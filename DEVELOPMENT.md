@@ -713,6 +713,38 @@ it, and that leaving it out loses it for good, carries four openings out
 of four -- including "hello" and "thank you", which give it the least
 excuse to add anything.
 
+### Snoozing, and what "that" means — decided, not yet built
+
+A reminder that rings at four can be pushed back: "snooze that", or
+"push my four o'clock to five" before it rings. Both, because the second
+is the first with the identifier given rather than assumed.
+
+The microphone stays shut after a reminder, for now. The satellite can
+reopen it -- `assist_satellite.start_conversation` sets
+`msg.start_conversation`, which `satellite.py` already honours, playing
+the reminder and then listening -- but a microphone that opens in the
+room after every reminder hears the room. So a snooze is asked for with
+the wake word, like anything else.
+
+That leaves "that" to be resolved, and today nothing can: the firing loop
+goes to the announcer and never touches the conversation, so the
+assistant has no record of having spoken. Asked what it just said, it
+does not know. Two things fix it, and they are the same two things:
+
+- **A block saying what was just said aloud**, on the pattern of the
+  missed-reminder one. It gives "that" a referent, the way a person has
+  one, because the thing was said a minute ago and both parties know it.
+  Fifteen minutes or so; past that the assistant asks which rather than
+  guessing at an hour-old reminder.
+- **The tool defaults to it.** `reminder_snooze` with no identifier takes
+  the last one spoken, so an identifier never has to survive a voice turn.
+  Two fired close together and it refuses and names them, so the question
+  is asked rather than answered wrongly.
+
+A repeating one is not moved. Snoozing a daily seven o'clock by ten
+minutes would make it ten past seven tomorrow, and twenty past the day
+after. The snooze is a one-shot of its own and the series is left alone.
+
 ### A length of time is the server's arithmetic, not the model's
 
 `reminder_set` takes exactly one of `seconds_from_now`, `minutes_from_now`
