@@ -13,6 +13,7 @@ import (
 	"errors"
 	"fmt"
 	"log/slog"
+	"net"
 	"net/http"
 	"strings"
 	"time"
@@ -29,6 +30,21 @@ const (
 
 	// DefaultTimeout : How long a single call may take.
 	DefaultTimeout = 120 * time.Second
+
+	// idleConnTimeout : How long an unused connection is kept.
+	//
+	// Not a tuning knob: http.DefaultTransport sets ninety seconds, and a
+	// Transport built by hand silently gets zero instead, which means keep
+	// them for ever. One kept past the far end's own idle timeout is dead,
+	// and the next request down it fails with EOF before anything can
+	// answer -- which is how a reminder turn was lost after thirty-five
+	// seconds of quiet. Thirty seconds is under anything likely at the
+	// other end.
+	idleConnTimeout = 30 * time.Second
+
+	// dialKeepAlive : How often the operating system probes an idle
+	// connection, so one that has died is noticed rather than used.
+	dialKeepAlive = 30 * time.Second
 
 	// MaxMessages : The most messages this endpoint accepts in one request.
 	//
@@ -169,6 +185,14 @@ func New(cfg Config, logger *slog.Logger) (*Environment, error) {
 			Timeout: cfg.Timeout,
 			Transport: &http.Transport{
 				TLSClientConfig: &tls.Config{InsecureSkipVerify: cfg.InsecureSkipVerify},
+				// Everything below is what http.DefaultTransport would
+				// have given us and a hand-built one does not.
+				Proxy:           http.ProxyFromEnvironment,
+				IdleConnTimeout: idleConnTimeout,
+				DialContext: (&net.Dialer{
+					Timeout:   30 * time.Second,
+					KeepAlive: dialKeepAlive,
+				}).DialContext,
 			},
 		},
 	}, nil

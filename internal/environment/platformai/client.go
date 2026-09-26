@@ -7,10 +7,13 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"log/slog"
+	"net"
 	"net/http"
 	"net/url"
 	"strings"
 	"sync"
+	"syscall"
 	"time"
 
 	"github.com/DhanushRamesh/personal-assistant/internal/environment"
@@ -211,7 +214,39 @@ func (p *Environment) chat(ctx context.Context, ask environment.Request) (reply,
 		got, _, err = p.attemptChat(ctx, ask)
 		return got, err
 	}
+
+	// A connection kept open between calls can be closed at the far end
+	// while nothing is using it, and the next request down it ends before
+	// anything answers. Nothing was asked, so asking again is not asking
+	// twice: no tool has run and the model has not been reached.
+	//
+	// Once only, and only for a connection that died. A service that is
+	// down would otherwise be asked twice for every turn, which is twice
+	// the wait before somebody is told.
+	if status == 0 && dropped(err) && ctx.Err() == nil {
+		p.logger.WarnContext(ctx, "the connection to platform ai was dead, asking again",
+			slog.Any("error", err))
+		got, _, err = p.attemptChat(ctx, ask)
+		return got, err
+	}
 	return reply{}, err
+}
+
+// dropped : Whether the request failed because the connection went away
+// rather than because anything answered.
+//
+// The distinction is what makes asking again safe. An answer, even a
+// refusal, means the far end received the request; these mean it did not.
+func dropped(err error) bool {
+	switch {
+	case errors.Is(err, io.EOF),
+		errors.Is(err, io.ErrUnexpectedEOF),
+		errors.Is(err, syscall.ECONNRESET),
+		errors.Is(err, syscall.EPIPE),
+		errors.Is(err, net.ErrClosed):
+		return true
+	}
+	return false
 }
 
 // attemptChat : One try, returning the HTTP status alongside the failure

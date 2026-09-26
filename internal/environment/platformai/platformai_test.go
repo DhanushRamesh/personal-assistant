@@ -910,3 +910,82 @@ func TestABlockedAnswerIsNotABadRequest(t *testing.T) {
 		t.Errorf("detail = %q, want the real reason kept", last.Detail)
 	}
 }
+
+// The failure this was written for. A connection kept open between calls
+// was closed at the far end while nothing was using it; the next request
+// down it ended in EOF after eighty-two milliseconds, and the turn was
+// lost. Nothing was asked, so asking again is not asking twice.
+func TestADeadConnectionIsAskedAgain(t *testing.T) {
+	f, cfg := newFakeService(t)
+
+	var tries atomic.Int32
+	f.chatHandler = func(w http.ResponseWriter, _ []byte) {
+		// The first request gets no answer at all: the connection is
+		// taken away underneath it, which is what EOF means here.
+		if tries.Add(1) == 1 {
+			conn, _, err := w.(http.Hijacker).Hijack()
+			if err != nil {
+				t.Errorf("Hijack: %v", err)
+				return
+			}
+			conn.Close()
+			return
+		}
+		w.Header().Set("Content-Type", "application/json")
+		_, _ = w.Write([]byte(`{"data":{"messages":[{"content":"Put off until ten past."}]}}`))
+	}
+
+	got := run(t, newProvider(t, cfg), "snooze that")
+
+	if tries.Load() != 2 {
+		t.Fatalf("the service was asked %d times, want a second try", tries.Load())
+	}
+	if len(got) != 1 || got[0].Text != "Put off until ten past." {
+		t.Fatalf("got %v, want the answer from the second try", got)
+	}
+}
+
+// Once only. A service that is down would otherwise be asked twice for
+// every turn, doubling the wait before anybody is told it is down.
+func TestADeadConnectionIsNotAskedForever(t *testing.T) {
+	f, cfg := newFakeService(t)
+
+	var tries atomic.Int32
+	f.chatHandler = func(w http.ResponseWriter, _ []byte) {
+		tries.Add(1)
+		conn, _, err := w.(http.Hijacker).Hijack()
+		if err != nil {
+			t.Errorf("Hijack: %v", err)
+			return
+		}
+		conn.Close()
+	}
+
+	got := run(t, newProvider(t, cfg), "snooze that")
+
+	if tries.Load() != 2 {
+		t.Errorf("the service was asked %d times, want exactly two", tries.Load())
+	}
+	if len(got) != 1 || got[0].Kind != environment.KindError {
+		t.Fatalf("got %v, want a failure once the second try failed too", got)
+	}
+}
+
+// An answer, even a refusal, means the far end received the request.
+// Asking again would ask a second time in earnest.
+func TestARefusalIsNotAskedAgain(t *testing.T) {
+	f, cfg := newFakeService(t)
+
+	var tries atomic.Int32
+	f.chatHandler = func(w http.ResponseWriter, _ []byte) {
+		tries.Add(1)
+		w.WriteHeader(http.StatusBadRequest)
+		_, _ = w.Write([]byte(`{"message":"Output blocked by content filtering policy"}`))
+	}
+
+	run(t, newProvider(t, cfg), "anything")
+
+	if tries.Load() != 1 {
+		t.Errorf("a refusal was asked again: %d tries", tries.Load())
+	}
+}

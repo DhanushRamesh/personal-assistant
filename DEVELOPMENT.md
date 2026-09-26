@@ -2253,6 +2253,32 @@ on, since the public endpoints present ordinary certificates.
 Credentials live in `config.ini`, which is git-ignored, or in
 `ASSISTANT_PLATFORMAI_CLIENT_SECRET` and `ASSISTANT_PLATFORMAI_REFRESH_TOKEN`.
 
+### A hand-built Transport loses every default
+
+`http.DefaultTransport` sets `IdleConnTimeout` to ninety seconds. A
+`&http.Transport{}` written out to set one field gets zero for the rest,
+and zero there means keep idle connections for ever. One kept past the
+far end's own idle timeout is dead, and the next request down it fails
+with EOF before anything can answer.
+
+That is what lost a turn: thirty-five seconds of quiet, then a POST that
+ended in eighty-two milliseconds. The first of its kind in the log, which
+fits -- it needs the other end to drop a connection during an idle gap.
+
+So the Transport now also sets `IdleConnTimeout`, a dialer keep-alive and
+`Proxy: http.ProxyFromEnvironment`. The last changes nothing today, since
+no proxy variables are set, and silently bypassing a proxy is not a thing
+to leave waiting to be discovered.
+
+That narrows the window rather than closing it: the far end can close a
+connection at any instant, and Go will not retry a POST by itself. So a
+call that fails with the connection gone is made once more. It is safe
+exactly because nothing was asked -- no tool ran, the model was never
+reached -- and it is told apart from an answer by the error, since an
+answer of any kind, refusal included, means the request arrived. Once
+only: a service that is down would otherwise be asked twice a turn, and
+double the wait before anybody is told.
+
 ### A refused token renews itself
 
 An access token can be refused before it was believed to have expired.
