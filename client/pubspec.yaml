@@ -31,6 +31,11 @@ dependencies:
   flutter:
     sdk: flutter
 
+  # Only for the address bar: it is what puts a route in the path rather
+  # than after a hash. Web only, behind a conditional import.
+  flutter_web_plugins:
+    sdk: flutter
+
   http: ^1.6.0
   web: ^1.1.1
   shared_preferences: ^2.5.5

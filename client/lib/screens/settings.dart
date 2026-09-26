@@ -28,7 +28,18 @@ enum SettingsModule {
 /// grow — conversations and voice belong here eventually — without the page
 /// getting longer.
 class SettingsScreen extends StatefulWidget {
-  const SettingsScreen({super.key, required this.state});
+  const SettingsScreen({
+    super.key,
+    required this.state,
+    this.module = SettingsModule.account,
+    this.onModule,
+  });
+
+  /// module : Which page to show, which comes from the address.
+  final SettingsModule module;
+
+  /// onModule : Told when another page is picked, so the address follows.
+  final ValueChanged<SettingsModule>? onModule;
 
   final AppState state;
 
@@ -37,25 +48,39 @@ class SettingsScreen extends StatefulWidget {
 }
 
 class _SettingsScreenState extends State<SettingsScreen> {
-  SettingsModule _module = SettingsModule.account;
-
   @override
   void initState() {
     super.initState();
     widget.state.loadClients();
     widget.state.loadReminders();
+    _read(widget.module);
   }
 
-  /// _pick : Moves to a module, reading afresh what it is about to show.
+  @override
+  void didUpdateWidget(SettingsScreen old) {
+    super.didUpdateWidget(old);
+    // The address changed under us -- the back button, or a link.
+    if (widget.module != old.module) _read(widget.module);
+  }
+
+  /// _module : Which page is showing. It lives in the address, not here.
+  SettingsModule get _module => widget.module;
+
+  /// _read : Reads afresh whatever a page is about to show.
   ///
   /// Reminders change without this screen being told: one set by voice
   /// while the page is open would otherwise not appear until Refresh was
   /// pressed, and an empty list reads as nothing to show rather than as
   /// out of date.
-  void _pick(SettingsModule module) {
-    setState(() => _module = module);
+  void _read(SettingsModule module) {
     if (module == SettingsModule.reminders) widget.state.loadReminders();
     if (module == SettingsModule.clients) widget.state.loadClients();
+  }
+
+  /// _pick : Moves to a page, and with it the address.
+  void _pick(SettingsModule module) {
+    widget.onModule?.call(module);
+    _read(module);
   }
 
   Future<void> _confirmRevoke(Client client) async {
@@ -333,10 +358,9 @@ class _AccountModule extends StatelessWidget {
             label: 'Sign out',
             variant: AppButtonVariant.secondary,
             icon: Icons.logout,
-            onPressed: () async {
-              await state.signOut();
-              if (context.mounted) Navigator.of(context).pop();
-            },
+            // Signing out takes the address back to the conversation on
+            // its own, so there is nothing to close here.
+            onPressed: state.signOut,
           ),
         ],
       ),

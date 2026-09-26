@@ -161,8 +161,8 @@ client-start: client-build ## Build it and serve it in the background
 	fi
 	@# Anything else holding the port, from an older run started by hand.
 	@fuser -k $(CLIENT_PORT)/tcp 2>/dev/null >/dev/null || true
-	@nohup python3 -m http.server $(CLIENT_PORT) --bind 127.0.0.1 \
-		--directory $(CLIENT_OUT) > /dev/null 2>&1 & echo $$! > $(CLIENT_PID)
+	@nohup python3 $(CLIENT_DIR)/serve.py $(CLIENT_PORT) $(CLIENT_OUT) \
+		> /dev/null 2>&1 & echo $$! > $(CLIENT_PID)
 	@sleep 1
 	@if kill -0 $$(cat $(CLIENT_PID)) 2>/dev/null; then \
 		echo "serving http://localhost:$(CLIENT_PORT) (pid $$(cat $(CLIENT_PID)))"; \

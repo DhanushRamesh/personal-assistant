@@ -322,6 +322,32 @@ by the assistant itself, so the page's own origin is the server's address and
 nothing has to be configured; during development `--dart-define=ASSISTANT_URL`
 points it somewhere else and the loopback CORS rule lets it through.
 
+### Every page has an address
+
+The settings pages are at `/settings/account`, `/settings/clients`,
+`/settings/reminders` and `/settings/server`, and the conversation is at `/`.
+Typing one opens it, the back button walks back out of it, and a link to a
+page can be kept.
+
+`client/lib/routing.dart` holds the whole of it: a route is either the
+conversation or one settings page, `AppRoute.parse` turns a path into one, and
+anything unrecognised lands on the conversation rather than on nothing. It is
+hand-written rather than a routing package because there are five addresses;
+a package would be more configuration than this is code. The screens know
+nothing about it: `HomeScreen` is handed an `onSettings`, `SettingsScreen` is
+handed its page and an `onModule`, and `main.dart` is the only place that maps
+a route to what is on screen.
+
+Two things are needed to make that work in a browser and neither is obvious.
+Flutter's default on the web puts routes after a hash, so a page reads as
+`/#/settings/account` and never reaches the server at all; `usePathUrlStrategy`
+turns that off, behind a conditional import because it is web-only code.
+And a plain file server answers `/settings/account` with 404, because no such
+file exists — only an app that understands the address. `client/serve.py`
+hands anything that is not a file on disk to `index.html`, which is what makes
+a reload of a settings page work. A missing asset still gets its 404: falling
+back for those too would turn a broken script tag into a silent blank page.
+
 ### Archiving and deleting are different things, and both exist
 
 Archiving puts a session away: it keeps everything said in it, stops appearing

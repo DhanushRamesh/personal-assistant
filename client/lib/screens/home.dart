@@ -6,7 +6,6 @@ import 'package:flutter/material.dart';
 import '../api/models.dart';
 import '../design/design.dart';
 import '../state/app_state.dart';
-import 'settings.dart';
 
 /// HomeScreen : The sidebar and the conversation.
 ///
@@ -14,9 +13,13 @@ import 'settings.dart';
 /// a drawer, because a phone-width column cannot hold a readable conversation
 /// and a list of conversations side by side.
 class HomeScreen extends StatefulWidget {
-  const HomeScreen({super.key, required this.state});
+  const HomeScreen({super.key, required this.state, required this.onSettings});
 
   final AppState state;
+
+  /// onSettings : Asked to open settings. The address moves with it, so
+  /// this screen does not push it itself.
+  final VoidCallback onSettings;
 
   @override
   State<HomeScreen> createState() => _HomeScreenState();
@@ -145,14 +148,6 @@ class _HomeScreenState extends State<HomeScreen> {
     if (ok ?? false) await widget.state.remove(id);
   }
 
-  void _openSettings() {
-    Navigator.of(context).push(
-      MaterialPageRoute<void>(
-        builder: (_) => SettingsScreen(state: widget.state),
-      ),
-    );
-  }
-
   @override
   Widget build(BuildContext context) {
     final state = widget.state;
@@ -163,7 +158,7 @@ class _HomeScreenState extends State<HomeScreen> {
       builder: (context, _) {
         final sidebar = _Sidebar(
           state: state,
-          onSettings: _openSettings,
+          onSettings: widget.onSettings,
           onRename: _rename,
           onDelete: _confirmDelete,
           onPicked: compact ? () => Navigator.of(context).maybePop() : null,
