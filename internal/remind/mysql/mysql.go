@@ -264,6 +264,54 @@ func (s *Store) Mentioned(ctx context.Context, ids []string, at time.Time) error
 	return nil
 }
 
+// Snooze : Puts a reminder off until a later time.
+func (s *Store) Snooze(ctx context.Context, userID, id string, until time.Time) error {
+	if until.IsZero() {
+		return remind.ErrNoTime
+	}
+
+	// Read first, so that a refusal can say which reason it was rather
+	// than reporting no such reminder for a repeating one.
+	r, err := s.Get(ctx, userID, id)
+	if err != nil {
+		return err
+	}
+	if err := remind.Snoozable(r); err != nil {
+		return err
+	}
+
+	// Still in the state it was read in, so a firing that landed in
+	// between is not undone.
+	out := s.db.WithContext(ctx).Model(&row{}).
+		Where("id = ? AND user_id = ? AND status = ?", id, userID, string(r.Status)).
+		Updates(map[string]any{
+			"due_at":     until.UTC(),
+			"status":     string(remind.Pending),
+			"updated_at": time.Now().UTC(),
+		})
+	if out.Error != nil {
+		return fmt.Errorf("remind: putting %s off: %w", id, out.Error)
+	}
+	if out.RowsAffected == 0 {
+		return remind.ErrNotFound
+	}
+	return nil
+}
+
+// LastSpoken : What the person was told since the given moment.
+func (s *Store) LastSpoken(ctx context.Context, userID string, since time.Time) ([]remind.Reminder, error) {
+	var rows []row
+	err := s.db.WithContext(ctx).
+		Where("user_id = ? AND last_fired_at IS NOT NULL AND last_fired_at >= ?", userID, since.UTC()).
+		Order("last_fired_at DESC, id DESC").
+		Limit(remind.DefaultSpokenLimit).
+		Find(&rows).Error
+	if err != nil {
+		return nil, fmt.Errorf("remind: reading what was just said: %w", err)
+	}
+	return toReminders(rows), nil
+}
+
 // Reschedule : Moves a reminder to its next time without saying it.
 func (s *Store) Reschedule(ctx context.Context, id string, next time.Time) error {
 	out := s.db.WithContext(ctx).Model(&row{}).

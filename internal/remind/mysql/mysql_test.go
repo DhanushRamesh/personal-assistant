@@ -15,8 +15,17 @@ import (
 	"github.com/DhanushRamesh/personal-assistant/internal/config"
 	"github.com/DhanushRamesh/personal-assistant/internal/remind"
 	remindmysql "github.com/DhanushRamesh/personal-assistant/internal/remind/mysql"
+	"github.com/DhanushRamesh/personal-assistant/internal/remind/storetest"
 	"github.com/DhanushRamesh/personal-assistant/internal/storage"
 )
+
+// The same cases the in-memory store runs. Both must answer alike, or a
+// test passes against one and the server runs on the other.
+func TestItBehavesLikeAStore(t *testing.T) {
+	storetest.Run(t, func(t *testing.T) (remind.Store, string) {
+		return newStore(t)
+	})
+}
 
 // discard : A logger that writes nowhere.
 func discard() *slog.Logger { return slog.New(slog.NewJSONHandler(io.Discard, nil)) }

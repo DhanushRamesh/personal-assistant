@@ -173,6 +173,48 @@ func (s *Store) Mentioned(_ context.Context, ids []string, at time.Time) error {
 	return nil
 }
 
+// Snooze : Puts a reminder off until a later time.
+func (s *Store) Snooze(_ context.Context, userID, id string, until time.Time) error {
+	if until.IsZero() {
+		return remind.ErrNoTime
+	}
+
+	s.mu.Lock()
+	defer s.mu.Unlock()
+
+	r, ok := s.kept[id]
+	if !ok || r.UserID != userID {
+		return remind.ErrNotFound
+	}
+	if err := remind.Snoozable(&r); err != nil {
+		return err
+	}
+
+	r.DueAt, r.Status, r.UpdatedAt = until.UTC(), remind.Pending, time.Now().UTC()
+	s.kept[id] = r
+	return nil
+}
+
+// LastSpoken : What the person was told since the given moment.
+func (s *Store) LastSpoken(_ context.Context, userID string, since time.Time) ([]remind.Reminder, error) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+
+	out := make([]remind.Reminder, 0, len(s.kept))
+	for _, r := range s.kept {
+		if r.UserID != userID || r.LastFiredAt == nil || r.LastFiredAt.Before(since.UTC()) {
+			continue
+		}
+		out = append(out, r)
+	}
+	newestFirst(out)
+
+	if len(out) > remind.DefaultSpokenLimit {
+		out = out[:remind.DefaultSpokenLimit]
+	}
+	return out, nil
+}
+
 // Reschedule : Moves a reminder to its next time without saying it.
 func (s *Store) Reschedule(_ context.Context, id string, next time.Time) error {
 	s.mu.Lock()
@@ -195,6 +237,17 @@ func soonestFirst(r []remind.Reminder) {
 			return r[i].DueAt.Before(r[j].DueAt)
 		}
 		return r[i].ID < r[j].ID
+	})
+}
+
+// newestFirst : Orders by when they were said, most recent first, as the
+// MySQL store does.
+func newestFirst(r []remind.Reminder) {
+	sort.SliceStable(r, func(i, j int) bool {
+		if !r[i].LastFiredAt.Equal(*r[j].LastFiredAt) {
+			return r[i].LastFiredAt.After(*r[j].LastFiredAt)
+		}
+		return r[i].ID > r[j].ID
 	})
 }
 

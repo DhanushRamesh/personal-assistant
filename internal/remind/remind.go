@@ -161,7 +161,36 @@ var (
 	ErrBadStatus = errors.New("remind: unknown status")
 	// ErrNotFound : No such reminder.
 	ErrNotFound = errors.New("remind: no such reminder")
+	// ErrNotSnoozable : A reminder in a state that cannot be put off.
+	ErrNotSnoozable = errors.New("remind: only one that is waiting, or has just been said, can be put off")
+	// ErrSnoozeRepeats : A repeating reminder cannot be moved. See Snoozable.
+	ErrSnoozeRepeats = errors.New("remind: a repeating reminder is not moved; make a one-off instead")
 )
+
+// Snoozable : Whether a reminder may be put off to a later time.
+//
+// Both stores ask this, so that what may be snoozed cannot come to mean
+// one thing in memory and another in MySQL.
+//
+// A repeating one is refused outright. Moving its due time would move the
+// series with it: a daily seven o'clock put off by ten minutes is ten past
+// seven tomorrow, and twenty past the day after. Putting off one morning's
+// is a one-off of its own, which is the caller's to make.
+//
+// A missed one is refused because it was never said, and a cancelled one
+// because it was called off on purpose. Neither is something to be put off;
+// they are something to be set again.
+func Snoozable(r *Reminder) error {
+	switch {
+	case r == nil:
+		return ErrNotFound
+	case r.Repeats != Once:
+		return ErrSnoozeRepeats
+	case r.Status != Pending && r.Status != Done:
+		return ErrNotSnoozable
+	}
+	return nil
+}
 
 // Valid : Whether the reminder can be stored.
 func (r *Reminder) Valid() error {

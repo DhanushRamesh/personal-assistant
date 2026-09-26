@@ -45,6 +45,24 @@ type Store interface {
 	// up once and not on every turn afterwards.
 	Mentioned(ctx context.Context, ids []string, at time.Time) error
 
+	// Snooze : Puts a reminder off until a later time.
+	//
+	// It goes back to pending, whether it was waiting or has just been
+	// said, so that one that already rang can ring again. Fires is left
+	// alone: how many times it has been put off is worth knowing.
+	//
+	// Refused for anything Snoozable refuses, and with that error.
+	Snooze(ctx context.Context, userID, id string, until time.Time) error
+
+	// LastSpoken : What the person was told since the given moment,
+	// most recently first.
+	//
+	// This is what "that" means in "snooze that". Several, not one,
+	// because two reminders can come due together and the difference
+	// between one answer and two is the difference between answering and
+	// asking which.
+	LastSpoken(ctx context.Context, userID string, since time.Time) ([]Reminder, error)
+
 	// Reschedule : Moves a reminder to its next time without saying it.
 	//
 	// For a repeating one whose turn was missed. Marking it missed would
@@ -58,3 +76,9 @@ type Store interface {
 // A bound rather than a guess at a maximum. If a hundred are somehow due at
 // once, they are said over several passes rather than all in one breath.
 const DefaultDueLimit = 20
+
+// DefaultSpokenLimit : The most LastSpoken returns.
+//
+// A bound, not a guess. What it is for is the last thing or two said, and
+// anything past a handful is not what "that" could mean anyway.
+const DefaultSpokenLimit = 5
