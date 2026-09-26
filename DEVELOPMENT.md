@@ -661,6 +661,36 @@ answered it locally, and did not -- the question reached here and was
 turned down. Do not assume a local intent covers something without
 checking the transcript for it.
 
+### The greeting is composed here, not by the model
+
+`POST /v1/presence/arrived` says somebody has walked in. Home Assistant
+does the deciding -- it watches how strong the owner's watch sounds and
+works out when it has crossed into the room -- and what arrives here is
+the conclusion. This chooses the words and speaks them through the same
+announcer the reminders use.
+
+The model is not asked. A greeting that lands after somebody has sat
+down is not a greeting: detection takes about two seconds and a Platform
+AI call has measured between two and five, so asking would have more
+than doubled it, for a sentence that varies. What is said instead is the
+hour and what is waiting, both looked up as they are said, which also
+means there is nothing in it to be wrong about.
+
+It refuses to greet the same person twice within ten minutes. Nothing
+upstream promises to ask once, and a rule watching a signal that swings
+fifteen decibels with arm position will eventually decide somebody has
+arrived twice. Being welcomed into a room you have been sitting in is
+the failure that makes the whole thing feel broken. A greeting that
+could not be spoken gives the claim back, so a satellite that was busy
+does not cost the next arrival its welcome too.
+
+**Not in the transcript yet.** The owner asked for what the assistant
+said to be recorded, and it is not: a `chat` requires a prompt, and the
+whole history is prompt-and-answer pairs. Recording something the
+assistant said unprompted needs that model changed, which is why
+reminders do not appear there either. Left undone rather than faked with
+a prompt nobody spoke.
+
 ### Reminders are said through Home Assistant, and nowhere else
 
 Owner's decision. The satellite is the only place a reminder lands.

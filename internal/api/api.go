@@ -19,6 +19,7 @@ import (
 	"github.com/go-chi/chi/v5"
 	chimw "github.com/go-chi/chi/v5/middleware"
 
+	"github.com/DhanushRamesh/personal-assistant/internal/announce"
 	"github.com/DhanushRamesh/personal-assistant/internal/api/assist"
 	"github.com/DhanushRamesh/personal-assistant/internal/api/authn"
 	"github.com/DhanushRamesh/personal-assistant/internal/api/chats"
@@ -26,6 +27,7 @@ import (
 	"github.com/DhanushRamesh/personal-assistant/internal/api/conversations"
 	"github.com/DhanushRamesh/personal-assistant/internal/api/health"
 	"github.com/DhanushRamesh/personal-assistant/internal/api/middleware"
+	"github.com/DhanushRamesh/personal-assistant/internal/api/presence"
 	"github.com/DhanushRamesh/personal-assistant/internal/api/reminders"
 	"github.com/DhanushRamesh/personal-assistant/internal/chat"
 	"github.com/DhanushRamesh/personal-assistant/internal/conversation"
@@ -66,6 +68,15 @@ type Options struct {
 	// Reminders : What is waiting to be said. Optional; without it the
 	// listing is empty and nothing can be called off from the screen.
 	Reminders remind.Store
+
+	// Announcer : Where the server speaks of its own accord. Optional;
+	// without it a greeting is composed and not said.
+	Announcer announce.Announcer
+	// Location : The person's zone, for deciding what hour it is to them.
+	// Nil is UTC.
+	Location *time.Location
+	// Now : The clock, replaceable in tests. Nil uses the real one.
+	Now func() time.Time
 	// Runner : Executes chats. Required.
 	Runner Runner
 	// Events : Carries a chat's messages to clients listening for them.
@@ -109,6 +120,7 @@ type Server struct {
 	conversations *conversations.Handler
 	chats         *chats.Handler
 	reminders     *reminders.Handler
+	presence      *presence.Handler
 	assist        *assist.Handler
 }
 
@@ -130,7 +142,9 @@ func New(opts Options) *Server {
 		conversations: conversations.New(opts.Logger, opts.Chats),
 		chats:         chats.New(opts.Logger, opts.Chats, opts.Messages, opts.Runner, opts.Events),
 		reminders:     reminders.New(opts.Logger, opts.Reminders),
-		assist:        assist.New(opts.Logger, opts.Chats, opts.Runner, opts.Events),
+		presence: presence.New(opts.Logger, opts.Announcer, opts.Reminders,
+			opts.Location, opts.Now),
+		assist: assist.New(opts.Logger, opts.Chats, opts.Runner, opts.Events),
 	}
 	s.routes()
 	return s
@@ -171,6 +185,7 @@ func (s *Server) routes() {
 		s.conversations.Mount(r)
 		s.chats.Mount(r)
 		s.reminders.Mount(r)
+		s.presence.Mount(r)
 		s.assist.Mount(r)
 	})
 }

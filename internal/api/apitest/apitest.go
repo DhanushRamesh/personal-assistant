@@ -28,6 +28,7 @@ import (
 
 	"golang.org/x/crypto/bcrypt"
 
+	"github.com/DhanushRamesh/personal-assistant/internal/announce"
 	"github.com/DhanushRamesh/personal-assistant/internal/api"
 	"github.com/DhanushRamesh/personal-assistant/internal/api/authn"
 	"github.com/DhanushRamesh/personal-assistant/internal/api/views"
@@ -97,6 +98,10 @@ type Options struct {
 	// AllowCrossOrigin : Whether the server answers a browser's
 	// cross-origin checks, as it does outside production.
 	AllowCrossOrigin bool
+	// Announcer : Where the server speaks of its own accord. Nil says
+	// nowhere, which is what a server with no satellite has.
+	Announcer announce.Announcer
+
 	// Reminders : What is waiting to be said. Nil selects an empty store,
 	// so a test that does not care need not build one.
 	Reminders remind.Store
@@ -174,6 +179,7 @@ func NewWith(t *testing.T, opts Options) *Env {
 			Chats:            repo,
 			Messages:         repo,
 			Reminders:        opts.Reminders,
+			Announcer:        opts.Announcer,
 			Runner:           chatRunner,
 			Events:           bus,
 			AllowCrossOrigin: opts.AllowCrossOrigin,
