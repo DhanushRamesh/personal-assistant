@@ -675,6 +675,19 @@ The browser therefore still goes stale when something is said out loud,
 which the client's own `refresh` comment already describes. That was going
 to be fixed by the same stream and now is not.
 
+### A reminder announces itself with no sound before it
+
+Tried on 27 September 2026 and dropped the same night. A short sound
+first, and only one for a run of them however many came due together,
+which is the part that would have been easy to get wrong.
+
+Home Assistant supplies the sound, and the owner's verdict on hearing it
+was a cowbell. The idea went with it rather than the sound alone: no
+heads-up before a reminder, and `Preannounce` stays false.
+
+Written down because it is an obvious thing to add and it has already
+been decided against. Adding one means picking a sound first.
+
 ### Speaking and asking need different timeouts
 
 Home Assistant holds `assist_satellite.announce` open until the satellite
