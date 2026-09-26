@@ -220,3 +220,77 @@ func TestNotConfiguredIsNotAFailure(t *testing.T) {
 		t.Errorf("error = %v, want ErrNotConfigured", err)
 	}
 }
+
+// Home Assistant holds the announce call open until the satellite has
+// finished playing, so the call takes as long as the speaking does. Under
+// one timeout shared with the state polls, a reminder longer than ten
+// seconds played perfectly well and then reported failure -- which left it
+// pending, and the firing loop said it again, and again.
+func TestSpeakingMayTakeLongerThanAsking(t *testing.T) {
+	sat := &satellite{states: []string{"idle"}}
+
+	// Stands in for a long announcement: Home Assistant does not answer
+	// until the words have been read out.
+	slow := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if strings.HasPrefix(r.URL.Path, "/api/services/") {
+			time.Sleep(120 * time.Millisecond)
+		}
+		sat.handler().ServeHTTP(w, r)
+	})
+	server := httptest.NewServer(slow)
+	t.Cleanup(server.Close)
+
+	sp, err := hass.New(hass.Config{
+		URL:       server.URL,
+		Token:     logging.Secret("token"),
+		Satellite: "assist_satellite.test",
+		Settle:    -1,
+		// Shorter than the announcement takes. Speaking must not be held
+		// to it, or the words are said and the call reports failure.
+		Timeout:      40 * time.Millisecond,
+		SpeakTimeout: 5 * time.Second,
+	})
+	if err != nil {
+		t.Fatalf("hass.New: %v", err)
+	}
+
+	if err := sp.Say(context.Background(), "a long reminder"); err != nil {
+		t.Fatalf("Say: %v", err)
+	}
+	if got := sat.said.Load(); got != "a long reminder" {
+		t.Errorf("said %v, want the reminder", got)
+	}
+}
+
+// Asking is still held to the short one. A satellite that will not say what
+// it is doing must not hold the firing loop for two minutes.
+func TestAskingIsStillHeldToTheShortTimeout(t *testing.T) {
+	slow := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if strings.HasPrefix(r.URL.Path, "/api/states/") {
+			time.Sleep(300 * time.Millisecond)
+		}
+		_ = json.NewEncoder(w).Encode(map[string]string{"state": "idle"})
+	})
+	server := httptest.NewServer(slow)
+	t.Cleanup(server.Close)
+
+	sp, err := hass.New(hass.Config{
+		URL:          server.URL,
+		Token:        logging.Secret("token"),
+		Satellite:    "assist_satellite.test",
+		QuietWait:    5 * time.Second,
+		Timeout:      30 * time.Millisecond,
+		SpeakTimeout: 5 * time.Second,
+	})
+	if err != nil {
+		t.Fatalf("hass.New: %v", err)
+	}
+
+	started := time.Now()
+	if err := sp.Say(context.Background(), "anything"); err == nil {
+		t.Fatal("a satellite that never answers was announced to anyway")
+	}
+	if took := time.Since(started); took > time.Second {
+		t.Errorf("gave up after %v: the short timeout is not being applied", took)
+	}
+}

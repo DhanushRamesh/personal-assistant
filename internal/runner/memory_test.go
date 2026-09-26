@@ -453,7 +453,7 @@ func TestAReminderJustSaidReachesThePrompt(t *testing.T) {
 
 	h.ask(t, "snooze that")
 
-	for _, want := range []string{"Time to take your tablets.", "the most recent one listed"} {
+	for _, want := range []string{"Time to take your tablets.", "mean this one"} {
 		if !strings.Contains(p.systemPrompt(), want) {
 			t.Errorf("the prompt is missing %q:\n%s", want, p.systemPrompt())
 		}

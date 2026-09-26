@@ -675,6 +675,29 @@ The browser therefore still goes stale when something is said out loud,
 which the client's own `refresh` comment already describes. That was going
 to be fixed by the same stream and now is not.
 
+### Speaking and asking need different timeouts
+
+Home Assistant holds `assist_satellite.announce` open until the satellite
+has finished playing -- "Block until announcement is finished", in the
+comment in its own `entity.py`. The call therefore takes as long as the
+speaking does, which is nothing like how long a state poll takes.
+
+One shared ten-second timeout covered both, and ten seconds is about a
+hundred and fifty characters of speech against a `MaxBody` of five
+hundred. A longer reminder played perfectly well and then reported
+failure. The loop leaves a failed one pending on purpose, so it was said
+again two seconds later, and again, until the grace hour ran out.
+
+So there are two: `Timeout` for anything that only asks, and
+`SpeakTimeout` for the one call that speaks. The client carries no
+timeout of its own -- one number cannot be both -- and each request takes
+its own deadline. The speaking deadline starts after the wait for quiet,
+which is longer than it and is not the speaking.
+
+Nothing here makes a double-say impossible: a call that fails after the
+words are out will always look like one that never said them. It removes
+the way it actually happened.
+
 ### The reminders screen shows what is coming, not what happened
 
 `GET /v1/reminders` lists what is still pending, and `DELETE
@@ -750,8 +773,18 @@ does not know. Two things fix it, and they are the same two things:
   It is also told *not* to raise it -- the person was there.
 - **The tool defaults to it.** `reminder_snooze` with no identifier takes
   the last one spoken, so an identifier never has to survive a voice turn.
-  Two fired close together and it refuses and names them, so the question
-  is asked rather than answered wrongly.
+  Two fired close together and it refuses and names them, with their
+  identifiers, so the question is asked rather than answered wrongly and
+  the answer can be acted on in the same turn.
+
+The block says what "that" means only where one thing was said. Where two
+were, it says to ask. It used to say "the most recent one listed", which
+names nothing when two came due together: the firing loop takes the clock
+once per pass and stamps every reminder in it with the same moment, so
+the order falls through to the identifier, and the most recent is
+whichever was created last. The tool refused to choose anyway, and a
+prompt that tells the model to choose while the tool refuses to is two
+minds about the same question.
 
 A repeating one is not moved. Snoozing a daily seven o'clock by ten
 minutes would make it ten past seven tomorrow, and twenty past the day

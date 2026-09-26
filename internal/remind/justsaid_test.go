@@ -54,10 +54,42 @@ func TestItSaysWhatThatMeans(t *testing.T) {
 		spokenAt("Tablets", "Time to take your tablets.", now.Add(-time.Minute)),
 	}, now, time.UTC)
 
-	for _, want := range []string{"the most recent one listed", "what you just said, this is it"} {
+	for _, want := range []string{"mean this one", "what you just said, this is it"} {
 		if !strings.Contains(got, want) {
 			t.Errorf("the block does not say what \"that\" means:\n%s", got)
 		}
+	}
+}
+
+// Two said together and "that" picks out nothing. Telling the model to
+// take the most recent would have it choose by which was created first,
+// which is no answer at all, and the tool refuses to choose anyway.
+func TestWithTwoItIsToldToAskRatherThanChoose(t *testing.T) {
+	now := time.Now().UTC()
+	at := now.Add(-time.Minute)
+	got := remind.JustSaid([]remind.Reminder{
+		spokenAt("Tablets", "Take your tablets.", at),
+		spokenAt("Mum", "Call your mother.", at),
+	}, now, time.UTC)
+
+	if !strings.Contains(got, "ask which they mean rather than choosing") {
+		t.Errorf("the block does not say to ask:\n%s", got)
+	}
+	if strings.Contains(got, "mean this one") {
+		t.Errorf("the block points at one of two:\n%s", got)
+	}
+}
+
+// And the single case is not made to ask about a choice that does not
+// exist. One said is not ambiguous.
+func TestWithOneItDoesNotAsk(t *testing.T) {
+	now := time.Now().UTC()
+	got := remind.JustSaid([]remind.Reminder{
+		spokenAt("Tablets", "Take your tablets.", now.Add(-time.Minute)),
+	}, now, time.UTC)
+
+	if strings.Contains(got, "ask which") {
+		t.Errorf("one reminder was made into a question:\n%s", got)
 	}
 }
 

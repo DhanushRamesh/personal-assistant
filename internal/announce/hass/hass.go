@@ -19,11 +19,27 @@ import (
 	"github.com/DhanushRamesh/personal-assistant/internal/logging"
 )
 
-// DefaultTimeout : How long a single call may take.
+// DefaultTimeout : How long a call that only asks something may take.
 //
 // Short, because nothing waits on an announcement and a satellite that is not
-// answering should not hold anything up.
+// answering should not hold anything up. Speaking is the exception and has
+// its own, in DefaultSpeakTimeout.
 const DefaultTimeout = 10 * time.Second
+
+// DefaultSpeakTimeout : How long the call that speaks may take.
+//
+// Home Assistant holds the announce call open until the satellite has
+// finished playing -- "Block until announcement is finished", in its own
+// words -- so this has to cover synthesising the speech and reading it out,
+// not merely handing it over.
+//
+// Ten seconds does not. It is about a hundred and fifty characters of speech,
+// and remind.MaxBody allows five hundred. A longer one played perfectly well
+// and then reported failure, which left it pending, and the firing loop said
+// it again two seconds later, and again, until the grace hour ran out. Two
+// minutes covers the longest body that can be stored, with room for a slow
+// synthesiser.
+const DefaultSpeakTimeout = 2 * time.Minute
 
 // DefaultQuietWait : How long to wait for the satellite to stop talking
 // before speaking over it.
@@ -67,8 +83,12 @@ type Config struct {
 	// Satellite : The entity to speak through, such as
 	// assist_satellite.laptop_lva_assist_satellite.
 	Satellite string
-	// Timeout : How long a call may take. Zero selects DefaultTimeout.
+	// Timeout : How long a call that only asks something may take. Zero
+	// selects DefaultTimeout.
 	Timeout time.Duration
+	// SpeakTimeout : How long the call that speaks may take, which is as
+	// long as the speaking takes. Zero selects DefaultSpeakTimeout.
+	SpeakTimeout time.Duration
 	// QuietWait : How long to wait for the satellite to finish speaking
 	// before announcing. Zero selects DefaultQuietWait; negative announces
 	// at once and interrupts whatever is playing.
@@ -104,6 +124,9 @@ func New(cfg Config) (*Speaker, error) {
 	if cfg.Timeout <= 0 {
 		cfg.Timeout = DefaultTimeout
 	}
+	if cfg.SpeakTimeout <= 0 {
+		cfg.SpeakTimeout = DefaultSpeakTimeout
+	}
 	if cfg.QuietWait == 0 {
 		cfg.QuietWait = DefaultQuietWait
 	}
@@ -111,9 +134,12 @@ func New(cfg Config) (*Speaker, error) {
 		cfg.Settle = DefaultSettle
 	}
 
+	// No timeout on the client: one number cannot be both short enough for
+	// a state poll and long enough to read a paragraph aloud. Every request
+	// below carries its own deadline instead.
 	client := cfg.HTTP
 	if client == nil {
-		client = &http.Client{Timeout: cfg.Timeout}
+		client = &http.Client{}
 	}
 
 	return &Speaker{cfg: cfg, http: client}, nil
@@ -156,6 +182,12 @@ func (s *Speaker) Say(ctx context.Context, message string) error {
 	if err != nil {
 		return fmt.Errorf("hass: building announce request: %w", err)
 	}
+
+	// Started only now, so the wait for the satellite to fall quiet -- up
+	// to QuietWait, which is longer than this -- is not counted against
+	// the speaking.
+	ctx, cancel := context.WithTimeout(ctx, s.cfg.SpeakTimeout)
+	defer cancel()
 
 	url := s.cfg.URL + "/api/services/assist_satellite/announce"
 	req, err := http.NewRequestWithContext(ctx, http.MethodPost, url, bytes.NewReader(body))
@@ -246,6 +278,9 @@ func (s *Speaker) pause(ctx context.Context, d time.Duration) error {
 
 // state : What the satellite is doing, as Home Assistant reports it.
 func (s *Speaker) state(ctx context.Context) (string, error) {
+	ctx, cancel := context.WithTimeout(ctx, s.cfg.Timeout)
+	defer cancel()
+
 	url := s.cfg.URL + "/api/states/" + s.cfg.Satellite
 	req, err := http.NewRequestWithContext(ctx, http.MethodGet, url, nil)
 	if err != nil {

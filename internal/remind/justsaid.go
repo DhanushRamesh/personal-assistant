@@ -36,10 +36,22 @@ func JustSaid(spoken []Reminder, at time.Time, loc *time.Location) string {
 	b.WriteString("conversation, so none of it appears above, but the person heard ")
 	b.WriteString("it.\n\n")
 
-	b.WriteString("They may be answering one of these rather than starting something ")
-	b.WriteString("new. Take \"that\", \"it\" and \"the reminder\" to mean the most ")
-	b.WriteString("recent one listed, unless what they say points to another. Asked ")
-	b.WriteString("what you just said, this is it.\n\n")
+	// What "that" picks out depends on how many there are, and saying
+	// "the most recent" when two came due together names nothing: they
+	// were said in the same breath, and which one sorts first is an
+	// accident of which was created first. The tool refuses to choose
+	// between them, so the prompt must not suggest choosing either.
+	if len(spoken) == 1 {
+		b.WriteString("They may be answering it rather than starting something new: ")
+		b.WriteString("\"that\", \"it\" and \"the reminder\" mean this one. Asked what ")
+		b.WriteString("you just said, this is it.\n\n")
+	} else {
+		b.WriteString("They may be answering one of these rather than starting ")
+		b.WriteString("something new. More than one was said, so \"that\" does not ")
+		b.WriteString("pick one out on its own: unless what they say points to one, ")
+		b.WriteString("ask which they mean rather than choosing. Asked what you just ")
+		b.WriteString("said, all of these are.\n\n")
+	}
 
 	b.WriteString("Do not raise any of this yourself. They were there when you said ")
 	b.WriteString("it, and being told again is being told twice.")
