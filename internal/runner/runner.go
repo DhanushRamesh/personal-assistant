@@ -109,6 +109,8 @@ type Options struct {
 	// nowhere anybody lives but is at least a real time.
 	Now func() time.Time
 
+	// Recently : Reminders just said aloud, so that "that" means one.
+	Recently *remind.Recently
 	// Missing : Reminders that were never said, to be brought up once.
 	// Nil never mentions them.
 	Missing *remind.Missing
@@ -132,6 +134,7 @@ type Runner struct {
 	tools           *tool.Registry
 	memory          *memory.Recall
 	now             func() time.Time
+	recently        *remind.Recently
 	missing         *remind.Missing
 
 	// slots : Limits how many chats run at once. A chat holds one for the
@@ -201,6 +204,7 @@ func New(opts Options) (*Runner, error) {
 		tools:           opts.Tools,
 		memory:          opts.Memory,
 		now:             opts.Now,
+		recently:        opts.Recently,
 		missing:         opts.Missing,
 		slots:           make(chan struct{}, opts.MaxConcurrent),
 		base:            base,
@@ -348,6 +352,7 @@ func (r *Runner) promptFor(ctx context.Context, t *chat.Chat) (string, []remind.
 		r.known(ctx, userID, &note),
 		r.recalled(ctx, userID, t.Prompt, &note),
 		r.quoted(ctx, userID, t.Prompt, t.ConversationID, &note),
+		r.justSaid(ctx, userID),
 		unsaid)
 
 	note.TookMS = time.Since(started).Milliseconds()
@@ -439,6 +444,23 @@ func (r *Runner) missed(ctx context.Context, userID string) (string, []remind.Re
 		return "", nil
 	}
 	return block, covered
+}
+
+// justSaid : What was spoken aloud in the last few minutes, if anything.
+//
+// Nothing here may fail the turn. An assistant that does not know what it
+// just said is the assistant there was before this, not a broken one.
+func (r *Runner) justSaid(ctx context.Context, userID string) string {
+	if r.recently == nil || userID == "" {
+		return ""
+	}
+
+	block, err := r.recently.Block(ctx, userID)
+	if err != nil {
+		r.logger.WarnContext(ctx, "cannot read what was just said", slog.Any("error", err))
+		return ""
+	}
+	return block
 }
 
 // mentioned : Records that misses carried into a prompt have been raised.

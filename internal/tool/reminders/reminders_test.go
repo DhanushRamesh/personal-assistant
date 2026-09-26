@@ -58,11 +58,14 @@ func TestEveryReminderToolRegisters(t *testing.T) {
 }
 
 // Nothing here destroys anything, so all of it may be said out loud.
+// Counted against the whole set rather than a number, so a tool added
+// without a voice channel is caught instead of the count being edited.
 func TestVoiceMayUseAllOfThem(t *testing.T) {
 	r, _ := harness(t)
+	all := len(reminders.All(nil, reminders.Clock{}))
 
-	if got := len(r.For(chat.ChannelVoice)); got != 3 {
-		t.Errorf("voice is offered %d of the 3 reminder tools", got)
+	if got := len(r.For(chat.ChannelVoice)); got != all {
+		t.Errorf("voice is offered %d of the %d reminder tools", got, all)
 	}
 }
 
@@ -352,5 +355,228 @@ func TestOnlyOneWayOfSayingWhen(t *testing.T) {
 		if got := call(t, r, "reminder_set", args); got.Outcome != conversation.OutcomeFailed {
 			t.Errorf("%s was accepted", args)
 		}
+	}
+}
+
+// rang : A reminder in the store that has already gone off.
+func rang(t *testing.T, store *inmemory.Store, title, body string, repeats remind.Repeat) *remind.Reminder {
+	t.Helper()
+	ctx := context.Background()
+
+	r, err := remind.New(user, client, remind.ScopeUser, title, body, noon.Add(-time.Minute), repeats)
+	if err != nil {
+		t.Fatalf("remind.New: %v", err)
+	}
+	if err := store.Create(ctx, r); err != nil {
+		t.Fatalf("Create: %v", err)
+	}
+
+	next := time.Time{}
+	if repeats != remind.Once {
+		next, _ = remind.Next(r.DueAt, repeats, noon, india)
+	}
+	if err := store.Fired(ctx, r.ID, noon.Add(-time.Minute), next); err != nil {
+		t.Fatalf("Fired: %v", err)
+	}
+	return r
+}
+
+// "Snooze that", with nothing else said, is the one just spoken and ten
+// minutes. Both are worked out here: neither is the model's to guess.
+func TestSnoozeThatMeansTheOneJustSaid(t *testing.T) {
+	r, store := harness(t)
+	existing := rang(t, store, "Tablets", "Time to take your tablets.", remind.Once)
+
+	got := call(t, r, "reminder_snooze", `{}`)
+	if got.Outcome != conversation.OutcomeOK {
+		t.Fatalf("reminder_snooze: %s", got.Content)
+	}
+
+	after, err := store.Get(context.Background(), user, existing.ID)
+	if err != nil {
+		t.Fatalf("Get: %v", err)
+	}
+	if after.Status != remind.Pending {
+		t.Errorf("status = %q, want pending", after.Status)
+	}
+	if want := noon.Add(reminders.DefaultSnooze); !after.DueAt.Equal(want.UTC()) {
+		t.Errorf("due at %v, want %v", after.DueAt, want.UTC())
+	}
+}
+
+// A length said is the length used.
+func TestSnoozeTakesALengthOfTime(t *testing.T) {
+	r, store := harness(t)
+	existing := rang(t, store, "Tablets", "Time to take your tablets.", remind.Once)
+
+	if got := call(t, r, "reminder_snooze", `{"minutes_from_now":25}`); got.Outcome != conversation.OutcomeOK {
+		t.Fatalf("reminder_snooze: %s", got.Content)
+	}
+
+	after, err := store.Get(context.Background(), user, existing.ID)
+	if err != nil {
+		t.Fatalf("Get: %v", err)
+	}
+	if want := noon.Add(25 * time.Minute); !after.DueAt.Equal(want.UTC()) {
+		t.Errorf("due at %v, want %v", after.DueAt, want.UTC())
+	}
+}
+
+// Nothing said aloud recently means "that" points at nothing. Picking
+// something anyway would put off a reminder nobody mentioned.
+func TestSnoozeWithNothingSaidRefuses(t *testing.T) {
+	r, _ := harness(t)
+
+	got := call(t, r, "reminder_snooze", `{}`)
+	if got.Outcome == conversation.OutcomeOK {
+		t.Fatalf("it put something off with nothing to point at: %s", got.Content)
+	}
+	if !strings.Contains(got.Content, "Ask which") {
+		t.Errorf("the refusal does not say to ask: %s", got.Content)
+	}
+}
+
+// Two said together is the case that must be asked about rather than
+// answered. Guessing here puts off the wrong one and says it did the right.
+func TestSnoozeAsksWhichWhenTwoWereSaid(t *testing.T) {
+	r, store := harness(t)
+	rang(t, store, "Tablets", "Time to take your tablets.", remind.Once)
+	rang(t, store, "Mum", "Call your mother.", remind.Once)
+
+	got := call(t, r, "reminder_snooze", `{}`)
+	if got.Outcome == conversation.OutcomeOK {
+		t.Fatalf("it chose between two: %s", got.Content)
+	}
+	for _, want := range []string{"Ask which", "Tablets", "Mum"} {
+		if !strings.Contains(got.Content, want) {
+			t.Errorf("the refusal is missing %q: %s", want, got.Content)
+		}
+	}
+}
+
+// One still to come is pushed back by identifier: "move my four o'clock".
+func TestOneStillToComeIsPushedBack(t *testing.T) {
+	r, store := harness(t)
+	existing, err := remind.New(user, "", remind.ScopeUser, "Dentist", "Time to leave.",
+		noon.Add(time.Hour), remind.Once)
+	if err != nil {
+		t.Fatalf("remind.New: %v", err)
+	}
+	if err := store.Create(context.Background(), existing); err != nil {
+		t.Fatalf("Create: %v", err)
+	}
+
+	got := call(t, r, "reminder_snooze", `{"id":"`+existing.ID+`","minutes_from_now":90}`)
+	if got.Outcome != conversation.OutcomeOK {
+		t.Fatalf("reminder_snooze: %s", got.Content)
+	}
+
+	after, err := store.Get(context.Background(), user, existing.ID)
+	if err != nil {
+		t.Fatalf("Get: %v", err)
+	}
+	if want := noon.Add(90 * time.Minute); !after.DueAt.Equal(want.UTC()) {
+		t.Errorf("due at %v, want %v", after.DueAt, want.UTC())
+	}
+}
+
+// The one that matters. Putting off a daily reminder must not walk the
+// series later: ten past seven tomorrow, twenty past the day after.
+func TestSnoozingADailyOneLeavesTheSeriesAlone(t *testing.T) {
+	r, store := harness(t)
+	existing := rang(t, store, "Wake", "It is seven o'clock.", remind.Daily)
+
+	got := call(t, r, "reminder_snooze", `{"minutes_from_now":10}`)
+	if got.Outcome != conversation.OutcomeOK {
+		t.Fatalf("reminder_snooze: %s", got.Content)
+	}
+
+	after, err := store.Get(context.Background(), user, existing.ID)
+	if err != nil {
+		t.Fatalf("Get: %v", err)
+	}
+	series, _ := remind.Next(existing.DueAt, remind.Daily, noon, india)
+	if !after.DueAt.Equal(series) {
+		t.Errorf("the daily one moved to %v: it would drift further every day", after.DueAt)
+	}
+
+	// And the put-off one exists in its own right.
+	all, err := store.List(context.Background(), user, remind.Pending)
+	if err != nil {
+		t.Fatalf("List: %v", err)
+	}
+	var extra int
+	for i := range all {
+		if all[i].ID != existing.ID && all[i].Repeats == remind.Once {
+			extra++
+			if want := noon.Add(10 * time.Minute); !all[i].DueAt.Equal(want.UTC()) {
+				t.Errorf("the extra one is due at %v, want %v", all[i].DueAt, want.UTC())
+			}
+		}
+	}
+	if extra != 1 {
+		t.Errorf("got %d one-off reminders, want the one that was put off", extra)
+	}
+}
+
+// And it says so, rather than reporting a plain success that would have
+// the assistant claim the seven o'clock had moved.
+func TestSnoozingADailyOneSaysWhatItDid(t *testing.T) {
+	r, store := harness(t)
+	rang(t, store, "Wake", "It is seven o'clock.", remind.Daily)
+
+	got := call(t, r, "reminder_snooze", `{"minutes_from_now":10}`)
+	for _, want := range []string{"is not moved", "unchanged", "extra"} {
+		if !strings.Contains(got.Content, want) {
+			t.Errorf("the result does not say the series was left alone (%q): %s", want, got.Content)
+		}
+	}
+}
+
+// One called off is not put off. It is set again.
+func TestACancelledOneIsNotPutOff(t *testing.T) {
+	r, store := harness(t)
+	existing := rang(t, store, "Tablets", "Time to take your tablets.", remind.Once)
+	if err := store.Cancel(context.Background(), user, existing.ID); err != nil {
+		t.Fatalf("Cancel: %v", err)
+	}
+
+	got := call(t, r, "reminder_snooze", `{}`)
+	if got.Outcome == conversation.OutcomeOK {
+		t.Fatalf("a cancelled reminder was put off: %s", got.Content)
+	}
+	if !strings.Contains(got.Content, "Set it again") {
+		t.Errorf("the refusal does not say what to do instead: %s", got.Content)
+	}
+}
+
+// An identifier the model invented is refused before it reaches the store.
+func TestAnInventedIdentifierIsRefused(t *testing.T) {
+	r, _ := harness(t)
+
+	got := call(t, r, "reminder_snooze", `{"id":"rem_01M3D477HXQ4YNQX7BNXJZZCV1"}`)
+	if got.Outcome == conversation.OutcomeOK {
+		t.Fatal("a reminder that does not exist was put off")
+	}
+	if !strings.Contains(got.Content, "List them rather than guessing") {
+		t.Errorf("the refusal does not say to list: %s", got.Content)
+	}
+}
+
+// Somebody else's is not theirs to move.
+func TestAnotherPersonsIsNotPutOff(t *testing.T) {
+	r, store := harness(t)
+	other, err := remind.New("usr_01M3D477HXQ4YNQX7BNXJZZCV9", "", remind.ScopeUser,
+		"Theirs", "Not yours.", noon.Add(time.Hour), remind.Once)
+	if err != nil {
+		t.Fatalf("remind.New: %v", err)
+	}
+	if err := store.Create(context.Background(), other); err != nil {
+		t.Fatalf("Create: %v", err)
+	}
+
+	got := call(t, r, "reminder_snooze", `{"id":"`+other.ID+`","minutes_from_now":10}`)
+	if got.Outcome == conversation.OutcomeOK {
+		t.Fatal("somebody else's reminder was put off")
 	}
 }

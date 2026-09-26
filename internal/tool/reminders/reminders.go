@@ -37,6 +37,12 @@ const (
 	MaxSeconds = 86400
 	// MaxAhead : The furthest ahead an absolute one may be set.
 	MaxAhead = 5 * 365 * 24 * time.Hour
+	// DefaultSnooze : How long "snooze it" means when no length is said.
+	//
+	// Ten minutes, which is what the word means on every clock radio ever
+	// made. Asking how long every time would be worse than being wrong
+	// occasionally, and being wrong is one more sentence to put right.
+	DefaultSnooze = 10 * time.Minute
 	// Slack : How far in the past a time may be and still be taken as now.
 	//
 	// The model works the time out from what it was told, and a second or
@@ -83,14 +89,164 @@ func (c Clock) where() *time.Location {
 
 // All : Every reminder tool, in the order they are offered.
 //
-// All three may be said out loud. None of them destroys anything: a
-// cancelled reminder that was wanted after all is set again in a sentence.
+// Any of them may be said out loud. None destroys anything: a cancelled
+// reminder that was wanted after all is set again in a sentence.
 func All(store remind.Store, clock Clock) []tool.Tool {
 	return []tool.Tool{
 		set(store, clock),
 		list(store, clock),
+		snooze(store, clock),
 		cancel(store),
 	}
+}
+
+// snooze : Puts off something that has just been said, or is still to come.
+func snooze(store remind.Store, clock Clock) tool.Tool {
+	return tool.Tool{
+		Name:    "reminder_snooze",
+		Purpose: "Put a reminder off until later, whether it has just gone off or is still to come.",
+		UseWhen: "The person wants one again later: snooze it, not now, in ten minutes, remind me after lunch, " +
+			"push my four o'clock back.",
+		Avoid: "Leave id out when they mean the one just said -- that is the usual case, and it is worked " +
+			"out here rather than guessed. Give id, from a listing, only for one they named that is still " +
+			"to come. Do not use this to make a new reminder about something else: that is reminder_set.",
+		Channels: []chat.Channel{chat.ChannelVoice, chat.ChannelDirect},
+		Params: tool.Schema{
+			Properties: map[string]tool.Property{
+				"id": {
+					Type: "string",
+					Description: "The reminder's identifier, from a listing. Leave it out for the one " +
+						"just said aloud, which is what \"that\" almost always means.",
+					Pattern: idPattern,
+				},
+				"seconds_from_now": {
+					Type:        "integer",
+					Description: "For a length of time said in seconds.",
+				},
+				"minutes_from_now": {
+					Type:        "integer",
+					Description: "For a length of time said in minutes or hours. Ten minutes is 10, an hour is 60.",
+				},
+				"at": {
+					Type: "string",
+					Description: "For a time or a date, written as 2006-01-02 15:04 in the person's own " +
+						"local time.",
+				},
+			},
+		},
+		Examples: []tool.Example{
+			{Ask: "snooze that", Args: `{}`},
+			{Ask: "remind me again in twenty minutes", Args: `{"minutes_from_now":20}`},
+			{Ask: "push my four o'clock back to five",
+				Args: `{"id":"rem_01M3D477HXQ4YNQX7BNXJZZCV0","at":"2026-09-27 17:00"}`},
+		},
+		Run: func(ctx context.Context, in tool.Invocation) tool.Result {
+			var args struct {
+				ID      string `json:"id"`
+				Seconds int    `json:"seconds_from_now"`
+				Minutes int    `json:"minutes_from_now"`
+				At      string `json:"at"`
+			}
+			_ = json.Unmarshal(in.Args, &args)
+
+			if store == nil {
+				return tool.Failed("There is nowhere to keep reminders on this server.")
+			}
+			if in.Caller.UserID == "" {
+				return tool.Failed("This request did not come from a known person.")
+			}
+
+			until, fail := laterBy(clock, args.Seconds, args.Minutes, args.At)
+			if fail != "" {
+				return tool.Failed(fail)
+			}
+
+			existing, fail := which(ctx, store, clock, in.Caller.UserID, args.ID)
+			if fail != "" {
+				return tool.Failed(fail)
+			}
+
+			// A repeating one is never moved: its due time is the series,
+			// and shifting it shifts every day after. The put-off morning
+			// becomes a one-off of its own and the series is left alone.
+			if existing.Repeats != remind.Once {
+				return apart(ctx, store, clock, existing, until)
+			}
+
+			if err := store.Snooze(ctx, in.Caller.UserID, existing.ID, until); err != nil {
+				if errors.Is(err, remind.ErrNotSnoozable) {
+					return tool.Failed(fmt.Sprintf(
+						"%q was %s, so there is nothing to put off. Set it again instead.",
+						existing.Title, existing.Status))
+				}
+				return tool.Failed(err.Error())
+			}
+			return tool.OK(fmt.Sprintf("Put off: %q will now be said at %s. Tell the person when, "+
+				"in their words rather than as a date.", existing.Title, spell(until, clock.where())))
+		},
+	}
+}
+
+// which : The reminder being put off, or why it cannot be worked out.
+//
+// With no identifier it is the one just said. Several said together is
+// the case that must not be answered by picking: the person is asked.
+func which(ctx context.Context, store remind.Store, clock Clock, userID, id string) (*remind.Reminder, string) {
+	if id != "" {
+		got, err := store.Get(ctx, userID, id)
+		if err != nil {
+			if errors.Is(err, remind.ErrNotFound) {
+				return nil, fmt.Sprintf(
+					"There is no reminder with the identifier %s. List them rather than guessing.", id)
+			}
+			return nil, err.Error()
+		}
+		return got, ""
+	}
+
+	spoken, err := store.LastSpoken(ctx, userID, clock.now().Add(-remind.JustSaidWindow))
+	if err != nil {
+		return nil, err.Error()
+	}
+
+	switch len(spoken) {
+	case 0:
+		return nil, "Nothing has been said aloud in the last few minutes, so there is no " +
+			"\"that\" to put off. Ask which reminder they mean, or list them and ask."
+	case 1:
+		return &spoken[0], ""
+	default:
+		return nil, "More than one was said just now, so which is meant cannot be told from " +
+			"\"that\". Ask which, naming them:\n" + describe(spoken, clock)
+	}
+}
+
+// apart : Puts off one turn of a repeating reminder without moving the rest.
+func apart(ctx context.Context, store remind.Store, clock Clock, of *remind.Reminder, until time.Time) tool.Result {
+	one, err := remind.New(of.UserID, of.ClientID, of.Scope, of.Title, of.Body, until, remind.Once)
+	if err != nil {
+		return tool.Failed(err.Error())
+	}
+	if err := store.Create(ctx, one); err != nil {
+		return tool.Failed(err.Error())
+	}
+
+	return tool.OK(fmt.Sprintf(
+		"%q repeats %s, and a repeating reminder is not moved: putting its time back would put "+
+			"every one after it back too. So it is unchanged, still due at %s, and a single extra "+
+			"one was added for %s. Tell the person both, briefly and in their words.",
+		of.Title, of.Repeats, spell(of.DueAt, clock.where()), spell(until, clock.where())))
+}
+
+// laterBy : When a put-off reminder comes back.
+//
+// Nothing said means DefaultSnooze. "Snooze it" is a whole sentence and
+// asking how long would be answering a question with a question.
+func laterBy(clock Clock, seconds, minutes int, written string) (time.Time, string) {
+	if seconds <= 0 && minutes <= 0 && strings.TrimSpace(written) == "" {
+		return clock.now().Add(DefaultSnooze), ""
+	}
+	return when(clock, seconds, minutes, written)
 }
 
 // set : Arranges for something to be said later.

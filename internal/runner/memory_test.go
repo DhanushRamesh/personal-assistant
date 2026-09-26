@@ -67,7 +67,8 @@ func withMemories(t *testing.T, p *recordingProvider, facts map[memory.Tier][][2
 	r, err := runner.New(runner.Options{
 		Repository: repo, Messages: repo, Environment: p,
 		Publisher: events.NewBus(discard()), Logger: discard(), Memory: recall,
-		Missing: &remind.Missing{Store: missed, Location: time.UTC},
+		Recently: &remind.Recently{Store: missed, Location: time.UTC},
+		Missing:  &remind.Missing{Store: missed, Location: time.UTC},
 	})
 	if err != nil {
 		t.Fatalf("runner.New: %v", err)
@@ -427,5 +428,76 @@ func TestAMissedReminderReachesThePromptOnce(t *testing.T) {
 	h.ask(t, "hello again")
 	if strings.Contains(p.systemPrompt(), "Time to take the washing out.") {
 		t.Error("it was raised a second time")
+	}
+}
+
+// A reminder the assistant has just spoken reaches the prompt, so that
+// "that" in "snooze that" has something to point at. Nothing in the
+// conversation records it: the firing loop speaks and never writes a turn.
+func TestAReminderJustSaidReachesThePrompt(t *testing.T) {
+	p := &recordingProvider{}
+	h := withMemories(t, p, nil)
+	ctx := context.Background()
+
+	r, err := remind.New(h.userID, "", remind.ScopeUser, "Tablets",
+		"Time to take your tablets.", time.Now().UTC().Add(-time.Minute), remind.Once)
+	if err != nil {
+		t.Fatalf("remind.New: %v", err)
+	}
+	if err := h.missed.Create(ctx, r); err != nil {
+		t.Fatalf("Create: %v", err)
+	}
+	if err := h.missed.Fired(ctx, r.ID, time.Now().UTC().Add(-time.Minute), time.Time{}); err != nil {
+		t.Fatalf("Fired: %v", err)
+	}
+
+	h.ask(t, "snooze that")
+
+	for _, want := range []string{"Time to take your tablets.", "the most recent one listed"} {
+		if !strings.Contains(p.systemPrompt(), want) {
+			t.Errorf("the prompt is missing %q:\n%s", want, p.systemPrompt())
+		}
+	}
+}
+
+// Unlike a missed one, a reminder that was said is carried every turn
+// while it is recent. It is context, not a message to be delivered, and
+// there is nothing to use up by showing it twice.
+func TestOneJustSaidIsCarriedWhileItIsRecent(t *testing.T) {
+	p := &recordingProvider{}
+	h := withMemories(t, p, nil)
+	ctx := context.Background()
+
+	r, err := remind.New(h.userID, "", remind.ScopeUser, "Tablets",
+		"Time to take your tablets.", time.Now().UTC().Add(-time.Minute), remind.Once)
+	if err != nil {
+		t.Fatalf("remind.New: %v", err)
+	}
+	if err := h.missed.Create(ctx, r); err != nil {
+		t.Fatalf("Create: %v", err)
+	}
+	if err := h.missed.Fired(ctx, r.ID, time.Now().UTC().Add(-time.Minute), time.Time{}); err != nil {
+		t.Fatalf("Fired: %v", err)
+	}
+
+	h.ask(t, "what did you just say")
+	p.system = ""
+	h.ask(t, "and again")
+
+	if !strings.Contains(p.systemPrompt(), "Time to take your tablets.") {
+		t.Errorf("it was dropped after one turn:\n%s", p.systemPrompt())
+	}
+}
+
+// Nothing said recently adds nothing. An assistant told about a reminder
+// it did not just give would talk about one that never went off.
+func TestNothingSaidAddsNothing(t *testing.T) {
+	p := &recordingProvider{}
+	h := withMemories(t, p, nil)
+
+	h.ask(t, "hello")
+
+	if strings.Contains(p.systemPrompt(), "said out loud a short time ago") {
+		t.Errorf("the prompt claims something was just said:\n%s", p.systemPrompt())
 	}
 }
