@@ -185,6 +185,13 @@ file for the two things that need the unexported router.
 `internal/chat/memory` is a real in-memory repository rather than a fixture,
 because the runner and the API both need one and a copy in each drifts apart.
 
+Where an interface has two implementations, the cases they must both pass go
+in a shared suite rather than in either one's tests -- `internal/remind/
+storetest` is the first. They have drifted before: an in-memory store that
+accepted what MySQL refused made a test pass where the server would have
+failed, and nothing said so until it was running. The suite runs in memory
+always and against MySQL when it is reachable.
+
 Where a test encodes a non-obvious requirement, say why in a comment. Existing
 examples worth imitating:
 
