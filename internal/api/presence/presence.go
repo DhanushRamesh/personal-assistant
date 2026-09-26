@@ -18,7 +18,6 @@ import (
 	"log/slog"
 	"net/http"
 	"strings"
-	"sync"
 	"time"
 
 	"github.com/go-chi/chi/v5"
@@ -28,15 +27,6 @@ import (
 	"github.com/DhanushRamesh/personal-assistant/internal/api/httpx"
 	"github.com/DhanushRamesh/personal-assistant/internal/remind"
 )
-
-// Quiet : How soon after greeting somebody they may be greeted again.
-//
-// Nothing downstream promises to ask only once. A rule watching a signal
-// that swings fifteen decibels with arm position will sooner or later
-// decide somebody has arrived twice, and being welcomed into a room you
-// have been sitting in is the failure that makes the whole thing feel
-// broken.
-const Quiet = 10 * time.Minute
 
 // ArrivedResponse : What the caller is told was done.
 type ArrivedResponse struct {
@@ -55,9 +45,6 @@ type Handler struct {
 	reminders remind.Store
 	location  *time.Location
 	now       func() time.Time
-
-	mu      sync.Mutex
-	greeted map[string]time.Time
 }
 
 // New : Builds the handler. A nil announcer says nothing, which is what a
@@ -71,7 +58,6 @@ func New(logger *slog.Logger, announcer announce.Announcer, reminders remind.Sto
 		reminders: reminders,
 		location:  location,
 		now:       now,
-		greeted:   map[string]time.Time{},
 	}
 }
 
@@ -83,17 +69,21 @@ func (h *Handler) Mount(r chi.Router) {
 	})
 }
 
-// Arrived : Somebody has come into the room. Greets them, once.
+// Arrived : Somebody has come into the room. Greets them.
+//
+// Every call greets. Deciding whether somebody has really been away is
+// the caller's job, and the caller has far better evidence for it: the
+// rule upstream will not ask again until the watch has been faint for
+// thirty unbroken seconds.
+//
+// This did once refuse to greet the same person twice within ten
+// minutes, on the reasoning that nothing upstream promises to ask once.
+// It was guarding against the wrong thing. Of three real arrivals in a
+// quarter of an hour it refused two, which is the same silence as the
+// fault it was there to prevent, and harder to explain.
 func (h *Handler) Arrived(w http.ResponseWriter, r *http.Request) {
 	ctx := r.Context()
 	user := authn.Of(ctx).User.ID
-
-	if !h.claim(user) {
-		httpx.WriteJSON(ctx, w, http.StatusOK, ArrivedResponse{
-			Why: "already greeted recently",
-		})
-		return
-	}
 
 	said := h.greeting(ctx, user)
 
@@ -108,7 +98,6 @@ func (h *Handler) Arrived(w http.ResponseWriter, r *http.Request) {
 		// greeting and the speaker was busy or unreachable. Said so
 		// plainly rather than reported as success.
 		h.Logger.WarnContext(ctx, "could not speak a greeting", slog.Any("error", err))
-		h.release(user)
 		httpx.WriteJSON(ctx, w, http.StatusOK, ArrivedResponse{
 			Said: said, Why: "could not be spoken: " + err.Error(),
 		})
@@ -116,26 +105,6 @@ func (h *Handler) Arrived(w http.ResponseWriter, r *http.Request) {
 	}
 
 	httpx.WriteJSON(ctx, w, http.StatusOK, ArrivedResponse{Said: said, Spoke: true})
-}
-
-// claim : Whether this greeting may go ahead, marking it as taken.
-func (h *Handler) claim(user string) bool {
-	h.mu.Lock()
-	defer h.mu.Unlock()
-
-	at := h.clock()
-	if last, ok := h.greeted[user]; ok && at.Sub(last) < Quiet {
-		return false
-	}
-	h.greeted[user] = at
-	return true
-}
-
-// release : Gives the claim back, for a greeting that was never spoken.
-func (h *Handler) release(user string) {
-	h.mu.Lock()
-	defer h.mu.Unlock()
-	delete(h.greeted, user)
 }
 
 // greeting : What to say to somebody who has just walked in.

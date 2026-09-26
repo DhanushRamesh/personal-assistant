@@ -676,13 +676,16 @@ than doubled it, for a sentence that varies. What is said instead is the
 hour and what is waiting, both looked up as they are said, which also
 means there is nothing in it to be wrong about.
 
-It refuses to greet the same person twice within ten minutes. Nothing
-upstream promises to ask once, and a rule watching a signal that swings
-fifteen decibels with arm position will eventually decide somebody has
-arrived twice. Being welcomed into a room you have been sitting in is
-the failure that makes the whole thing feel broken. A greeting that
-could not be spoken gives the claim back, so a satellite that was busy
-does not cost the next arrival its welcome too.
+Every call greets. It did once refuse to greet the same person twice
+within ten minutes, on the reasoning that nothing upstream promises to
+ask only once -- and that guarded against the wrong thing. Of three real
+arrivals in a quarter of an hour it refused two, which is the same
+silence as the fault it was there to prevent and harder to explain.
+
+Whether somebody has really been away is the caller's to judge, and the
+caller judges it on thirty unbroken seconds of a faint signal, which is
+better evidence than any clock here. A greeting that could not be spoken
+says so rather than reporting success.
 
 **Not in the transcript yet.** The owner asked for what the assistant
 said to be recorded, and it is not: a `chat` requires a prompt, and the

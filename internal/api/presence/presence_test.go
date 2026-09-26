@@ -72,24 +72,25 @@ func TestArrivingIsGreeted(t *testing.T) {
 	}
 }
 
-// The one that matters. Nothing downstream promises to ask once, and
-// being welcomed into a room you have been sitting in is what makes the
-// whole thing feel broken.
-func TestBeingGreetedTwiceIsRefused(t *testing.T) {
+// Every call greets. Whether somebody has really been away is the
+// caller's to judge, and it judges it on thirty unbroken seconds of a
+// faint signal, which is better evidence than a clock here.
+//
+// This once refused a second greeting within ten minutes. Of three real
+// arrivals in a quarter of an hour it refused two, which is the same
+// silence as the fault it was there to prevent.
+func TestEveryArrivalIsGreeted(t *testing.T) {
 	sat := &satellite{}
 	e := apitest.NewWith(t, apitest.Options{Announcer: sat})
 
 	first := arrive(t, e)
 	second := arrive(t, e)
 
-	if !first.Spoke {
-		t.Fatal("the first greeting was not spoken")
+	if !first.Spoke || !second.Spoke {
+		t.Errorf("an arrival went ungreeted: %+v, %+v", first, second)
 	}
-	if second.Spoke {
-		t.Error("it greeted twice in a row")
-	}
-	if len(sat.spoken()) != 1 {
-		t.Errorf("said %v, want only the first", sat.spoken())
+	if len(sat.spoken()) != 2 {
+		t.Errorf("said %v, want both", sat.spoken())
 	}
 }
 
@@ -128,9 +129,9 @@ func TestNothingWaitingIsNotMentioned(t *testing.T) {
 	}
 }
 
-// A greeting nobody heard does not use up the one-per-ten-minutes, or a
-// satellite that was briefly busy costs the next arrival its welcome too.
-func TestAGreetingNobodyHeardIsNotCounted(t *testing.T) {
+// A greeting nobody heard is reported as not spoken, rather than as
+// success, so a satellite that was busy is visible instead of silent.
+func TestAGreetingNobodyHeardSaysSo(t *testing.T) {
 	sat := &satellite{fail: errNoSpeaker{}}
 	e := apitest.NewWith(t, apitest.Options{Announcer: sat})
 
