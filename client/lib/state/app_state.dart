@@ -462,6 +462,32 @@ class AppState extends ChangeNotifier {
     _set(busy: false);
   }
 
+  /// snoozeReminder : Puts one off, then reads the list again.
+  ///
+  /// Read again rather than patched in place: putting off a repeating one
+  /// adds a second reminder beside it, and a list this screen edited
+  /// itself would show one of them.
+  ///
+  /// Returns what to say about it, or null when nothing needs saying.
+  Future<String?> snoozeReminder(String id, int minutes) async {
+    _set(busy: true, error: null);
+
+    String? said;
+    try {
+      final out = await api.snoozeReminder(id, minutes);
+      if (out.added) {
+        said =
+            'That one repeats, so it was left where it is and a single '
+            'extra reminder was added.';
+      }
+      _reminders = await api.listReminders();
+    } on Object catch (e) {
+      _error = _explain(e);
+    }
+    _set(busy: false);
+    return said;
+  }
+
   /// cancelReminder : Calls one off and drops it from the list.
   ///
   /// Removed rather than shown as cancelled: the list is what is coming,

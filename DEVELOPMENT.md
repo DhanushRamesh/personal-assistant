@@ -720,11 +720,13 @@ it, and that leaving it out loses it for good, carries four openings out
 of four -- including "hello" and "thank you", which give it the least
 excuse to add anything.
 
-### Snoozing, and what "that" means — decided, not yet built
+### Snoozing, and what "that" means
 
 A reminder that rings at four can be pushed back: "snooze that", or
 "push my four o'clock to five" before it rings. Both, because the second
-is the first with the identifier given rather than assumed.
+is the first with the identifier given rather than assumed. Ten minutes
+is what "snooze" alone means, which is what the word means on every
+clock radio ever made.
 
 The microphone stays shut after a reminder, for now. The satellite can
 reopen it -- `assist_satellite.start_conversation` sets
@@ -741,8 +743,11 @@ does not know. Two things fix it, and they are the same two things:
 - **A block saying what was just said aloud**, on the pattern of the
   missed-reminder one. It gives "that" a referent, the way a person has
   one, because the thing was said a minute ago and both parties know it.
-  Fifteen minutes or so; past that the assistant asks which rather than
-  guessing at an hour-old reminder.
+  `remind.JustSaidWindow` is a quarter of an hour; past that the
+  assistant asks which rather than guessing at an hour-old reminder. It
+  is carried every turn while it is recent, unlike the missed block,
+  which is spent on one telling: this one is context, not a message.
+  It is also told *not* to raise it -- the person was there.
 - **The tool defaults to it.** `reminder_snooze` with no identifier takes
   the last one spoken, so an identifier never has to survive a voice turn.
   Two fired close together and it refuses and names them, so the question
@@ -751,6 +756,14 @@ does not know. Two things fix it, and they are the same two things:
 A repeating one is not moved. Snoozing a daily seven o'clock by ten
 minutes would make it ten past seven tomorrow, and twenty past the day
 after. The snooze is a one-shot of its own and the series is left alone.
+`remind.Later` is where that decision lives, so the spoken tool and the
+`POST /v1/reminders/{id}/snooze` endpoint cannot come to disagree, and
+both say which of the two happened: reporting "put off" for a daily
+alarm that has not moved would be a bluff.
+
+The store refuses to snooze a repeating one at all (`remind.Snoozable`),
+which is what makes the rule an invariant rather than a convention two
+callers happen to follow.
 
 ### A length of time is the server's arithmetic, not the model's
 

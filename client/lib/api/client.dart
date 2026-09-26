@@ -33,6 +33,7 @@ export 'models.dart'
         RecalledNote,
         RecalledExchange,
         Reminder,
+        Snoozed,
         User;
 export 'server_url.dart';
 export 'token_store.dart';

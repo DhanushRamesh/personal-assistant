@@ -351,6 +351,19 @@ class AssistantApi {
     Reminder.fromJson,
   );
 
+  /// snoozeReminder : Puts one off by the given number of minutes.
+  ///
+  /// A repeating one is not moved. The server makes a single one-off
+  /// beside it and says so, which is what added means.
+  Future<Snoozed> snoozeReminder(String id, int minutes) async =>
+      Snoozed.fromJson(
+        await _send(
+          'POST',
+          '/v1/reminders/$id/snooze',
+          body: {'minutes': minutes},
+        ),
+      );
+
   /// cancelReminder : Calls one off.
   Future<Reminder> cancelReminder(String id) async =>
       Reminder.fromJson(await _send('DELETE', '/v1/reminders/$id'));

@@ -819,3 +819,25 @@ class Reminder {
     )?.toLocal(),
   );
 }
+
+/// Snoozed : What came back from putting a reminder off.
+class Snoozed {
+  const Snoozed({required this.reminder, this.added = false});
+
+  /// reminder : The one that will now go off at the later time.
+  final Reminder reminder;
+
+  /// added : Whether this is a new one-off beside a series left where it
+  /// was, rather than the reminder itself moved. A repeating one is never
+  /// moved -- putting a daily alarm back ten minutes would put every day
+  /// after it back too -- so saying "put off" either way would be telling
+  /// somebody their alarm had shifted when it has not.
+  final bool added;
+
+  factory Snoozed.fromJson(Map<String, dynamic> json) => Snoozed(
+    reminder: Reminder.fromJson(
+      (json['reminder'] as Map<String, dynamic>?) ?? const {},
+    ),
+    added: json['added'] as bool? ?? false,
+  );
+}

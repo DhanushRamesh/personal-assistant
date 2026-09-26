@@ -192,3 +192,141 @@ func TestNoStoreIsAnEmptyList(t *testing.T) {
 		t.Errorf("got %d, want none", len(got.Reminders))
 	}
 }
+
+// snoozed : Puts one off through the endpoint, decoded.
+func snoozed(t *testing.T, e *apitest.Env, id, body string) reminders.SnoozeResponse {
+	t.Helper()
+	rec := e.Do(t, http.MethodPost, "/v1/reminders/"+id+"/snooze", body)
+	if rec.Code != http.StatusOK {
+		t.Fatalf("status = %d, want 200: %s", rec.Code, rec.Body.String())
+	}
+	var got reminders.SnoozeResponse
+	if err := json.Unmarshal(rec.Body.Bytes(), &got); err != nil {
+		t.Fatalf("decoding: %v", err)
+	}
+	return got
+}
+
+// Putting one off moves it and leaves it waiting.
+func TestSnoozingMovesIt(t *testing.T) {
+	e, store := env(t)
+	r := put(t, e, store, "Tablets", time.Now().UTC().Add(time.Minute))
+
+	got := snoozed(t, e, r.ID, `{"minutes":30}`)
+	if got.Added {
+		t.Error("a one-off was added for something that is not a series")
+	}
+
+	after, err := store.Get(t.Context(), e.User.ID, r.ID)
+	if err != nil {
+		t.Fatalf("Get: %v", err)
+	}
+	if after.Status != remind.Pending {
+		t.Errorf("status = %q, want pending", after.Status)
+	}
+	if left := time.Until(after.DueAt); left < 29*time.Minute || left > 31*time.Minute {
+		t.Errorf("due in %v, want about thirty minutes", left)
+	}
+}
+
+// The button sends nothing, and nothing means ten minutes.
+func TestAnEmptyBodyIsTenMinutes(t *testing.T) {
+	e, store := env(t)
+	r := put(t, e, store, "Tablets", time.Now().UTC().Add(time.Minute))
+
+	snoozed(t, e, r.ID, "")
+
+	after, err := store.Get(t.Context(), e.User.ID, r.ID)
+	if err != nil {
+		t.Fatalf("Get: %v", err)
+	}
+	if left := time.Until(after.DueAt); left < 9*time.Minute || left > 11*time.Minute {
+		t.Errorf("due in %v, want about ten minutes", left)
+	}
+}
+
+// A repeating one is not moved, and the answer says so, or the screen
+// tells somebody their daily alarm has shifted when it has not.
+func TestSnoozingASeriesAddsOneBeside(t *testing.T) {
+	e, store := env(t)
+	due := time.Now().UTC().Add(time.Minute)
+	r, err := remind.New(e.User.ID, "", remind.ScopeUser, "Wake", "It is seven.", due, remind.Daily)
+	if err != nil {
+		t.Fatalf("remind.New: %v", err)
+	}
+	if err := store.Create(t.Context(), r); err != nil {
+		t.Fatalf("Create: %v", err)
+	}
+
+	got := snoozed(t, e, r.ID, `{"minutes":10}`)
+	if !got.Added {
+		t.Error("the answer does not say a separate one was added")
+	}
+	if got.Reminder.ID == r.ID {
+		t.Error("the series itself was answered with, so the screen would show it moved")
+	}
+
+	after, err := store.Get(t.Context(), e.User.ID, r.ID)
+	if err != nil {
+		t.Fatalf("Get: %v", err)
+	}
+	if !after.DueAt.Equal(due.Truncate(time.Nanosecond)) {
+		t.Errorf("the series moved to %v, want %v", after.DueAt, due)
+	}
+}
+
+// One already called off has nothing to put off.
+func TestSnoozingACancelledOneConflicts(t *testing.T) {
+	e, store := env(t)
+	r := put(t, e, store, "Tablets", time.Now().UTC().Add(time.Minute))
+	if err := store.Cancel(t.Context(), e.User.ID, r.ID); err != nil {
+		t.Fatalf("Cancel: %v", err)
+	}
+
+	rec := e.Do(t, http.MethodPost, "/v1/reminders/"+r.ID+"/snooze", `{"minutes":10}`)
+	if rec.Code != http.StatusConflict {
+		t.Errorf("status = %d, want 409: %s", rec.Code, rec.Body.String())
+	}
+}
+
+// The same 404 as everywhere else, so another person's reminder is not
+// revealed by the difference between a refusal and a miss.
+func TestSnoozingAnotherPersonsIsNotFound(t *testing.T) {
+	e, store := env(t)
+	other, err := remind.New(chat.NewUserID(), "", remind.ScopeUser, "Theirs", "Not yours.",
+		time.Now().UTC().Add(time.Hour), remind.Once)
+	if err != nil {
+		t.Fatalf("remind.New: %v", err)
+	}
+	if err := store.Create(t.Context(), other); err != nil {
+		t.Fatalf("Create: %v", err)
+	}
+
+	rec := e.Do(t, http.MethodPost, "/v1/reminders/"+other.ID+"/snooze", `{"minutes":10}`)
+	if rec.Code != http.StatusNotFound {
+		t.Errorf("status = %d, want 404: %s", rec.Code, rec.Body.String())
+	}
+}
+
+// An identifier that is not one is refused before it reaches the store.
+func TestSnoozingAnInventedIdentifierIsNotFound(t *testing.T) {
+	e, _ := env(t)
+
+	rec := e.Do(t, http.MethodPost, "/v1/reminders/not-an-id/snooze", `{"minutes":10}`)
+	if rec.Code != http.StatusNotFound {
+		t.Errorf("status = %d, want 404: %s", rec.Code, rec.Body.String())
+	}
+}
+
+// A length nobody means is refused rather than stored.
+func TestAnAbsurdLengthIsRefused(t *testing.T) {
+	e, store := env(t)
+	r := put(t, e, store, "Tablets", time.Now().UTC().Add(time.Minute))
+
+	for _, body := range []string{`{"minutes":-5}`, `{"minutes":99999999}`} {
+		rec := e.Do(t, http.MethodPost, "/v1/reminders/"+r.ID+"/snooze", body)
+		if rec.Code != http.StatusBadRequest {
+			t.Errorf("%s: status = %d, want 400: %s", body, rec.Code, rec.Body.String())
+		}
+	}
+}

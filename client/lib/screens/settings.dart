@@ -491,18 +491,88 @@ class _RemindersModule extends StatelessWidget {
                 _ReminderTile(
                   reminder: r,
                   onCancel: () => state.cancelReminder(r.id),
+                  onSnooze: (minutes) => _snooze(context, state, r, minutes),
                 ),
             ],
           ),
   );
 }
 
+/// _snooze : Puts one off, and says so when what happened needs saying.
+Future<void> _snooze(
+  BuildContext context,
+  AppState state,
+  Reminder r,
+  int minutes,
+) async {
+  final said = await state.snoozeReminder(r.id, minutes);
+  if (said != null && context.mounted) {
+    ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(said)));
+  }
+}
+
+/// _SnoozeButton : Put it off, by one of a few lengths.
+///
+/// A menu rather than a single Snooze, because the useful lengths are
+/// nothing alike: ten minutes for one going off now, an hour or tomorrow
+/// for one being got out of the way.
+class _SnoozeButton extends StatelessWidget {
+  const _SnoozeButton({required this.onSnooze});
+
+  final ValueChanged<int> onSnooze;
+
+  /// _lengths : What to offer, and what each is in minutes.
+  static const _lengths = <String, int>{
+    '10 minutes': 10,
+    'An hour': 60,
+    'This evening': 60 * 6,
+    'Tomorrow': 60 * 24,
+  };
+
+  @override
+  Widget build(BuildContext context) => PopupMenuButton<int>(
+    tooltip: 'Put it off',
+    position: PopupMenuPosition.under,
+    color: context.colors.surface,
+    onSelected: onSnooze,
+    itemBuilder: (context) => [
+      for (final length in _lengths.entries)
+        PopupMenuItem(
+          value: length.value,
+          child: Text(
+            length.key,
+            style: context.text.caption.copyWith(
+              color: context.colors.textSecondary,
+            ),
+          ),
+        ),
+    ],
+    child: Padding(
+      padding: const EdgeInsets.symmetric(
+        horizontal: AppSpacing.sm,
+        vertical: AppSpacing.xxs,
+      ),
+      child: Text(
+        'Snooze',
+        style: context.text.caption.copyWith(color: context.colors.textMuted),
+      ),
+    ),
+  );
+}
+
 /// _ReminderTile : One thing waiting to be said.
 class _ReminderTile extends StatelessWidget {
-  const _ReminderTile({required this.reminder, required this.onCancel});
+  const _ReminderTile({
+    required this.reminder,
+    required this.onCancel,
+    required this.onSnooze,
+  });
 
   final Reminder reminder;
   final VoidCallback onCancel;
+
+  /// onSnooze : Put it off by this many minutes.
+  final ValueChanged<int> onSnooze;
 
   @override
   Widget build(BuildContext context) {
@@ -559,6 +629,9 @@ class _ReminderTile extends StatelessWidget {
             ),
           ),
           const SizedBox(width: AppSpacing.sm),
+          // Not offered on a missed one. Its time came and went unheard,
+          // so there is nothing still to come to put off.
+          if (!missed) _SnoozeButton(onSnooze: onSnooze),
           AppButton(
             // Nothing is called off about one that already failed to
             // happen; the only thing left is to stop looking at it.

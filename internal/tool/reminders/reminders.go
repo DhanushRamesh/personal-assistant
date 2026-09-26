@@ -166,20 +166,27 @@ func snooze(store remind.Store, clock Clock) tool.Tool {
 				return tool.Failed(fail)
 			}
 
-			// A repeating one is never moved: its due time is the series,
-			// and shifting it shifts every day after. The put-off morning
-			// becomes a one-off of its own and the series is left alone.
-			if existing.Repeats != remind.Once {
-				return apart(ctx, store, clock, existing, until)
-			}
-
-			if err := store.Snooze(ctx, in.Caller.UserID, existing.ID, until); err != nil {
+			added, err := remind.Later(ctx, store, existing, until)
+			if err != nil {
 				if errors.Is(err, remind.ErrNotSnoozable) {
 					return tool.Failed(fmt.Sprintf(
 						"%q was %s, so there is nothing to put off. Set it again instead.",
 						existing.Title, existing.Status))
 				}
 				return tool.Failed(err.Error())
+			}
+
+			// A repeating one was not moved, and saying it was would have
+			// the assistant report that the alarm had shifted when the
+			// alarm is exactly where it was.
+			if added != nil {
+				return tool.OK(fmt.Sprintf(
+					"%q repeats %s, and a repeating reminder is not moved: putting its time back "+
+						"would put every one after it back too. So it is unchanged, still due at %s, "+
+						"and a single extra one was added for %s. Tell the person both, briefly and "+
+						"in their words.",
+					existing.Title, existing.Repeats, spell(existing.DueAt, clock.where()),
+					spell(until, clock.where())))
 			}
 			return tool.OK(fmt.Sprintf("Put off: %q will now be said at %s. Tell the person when, "+
 				"in their words rather than as a date.", existing.Title, spell(until, clock.where())))
@@ -219,23 +226,6 @@ func which(ctx context.Context, store remind.Store, clock Clock, userID, id stri
 		return nil, "More than one was said just now, so which is meant cannot be told from " +
 			"\"that\". Ask which, naming them:\n" + describe(spoken, clock)
 	}
-}
-
-// apart : Puts off one turn of a repeating reminder without moving the rest.
-func apart(ctx context.Context, store remind.Store, clock Clock, of *remind.Reminder, until time.Time) tool.Result {
-	one, err := remind.New(of.UserID, of.ClientID, of.Scope, of.Title, of.Body, until, remind.Once)
-	if err != nil {
-		return tool.Failed(err.Error())
-	}
-	if err := store.Create(ctx, one); err != nil {
-		return tool.Failed(err.Error())
-	}
-
-	return tool.OK(fmt.Sprintf(
-		"%q repeats %s, and a repeating reminder is not moved: putting its time back would put "+
-			"every one after it back too. So it is unchanged, still due at %s, and a single extra "+
-			"one was added for %s. Tell the person both, briefly and in their words.",
-		of.Title, of.Repeats, spell(of.DueAt, clock.where()), spell(until, clock.where())))
 }
 
 // laterBy : When a put-off reminder comes back.

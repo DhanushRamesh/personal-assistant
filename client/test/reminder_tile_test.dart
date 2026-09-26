@@ -63,4 +63,37 @@ void main() {
     expect(r.title, '');
     expect(r.say, '');
   });
+
+  // The answer to putting one off carries whether a separate reminder was
+  // made. Without it the screen would say "put off" for a daily alarm
+  // that has not moved at all.
+  test('putting one off says whether a separate one was added', () {
+    final moved = Snoozed.fromJson({
+      'reminder': {'id': 'rem_1', 'title': 'Tablets', 'say': 'Take them.'},
+      'added': false,
+    });
+    expect(moved.added, isFalse);
+    expect(moved.reminder.title, 'Tablets');
+
+    final beside = Snoozed.fromJson({
+      'reminder': {'id': 'rem_2', 'title': 'Wake up', 'say': 'It is seven.'},
+      'added': true,
+    });
+    expect(beside.added, isTrue);
+    expect(
+      beside.reminder.id,
+      'rem_2',
+      reason: 'the new one-off, not the series it was made beside',
+    );
+  });
+
+  // An answer missing the flag is the ordinary case, not an added one:
+  // claiming a series was left alone when it was moved is the worse way
+  // to be wrong.
+  test('no flag means the reminder itself moved', () {
+    final got = Snoozed.fromJson({
+      'reminder': {'id': 'rem_1', 'title': 'Tablets', 'say': 'Take them.'},
+    });
+    expect(got.added, isFalse);
+  });
 }

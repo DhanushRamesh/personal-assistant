@@ -1,14 +1,16 @@
-// Package reminders serves the endpoints for seeing and calling off what
-// is waiting to be said.
+// Package reminders serves the endpoints for seeing what is waiting to be
+// said, putting one off, and calling one off.
 //
-// The assistant can already do both by being asked. This is for looking at
-// the list, which is not a thing to do out loud.
+// The assistant can already do all of it by being asked. This is for
+// looking at the list, which is not a thing to do out loud.
 package reminders
 
 import (
+	"encoding/json"
 	"errors"
 	"log/slog"
 	"net/http"
+	"time"
 
 	"github.com/go-chi/chi/v5"
 
@@ -22,6 +24,30 @@ import (
 type ListResponse struct {
 	Reminders []views.Reminder `json:"reminders"`
 }
+
+// SnoozeRequest : How long to put a reminder off for.
+type SnoozeRequest struct {
+	// Minutes : From now. Zero or absent selects DefaultSnooze.
+	Minutes int `json:"minutes"`
+}
+
+// SnoozeResponse : What putting one off answers with.
+type SnoozeResponse struct {
+	// Reminder : The one that will now go off at the later time.
+	Reminder views.Reminder `json:"reminder"`
+	// Added : Whether this is a new one-off beside an untouched series,
+	// rather than the reminder itself moved. A client that says "put off"
+	// either way would be telling somebody their daily alarm had shifted.
+	Added bool `json:"added"`
+}
+
+// DefaultSnooze : How long a reminder is put off for when no length is
+// given. The same ten minutes the spoken tool uses.
+const DefaultSnooze = 10
+
+// MaxSnooze : The longest, in minutes. A year, which is past anything
+// somebody means by "later".
+const MaxSnooze = 525600
 
 // Handler : Serves the reminder endpoints.
 type Handler struct {
@@ -41,6 +67,7 @@ func New(logger *slog.Logger, store remind.Store) *Handler {
 func (h *Handler) Mount(r chi.Router) {
 	r.Route("/v1/reminders", func(r chi.Router) {
 		r.Get("/", h.List)
+		r.Post("/{id}/snooze", h.Snooze)
 		r.Delete("/{id}", h.Cancel)
 	})
 }
@@ -69,6 +96,69 @@ func (h *Handler) List(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	httpx.WriteJSON(ctx, w, http.StatusOK, ListResponse{Reminders: views.OfReminders(found)})
+}
+
+// Snooze : Puts one off until later.
+//
+// A repeating one is not moved. The series stays where it is and a single
+// one-off is made beside it, which the answer says so the screen can too.
+func (h *Handler) Snooze(w http.ResponseWriter, r *http.Request) {
+	ctx := r.Context()
+	id := chi.URLParam(r, "id")
+
+	if h.store == nil || !remind.ValidID(id) {
+		httpx.WriteError(ctx, w, http.StatusNotFound, "No such reminder.")
+		return
+	}
+
+	// An empty body is ten minutes, which is what the button sends.
+	var req SnoozeRequest
+	if r.ContentLength > 0 {
+		if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+			httpx.WriteError(ctx, w, http.StatusBadRequest, "That is not a request this understands.")
+			return
+		}
+	}
+	if req.Minutes == 0 {
+		req.Minutes = DefaultSnooze
+	}
+	if req.Minutes < 0 || req.Minutes > MaxSnooze {
+		httpx.WriteError(ctx, w, http.StatusBadRequest, "Put off by how long?")
+		return
+	}
+
+	user := authn.Of(ctx).User.ID
+	existing, err := h.store.Get(ctx, user, id)
+	if errors.Is(err, remind.ErrNotFound) {
+		httpx.WriteError(ctx, w, http.StatusNotFound, "No such reminder.")
+		return
+	}
+	if err != nil {
+		h.Fail(ctx, w, "reading reminder", err)
+		return
+	}
+
+	until := time.Now().UTC().Add(time.Duration(req.Minutes) * time.Minute)
+	added, err := remind.Later(ctx, h.store, existing, until)
+	switch {
+	case errors.Is(err, remind.ErrNotSnoozable):
+		httpx.WriteError(ctx, w, http.StatusConflict,
+			"That one is "+string(existing.Status)+", so there is nothing to put off.")
+		return
+	case err != nil:
+		h.Fail(ctx, w, "putting a reminder off", err)
+		return
+	}
+
+	if added != nil {
+		httpx.WriteJSON(ctx, w, http.StatusOK, SnoozeResponse{
+			Reminder: views.OfReminder(*added), Added: true,
+		})
+		return
+	}
+
+	existing.DueAt, existing.Status = until, remind.Pending
+	httpx.WriteJSON(ctx, w, http.StatusOK, SnoozeResponse{Reminder: views.OfReminder(*existing)})
 }
 
 // Cancel : Calls one off.
