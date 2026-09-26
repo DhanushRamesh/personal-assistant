@@ -66,9 +66,10 @@ func TestListShowsWhatIsComing(t *testing.T) {
 	}
 }
 
-// Only what is still coming, unless asked otherwise. A list of everything
-// that ever fired is a log, and nobody opens a settings screen for one.
-func TestFinishedOnesAreLeftOutUnlessAsked(t *testing.T) {
+// What fired as it should is left out; what was never said is not. A
+// reminder that vanished silently is the failure this screen exists to
+// make visible.
+func TestFinishedOnesAreLeftOutButMissedOnesAreNot(t *testing.T) {
 	e, store := env(t)
 	now := time.Now().UTC()
 	coming := put(t, e, store, "Coming", now.Add(time.Hour))
@@ -76,15 +77,33 @@ func TestFinishedOnesAreLeftOutUnlessAsked(t *testing.T) {
 	if err := store.Cancel(t.Context(), e.User.ID, gone.ID); err != nil {
 		t.Fatalf("Cancel: %v", err)
 	}
+	missed := put(t, e, store, "Never said", now.Add(-3*time.Hour))
+	if err := store.Missed(t.Context(), missed.ID, now); err != nil {
+		t.Fatalf("Missed: %v", err)
+	}
 
 	got := listed(t, e, "/v1/reminders")
-	if len(got.Reminders) != 1 || got.Reminders[0].ID != coming.ID {
-		t.Errorf("got %d reminders, want only the one still coming", len(got.Reminders))
+	var sawComing, sawMissed, sawCancelled bool
+	for _, r := range got.Reminders {
+		switch r.ID {
+		case coming.ID:
+			sawComing = true
+		case missed.ID:
+			sawMissed = true
+		case gone.ID:
+			sawCancelled = true
+		}
+	}
+	if !sawComing || !sawMissed {
+		t.Errorf("listing = %+v, want the coming one and the missed one", got.Reminders)
+	}
+	if sawCancelled {
+		t.Error("a cancelled reminder was listed")
 	}
 
 	all := listed(t, e, "/v1/reminders?all=true")
-	if len(all.Reminders) != 2 {
-		t.Errorf("got %d with all=true, want 2", len(all.Reminders))
+	if len(all.Reminders) != 3 {
+		t.Errorf("got %d with all=true, want 3", len(all.Reminders))
 	}
 }
 

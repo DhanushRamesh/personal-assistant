@@ -130,6 +130,9 @@ type Reminder struct {
 	UpdatedAt time.Time
 	// LastFiredAt : When it was last said, or nil if never.
 	LastFiredAt *time.Time
+	// MentionedAt : When a miss was brought up, or nil if it has not been.
+	// Only ever set on a missed one, and only once.
+	MentionedAt *time.Time
 	// Fires : How many times it has been said.
 	Fires int
 }

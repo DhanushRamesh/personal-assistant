@@ -656,6 +656,37 @@ A default scope was planned for this screen and left out. With one
 satellite, user and client land in the same place, so the setting would
 configure nothing anybody could hear.
 
+### A reminder that was never said must not vanish
+
+Home Assistant being unreachable at ten o'clock used to lose the
+reminder entirely. It stayed pending and was retried every two seconds,
+which is right; but past the grace hour it was marked missed, and then
+nothing at all happened. It was never spoken, the settings screen asked
+only for pending ones, and no code anywhere read the missed status back.
+
+Three things, all absent and all promised:
+
+- **A late one says so.** "This is late. It was due at ten o'clock." One
+  said at a quarter to eleven that sounded exactly like one said at ten
+  was acted on as though it were ten. The day is named when it crossed
+  midnight.
+- **Missed ones are on the screen**, marked, with Dismiss rather than
+  Cancel: nothing is called off about something that already failed to
+  happen.
+- **They are mentioned once** in the next conversation, then never again.
+
+The mention is marked as given only once an answer exists. Marking it
+while composing the prompt spent the one telling on a turn that then
+failed, and on one where the model simply left it out -- which is how a
+miss came to be recorded as told without ever being told.
+
+The wording had to be forceful to survive. "Mention them once, briefly,
+at the end of your reply" lost to the persona's instruction to be brief
+and to a prompt full of memories. Telling it to *begin* the reply with
+it, and that leaving it out loses it for good, carries four openings out
+of four -- including "hello" and "thank you", which give it the least
+excuse to add anything.
+
 ### A length of time is the server's arithmetic, not the model's
 
 `reminder_set` takes exactly one of `seconds_from_now`, `minutes_from_now`

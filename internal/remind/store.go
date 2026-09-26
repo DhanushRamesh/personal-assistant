@@ -37,6 +37,14 @@ type Store interface {
 	// too long ago to say now.
 	Missed(ctx context.Context, id string, at time.Time) error
 
+	// Unmentioned : Missed reminders the person has not been told about,
+	// oldest first.
+	Unmentioned(ctx context.Context, userID string) ([]Reminder, error)
+
+	// Mentioned : Records that a miss has been brought up, so it is brought
+	// up once and not on every turn afterwards.
+	Mentioned(ctx context.Context, ids []string, at time.Time) error
+
 	// Reschedule : Moves a reminder to its next time without saying it.
 	//
 	// For a repeating one whose turn was missed. Marking it missed would

@@ -45,10 +45,12 @@ func (h *Handler) Mount(r chi.Router) {
 	})
 }
 
-// List : What is waiting to be said, soonest first.
+// List : What is waiting to be said, and what was never said at all.
 //
-// Only what is still coming, unless asked otherwise. A list of everything
-// that ever fired is a log, and nobody opens a settings screen for one.
+// Missed ones are included because leaving them out was how a reminder
+// disappeared: never spoken, not on this screen, and nothing to show it
+// had ever existed. Everything that fired as it should is left out, since
+// a list of those is a log and nobody opens a settings screen for one.
 func (h *Handler) List(w http.ResponseWriter, r *http.Request) {
 	ctx := r.Context()
 	if h.store == nil {
@@ -56,7 +58,7 @@ func (h *Handler) List(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	states := []remind.Status{remind.Pending}
+	states := []remind.Status{remind.Pending, remind.Missed}
 	if r.URL.Query().Get("all") == "true" {
 		states = nil
 	}

@@ -5,9 +5,17 @@ import (
 	"errors"
 	"log/slog"
 	"strings"
+	"time"
 
 	"github.com/DhanushRamesh/personal-assistant/internal/announce"
 )
+
+// LateBy : How far behind its time a reminder must be before it is said to
+// be late.
+//
+// A couple of minutes covers the loop's own delay and the wait for the
+// satellite to fall quiet, neither of which is worth remarking on.
+const LateBy = 2 * time.Minute
 
 // Speaker : Somewhere a reminder can be said.
 type Speaker interface {
@@ -26,6 +34,11 @@ var ErrNowhereToSay = errors.New("remind: nowhere to say it")
 type Aloud struct {
 	// Announcer : Where it is said. Nil says nowhere.
 	Announcer announce.Announcer
+	// Location : The person's zone, for saying what time a late one was
+	// due. Nil is UTC.
+	Location *time.Location
+	// Now : The clock, replaceable in tests. Nil uses the real one.
+	Now func() time.Time
 }
 
 // Say : Speaks the reminder aloud.
@@ -33,7 +46,16 @@ func (a Aloud) Say(ctx context.Context, r Reminder) error {
 	if a.Announcer == nil || !a.Announcer.Available() {
 		return ErrNowhereToSay
 	}
-	return a.Announcer.Say(ctx, Spoken(r))
+
+	at := time.Now().UTC()
+	if a.Now != nil {
+		at = a.Now().UTC()
+	}
+	loc := a.Location
+	if loc == nil {
+		loc = time.UTC
+	}
+	return a.Announcer.Say(ctx, Spoken(r, at, loc))
 }
 
 // Nowhere : A Speaker with nothing behind it, for a server that cannot
@@ -81,10 +103,31 @@ func (e Everywhere) Say(ctx context.Context, r Reminder) error {
 // The body alone, when it already reads as something said. A title is for
 // a listing and saying it as well would have the assistant announce
 // "Wake: time to get up".
-func Spoken(r Reminder) string {
+//
+// A late one says so first. The server having been unreachable is the
+// usual reason, and a reminder said at a quarter to eleven that sounded
+// exactly like one said at ten is acted on as though it were ten.
+func Spoken(r Reminder, at time.Time, loc *time.Location) string {
 	body := strings.TrimSpace(r.Body)
 	if body == "" {
-		return strings.TrimSpace(r.Title)
+		body = strings.TrimSpace(r.Title)
 	}
-	return body
+	if at.Sub(r.DueAt) <= LateBy {
+		return body
+	}
+	return "This is late. It was due at " + due(r.DueAt, at, loc) + ". " + body
+}
+
+// due : When a late reminder was due, as it would be said.
+//
+// The day is named only when it is not today, which within the grace
+// window means it crossed midnight.
+func due(dueAt, at time.Time, loc *time.Location) string {
+	was, now := dueAt.In(loc), at.In(loc)
+	clock := was.Format("3:04 pm")
+
+	if was.YearDay() == now.YearDay() && was.Year() == now.Year() {
+		return clock
+	}
+	return clock + " " + was.Format("on Monday")
 }

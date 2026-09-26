@@ -12,6 +12,8 @@ import (
 	"github.com/DhanushRamesh/personal-assistant/internal/events"
 	"github.com/DhanushRamesh/personal-assistant/internal/memory"
 	"github.com/DhanushRamesh/personal-assistant/internal/memory/inmemory"
+	"github.com/DhanushRamesh/personal-assistant/internal/remind"
+	remindmemory "github.com/DhanushRamesh/personal-assistant/internal/remind/inmemory"
 	"github.com/DhanushRamesh/personal-assistant/internal/runner"
 )
 
@@ -23,6 +25,7 @@ type remembering struct {
 	store  *inmemory.Store
 	past   *inmemory.Transcript
 	recall *memory.Recall
+	missed *remindmemory.Store
 	convID string
 	userID string
 }
@@ -60,9 +63,11 @@ func withMemories(t *testing.T, p *recordingProvider, facts map[memory.Tier][][2
 		t.Fatalf("Embed: %v", err)
 	}
 
+	missed := remindmemory.New()
 	r, err := runner.New(runner.Options{
 		Repository: repo, Messages: repo, Environment: p,
 		Publisher: events.NewBus(discard()), Logger: discard(), Memory: recall,
+		Missing: &remind.Missing{Store: missed, Location: time.UTC},
 	})
 	if err != nil {
 		t.Fatalf("runner.New: %v", err)
@@ -75,7 +80,7 @@ func withMemories(t *testing.T, p *recordingProvider, facts map[memory.Tier][][2
 
 	return &remembering{
 		runner: r, repo: repo, store: store, past: past, recall: recall,
-		convID: c.ID, userID: userID,
+		missed: missed, convID: c.ID, userID: userID,
 	}
 }
 
@@ -381,5 +386,46 @@ func TestThePromptCarriesTheTime(t *testing.T) {
 
 	if !strings.Contains(p.systemPrompt(), "The time where the person is") {
 		t.Errorf("the prompt does not say what time it is:\n%s", p.systemPrompt())
+	}
+}
+
+// A reminder that was never said reaches the prompt, and is marked as
+// raised only once an answer exists.
+func TestAMissedReminderReachesThePromptOnce(t *testing.T) {
+	p := &recordingProvider{}
+	h := withMemories(t, p, nil)
+
+	store := h.missed
+	r, err := remind.New(h.userID, "", remind.ScopeUser, "Washing",
+		"Time to take the washing out.", time.Now().UTC().Add(-3*time.Hour), remind.Once)
+	if err != nil {
+		t.Fatalf("remind.New: %v", err)
+	}
+	if err := store.Create(context.Background(), r); err != nil {
+		t.Fatalf("Create: %v", err)
+	}
+	if err := store.Missed(context.Background(), r.ID, time.Now().UTC()); err != nil {
+		t.Fatalf("Missed: %v", err)
+	}
+
+	h.ask(t, "hello")
+
+	if !strings.Contains(p.systemPrompt(), "Time to take the washing out.") {
+		t.Errorf("the prompt does not carry what was never said:\n%s", p.systemPrompt())
+	}
+
+	after, err := store.Get(context.Background(), h.userID, r.ID)
+	if err != nil {
+		t.Fatalf("Get: %v", err)
+	}
+	if after.MentionedAt == nil {
+		t.Error("it was carried into the prompt but never marked as raised")
+	}
+
+	// And not again on the next turn.
+	p.system = ""
+	h.ask(t, "hello again")
+	if strings.Contains(p.systemPrompt(), "Time to take the washing out.") {
+		t.Error("it was raised a second time")
 	}
 }

@@ -438,9 +438,9 @@ class _RemindersModule extends StatelessWidget {
   Widget build(BuildContext context) => _Section(
     title: 'Reminders',
     subtitle:
-        'Everything waiting to be said, soonest first. These are spoken '
-        'through the voice satellite when their time comes, whether or not '
-        'anything is open here.',
+        'Everything waiting to be said, soonest first, and anything that was '
+        'never said at all. These are spoken through the voice satellite when '
+        'their time comes, whether or not anything is open here.',
     action: InkWell(
       onTap: state.loadReminders,
       borderRadius: BorderRadius.circular(AppRadius.xs),
@@ -484,15 +484,24 @@ class _ReminderTile extends StatelessWidget {
   Widget build(BuildContext context) {
     final colors = context.colors;
 
+    // One that was never said is shown rather than hidden. Leaving it out
+    // was how a reminder disappeared: not spoken, not here, nothing at
+    // all to show it had existed.
+    final missed = reminder.status == 'missed';
+
     return Padding(
       padding: const EdgeInsets.only(top: AppSpacing.md),
       child: Row(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           Icon(
-            reminder.repeating ? Icons.repeat : Icons.alarm_outlined,
+            missed
+                ? Icons.notifications_off_outlined
+                : reminder.repeating
+                ? Icons.repeat
+                : Icons.alarm_outlined,
             size: 15,
-            color: colors.textMuted,
+            color: missed ? colors.warning : colors.textMuted,
           ),
           const SizedBox(width: AppSpacing.sm),
           Expanded(
@@ -505,7 +514,12 @@ class _ReminderTile extends StatelessWidget {
                       child: Text(reminder.title, style: context.text.body),
                     ),
                     const SizedBox(width: AppSpacing.sm),
-                    Text(_when(reminder), style: context.text.caption),
+                    Text(
+                      missed ? 'missed, ${_when(reminder)}' : _when(reminder),
+                      style: context.text.caption.copyWith(
+                        color: missed ? colors.warning : null,
+                      ),
+                    ),
                   ],
                 ),
                 const SizedBox(height: AppSpacing.xxs),
@@ -522,7 +536,9 @@ class _ReminderTile extends StatelessWidget {
           ),
           const SizedBox(width: AppSpacing.sm),
           AppButton(
-            label: 'Cancel',
+            // Nothing is called off about one that already failed to
+            // happen; the only thing left is to stop looking at it.
+            label: missed ? 'Dismiss' : 'Cancel',
             variant: AppButtonVariant.ghost,
             onPressed: onCancel,
           ),

@@ -3,6 +3,7 @@ package remind_test
 import (
 	"context"
 	"errors"
+	"strings"
 	"sync"
 	"testing"
 	"time"
@@ -299,8 +300,49 @@ func TestEverywhereFailsWhenNobodyTakesIt(t *testing.T) {
 
 // What is said is what the reminder says, not its filing name.
 func TestSpokenIsTheBodyNotTheTitle(t *testing.T) {
-	got := remind.Spoken(remind.Reminder{Title: "Wake", Body: "time to get up"})
+	now := at(2026, 9, 26, 7, 0)
+	got := remind.Spoken(remind.Reminder{Title: "Wake", Body: "time to get up", DueAt: now}, now, india)
 	if got != "time to get up" {
 		t.Errorf("Spoken = %q", got)
+	}
+}
+
+// A late one says so, and says what time it was due. Said at a quarter to
+// eleven, one that sounded exactly like a reminder said at ten would be
+// acted on as though it were ten.
+func TestALateReminderSaysSo(t *testing.T) {
+	due := at(2026, 9, 26, 10, 0)
+	got := remind.Spoken(
+		remind.Reminder{Title: "Call", Body: "Time to call the roofer.", DueAt: due},
+		due.Add(45*time.Minute), india)
+
+	for _, want := range []string{"This is late", "10:00 am", "Time to call the roofer."} {
+		if !strings.Contains(got, want) {
+			t.Errorf("Spoken is missing %q:\n%s", want, got)
+		}
+	}
+}
+
+// A moment's lateness is the loop's own delay and the wait for the
+// satellite to fall quiet. Remarking on it would be noise.
+func TestAMomentLateSaysNothing(t *testing.T) {
+	due := at(2026, 9, 26, 10, 0)
+	got := remind.Spoken(
+		remind.Reminder{Body: "Time to call.", DueAt: due}, due.Add(30*time.Second), india)
+
+	if strings.Contains(got, "late") {
+		t.Errorf("Spoken = %q, want no remark", got)
+	}
+}
+
+// One that crossed midnight names the day, or "due at 11:50 pm" reads as
+// tonight.
+func TestALateReminderFromYesterdayNamesTheDay(t *testing.T) {
+	due := at(2026, 9, 26, 23, 50)
+	got := remind.Spoken(
+		remind.Reminder{Body: "Time for bed.", DueAt: due}, due.Add(30*time.Minute), india)
+
+	if !strings.Contains(got, "on Saturday") {
+		t.Errorf("Spoken does not name the day:\n%s", got)
 	}
 }

@@ -143,6 +143,36 @@ func (s *Store) Missed(_ context.Context, id string, at time.Time) error {
 	return nil
 }
 
+// Unmentioned : Missed reminders the person has not been told about.
+func (s *Store) Unmentioned(_ context.Context, userID string) ([]remind.Reminder, error) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+
+	out := make([]remind.Reminder, 0, len(s.kept))
+	for _, r := range s.kept {
+		if r.UserID == userID && r.Status == remind.Missed && r.MentionedAt == nil {
+			out = append(out, r)
+		}
+	}
+	soonestFirst(out)
+	return out, nil
+}
+
+// Mentioned : Records that a miss has been brought up.
+func (s *Store) Mentioned(_ context.Context, ids []string, at time.Time) error {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+
+	when := at.UTC()
+	for _, id := range ids {
+		if r, ok := s.kept[id]; ok && r.MentionedAt == nil {
+			r.MentionedAt = &when
+			s.kept[id] = r
+		}
+	}
+	return nil
+}
+
 // Reschedule : Moves a reminder to its next time without saying it.
 func (s *Store) Reschedule(_ context.Context, id string, next time.Time) error {
 	s.mu.Lock()

@@ -45,9 +45,13 @@ func (r *Runner) execute(ctx, lifeCtx context.Context, t *chat.Chat) {
 
 	// Composed once. It reads the database and searches memory, and every
 	// hop of the tool loop must be given the same one.
-	systemPrompt := r.promptFor(ctx, t)
+	systemPrompt, missed := r.promptFor(ctx, t)
 
 	r.consume(runCtx, ctx, t, systemPrompt)
+
+	// Once there is an answer, not before. Marking them while composing
+	// the prompt spent the one telling on turns that then failed.
+	r.mentioned(ctx, missed)
 
 	// After the answer is recorded and announced, so that maintaining the
 	// conversation's memory is never in front of the person waiting for it. The

@@ -31,6 +31,7 @@ type row struct {
 	CreatedAt   time.Time  `gorm:"column:created_at;autoCreateTime:false"`
 	UpdatedAt   time.Time  `gorm:"column:updated_at;autoUpdateTime:false"`
 	LastFiredAt *time.Time `gorm:"column:last_fired_at"`
+	MentionedAt *time.Time `gorm:"column:mentioned_at"`
 	Fires       int        `gorm:"column:fires"`
 }
 
@@ -57,6 +58,10 @@ func (r *row) toReminder() remind.Reminder {
 		at := r.LastFiredAt.UTC()
 		out.LastFiredAt = &at
 	}
+	if r.MentionedAt != nil {
+		at := r.MentionedAt.UTC()
+		out.MentionedAt = &at
+	}
 	return out
 }
 
@@ -75,6 +80,7 @@ func toRow(r *remind.Reminder) *row {
 		CreatedAt:   r.CreatedAt,
 		UpdatedAt:   r.UpdatedAt,
 		LastFiredAt: r.LastFiredAt,
+		MentionedAt: r.MentionedAt,
 		Fires:       r.Fires,
 	}
 }
@@ -227,6 +233,33 @@ func (s *Store) Missed(ctx context.Context, id string, at time.Time) error {
 	}
 	if out.RowsAffected == 0 {
 		return remind.ErrNotFound
+	}
+	return nil
+}
+
+// Unmentioned : Missed reminders the person has not been told about.
+func (s *Store) Unmentioned(ctx context.Context, userID string) ([]remind.Reminder, error) {
+	var rows []row
+	err := s.db.WithContext(ctx).
+		Where("user_id = ? AND status = ? AND mentioned_at IS NULL", userID, string(remind.Missed)).
+		Order("due_at ASC, id ASC").
+		Find(&rows).Error
+	if err != nil {
+		return nil, fmt.Errorf("remind: reading what was missed: %w", err)
+	}
+	return toReminders(rows), nil
+}
+
+// Mentioned : Records that a miss has been brought up.
+func (s *Store) Mentioned(ctx context.Context, ids []string, at time.Time) error {
+	if len(ids) == 0 {
+		return nil
+	}
+	err := s.db.WithContext(ctx).Model(&row{}).
+		Where("id IN ? AND mentioned_at IS NULL", ids).
+		Update("mentioned_at", at.UTC()).Error
+	if err != nil {
+		return fmt.Errorf("remind: recording that a miss was mentioned: %w", err)
 	}
 	return nil
 }

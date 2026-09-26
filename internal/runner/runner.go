@@ -23,6 +23,7 @@ import (
 	"github.com/DhanushRamesh/personal-assistant/internal/logging"
 	"github.com/DhanushRamesh/personal-assistant/internal/memory"
 	"github.com/DhanushRamesh/personal-assistant/internal/persona"
+	"github.com/DhanushRamesh/personal-assistant/internal/remind"
 	"github.com/DhanushRamesh/personal-assistant/internal/tool"
 )
 
@@ -107,6 +108,10 @@ type Options struct {
 	// Now : The time where the person is. Nil uses UTC, which is right
 	// nowhere anybody lives but is at least a real time.
 	Now func() time.Time
+
+	// Missing : Reminders that were never said, to be brought up once.
+	// Nil never mentions them.
+	Missing *remind.Missing
 }
 
 // Runner : Executes chats in the background.
@@ -127,6 +132,7 @@ type Runner struct {
 	tools           *tool.Registry
 	memory          *memory.Recall
 	now             func() time.Time
+	missing         *remind.Missing
 
 	// slots : Limits how many chats run at once. A chat holds one for the
 	// whole of its run.
@@ -195,6 +201,7 @@ func New(opts Options) (*Runner, error) {
 		tools:           opts.Tools,
 		memory:          opts.Memory,
 		now:             opts.Now,
+		missing:         opts.Missing,
 		slots:           make(chan struct{}, opts.MaxConcurrent),
 		base:            base,
 		stopBase:        stop,
@@ -312,7 +319,7 @@ func (r *Runner) prompt() string {
 // an assistant that has not been told answers from whatever it remembers
 // doing, and remembering having switched somewhere is not the same as being
 // there.
-func (r *Runner) promptFor(ctx context.Context, t *chat.Chat) string {
+func (r *Runner) promptFor(ctx context.Context, t *chat.Chat) (string, []remind.Reminder) {
 	standing := r.prompt() + " " + conversation.Now(r.now()) + heard(t)
 
 	// The conversation is read once: it carries both where the assistant is
@@ -335,15 +342,18 @@ func (r *Runner) promptFor(ctx context.Context, t *chat.Chat) string {
 	var note chat.Recalled
 	started := time.Now()
 
+	unsaid, covered := r.missed(ctx, userID)
+
 	prompt := join(standing,
 		r.known(ctx, userID, &note),
 		r.recalled(ctx, userID, t.Prompt, &note),
-		r.quoted(ctx, userID, t.Prompt, t.ConversationID, &note))
+		r.quoted(ctx, userID, t.Prompt, t.ConversationID, &note),
+		unsaid)
 
 	note.TookMS = time.Since(started).Milliseconds()
 	r.recordRecalled(ctx, t, note)
 
-	return prompt
+	return prompt, covered
 }
 
 // join : The parts of a system prompt that are not empty, separated so the
@@ -411,6 +421,35 @@ func (r *Runner) recalled(ctx context.Context, userID, question string, note *ch
 		note.ByWords = note.ByWords || found[i].ByWords
 	}
 	return memory.Offered(found)
+}
+
+// missed : Reminders that were never said, to be brought up once.
+//
+// It does not mark them told. That happens once an answer exists, because
+// marking them here burned the one telling on a turn that then failed, or
+// on one where the model left it out.
+func (r *Runner) missed(ctx context.Context, userID string) (string, []remind.Reminder) {
+	if r.missing == nil || userID == "" {
+		return "", nil
+	}
+
+	block, covered, err := r.missing.Block(ctx, userID)
+	if err != nil {
+		r.logger.WarnContext(ctx, "cannot read what was never said", slog.Any("error", err))
+		return "", nil
+	}
+	return block, covered
+}
+
+// mentioned : Records that misses carried into a prompt have been raised.
+func (r *Runner) mentioned(ctx context.Context, covered []remind.Reminder) {
+	if r.missing == nil || len(covered) == 0 {
+		return
+	}
+	if err := r.missing.Told(ctx, covered); err != nil {
+		r.logger.WarnContext(ctx, "cannot record that a miss was mentioned",
+			slog.Any("error", err))
+	}
 }
 
 // quoted : Past exchanges that resemble what was asked.

@@ -224,6 +224,11 @@ func run() error {
 		Tools:         tools,
 		Memory:        remembering,
 		Now:           cfg.Assistant.Now,
+		Missing: &remind.Missing{
+			Store:    reminderStore,
+			Location: cfg.Assistant.Location,
+			Now:      cfg.Assistant.Now,
+		},
 	})
 	if err != nil {
 		return err
@@ -238,8 +243,15 @@ func run() error {
 	// because somebody asked. Stopped with the server, so a reminder is
 	// never half said during a shutdown.
 	reminding := &remind.Loop{
-		Store:    reminderStore,
-		Speaker:  remind.Everywhere{To: []remind.Speaker{remind.Aloud{Announcer: speaker}}, Logger: logger.Logger},
+		Store: reminderStore,
+		Speaker: remind.Everywhere{
+			To: []remind.Speaker{remind.Aloud{
+				Announcer: speaker,
+				Location:  cfg.Assistant.Location,
+				Now:       cfg.Assistant.Now,
+			}},
+			Logger: logger.Logger,
+		},
 		Location: cfg.Assistant.Location,
 		Logger:   logger.Logger,
 	}
