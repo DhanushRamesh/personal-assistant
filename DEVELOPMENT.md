@@ -852,6 +852,24 @@ called Jarvis.
 A calendar deleted by hand shows up as a 404 when next used, and
 another is made in its place.
 
+**There is a `calendar_update`, and there had better be.** Without one
+the only way to rename an event is to cancel it and add another, which
+loses the identifier and leaves two events behind when the cancel
+fails. That is not hypothetical: on 27 September 2026 the model was
+asked to rename an event, correctly said it could not, offered to
+remove and recreate, and the remove failed with "there is no such
+event to cancel" -- leaving "Meeting for haircut" and "My Favorite
+Date" side by side on the same day.
+
+It patches rather than replaces, so anything not named keeps what it
+had, and moving the start alone keeps the length it had, which is what
+somebody means by "move it to four".
+
+The before is copied, not held by pointer. A Diary handing back a
+pointer into its own storage would have the write mutate what the diff
+compares against, and the change would silently report that nothing
+moved. The test double did exactly that and caught it.
+
 **`calendar_list` never reports an empty day.** It sees only what the
 assistant put there, so the tool says that nothing was written down
 here and points at `calendar_free` for whether the person is actually

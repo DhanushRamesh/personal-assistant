@@ -49,6 +49,8 @@ func (c Clock) where() *time.Location {
 // Diary : What the tools act on.
 type Diary interface {
 	Add(ctx context.Context, userID string, e calendar.Event) (*calendar.Event, error)
+	Update(ctx context.Context, userID, eventID string, a calendar.Amend) (*calendar.Event, error)
+	One(ctx context.Context, userID, eventID string) (*calendar.Event, error)
 	Cancel(ctx context.Context, userID, eventID string) error
 	Mine(ctx context.Context, userID string, from, to time.Time) ([]calendar.Event, error)
 	Busy(ctx context.Context, userID string, from, to time.Time) ([]calendar.Event, error)
@@ -58,6 +60,7 @@ type Diary interface {
 func All(diary Diary, clock Clock) []tool.Tool {
 	return []tool.Tool{
 		add(diary, clock),
+		amend(diary, clock),
 		agenda(diary, clock),
 		free(diary, clock),
 		cancel(diary, clock),
@@ -179,6 +182,123 @@ func add(diary Diary, clock Clock) tool.Tool {
 			return tool.OK(fmt.Sprintf("Put in the diary and read back: %s. That day had %d %s "+
 				"before and has %d now. Tell them what was added and when.",
 				describe(*made, clock.where()), before, thing(before), len(after)))
+		},
+	}
+}
+
+// amend : Changes an event already in the diary.
+//
+// Here because without it the only way to rename something was to
+// cancel it and add another, which loses the identifier and leaves two
+// events behind when the cancel fails. That happened on 27 September
+// 2026 and left a duplicate pair an hour before this was written.
+func amend(diary Diary, clock Clock) tool.Tool {
+	return tool.Tool{
+		Name:    "calendar_update",
+		Purpose: "Change an event already in the diary: its name, when it is, where, or the notes.",
+		UseWhen: "They want an existing event altered rather than replaced -- rename it, move it, " +
+			"make it longer, add a place.",
+		Avoid: "Give only what is changing; anything left out keeps what it had. Never cancel an " +
+			"event and add another in its place: that gives it a new identifier, and if the cancel " +
+			"fails you have left them with two. Use this.",
+		Channels: []chat.Channel{chat.ChannelVoice, chat.ChannelDirect},
+		Params: tool.Schema{
+			Required: []string{"id"},
+			Properties: map[string]tool.Property{
+				"id": {
+					Type:        "string",
+					Description: "The event's identifier, from calendar_list. Never guessed.",
+				},
+				"title":   {Type: "string", Description: "A new name for it."},
+				"starts":  {Type: "string", Description: "A new start, as 2026-09-28T15:00 in their own time."},
+				"minutes": {Type: "integer", Description: "A new length in minutes, counted from the start."},
+				"where":   {Type: "string", Description: "A new place. An empty string clears it."},
+				"notes":   {Type: "string", Description: "New notes. An empty string clears them."},
+			},
+		},
+		Run: func(ctx context.Context, in tool.Invocation) tool.Result {
+			var args struct {
+				ID      string  `json:"id"`
+				Title   *string `json:"title"`
+				Starts  string  `json:"starts"`
+				Minutes int     `json:"minutes"`
+				Where   *string `json:"where"`
+				Notes   *string `json:"notes"`
+			}
+			_ = json.Unmarshal(in.Args, &args)
+
+			if diary == nil {
+				return tool.Failed("There is no calendar on this server.")
+			}
+			if in.Caller.UserID == "" {
+				return tool.Failed("This request did not come from a known person.")
+			}
+			if strings.TrimSpace(args.ID) == "" {
+				return tool.Failed("Which event? Use calendar_list to find its identifier.")
+			}
+
+			// Read it first, both to have something to compare against
+			// and so a wrong identifier is caught before anything is
+			// written.
+			before, err := diary.One(ctx, in.Caller.UserID, args.ID)
+			if err != nil {
+				return whenTrouble(err)
+			}
+			if before == nil {
+				return tool.Failed("There is no event with that identifier. List the diary and use " +
+					"the identifier exactly as it came back, rather than guessing.")
+			}
+			// Copied, not held by pointer. A Diary that hands back a
+			// pointer into its own storage would otherwise have the
+			// write mutate what we are comparing against, and the diff
+			// would quietly show that nothing changed.
+			was := *before
+
+			change := calendar.Amend{Title: args.Title, Where: args.Where, Notes: args.Notes}
+			if strings.TrimSpace(args.Starts) != "" {
+				starts, err := when(args.Starts, clock.where())
+				if err != nil {
+					return tool.Failed(err.Error())
+				}
+				change.Starts = &starts
+
+				// Moving the start alone keeps the length it had, which
+				// is what somebody means by "move it to four".
+				length := was.Ends.Sub(was.Starts)
+				if args.Minutes > 0 {
+					length = time.Duration(args.Minutes) * time.Minute
+				}
+				if length <= 0 {
+					length = time.Hour
+				}
+				ends := starts.Add(length)
+				change.Ends = &ends
+			} else if args.Minutes > 0 {
+				ends := was.Starts.Add(time.Duration(args.Minutes) * time.Minute)
+				change.Ends = &ends
+			}
+
+			if change.Empty() {
+				return tool.Failed("Nothing was given to change. Say what should be different.")
+			}
+			if _, err := diary.Update(ctx, in.Caller.UserID, args.ID, change); err != nil {
+				return whenTrouble(err)
+			}
+
+			after, err := diary.One(ctx, in.Caller.UserID, args.ID)
+			if err != nil || after == nil {
+				return tool.Unverified("Changing that event", "it can no longer be read back")
+			}
+
+			loc := clock.where()
+			return tool.Changed("Changed the event",
+				tool.Change{What: "the name", From: was.Title, To: after.Title},
+				tool.Change{What: "when it is",
+					From: was.Starts.In(loc).Format("3:04 pm on Monday 2 January"),
+					To:   after.Starts.In(loc).Format("3:04 pm on Monday 2 January")},
+				tool.Change{What: "the place", From: was.Where, To: after.Where},
+				tool.Change{What: "the notes", From: was.Notes, To: after.Notes},
+			)
 		},
 	}
 }

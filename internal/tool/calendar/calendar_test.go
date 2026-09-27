@@ -38,6 +38,46 @@ func (d *diary) Add(_ context.Context, _ string, e calendar.Event) (*calendar.Ev
 
 func (d *diary) Cancel(_ context.Context, _, _ string) error { return d.refuse }
 
+func (d *diary) One(_ context.Context, _, id string) (*calendar.Event, error) {
+	if d.refuse != nil {
+		return nil, d.refuse
+	}
+	for i := range d.mine {
+		if d.mine[i].ID == id {
+			return &d.mine[i], nil
+		}
+	}
+	return nil, nil
+}
+
+func (d *diary) Update(_ context.Context, _, id string, a calendar.Amend) (*calendar.Event, error) {
+	if d.refuse != nil {
+		return nil, d.refuse
+	}
+	for i := range d.mine {
+		if d.mine[i].ID != id {
+			continue
+		}
+		if a.Title != nil {
+			d.mine[i].Title = *a.Title
+		}
+		if a.Where != nil {
+			d.mine[i].Where = *a.Where
+		}
+		if a.Notes != nil {
+			d.mine[i].Notes = *a.Notes
+		}
+		if a.Starts != nil {
+			d.mine[i].Starts = *a.Starts
+		}
+		if a.Ends != nil {
+			d.mine[i].Ends = *a.Ends
+		}
+		return &d.mine[i], nil
+	}
+	return nil, nil
+}
+
 func (d *diary) Mine(_ context.Context, _ string, _, _ time.Time) ([]calendar.Event, error) {
 	return d.mine, d.refuse
 }
@@ -262,5 +302,62 @@ func TestAnEmptyRangeStillWarns(t *testing.T) {
 	got := asked(t, &diary{}, `{"from":"2026-09-03"}`)
 	if !strings.Contains(got, "their own") {
 		t.Errorf("content = %q, want the warning", got)
+	}
+}
+
+// an : One event already in the diary, for the change tests.
+func an(id, title string) []calendar.Event {
+	return []calendar.Event{{
+		ID: id, Title: title, Mine: true,
+		Starts: time.Date(2026, 10, 29, 6, 30, 0, 0, time.UTC),
+		Ends:   time.Date(2026, 10, 29, 7, 30, 0, 0, time.UTC),
+	}}
+}
+
+// Renaming reports both ends, so the person hears what it was called.
+func TestRenamingSaysWhatItWas(t *testing.T) {
+	d := &diary{mine: an("e1", "Meeting for haircut")}
+	got := run(t, d, "calendar_update", `{"id":"e1","title":"My Favorite Date"}`)
+
+	if got.Outcome != "ok" {
+		t.Fatalf("outcome = %q: %s", got.Outcome, got.Content)
+	}
+	for _, want := range []string{"Meeting for haircut", "My Favorite Date"} {
+		if !strings.Contains(got.Content, want) {
+			t.Errorf("content = %q, want %q in it", got.Content, want)
+		}
+	}
+}
+
+// Moving the start keeps the length it had, which is what "move it to
+// four" means.
+func TestMovingKeepsTheLength(t *testing.T) {
+	d := &diary{mine: an("e1", "Haircut")}
+	run(t, d, "calendar_update", `{"id":"e1","starts":"2026-10-29T16:00"}`)
+
+	if got := d.mine[0].Ends.Sub(d.mine[0].Starts); got != time.Hour {
+		t.Errorf("length = %v, want the hour it had", got)
+	}
+}
+
+// An identifier that is not there is refused before anything is
+// written, rather than creating something new.
+func TestAnUnknownEventIsRefused(t *testing.T) {
+	d := &diary{mine: an("e1", "Haircut")}
+	got := run(t, d, "calendar_update", `{"id":"nope","title":"Other"}`)
+
+	if got.Outcome != "failed" {
+		t.Errorf("outcome = %q, want it refused", got.Outcome)
+	}
+	if d.mine[0].Title != "Haircut" {
+		t.Errorf("the existing event was changed to %q", d.mine[0].Title)
+	}
+}
+
+// Nothing to change is said rather than reported as a change.
+func TestNothingToChangeIsRefused(t *testing.T) {
+	d := &diary{mine: an("e1", "Haircut")}
+	if got := run(t, d, "calendar_update", `{"id":"e1"}`); got.Outcome != "failed" {
+		t.Errorf("outcome = %q: %s", got.Outcome, got.Content)
 	}
 }

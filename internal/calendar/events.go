@@ -62,6 +62,111 @@ func (d *Diary) Add(ctx context.Context, userID string, e Event) (*Event, error)
 	return fromGoogle(made, true, d.location), nil
 }
 
+// Amend : What to change about an event. A nil field is left alone.
+//
+// Pointers rather than zero values, because clearing a location and
+// leaving it untouched are different intentions and an empty string
+// cannot say which was meant.
+type Amend struct {
+	Title  *string
+	Where  *string
+	Notes  *string
+	Starts *time.Time
+	Ends   *time.Time
+}
+
+// Empty : Whether nothing was actually given to change.
+func (a Amend) Empty() bool {
+	return a.Title == nil && a.Where == nil && a.Notes == nil &&
+		a.Starts == nil && a.Ends == nil
+}
+
+// Update : Changes an event on the assistant's own calendar.
+//
+// A patch rather than a replace, so anything not named keeps what it
+// had. Without this the only way to change a name was to cancel and
+// recreate, which loses the identifier and leaves two events behind
+// when the cancel fails -- which is exactly what happened on 27
+// September 2026.
+func (d *Diary) Update(ctx context.Context, userID, eventID string, a Amend) (*Event, error) {
+	if a.Empty() {
+		return nil, fmt.Errorf("calendar: nothing was given to change")
+	}
+
+	svc, err := d.service(ctx, userID)
+	if err != nil {
+		return nil, err
+	}
+	id, err := d.mine(ctx, userID, svc)
+	if err != nil {
+		return nil, err
+	}
+
+	patch := &gcal.Event{}
+	var clear []string
+	if a.Title != nil {
+		patch.Summary = *a.Title
+	}
+	if a.Where != nil {
+		patch.Location = *a.Where
+		if *a.Where == "" {
+			clear = append(clear, "Location")
+		}
+	}
+	if a.Notes != nil {
+		patch.Description = *a.Notes
+		if *a.Notes == "" {
+			clear = append(clear, "Description")
+		}
+	}
+	if a.Starts != nil {
+		patch.Start = &gcal.EventDateTime{
+			DateTime: a.Starts.In(d.location).Format(time.RFC3339),
+			TimeZone: d.location.String(),
+		}
+	}
+	if a.Ends != nil {
+		patch.End = &gcal.EventDateTime{
+			DateTime: a.Ends.In(d.location).Format(time.RFC3339),
+			TimeZone: d.location.String(),
+		}
+	}
+	if len(clear) > 0 {
+		patch.NullFields = clear
+	}
+
+	changed, err := svc.Events.Patch(id, eventID, patch).Context(ctx).Do()
+	if err != nil {
+		if gone(err) {
+			return nil, fmt.Errorf("calendar: there is no such event to change")
+		}
+		return nil, fmt.Errorf("calendar: changing that event: %w", err)
+	}
+	return fromGoogle(changed, true, d.location), nil
+}
+
+// One : A single event from the assistant's own calendar, for reading
+// back what a change actually did.
+func (d *Diary) One(ctx context.Context, userID, eventID string) (*Event, error) {
+	svc, err := d.service(ctx, userID)
+	if err != nil {
+		return nil, err
+	}
+	id, err := d.mine(ctx, userID, svc)
+	if err != nil {
+		return nil, err
+	}
+
+	got, err := svc.Events.Get(id, eventID).Context(ctx).Do()
+	if err != nil {
+		if gone(err) {
+			return nil, nil
+		}
+		return nil, fmt.Errorf("calendar: reading that event: %w", err)
+	}
+	return fromGoogle(got, true, d.location), nil
+}
+
 // Cancel : Removes an event from the assistant's own calendar.
 //
 // Only its own. Nothing else is reachable with these scopes, which is
