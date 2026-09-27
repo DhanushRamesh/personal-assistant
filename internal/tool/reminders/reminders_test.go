@@ -580,3 +580,101 @@ func TestAnotherPersonsIsNotPutOff(t *testing.T) {
 		t.Fatal("somebody else's reminder was put off")
 	}
 }
+
+// missedAt : A reminder whose time passed with nothing able to say it.
+func missedAt(t *testing.T, store *inmemory.Store, title, body string, due time.Time) *remind.Reminder {
+	t.Helper()
+	r, err := remind.New(user, "", remind.ScopeUser, title, body, due, remind.Once)
+	if err != nil {
+		t.Fatalf("remind.New: %v", err)
+	}
+	if err := store.Create(context.Background(), r); err != nil {
+		t.Fatalf("Create: %v", err)
+	}
+	if err := store.Missed(context.Background(), r.ID, noon); err != nil {
+		t.Fatalf("Missed: %v", err)
+	}
+	return r
+}
+
+// Walking back in and asking what was missed. The default window is the
+// last hour, which is what somebody who has just come back is asking about.
+func TestRecentAnswersForTheLastHour(t *testing.T) {
+	r, store := harness(t)
+	rang(t, store, "Tablets", "Time to take your tablets.", remind.Once)
+
+	got := call(t, r, "reminder_recent", `{}`)
+	if got.Outcome != conversation.OutcomeOK {
+		t.Fatalf("reminder_recent: %s", got.Content)
+	}
+	if !strings.Contains(got.Content, "Time to take your tablets.") {
+		t.Errorf("the recap leaves out what was said: %s", got.Content)
+	}
+	if !strings.Contains(got.Content, "the last hour") {
+		t.Errorf("the recap does not say what window it covers: %s", got.Content)
+	}
+}
+
+// The distinction that matters. Being told a thing and never being told it
+// are different facts, and running them together tells somebody they heard
+// something they did not.
+func TestSaidAndNeverSaidAreKeptApart(t *testing.T) {
+	r, store := harness(t)
+	rang(t, store, "Tablets", "Time to take your tablets.", remind.Once)
+	missedAt(t, store, "Bins", "Put the bins out.", noon.Add(-30*time.Minute))
+
+	got := call(t, r, "reminder_recent", `{}`)
+
+	saidAt := strings.Index(got.Content, "Said out loud")
+	neverAt := strings.Index(got.Content, "Never said at all")
+	if saidAt < 0 || neverAt < 0 {
+		t.Fatalf("the two are not labelled separately:\n%s", got.Content)
+	}
+	if !strings.Contains(got.Content, "Put the bins out.") {
+		t.Errorf("the missed one is left out: %s", got.Content)
+	}
+	if saidAt > neverAt {
+		t.Error("what was never said comes before what was, which reads as the main news")
+	}
+}
+
+// Nothing happened is an answer, not an empty list.
+func TestRecentSaysWhenNothingHappened(t *testing.T) {
+	r, _ := harness(t)
+
+	got := call(t, r, "reminder_recent", `{}`)
+	if got.Outcome != conversation.OutcomeOK {
+		t.Fatalf("reminder_recent: %s", got.Content)
+	}
+	if !strings.Contains(got.Content, "Nothing has been said and nothing was missed") {
+		t.Errorf("got %q, want a plain nothing-happened", got.Content)
+	}
+}
+
+// Older than the window is not in the recap. A miss from yesterday is not
+// what somebody who stepped out for ten minutes is asking about.
+func TestRecentLeavesOutWhatIsTooOld(t *testing.T) {
+	r, store := harness(t)
+	missedAt(t, store, "Yesterday", "Something from yesterday.", noon.Add(-26*time.Hour))
+
+	if got := call(t, r, "reminder_recent", `{}`); strings.Contains(got.Content, "yesterday") {
+		t.Errorf("the recap reaches too far back: %s", got.Content)
+	}
+	// But it is there when asked for.
+	if got := call(t, r, "reminder_recent", `{"hours":48}`); !strings.Contains(got.Content, "Something from yesterday.") {
+		t.Errorf("asking for two days did not reach it: %s", got.Content)
+	}
+}
+
+// A window nobody means is refused, with what to use instead.
+func TestAnAbsurdWindowIsRefused(t *testing.T) {
+	r, _ := harness(t)
+
+	got := call(t, r, "reminder_recent", `{"hours":100000}`)
+	if got.Outcome == conversation.OutcomeOK {
+		t.Fatal("it accepted a window of years")
+	}
+	if !strings.Contains(got.Content, "include_finished") {
+		t.Errorf("the refusal does not say what to use instead: %s", got.Content)
+	}
+}

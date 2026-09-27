@@ -844,6 +844,24 @@ The store refuses to snooze a repeating one at all (`remind.Snoozable`),
 which is what makes the rule an invariant rather than a convention two
 callers happen to follow.
 
+### What was said and what was never said are different answers
+
+`reminder_recent` answers "did I miss anything", over the last hour by
+default, because somebody who has stepped out and come back is asking
+about the time they were gone.
+
+It keeps two lists apart and labels them: ones that were spoken, and ones
+that were never spoken because nothing could say them at the time. Run
+together they would tell the person they heard something they did not,
+which is the same fault as any other thing the assistant claims happened
+and did not. The spoken list comes from `LastSpoken`, which is bounded,
+so when the bound is reached the tool says there may be more rather than
+implying the list is everything.
+
+Holding a reminder back because nobody was in the room is a third
+category and does not exist yet. That is the other half of this, and it
+needs the server to know where somebody is.
+
 ### A length of time is the server's arithmetic, not the model's
 
 `reminder_set` takes exactly one of `seconds_from_now`, `minutes_from_now`

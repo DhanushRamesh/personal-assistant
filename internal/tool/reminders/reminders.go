@@ -95,9 +95,150 @@ func All(store remind.Store, clock Clock) []tool.Tool {
 	return []tool.Tool{
 		set(store, clock),
 		list(store, clock),
+		recent(store, clock),
 		snooze(store, clock),
 		cancel(store),
 	}
+}
+
+// DefaultRecentHours : How far back "did I miss anything" looks by default.
+//
+// An hour. Somebody stepping out and coming back is asking about the time
+// they were gone, not about yesterday, and a recap that reaches further
+// reads out things they were there for.
+const DefaultRecentHours = 1
+
+// MaxRecentHours : The furthest back it will look. A week, past which this
+// is not a recap but a history, and reminder_list with include_finished is
+// the honest way to ask for that.
+const MaxRecentHours = 168
+
+// recent : What happened while somebody was away.
+func recent(store remind.Store, clock Clock) tool.Tool {
+	return tool.Tool{
+		Name:    "reminder_recent",
+		Purpose: "Say what reminders have happened lately: which were said, and which were never said at all.",
+		UseWhen: "The person asks whether they missed anything, what they missed while they were out, or " +
+			"what has already gone off.",
+		Avoid: "This is about what has already happened. For what is still to come, that is reminder_list. " +
+			"Say which of the two each one was: being told a thing and never being told it are different, " +
+			"and running them together tells the person they heard something they did not.",
+		Channels: []chat.Channel{chat.ChannelVoice, chat.ChannelDirect},
+		Params: tool.Schema{
+			Properties: map[string]tool.Property{
+				"hours": {
+					Type: "integer",
+					Description: "How far back to look. Leave out for the last hour, which is what " +
+						"somebody who has just walked in is asking about.",
+					Default: DefaultRecentHours,
+				},
+			},
+		},
+		Examples: []tool.Example{
+			{Ask: "did I miss any reminders", Args: `{}`},
+			{Ask: "what did I miss this morning", Args: `{"hours":6}`},
+		},
+		Run: func(ctx context.Context, in tool.Invocation) tool.Result {
+			var args struct {
+				Hours int `json:"hours"`
+			}
+			_ = json.Unmarshal(in.Args, &args)
+
+			if store == nil {
+				return tool.Failed("There is nowhere to keep reminders on this server.")
+			}
+			if in.Caller.UserID == "" {
+				return tool.Failed("This request did not come from a known person.")
+			}
+
+			hours := args.Hours
+			if hours <= 0 {
+				hours = DefaultRecentHours
+			}
+			if hours > MaxRecentHours {
+				return tool.Failed(fmt.Sprintf(
+					"hours was %d, and the most allowed is %d. For anything older, list them with "+
+						"include_finished instead.", hours, MaxRecentHours))
+			}
+
+			since := clock.now().Add(-time.Duration(hours) * time.Hour)
+
+			said, err := store.LastSpoken(ctx, in.Caller.UserID, since)
+			if err != nil {
+				return tool.Failed(err.Error())
+			}
+			missed, err := store.List(ctx, in.Caller.UserID, remind.Missed)
+			if err != nil {
+				return tool.Failed(err.Error())
+			}
+
+			return tool.OK(recap(said, within(missed, since), hours, len(said), clock))
+		},
+	}
+}
+
+// within : The reminders whose time fell inside the window.
+func within(all []remind.Reminder, since time.Time) []remind.Reminder {
+	kept := make([]remind.Reminder, 0, len(all))
+	for i := range all {
+		if !all[i].DueAt.Before(since) {
+			kept = append(kept, all[i])
+		}
+	}
+	return kept
+}
+
+// recap : What happened lately, as the model is shown it.
+//
+// The two lists are kept apart and labelled. A reminder that was spoken and
+// one that was never spoken are different facts, and a recap that runs them
+// together tells somebody they heard a thing they did not.
+func recap(said, missed []remind.Reminder, hours, spokenCount int, clock Clock) string {
+	window := "the last hour"
+	if hours != 1 {
+		window = fmt.Sprintf("the last %d hours", hours)
+	}
+
+	if len(said) == 0 && len(missed) == 0 {
+		return "Nothing has been said and nothing was missed in " + window + "."
+	}
+
+	var b strings.Builder
+	if len(said) > 0 {
+		b.WriteString("Said out loud in " + window + ", most recent first:")
+		for i := range said {
+			b.WriteString("\n- ")
+			b.WriteString(spell(spokenAt(said[i]), clock.where()))
+			b.WriteString(": ")
+			b.WriteString(said[i].Body)
+		}
+		// The store returns a bounded number. Saying so is better than
+		// implying the list is everything.
+		if spokenCount >= remind.DefaultSpokenLimit {
+			b.WriteString("\n(That is as many as this returns; there may be more.)")
+		}
+	}
+	if len(missed) > 0 {
+		if b.Len() > 0 {
+			b.WriteString("\n\n")
+		}
+		b.WriteString("Never said at all, because nothing could say them at the time:")
+		for i := range missed {
+			b.WriteString("\n- ")
+			b.WriteString(spell(missed[i].DueAt, clock.where()))
+			b.WriteString(": ")
+			b.WriteString(missed[i].Body)
+		}
+	}
+	return b.String()
+}
+
+// spokenAt : The moment a reminder was said, or its due time if unrecorded.
+func spokenAt(r remind.Reminder) time.Time {
+	if r.LastFiredAt != nil {
+		return *r.LastFiredAt
+	}
+	return r.DueAt
 }
 
 // snooze : Puts off something that has just been said, or is still to come.
