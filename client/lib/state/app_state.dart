@@ -6,6 +6,7 @@ import 'dart:async';
 import 'package:flutter/foundation.dart';
 
 import '../api/client.dart';
+import '../api/models.dart';
 import '../api/remembered_client.dart';
 
 /// Turn : One exchange — what was asked, and what came back.
@@ -22,7 +23,26 @@ class Turn {
     required this.status,
     this.error = '',
     this.detail = '',
+    this.announcement,
   });
+
+  /// Turn.announced : Something the assistant said without being asked.
+  ///
+  /// A turn of its own rather than an answer without a question, so the
+  /// transcript can show it for what it is: nobody asked, and there is no
+  /// prompt above it to render.
+  Turn.announced(Announcement said)
+    : chatId = '',
+      prompt = '',
+      answer = said.text,
+      status = ChatStatus.completed,
+      error = '',
+      detail = '',
+      announcement = said;
+
+  /// announcement : What made the assistant speak, when nothing was asked.
+  /// Null for an ordinary question and answer.
+  final Announcement? announcement;
 
   final String chatId;
   final String prompt;
@@ -51,6 +71,7 @@ class Turn {
   }) => Turn(
     chatId: chatId,
     prompt: prompt,
+    announcement: announcement,
     answer: answer ?? this.answer,
     status: status ?? this.status,
     error: error ?? this.error,
@@ -688,17 +709,27 @@ class AppState extends ChangeNotifier {
       }),
     );
 
-    _turns = [
+    // Chats and announcements in one sequence, ordered by when they
+    // happened. A greeting said between two questions belongs between
+    // them: read in any other order the conversation stops making sense,
+    // because the answer to an announcement would come before it.
+    final ordered = <({DateTime at, Turn turn})>[
       for (final c in chats)
-        Turn(
-          chatId: c.id,
-          prompt: c.prompt,
-          answer: c.response,
-          status: c.status,
-          error: c.error,
-          detail: c.errorDetail,
+        (
+          at: c.createdAt,
+          turn: Turn(
+            chatId: c.id,
+            prompt: c.prompt,
+            answer: c.response,
+            status: c.status,
+            error: c.error,
+            detail: c.errorDetail,
+          ),
         ),
-    ];
+      for (final a in detail.announcements) (at: a.at, turn: Turn.announced(a)),
+    ]..sort((a, b) => a.at.compareTo(b.at));
+
+    _turns = [for (final e in ordered) e.turn];
     notifyListeners();
   }
 

@@ -20,6 +20,7 @@ import (
 	"github.com/DhanushRamesh/personal-assistant/internal/api/httpx"
 	"github.com/DhanushRamesh/personal-assistant/internal/api/views"
 	"github.com/DhanushRamesh/personal-assistant/internal/chat"
+	"github.com/DhanushRamesh/personal-assistant/internal/conversation"
 )
 
 // CreateRequest : The body of a request to start a conversation.
@@ -53,21 +54,30 @@ type ListResponse struct {
 	Conversations []views.Conversation `json:"conversations"`
 }
 
-// DetailResponse : A conversation together with its chats.
+// DetailResponse : A conversation together with everything said in it.
 type DetailResponse struct {
 	Conversation views.Conversation `json:"conversation"`
 	Chats        []views.Summary    `json:"chats"`
+	// Announcements : What the assistant said unasked, which belongs in
+	// the conversation as much as an answer does but is not a chat.
+	Announcements []views.Announcement `json:"announcements"`
 }
 
 // Handler : Serves the conversation endpoints.
 type Handler struct {
 	httpx.Responder
-	repo chat.Repository
+	repo     chat.Repository
+	messages conversation.Repository
 }
 
-// New : Builds the handler from the store holding the conversations.
-func New(logger *slog.Logger, repo chat.Repository) *Handler {
-	return &Handler{Responder: httpx.Responder{Logger: logger}, repo: repo}
+// New : Builds the handler from the stores holding the conversations and
+// what was said in them.
+func New(logger *slog.Logger, repo chat.Repository, messages conversation.Repository) *Handler {
+	return &Handler{
+		Responder: httpx.Responder{Logger: logger},
+		repo:      repo,
+		messages:  messages,
+	}
 }
 
 // Mount : Registers the conversation endpoints on r, which must already require
@@ -197,9 +207,28 @@ func (h *Handler) Get(w http.ResponseWriter, r *http.Request) {
 	sort.Slice(summaries, func(i, j int) bool { return summaries[i].ID < summaries[j].ID })
 
 	httpx.WriteJSON(ctx, w, http.StatusOK, DetailResponse{
-		Conversation: views.OfConversation(*conversation, conversation.ID == c.Client.ActiveConversationID),
-		Chats:        views.OfSummaries(summaries),
+		Conversation:  views.OfConversation(*conversation, conversation.ID == c.Client.ActiveConversationID),
+		Chats:         views.OfSummaries(summaries),
+		Announcements: h.announcements(ctx, id),
 	})
+}
+
+// announcements : What the assistant said unasked in this conversation.
+//
+// Read separately from the chats because it is not one. Failing to read
+// them costs the conversation its announcements and nothing else, so the
+// rest is still shown rather than the whole request failing.
+func (h *Handler) announcements(ctx context.Context, id string) []views.Announcement {
+	if h.messages == nil {
+		return nil
+	}
+	said, err := h.messages.All(ctx, id)
+	if err != nil {
+		h.Logger.WarnContext(ctx, "cannot read what was announced",
+			slog.String("conversation_id", id), slog.Any("error", err))
+		return nil
+	}
+	return views.OfAnnouncements(said)
 }
 
 // Rename : Changes what a conversation is called.

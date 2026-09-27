@@ -54,14 +54,21 @@ type ArrivedResponse struct {
 	Missed int `json:"missed,omitempty"`
 }
 
+// Announcements : Somewhere to note what was said at the door, so the next
+// thing the person says has it behind them.
+type Announcements interface {
+	// Arrived : Notes that these words were announced as somebody came in.
+	Arrived(ctx context.Context, userID, text string)
+}
+
 // Handler : Serves the presence endpoints.
 type Handler struct {
 	httpx.Responder
-	announcer announce.Announcer
-	reminders remind.Store
-	aside     remind.Aside
-	location  *time.Location
-	now       func() time.Time
+	announcer     announce.Announcer
+	reminders     remind.Store
+	announcements Announcements
+	location      *time.Location
+	now           func() time.Time
 
 	mu sync.Mutex
 	// lastGreeting : So the same words are not used twice running.
@@ -71,15 +78,15 @@ type Handler struct {
 // New : Builds the handler. A nil announcer says nothing, which is what a
 // server with no satellite has.
 func New(logger *slog.Logger, announcer announce.Announcer, reminders remind.Store,
-	aside remind.Aside, location *time.Location, now func() time.Time) *Handler {
+	announcements Announcements, location *time.Location, now func() time.Time) *Handler {
 
 	return &Handler{
-		Responder: httpx.Responder{Logger: logger},
-		announcer: announcer,
-		reminders: reminders,
-		aside:     aside,
-		location:  location,
-		now:       now,
+		Responder:     httpx.Responder{Logger: logger},
+		announcer:     announcer,
+		reminders:     reminders,
+		announcements: announcements,
+		location:      location,
+		now:           now,
 	}
 }
 
@@ -166,8 +173,8 @@ func (h *Handler) Arrived(w http.ResponseWriter, r *http.Request) {
 	// the reply will arrive in. Somebody who has just been told they
 	// should have done something at ten to four asks how late they were,
 	// and the question needs the sentence it is about.
-	if h.aside != nil {
-		h.aside.Said(speak, user, said)
+	if h.announcements != nil {
+		h.announcements.Arrived(speak, user, said)
 	}
 
 	// Only now. Said and not recorded is better than recorded and not

@@ -17,8 +17,8 @@ import (
 
 	"github.com/DhanushRamesh/personal-assistant/internal/announce"
 	"github.com/DhanushRamesh/personal-assistant/internal/announce/hass"
+	"github.com/DhanushRamesh/personal-assistant/internal/announcement"
 	"github.com/DhanushRamesh/personal-assistant/internal/api"
-	"github.com/DhanushRamesh/personal-assistant/internal/aside"
 	"github.com/DhanushRamesh/personal-assistant/internal/chat"
 	chatmysql "github.com/DhanushRamesh/personal-assistant/internal/chat/mysql"
 	"github.com/DhanushRamesh/personal-assistant/internal/config"
@@ -255,7 +255,7 @@ func run() error {
 	// is possible at all. Without this a greeting and the reminders
 	// behind it are spoken into a conversation that shows no trace of
 	// them, and "how late was I" has nothing to refer to.
-	spokenAside := &aside.Writer{
+	announcements := &announcement.Writer{
 		Conversations: chats,
 		Clients:       chats,
 		Location:      cfg.Assistant.Location,
@@ -271,10 +271,10 @@ func run() error {
 		Presence: whereabouts(cfg, logger.Logger),
 		Speaker: remind.Everywhere{
 			To: []remind.Speaker{remind.Aloud{
-				Announcer: speaker,
-				Location:  cfg.Assistant.Location,
-				Now:       cfg.Assistant.Now,
-				Aside:     spokenAside,
+				Announcer:     speaker,
+				Location:      cfg.Assistant.Location,
+				Now:           cfg.Assistant.Now,
+				Announcements: announcements,
 			}},
 			Logger: logger.Logger,
 		},
@@ -305,7 +305,7 @@ func run() error {
 		Messages:       chats,
 		Reminders:      reminderStore,
 		Announcer:      speaker,
-		Aside:          spokenAside,
+		Announcements:  announcements,
 		Location:       cfg.Assistant.Location,
 		Now:            cfg.Assistant.Now,
 		Runner:         chatRunner,

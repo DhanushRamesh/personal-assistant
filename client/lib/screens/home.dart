@@ -400,6 +400,26 @@ class _Conversation extends StatelessWidget {
                     final turn = state.turns[i];
                     final failed = turn.error.isNotEmpty;
                     final stopped = turn.status == ChatStatus.cancelled;
+
+                    // An announcement has no question above it, so it is
+                    // shown on its own rather than as half of an exchange.
+                    final said = turn.announcement;
+                    if (said != null) {
+                      return Column(
+                        crossAxisAlignment: CrossAxisAlignment.stretch,
+                        children: [
+                          AppTurn(
+                            speaker: AppSpeaker.assistant,
+                            text: said.text,
+                            label: said.kind.label,
+                            unprompted: true,
+                            timestamp: _when(said.at),
+                          ),
+                          const SizedBox(height: AppSpacing.lg),
+                        ],
+                      );
+                    }
+
                     return Column(
                       crossAxisAlignment: CrossAxisAlignment.stretch,
                       children: [

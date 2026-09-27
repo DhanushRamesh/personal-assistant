@@ -31,6 +31,7 @@ import (
 	"github.com/DhanushRamesh/personal-assistant/internal/announce"
 	"github.com/DhanushRamesh/personal-assistant/internal/api"
 	"github.com/DhanushRamesh/personal-assistant/internal/api/authn"
+	"github.com/DhanushRamesh/personal-assistant/internal/api/presence"
 	"github.com/DhanushRamesh/personal-assistant/internal/api/views"
 	"github.com/DhanushRamesh/personal-assistant/internal/auth"
 	"github.com/DhanushRamesh/personal-assistant/internal/chat"
@@ -106,9 +107,9 @@ type Options struct {
 	// so a test that does not care need not build one.
 	Reminders remind.Store
 
-	// Aside : Where what the server said unasked is noted down. Nil notes
-	// nothing.
-	Aside remind.Aside
+	// Announcements : Where what the server said unasked is noted down.
+	// Nil notes nothing.
+	Announcements presence.Announcements
 }
 
 // Env : A server, its dependencies, and a client already logged in.
@@ -184,7 +185,7 @@ func NewWith(t *testing.T, opts Options) *Env {
 			Messages:         repo,
 			Reminders:        opts.Reminders,
 			Announcer:        opts.Announcer,
-			Aside:            opts.Aside,
+			Announcements:    opts.Announcements,
 			Runner:           chatRunner,
 			Events:           bus,
 			AllowCrossOrigin: opts.AllowCrossOrigin,

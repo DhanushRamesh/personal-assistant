@@ -26,15 +26,15 @@ type Speaker interface {
 	Say(ctx context.Context, r Reminder) error
 }
 
-// Aside : Somewhere to note what was said aloud, so that the next thing
-// the person says has it behind them.
+// Announcements : Somewhere to note what was said aloud, so that the next
+// thing the person says has it behind them.
 //
 // Deliberately cannot fail from the caller's point of view. The words are
 // already spoken by the time this runs, and a reminder that was heard must
 // be recorded as heard whether or not the note was written.
-type Aside interface {
-	// Said : Notes that these words were spoken aloud to the given person.
-	Said(ctx context.Context, userID, text string)
+type Announcements interface {
+	// Reminded : Notes that these words were announced to the given person.
+	Reminded(ctx context.Context, userID, text string)
 }
 
 // ErrNowhereToSay : Returned when nothing is configured to deliver a
@@ -50,10 +50,10 @@ type Aloud struct {
 	Location *time.Location
 	// Now : The clock, replaceable in tests. Nil uses the real one.
 	Now func() time.Time
-	// Aside : Where what was said is noted down, so the person can answer
-	// it. Nil notes nothing, which is what this did before conversations
-	// knew anything the assistant started.
-	Aside Aside
+	// Announcements : Where what was said is noted down, so the person can
+	// answer it. Nil notes nothing, which is what this did before
+	// conversations knew anything the assistant started.
+	Announcements Announcements
 }
 
 // Say : Speaks the reminder aloud.
@@ -78,8 +78,8 @@ func (a Aloud) Say(ctx context.Context, r Reminder) error {
 	// Only once it has been heard. A note of something that was never
 	// said is worse than no note: the next turn reads it as context and
 	// answers a sentence nobody spoke.
-	if a.Aside != nil {
-		a.Aside.Said(ctx, r.UserID, said)
+	if a.Announcements != nil {
+		a.Announcements.Reminded(ctx, r.UserID, said)
 	}
 	return nil
 }

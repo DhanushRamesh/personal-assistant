@@ -316,7 +316,7 @@ type notebook struct {
 	texts []string
 }
 
-func (n *notebook) Said(_ context.Context, _ string, text string) {
+func (n *notebook) Arrived(_ context.Context, _ string, text string) {
 	n.texts = append(n.texts, text)
 }
 
@@ -331,7 +331,7 @@ func TestWhatIsSaidAtTheDoorIsWrittenDown(t *testing.T) {
 	store := inmemory.New()
 	sat := &satellite{}
 	note := &notebook{}
-	e := apitest.NewWith(t, apitest.Options{Announcer: sat, Reminders: store, Aside: note})
+	e := apitest.NewWith(t, apitest.Options{Announcer: sat, Reminders: store, Announcements: note})
 
 	at := time.Now().UTC()
 	r := remind.Reminder{
@@ -363,7 +363,7 @@ func TestWhatIsSaidAtTheDoorIsWrittenDown(t *testing.T) {
 func TestAGreetingNobodyHeardIsNotWrittenDown(t *testing.T) {
 	note := &notebook{}
 	sat := &satellite{fail: errors.New("the satellite is unreachable")}
-	e := apitest.NewWith(t, apitest.Options{Announcer: sat, Aside: note})
+	e := apitest.NewWith(t, apitest.Options{Announcer: sat, Announcements: note})
 
 	arrive(t, e)
 

@@ -12,6 +12,7 @@ import (
 	"time"
 
 	"github.com/DhanushRamesh/personal-assistant/internal/chat"
+	"github.com/DhanushRamesh/personal-assistant/internal/conversation"
 	"github.com/DhanushRamesh/personal-assistant/internal/llm"
 	"github.com/DhanushRamesh/personal-assistant/internal/persona"
 	"github.com/DhanushRamesh/personal-assistant/internal/remind"
@@ -71,6 +72,40 @@ type Summary struct {
 	UpdatedAt      time.Time  `json:"updated_at"`
 	StartedAt      *time.Time `json:"started_at,omitempty"`
 	FinishedAt     *time.Time `json:"finished_at,omitempty"`
+}
+
+// Announcement : Something the assistant said without being asked, as it
+// is shown in a conversation.
+//
+// Separate from Summary because it is not a chat: there is no question, no
+// status and nothing to cancel. It carries only what was said, what
+// prompted it, and when.
+type Announcement struct {
+	ID string `json:"id"`
+	// Kind : What prompted it -- "reminder" or "presence".
+	Kind string `json:"kind"`
+	// Text : The words as they were spoken.
+	Text string `json:"text"`
+	// At : When they were said.
+	At time.Time `json:"at"`
+}
+
+// OfAnnouncements : Renders the announcements among a conversation's
+// messages, oldest first, leaving everything else out.
+func OfAnnouncements(messages []conversation.Message) []Announcement {
+	out := make([]Announcement, 0, len(messages))
+	for _, m := range messages {
+		if !m.Kind.Announcement() {
+			continue
+		}
+		out = append(out, Announcement{
+			ID:   m.ID,
+			Kind: string(m.Kind),
+			Text: m.Content,
+			At:   m.At,
+		})
+	}
+	return out
 }
 
 // OfSummary : Renders a chat summary for the API.

@@ -691,6 +691,34 @@ A miss is said in words rather than as a count, and saying it here is
 the telling -- it is marked mentioned, so the same miss is not raised
 again in the next sentence.
 
+**What is said unprompted is an announcement, and there are two kinds.**
+Anything the assistant says without being asked is an announcement:
+`conversation.ReminderAnnouncement` for a reminder or timer whose time
+came, `conversation.PresenceAnnouncement` for a greeting and whatever
+was held back with it as somebody walks in.
+
+Told apart rather than lumped together, because a person reading the
+conversation back wants to know whether it spoke because a time came or
+because they came in, and the two are asked about differently: "why did
+you tell me that" is about the clock for one and about the door for the
+other.
+
+They are shown in the conversation, merged with the chats in time order.
+A greeting between two questions belongs between them -- read in any
+other order the answer to an announcement comes before it. The server
+returns them alongside the chats on `GET /v1/conversations/{id}` rather
+than as chats: an announcement has no question, no status and nothing to
+cancel, so making it a `Summary` would mean inventing all three. The
+client labels it by what prompted it (Reminder, Welcome) and marks it
+"announced", because nothing above it explains why it is there.
+
+An unknown kind from a newer server reads as "Announcement" rather than
+breaking the transcript.
+
+The kind was briefly `aside` on 27 September 2026, renamed the same
+afternoon to the owner's word for it. No migration: the kind never left
+this development database, and its three rows were corrected by hand.
+
 **What is said unprompted is written into the conversation.** Everything
 else the assistant says is recorded as part of answering: a question
 arrives, a turn runs, and both halves land in the conversation. A

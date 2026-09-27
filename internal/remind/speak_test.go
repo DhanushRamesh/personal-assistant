@@ -33,7 +33,7 @@ type notebook struct {
 	texts []string
 }
 
-func (n *notebook) Said(_ context.Context, userID, text string) {
+func (n *notebook) Reminded(_ context.Context, userID, text string) {
 	n.users = append(n.users, userID)
 	n.texts = append(n.texts, text)
 }
@@ -51,7 +51,7 @@ func due() remind.Reminder {
 // it was spoken, so the person can answer it.
 func TestSpeakingAReminderWritesItDown(t *testing.T) {
 	say, note := &mouth{}, &notebook{}
-	aloud := remind.Aloud{Announcer: say, Aside: note, Now: due().DueAt.UTC}
+	aloud := remind.Aloud{Announcer: say, Announcements: note, Now: due().DueAt.UTC}
 
 	if err := aloud.Say(context.Background(), due()); err != nil {
 		t.Fatalf("saying it: %v", err)
@@ -85,9 +85,9 @@ func TestAReminderThatWasNotHeardIsNotWrittenDown(t *testing.T) {
 		name  string
 		aloud remind.Aloud
 	}{
-		{"speaking failed", remind.Aloud{Announcer: &mouth{fail: refused}, Aside: note}},
-		{"nowhere to speak", remind.Aloud{Announcer: &mouth{off: true}, Aside: note}},
-		{"no announcer at all", remind.Aloud{Aside: note}},
+		{"speaking failed", remind.Aloud{Announcer: &mouth{fail: refused}, Announcements: note}},
+		{"nowhere to speak", remind.Aloud{Announcer: &mouth{off: true}, Announcements: note}},
+		{"no announcer at all", remind.Aloud{Announcements: note}},
 	} {
 		t.Run(c.name, func(t *testing.T) {
 			if err := c.aloud.Say(context.Background(), due()); err == nil {

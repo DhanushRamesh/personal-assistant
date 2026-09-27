@@ -1,4 +1,4 @@
-package aside_test
+package announcement_test
 
 import (
 	"context"
@@ -6,7 +6,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/DhanushRamesh/personal-assistant/internal/aside"
+	"github.com/DhanushRamesh/personal-assistant/internal/announcement"
 	"github.com/DhanushRamesh/personal-assistant/internal/chat"
 	"github.com/DhanushRamesh/personal-assistant/internal/chat/memory"
 	"github.com/DhanushRamesh/personal-assistant/internal/conversation"
@@ -19,7 +19,7 @@ func at() time.Time { return time.Date(2026, 9, 27, 10, 20, 0, 0, time.UTC) }
 func india() *time.Location { return time.FixedZone("IST", 5*3600+1800) }
 
 // writer : A writer over a fresh repository, with a user already in it.
-func writer(t *testing.T) (*aside.Writer, *memory.Repository, *chat.User) {
+func writer(t *testing.T) (*announcement.Writer, *memory.Repository, *chat.User) {
 	t.Helper()
 	repo := memory.New()
 
@@ -28,7 +28,7 @@ func writer(t *testing.T) (*aside.Writer, *memory.Repository, *chat.User) {
 		t.Fatalf("creating a user: %v", err)
 	}
 
-	return &aside.Writer{
+	return &announcement.Writer{
 		Conversations: repo,
 		Clients:       repo,
 		Location:      india(),
@@ -68,7 +68,7 @@ func TestAnAsideLandsWhereTheReplyWill(t *testing.T) {
 	w, repo, user := writer(t)
 	voice := client(t, repo, user.ID, "home assistant", chat.ChannelVoice)
 
-	w.Said(context.Background(), user.ID, "You should have heard this at 3:50 pm, sir. Call the bank.")
+	w.Arrived(context.Background(), user.ID, "You should have heard this at 3:50 pm, sir. Call the bank.")
 
 	// The client had no conversation yet, so one was taken up for it.
 	got := reread(t, repo, user.ID, voice.ID)
@@ -83,8 +83,8 @@ func TestAnAsideLandsWhereTheReplyWill(t *testing.T) {
 	if len(said) != 1 {
 		t.Fatalf("%d messages, want the one aside", len(said))
 	}
-	if said[0].Kind != conversation.Aside {
-		t.Errorf("kind = %q, want an aside", said[0].Kind)
+	if said[0].Kind != conversation.PresenceAnnouncement {
+		t.Errorf("kind = %q, want a presence announcement", said[0].Kind)
 	}
 	if said[0].Role != conversation.Assistant {
 		t.Errorf("role = %q, want the assistant", said[0].Role)
@@ -101,7 +101,7 @@ func TestAnAsideCarriesTheHourItWasSaid(t *testing.T) {
 	w, repo, user := writer(t)
 	client(t, repo, user.ID, "home assistant", chat.ChannelVoice)
 
-	w.Said(context.Background(), user.ID, "Good afternoon, sir.")
+	w.Arrived(context.Background(), user.ID, "Good afternoon, sir.")
 
 	id, err := chat.EnsureConversation(context.Background(), repo, user.ID)
 	if err != nil {
@@ -123,7 +123,7 @@ func TestAnAsideCarriesTheHourItWasSaid(t *testing.T) {
 		t.Fatalf("%d messages for the model", len(forModel))
 	}
 	if !strings.Contains(forModel[0].Content, "3:50 pm") ||
-		!strings.Contains(forModel[0].Content, "unprompted") {
+		!strings.Contains(forModel[0].Content, "came into the room") {
 		t.Errorf("for the model = %q", forModel[0].Content)
 	}
 }
@@ -134,7 +134,7 @@ func TestNothingIsWrittenWhenNobodyIsListening(t *testing.T) {
 	w, repo, user := writer(t)
 	typed := client(t, repo, user.ID, "chrome", chat.ChannelDirect)
 
-	w.Said(context.Background(), user.ID, "Good afternoon, sir.")
+	w.Arrived(context.Background(), user.ID, "Good afternoon, sir.")
 
 	if got := reread(t, repo, user.ID, typed.ID); got.ActiveConversationID != "" {
 		t.Error("a typed client was given a conversation it never asked for")

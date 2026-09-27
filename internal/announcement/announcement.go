@@ -1,4 +1,5 @@
-// Package aside records what the assistant said without having been asked.
+// Package announcement records what the assistant said without having been
+// asked.
 //
 // Everything else the assistant says is written down as part of answering:
 // a question arrives, a turn runs, and both halves land in the
@@ -9,8 +10,8 @@
 //
 // That is fine until they answer it. "How late was I" after "you should
 // have done this at ten to four" is a reply, and a reply to nothing cannot
-// be understood. This puts the aside in front of it.
-package aside
+// be understood. This puts the announcement in front of it.
+package announcement
 
 import (
 	"context"
@@ -22,7 +23,7 @@ import (
 	"github.com/DhanushRamesh/personal-assistant/internal/conversation"
 )
 
-// Writer : Notes spoken asides in the conversation that will hear the reply.
+// Writer : Notes announcements in the conversation that will hear the reply.
 type Writer struct {
 	// Conversations : Where messages are stored. Required.
 	Conversations conversation.Repository
@@ -38,7 +39,18 @@ type Writer struct {
 	Logger *slog.Logger
 }
 
-// Said : Notes that these words were spoken aloud to the given person.
+// Reminded : Notes a reminder or timer said aloud as its time came.
+func (w *Writer) Reminded(ctx context.Context, userID, text string) {
+	w.said(ctx, userID, conversation.ReminderAnnouncement, text)
+}
+
+// Arrived : Notes a greeting, and whatever was held back with it, said as
+// somebody came into the room.
+func (w *Writer) Arrived(ctx context.Context, userID, text string) {
+	w.said(ctx, userID, conversation.PresenceAnnouncement, text)
+}
+
+// said : Notes that these words were spoken aloud to the given person.
 //
 // Written against the conversation the voice client is talking in, because
 // that is where the answer to it will arrive. A person who is spoken to in
@@ -48,7 +60,7 @@ type Writer struct {
 // said by the time this runs, and failing to write them down is worth a
 // line in the log and nothing more: losing the note costs the next turn
 // its context, and there is nothing useful to do about it here.
-func (w *Writer) Said(ctx context.Context, userID, text string) {
+func (w *Writer) said(ctx context.Context, userID string, kind conversation.Kind, text string) {
 	if w == nil || w.Conversations == nil || w.Clients == nil {
 		return
 	}
@@ -70,7 +82,7 @@ func (w *Writer) Said(ctx context.Context, userID, text string) {
 	}
 
 	at := w.clock()
-	m := conversation.Spoke(id, text, at.In(w.where()).Format("3:04 pm"), at)
+	m := conversation.Announced(id, kind, text, at.In(w.where()).Format("3:04 pm"), at)
 	if _, err := w.Conversations.Append(ctx, m); err != nil {
 		w.warn(ctx, "cannot record what was said aloud", err)
 	}
