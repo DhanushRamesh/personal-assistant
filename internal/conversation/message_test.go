@@ -180,3 +180,73 @@ func TestAMessageWithoutAnIdentifierIsRefused(t *testing.T) {
 		t.Error("a message with no identifier was accepted")
 	}
 }
+
+// What a tool returned in an earlier turn is taken out of the window.
+//
+// It was true when it ran and is the most authoritative-looking thing
+// in the history, so the model reuses it rather than looking again.
+// Four rounds of forbidding that changed nothing; removing it is the
+// only thing that has.
+func TestOldToolResultsAreWithdrawn(t *testing.T) {
+	at := time.Now().UTC()
+	said := []conversation.Message{
+		conversation.Said("c", "what reminders do I have", at),
+		conversation.ToolsReturned("c", []conversation.ToolResult{{
+			ID: "t1", Name: "reminder_list",
+			Content: "Tablets at 9:00 am [id rem_01ABC]",
+		}}, at),
+	}
+
+	got := conversation.ForModel(said)
+
+	var results []conversation.ToolResult
+	for _, m := range got {
+		results = append(results, m.ToolResults...)
+	}
+	if len(results) != 1 {
+		t.Fatalf("%d results, want the one", len(results))
+	}
+	if strings.Contains(results[0].Content, "Tablets") {
+		t.Errorf("the old answer is still there: %q", results[0].Content)
+	}
+	if strings.Contains(results[0].Content, "rem_01ABC") {
+		t.Errorf("a stale identifier is still there: %q", results[0].Content)
+	}
+	// Which tool ran is a fact about the conversation and is kept.
+	if !strings.Contains(results[0].Content, "reminder_list") {
+		t.Errorf("content = %q, want the tool named", results[0].Content)
+	}
+	if !strings.Contains(results[0].Content, "Call it again") {
+		t.Errorf("content = %q, want it to say to look again", results[0].Content)
+	}
+}
+
+// What is stored is untouched: only the copy sent to the model is.
+func TestWithdrawingDoesNotTouchWhatIsStored(t *testing.T) {
+	at := time.Now().UTC()
+	stored := conversation.ToolsReturned("c", []conversation.ToolResult{{
+		ID: "t1", Name: "reminder_list", Content: "Tablets at 9:00 am",
+	}}, at)
+
+	_ = conversation.ForModel([]conversation.Message{stored})
+
+	if !strings.Contains(stored.ToolResults[0].Content, "Tablets") {
+		t.Errorf("the stored message was altered: %q", stored.ToolResults[0].Content)
+	}
+}
+
+// A person reading the transcript still sees what the tool said.
+func TestAPersonStillSeesToolResults(t *testing.T) {
+	at := time.Now().UTC()
+	said := []conversation.Message{conversation.ToolsReturned("c", []conversation.ToolResult{{
+		ID: "t1", Name: "reminder_list", Content: "Tablets at 9:00 am",
+	}}, at)}
+
+	for _, m := range conversation.ForPerson(said) {
+		for _, r := range m.ToolResults {
+			if !strings.Contains(r.Content, "Tablets") {
+				t.Errorf("a person can no longer see what ran: %q", r.Content)
+			}
+		}
+	}
+}

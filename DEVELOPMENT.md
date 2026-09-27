@@ -808,6 +808,38 @@ that a past date must be empty, reusing something read out one turn
 ago, and padding a tool's answer with a remembered item that the tool
 did not return.
 
+**Withdrawing old tool results did not fix it either, and the numbers
+are recorded here so it is not tried again on a hunch.** `ForModel`
+takes the contents out of tool results from earlier turns, leaving the
+tool's name and a note to call it again. Four questions in a fresh
+conversation, three runs each:
+
+| | tool called |
+|---|---|
+| without withdrawal | 1, 2, 2 of 4 |
+| with withdrawal | 1, 1, 1 of 4 |
+| with withdrawal and the answers marked stale as well | 1, 1, 1 of 4 |
+
+No improvement, possibly a little worse. The reason is plain in
+hindsight: removing what the tool said does not remove the assistant's
+own answer repeating it, and that is the copy being reused. Marking
+those answers as stale was tried and dropped, since it bought nothing
+and cost tokens on every turn.
+
+**It is kept anyway, for a different reason.** A listing's identifiers
+are as perishable as the rest of it, and withdrawing them stops an
+identifier from an old listing being used. That is not hypothetical: on
+27 September 2026 an event was cancelled by an identifier from a stale
+listing, the cancel failed, and the model created a duplicate rather
+than admitting it did not know. Withdrawal forces a fresh listing
+first. That benefit is real and separate from the one it was built for,
+which it did not deliver.
+
+**So the read half of the golden rule is still unsolved.** Writes are
+guarded in code and cannot be skipped. Reads are guarded by words, and
+the words do not reliably hold. Anything tried next should be measured
+against the table above before it is believed.
+
 **Prose has not been enough, and the cause is structural.** Measured
 the same afternoon: in a conversation with history, four questions in a
 row about the diary and the reminders produced no tool calls at all --

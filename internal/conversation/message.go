@@ -296,12 +296,24 @@ var (
 // require the roles to alternate reject, and which reads correctly joined
 // anyway, a question and its correction being one request.
 func ForModel(messages []Message) []Message {
+	// Which turns answered out of a tool. Their answers repeat what the
+	// tool said, so once the tool's own words are withdrawn they become
+	// the last copy of it left in the window -- and the model reads
+	// them instead of looking again.
+	fromTools := map[string]bool{}
+	for _, m := range messages {
+		if len(m.ToolResults) > 0 && m.ChatID != "" {
+			fromTools[m.ChatID] = true
+		}
+	}
+
 	kept := make([]Message, 0, len(messages))
 	for _, m := range messages {
 		if m.empty() {
 			continue
 		}
 		m.Content = forModelContent(m)
+		m.ToolResults = withdrawn(m.ToolResults)
 
 		// Only prose is joined. A message carrying tool calls or results has
 		// no words to append to and must not be merged into the message
@@ -365,6 +377,41 @@ func announcedAs(kind Kind, when string) string {
 		return "Announced aloud" + at + ", as they came into the room."
 	}
 	return "Reminder announced aloud" + at + "."
+}
+
+// withdrawn : Tool results with their contents taken out.
+//
+// What a tool returned was true when it ran and is not evidence of
+// anything now. Left in the window it is the most authoritative-looking
+// thing the model can see, and it reuses it: measured on 27 September
+// 2026, four questions in a row about the reminders and the diary
+// produced no tool calls at all, every answer coming from results
+// already in the history. The same questions in a conversation with no
+// history called the tool every time.
+//
+// Four rounds of telling the model not to do this changed nothing. So
+// the material is removed instead of forbidden. What is left says a
+// tool ran and what it was called, because that is a fact about the
+// conversation and is worth keeping; what it said is not.
+//
+// Identifiers go with it, deliberately. A listing's identifiers are as
+// perishable as the rest of it, and an event was cancelled by identifier
+// from a stale listing that same evening -- it failed, and the model
+// then created a duplicate rather than admitting it did not know.
+//
+// Only history is touched. Results from the turn being answered are
+// added after this and are exactly what the model is meant to use.
+func withdrawn(results []ToolResult) []ToolResult {
+	if len(results) == 0 {
+		return results
+	}
+	out := make([]ToolResult, len(results))
+	copy(out, results)
+	for i := range out {
+		out[i].Content = "[" + out[i].Name + " ran here. What it returned is not shown: it was " +
+			"true then and may not be now. Call it again if you need to know.]"
+	}
+	return out
 }
 
 // ForPerson : The messages a person sees, oldest first.
