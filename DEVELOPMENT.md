@@ -768,10 +768,21 @@ client -- so reconnecting after a disconnect yields an access token
 that dies within the hour and nothing that outlives it, which looks
 like a bug an hour after it looked like success.
 
-**The client must be published "In Production", not left in "Testing".**
-A client in Testing issues refresh tokens that expire after seven days.
-Unverified and in production is fine for one person: it caps at 100
-users and shows a warning screen once.
+**The client is in Testing, on purpose, for now.** A client in Testing
+issues refresh tokens that expire after seven days -- *unless the app
+requests only name, email address and profile*, which is exactly what
+it requests today. So nothing expires yet.
+
+Publishing to production is blocked by Google on a homepage URL and a
+privacy policy URL, which need a public domain nobody here owns. The
+owner chose on 27 September 2026 to leave it in Testing until a
+sensitive scope forces the question. **Adding the Calendar scope is
+what forces it**: from that moment the seven days apply, and the
+connection needs re-granting every week until the app is published.
+
+In Testing with an External audience, only listed test users may grant
+access at all, so the owner's own address is on the test user list.
+Without it the consent screen refuses outright.
 
 **A refresh token dies for reasons invisible from here** -- the
 password changed, six months passed unused, it was revoked from a
