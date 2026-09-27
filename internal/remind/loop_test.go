@@ -440,3 +440,63 @@ func TestWhatIsHeldIsWaiting(t *testing.T) {
 		t.Errorf("Waiting = %v, want the held one", waiting)
 	}
 }
+
+// A held reminder waits for somebody to walk in. Until this it waited
+// for ever: Due returns only pending ones, so nothing looked at it
+// again, and a ten o'clock reminder was still spoken at seven.
+func TestAReminderHeldTooLongBecomesAMiss(t *testing.T) {
+	store := inmemory.New()
+	old, err := remind.New("usr_1", "", remind.ScopeUser, "Tablets", "Take your tablets.",
+		time.Now().UTC().Add(-3*time.Hour), remind.Once)
+	if err != nil {
+		t.Fatalf("remind.New: %v", err)
+	}
+	if err := store.Create(context.Background(), old); err != nil {
+		t.Fatalf("Create: %v", err)
+	}
+	if err := store.Hold(context.Background(), old.ID, time.Now().UTC()); err != nil {
+		t.Fatalf("Hold: %v", err)
+	}
+
+	loop := &remind.Loop{Store: store, Speaker: &heard{}, Presence: elsewhere{away: true}}
+	if pass := loop.Once(context.Background()); pass.Missed != 1 {
+		t.Errorf("pass = %+v, want the stale one given up on", pass)
+	}
+
+	got, err := store.Get(context.Background(), "usr_1", old.ID)
+	if err != nil {
+		t.Fatalf("Get: %v", err)
+	}
+	if got.Status != remind.Missed {
+		t.Errorf("status = %q, want missed", got.Status)
+	}
+}
+
+// One held a few minutes ago is still worth saying when they walk in.
+func TestARecentlyHeldReminderIsLeftAlone(t *testing.T) {
+	store := inmemory.New()
+	r, err := remind.New("usr_1", "", remind.ScopeUser, "Tablets", "Take your tablets.",
+		time.Now().UTC().Add(-2*time.Minute), remind.Once)
+	if err != nil {
+		t.Fatalf("remind.New: %v", err)
+	}
+	if err := store.Create(context.Background(), r); err != nil {
+		t.Fatalf("Create: %v", err)
+	}
+	if err := store.Hold(context.Background(), r.ID, time.Now().UTC()); err != nil {
+		t.Fatalf("Hold: %v", err)
+	}
+
+	loop := &remind.Loop{Store: store, Speaker: &heard{}, Presence: elsewhere{away: true}}
+	if pass := loop.Once(context.Background()); pass.Missed != 0 {
+		t.Errorf("pass = %+v, want it left waiting", pass)
+	}
+
+	waiting, err := store.Waiting(context.Background(), "usr_1")
+	if err != nil {
+		t.Fatalf("Waiting: %v", err)
+	}
+	if len(waiting) != 1 {
+		t.Errorf("Waiting = %v, want it still held", waiting)
+	}
+}

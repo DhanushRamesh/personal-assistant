@@ -40,6 +40,7 @@ func Run(t *testing.T, open New) {
 		{"put off until nothing is refused", noTimeIsRefused},
 		{"one held back is waiting", aHeldOneIsWaiting},
 		{"a held one can be recorded as said", aHeldOneCanBeDelivered},
+		{"one held too long is given up on", aHeldOneGoesStale},
 		{"what was just said comes back", whatWasSaidComesBack},
 		{"the most recent is first", theMostRecentIsFirst},
 		{"two said together both come back", twoTogetherBothComeBack},
@@ -350,6 +351,52 @@ func aHeldOneCanBeDelivered(t *testing.T, open New) {
 	}
 	if len(waiting) != 0 {
 		t.Errorf("still waiting after delivery: %v", ids(waiting))
+	}
+}
+
+// A held reminder waits for somebody to walk in, and nothing else ever
+// looks at it: Due returns only pending ones. Without a way to find the
+// old ones, one held at ten in the morning is still spoken at seven.
+func aHeldOneGoesStale(t *testing.T, open New) {
+	ctx, s, user := setup(t, open)
+	old := stored(t, s, user, "Tablets", ago(2*time.Hour), remind.Once)
+	fresh := stored(t, s, user, "Bins", ago(time.Minute), remind.Once)
+	for _, r := range []*remind.Reminder{old, fresh} {
+		if err := s.Hold(ctx, r.ID, now()); err != nil {
+			t.Fatalf("Hold: %v", err)
+		}
+	}
+
+	// Everything, and then only this run's. Stale is not scoped to a
+	// person -- the firing loop gives up on everybody's -- so in a
+	// database another run has left rows in, a batch is somebody else's.
+	stale, err := s.Stale(ctx, ago(time.Hour), 100000)
+	if err != nil {
+		t.Fatalf("Stale: %v", err)
+	}
+	var mine []remind.Reminder
+	for i := range stale {
+		if stale[i].ID == old.ID || stale[i].ID == fresh.ID {
+			mine = append(mine, stale[i])
+		}
+	}
+	if len(mine) != 1 || mine[0].ID != old.ID {
+		t.Fatalf("Stale = %v, want only the two-hour-old one", ids(mine))
+	}
+
+	// And giving up on it has to work from held, or it waits for ever.
+	if err := s.Missed(ctx, old.ID, now()); err != nil {
+		t.Fatalf("Missed on a held one: %v", err)
+	}
+	if got := read(t, s, user, old.ID); got.Status != remind.Missed {
+		t.Errorf("status = %q, want missed", got.Status)
+	}
+	waiting, err := s.Waiting(ctx, user)
+	if err != nil {
+		t.Fatalf("Waiting: %v", err)
+	}
+	if len(waiting) != 1 || waiting[0].ID != fresh.ID {
+		t.Errorf("Waiting = %v, want the fresh one still held", ids(waiting))
 	}
 }
 

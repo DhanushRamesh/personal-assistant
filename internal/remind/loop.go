@@ -124,7 +124,40 @@ func (l *Loop) Once(ctx context.Context) Pass {
 	for i := range due {
 		l.one(ctx, due[i], at, &pass)
 	}
+
+	l.retire(ctx, at, &pass)
 	return pass
+}
+
+// retire : Gives up on reminders held back for too long.
+//
+// A held one waits for somebody to walk in, and until this it waited for
+// ever: Due returns only pending ones, so nothing looked at it again.
+// Away all day and a ten o'clock reminder was still spoken at seven, as
+// though it were news.
+//
+// Past the grace it becomes missed, which is the honest description and
+// already has the right behaviour: reported once, in words, as a thing
+// that did not happen rather than a thing being announced now.
+func (l *Loop) retire(ctx context.Context, at time.Time, pass *Pass) {
+	if l.Store == nil {
+		return
+	}
+
+	held, err := l.Store.Stale(ctx, at.Add(-l.grace()), DefaultDueLimit)
+	if err != nil {
+		l.log(ctx, "cannot read what has been held too long", err)
+		return
+	}
+
+	for i := range held {
+		if err := l.Store.Missed(ctx, held[i].ID, at); err != nil {
+			l.log(ctx, "cannot give up on a held reminder", err)
+			continue
+		}
+		pass.Missed++
+		l.note(ctx, "a reminder was held too long and is now a miss", held[i])
+	}
 }
 
 // one : Deals with a single reminder whose time has come.

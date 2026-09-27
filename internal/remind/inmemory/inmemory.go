@@ -135,7 +135,7 @@ func (s *Store) Missed(_ context.Context, id string, at time.Time) error {
 	defer s.mu.Unlock()
 
 	r, ok := s.kept[id]
-	if !ok || r.Status != remind.Pending {
+	if !ok || (r.Status != remind.Pending && r.Status != remind.Held) {
 		return remind.ErrNotFound
 	}
 	r.Status, r.UpdatedAt = remind.Missed, at.UTC()
@@ -185,6 +185,32 @@ func (s *Store) Hold(_ context.Context, id string, at time.Time) error {
 	r.Status, r.UpdatedAt = remind.Held, at.UTC()
 	s.kept[id] = r
 	return nil
+}
+
+// Stale : Reminders held back since before the given moment.
+func (s *Store) Stale(_ context.Context, before time.Time, limit int) ([]remind.Reminder, error) {
+	if limit <= 0 {
+		limit = remind.DefaultDueLimit
+	}
+
+	s.mu.Lock()
+	defer s.mu.Unlock()
+
+	out := make([]remind.Reminder, 0, len(s.kept))
+	for _, r := range s.kept {
+		// Judged on when it was due, not when it was held. A reminder
+		// for ten o'clock is stale at eleven whether it was held at ten
+		// or at half past.
+		if r.Status == remind.Held && r.DueAt.Before(before) {
+			out = append(out, r)
+		}
+	}
+	soonestFirst(out)
+
+	if len(out) > limit {
+		out = out[:limit]
+	}
+	return out, nil
 }
 
 // Waiting : Reminders held back for somebody, oldest first.

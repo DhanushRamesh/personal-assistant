@@ -223,8 +223,11 @@ func (s *Store) Fired(ctx context.Context, id string, at, next time.Time) error 
 
 // Missed : Records that a reminder's time passed with nothing listening.
 func (s *Store) Missed(ctx context.Context, id string, at time.Time) error {
+	// Pending or held. Pending is its time passing with nothing able to
+	// say it; held is the firing loop giving up on one that waited too
+	// long for somebody to come back. Both end the same way.
 	out := s.db.WithContext(ctx).Model(&row{}).
-		Where("id = ? AND status = ?", id, string(remind.Pending)).
+		Where("id = ? AND status IN ?", id, []string{string(remind.Pending), string(remind.Held)}).
 		Updates(map[string]any{
 			"status":     string(remind.Missed),
 			"updated_at": at.UTC(),
@@ -282,6 +285,26 @@ func (s *Store) Hold(ctx context.Context, id string, at time.Time) error {
 		return remind.ErrNotFound
 	}
 	return nil
+}
+
+// Stale : Reminders held back since before the given moment.
+func (s *Store) Stale(ctx context.Context, before time.Time, limit int) ([]remind.Reminder, error) {
+	if limit <= 0 {
+		limit = remind.DefaultDueLimit
+	}
+
+	var rows []row
+	// Judged on when it was due, not when it was held: a reminder for
+	// ten o'clock is stale at eleven either way.
+	err := s.db.WithContext(ctx).
+		Where("status = ? AND due_at < ?", string(remind.Held), before.UTC()).
+		Order("due_at ASC, id ASC").
+		Limit(limit).
+		Find(&rows).Error
+	if err != nil {
+		return nil, fmt.Errorf("remind: reading what has been held too long: %w", err)
+	}
+	return toReminders(rows), nil
 }
 
 // Waiting : Reminders held back for somebody, oldest first.

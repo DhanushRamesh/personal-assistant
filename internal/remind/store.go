@@ -40,6 +40,10 @@ type Store interface {
 
 	// Missed : Records that a reminder's time passed with nothing listening,
 	// too long ago to say now.
+	//
+	// Pending or held. Pending is its time passing with nothing able to
+	// say it; held is the loop giving up on one that waited too long for
+	// somebody to come back. Both end the same way.
 	Missed(ctx context.Context, id string, at time.Time) error
 
 	// Unmentioned : Missed reminders the person has not been told about,
@@ -56,6 +60,14 @@ type Store interface {
 	// that is what the person is told when they come back. Only a pending
 	// one can be held, so a firing loop and this cannot both claim it.
 	Hold(ctx context.Context, id string, at time.Time) error
+
+	// Stale : Reminders held back since before the given moment.
+	//
+	// What the firing loop gives up on. A held one waits for somebody to
+	// walk in, and nothing else ever looks at it: Due returns only
+	// pending ones. Without this a reminder held at ten in the morning
+	// is still spoken when somebody comes home at seven.
+	Stale(ctx context.Context, before time.Time, limit int) ([]Reminder, error)
 
 	// Waiting : Reminders held back for somebody, oldest first.
 	//
