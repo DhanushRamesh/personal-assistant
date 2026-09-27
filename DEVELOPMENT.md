@@ -1053,6 +1053,28 @@ could say it, and drives the mention-it-once path. Held means something
 could and chose to wait. Its due time is left alone: that is what the
 reminder was for, and what the person is told when they get it.
 
+**The thresholds, and why each direction has its own.** Arriving reads
+`sensor.watch_signal`, a three-sample median, and wants **above -72 held
+for a second and a half**. Leaving reads `sensor.watch_signal_settled`,
+a thirty-second median, and wants **below -73 held for a minute and
+three quarters**. The decibel between them is hysteresis, so sitting on
+the line changes nothing.
+
+Different sensors because they are different questions. Moment to
+moment the two rooms overlap -- the desk has read -76 and the next room
+-70 -- so no threshold on the fast figure separates them, but over half
+a minute they separate completely. Arriving wants speed and gets the
+fast figure; leaving is never urgent and gets the slow one.
+
+The arrival wait was half a second, the shortest a blip could not
+survive, until 27 September 2026. Raised to a second and a half by the
+owner after the signal at the desk turned out to swing far wider than
+the recording it was fitted to: over ninety minutes the settled figure
+had a median of -66 but a tenth of its readings under -82, and 27% of
+them below the -73 away line. A spread that wide throws up longer
+excursions both ways, so half a second stopped telling a blip from an
+arrival. It costs about a second before the greeting.
+
 **The rule is fail-safe, and that is the whole design.** `remind.Presence`
 asks one question and anything short of a confident, current "they are
 elsewhere" comes back false, so the reminder is spoken. An error, an
