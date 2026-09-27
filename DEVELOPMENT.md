@@ -806,6 +806,24 @@ Granting a *different* Google account is refused rather than absorbed,
 compared on Google's `sub` rather than the address, since an address can
 change hands.
 
+**The callback cannot require a token, and mounting it as though it
+could was a real fault.** What arrives there is a browser Google has
+just redirected, and a redirect carries no `Authorization` header. It
+was inside the authenticated group with a comment claiming the browser
+carried the session -- which is true of a cookie and false of a bearer
+token. It answered 401 and the connection could never have completed.
+Found by trying it rather than by reading it.
+
+The state is what stands in for a token: 32 bytes from `crypto/rand`,
+issued against one person, spent on first use, dead after ten minutes.
+That is what OAuth state is for.
+
+`./personal-assistant google <user>` says whether the connection still
+works, and proves it by exchanging the stored token for a live one
+rather than reporting what was last written down. Everything else here
+has had the same shape of fault at least once -- something stopped and
+nothing noticed -- so the question has a command.
+
 The tests stand a server in Google's place through `Config.Endpoint`.
 Written after the first pass reached accounts.google.com for real and
 two tests passed for the wrong reason.

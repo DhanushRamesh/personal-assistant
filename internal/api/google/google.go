@@ -70,19 +70,30 @@ func New(logger *slog.Logger, link *google.Link, done string) *Handler {
 	return &Handler{Responder: httpx.Responder{Logger: logger}, link: link, done: done}
 }
 
-// Mount : Registers the endpoints on r.
-//
-// The callback is mounted here and so requires authentication like
-// everything else. Google sends the browser, and the browser carries
-// the session: the person following the redirect is the person who
-// started it, in the same browser, moments earlier.
+// Mount : Registers the endpoints that a signed-in caller uses.
 func (h *Handler) Mount(r chi.Router) {
 	r.Route("/v1/google", func(r chi.Router) {
 		r.Get("/account", h.Account)
 		r.Delete("/account", h.Disconnect)
 		r.Post("/authorize", h.Authorize)
-		r.Get("/callback", h.Callback)
 	})
+}
+
+// MountPublic : Registers the callback, which cannot require a token.
+//
+// What arrives here is a browser Google has just redirected, and a
+// redirect carries no Authorization header. Mounted inside the
+// authenticated group it answered 401 every time and the connection
+// could never be completed -- which is how this was found, by trying
+// it rather than by reading it.
+//
+// The state is what stands in for a token, and is what OAuth state is
+// for. It is 32 bytes from crypto/rand, issued by this server against
+// one person, spent on first use, and dead after ten minutes. A
+// caller who cannot produce one gets nowhere, and one who replays a
+// spent one gets nowhere either.
+func (h *Handler) MountPublic(r chi.Router) {
+	r.Get("/v1/google/callback", h.Callback)
 }
 
 // Account : What is connected.

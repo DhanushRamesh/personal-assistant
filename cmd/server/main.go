@@ -77,6 +77,15 @@ func main() {
 		os.Exit(1)
 	}
 
+	if len(os.Args) > 2 && os.Args[1] == "google" {
+		osExitOnError(runGoogleCheck(os.Args[2]))
+		return
+	}
+	if len(os.Args) > 1 && os.Args[1] == "google" {
+		fmt.Fprintln(os.Stderr, "usage: personal-assistant google <username>")
+		os.Exit(1)
+	}
+
 	if err := run(); err != nil {
 		// Configuration is read before the logger exists, so this cannot be
 		// a structured record.

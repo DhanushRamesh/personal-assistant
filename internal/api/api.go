@@ -195,6 +195,10 @@ func (s *Server) routes() {
 	// Open: probed by infrastructure, and the one call that issues a token.
 	s.health.Mount(s.router)
 	s.authn.Mount(s.router)
+	// Google redirects a browser here, and a redirect carries no
+	// Authorization header. The state it arrives with is what stands in
+	// for one.
+	s.google.MountPublic(s.router)
 
 	// Everything else needs one. Grouped so that authentication is applied
 	// once here rather than remembered by each module.
