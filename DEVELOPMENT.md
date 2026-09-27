@@ -791,6 +791,36 @@ Covered: reminders (set, update, snooze, cancel), memories (remember,
 update, forget), conversations (new, switch, rename, archive, delete),
 calendar (add, cancel).
 
+## When the tool list outgrows the turn
+
+Not a problem at 22 tools, which cost about 17,900 characters of
+description -- roughly 4,500 tokens -- charged against the history
+budget by `alongside`. It becomes one when a domain is added that is
+rarely used and costs that every turn. Gmail is the likely trigger.
+
+**The plan, agreed 27 September 2026: names always, schemas on
+demand.** A name and one line is about 15 tokens against 800 for a
+definition. The tools used constantly stay loaded; the rest are
+registered as a name and a line, with a `tool_load` that returns the
+real schema in the same format as the ordinary tool list.
+
+**Never shortlist by relevance alone.** Sending only the tools that
+look relevant fails silently: the model never learns the others
+existed and simply answers worse. Names present means it can always
+find out what it is missing. That is what keeps this a latency cost
+rather than an accuracy one.
+
+**The enforcement is an error, not an instruction.** Calling an
+unloaded tool must fail with "X exists but is not loaded; call
+tool_load with X first". `Registry.Call` already answers that shape
+for a tool that does not exist, and would grow a case for one that
+does but is not loaded.
+
+The number to watch is not the count. It is whether tools still need
+long `Avoid` text pointing at each other: seven of twenty-two do
+today, which is already a little high and means a boundary is wrong
+somewhere.
+
 ## One mechanism for reading before being asked
 
 **Accuracy before latency, always.** The owner's rule, 27 September
