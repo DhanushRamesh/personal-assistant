@@ -57,6 +57,17 @@ const (
 	// history that omits the request leaves the model contradicting a world
 	// it changed.
 	Interruption Kind = "stopped"
+
+	// Aside : The assistant speaking without having been asked -- a
+	// reminder falling due, a greeting as somebody walks in.
+	//
+	// A kind of its own rather than a plain Chat, because it is the only
+	// assistant turn with no question in front of it, and because what
+	// follows it is usually a reply to it. Somebody who hears "you should
+	// have done this at ten to four" and answers "how late was I" is
+	// talking about the aside, and without it in the conversation the
+	// question lands on nothing.
+	Aside Kind = "aside"
 )
 
 // known : Whether this is a kind the store will accept.
@@ -66,7 +77,7 @@ const (
 // interruption was rejected by the store for a morning without anything
 // louder than a line in the log.
 func (k Kind) known() bool {
-	return k == Chat || k == Failure || k == Interruption
+	return k == Chat || k == Failure || k == Interruption || k == Aside
 }
 
 // Role : Who said something.
@@ -192,6 +203,24 @@ func Failed(conversationID, content, detail string, at time.Time) Message {
 	}
 }
 
+// Spoke : The assistant saying something nobody asked for.
+//
+// [when] is the time it was said, already written in the person's own zone,
+// because a stored message carries a timestamp and a model reading one back
+// does not: only the words reach the provider. An aside whose hour is not in
+// its words cannot be asked how long ago it was.
+func Spoke(conversationID, content, when string, at time.Time) Message {
+	return Message{
+		ID:             NewMessageID(),
+		ConversationID: conversationID,
+		Kind:           Aside,
+		Detail:         strings.TrimSpace(when),
+		Role:           Assistant,
+		Content:        content,
+		At:             at,
+	}
+}
+
 // Valid : Reports whether a message can be stored, and why not if it cannot.
 //
 // A message carries exactly one of three things: words, tool calls, or tool
@@ -290,10 +319,20 @@ func (m Message) empty() bool {
 // repeat: a spoken answer should still be the sentence, and the detail is
 // there so that asking for it gets the truth.
 func forModelContent(m Message) string {
-	if m.Kind != Failure || m.Detail == "" {
-		return m.Content
+	switch {
+	case m.Kind == Failure && m.Detail != "":
+		return m.Content + "\n\n[Exact error, for reference if asked: " + m.Detail + "]"
+
+	// Marked, because an aside is the one assistant turn that answers
+	// nothing, and because its hour is the thing most likely to be asked
+	// about next. Said plainly as a fact, the way an interruption is: it
+	// is there to be referred to, not to be apologised for or repeated.
+	case m.Kind == Aside && m.Detail != "":
+		return "[Said aloud at " + m.Detail + ", unprompted.] " + m.Content
+	case m.Kind == Aside:
+		return "[Said aloud, unprompted.] " + m.Content
 	}
-	return m.Content + "\n\n[Exact error, for reference if asked: " + m.Detail + "]"
+	return m.Content
 }
 
 // ForPerson : The messages a person sees, oldest first.

@@ -59,6 +59,7 @@ type Handler struct {
 	httpx.Responder
 	announcer announce.Announcer
 	reminders remind.Store
+	aside     remind.Aside
 	location  *time.Location
 	now       func() time.Time
 
@@ -70,12 +71,13 @@ type Handler struct {
 // New : Builds the handler. A nil announcer says nothing, which is what a
 // server with no satellite has.
 func New(logger *slog.Logger, announcer announce.Announcer, reminders remind.Store,
-	location *time.Location, now func() time.Time) *Handler {
+	aside remind.Aside, location *time.Location, now func() time.Time) *Handler {
 
 	return &Handler{
 		Responder: httpx.Responder{Logger: logger},
 		announcer: announcer,
 		reminders: reminders,
+		aside:     aside,
 		location:  location,
 		now:       now,
 	}
@@ -158,6 +160,14 @@ func (h *Handler) Arrived(w http.ResponseWriter, r *http.Request) {
 			Said: said, Why: "could not be spoken: " + err.Error(),
 		})
 		return
+	}
+
+	// The greeting and everything behind it, noted in the conversation
+	// the reply will arrive in. Somebody who has just been told they
+	// should have done something at ten to four asks how late they were,
+	// and the question needs the sentence it is about.
+	if h.aside != nil {
+		h.aside.Said(speak, user, said)
 	}
 
 	// Only now. Said and not recorded is better than recorded and not

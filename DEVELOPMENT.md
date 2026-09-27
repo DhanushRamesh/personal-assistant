@@ -691,6 +691,41 @@ A miss is said in words rather than as a count, and saying it here is
 the telling -- it is marked mentioned, so the same miss is not raised
 again in the next sentence.
 
+**What is said unprompted is written into the conversation.** Everything
+else the assistant says is recorded as part of answering: a question
+arrives, a turn runs, and both halves land in the conversation. A
+reminder falling due and a greeting at the door went straight to the
+speaker and were written nowhere, so the next thing the person said
+arrived in a conversation that showed no sign of them having been
+spoken to.
+
+That is only a gap until they answer it. "How much time was I delayed",
+after being told at the door that something was due at ten to four, is a
+reply -- and a reply to nothing cannot be understood.
+
+`internal/aside` writes it down. It resolves the conversation itself,
+from the user's **voice** client: an aside is spoken into a room, and the
+reply comes back from the same room. A reply typed into the browser half
+an hour later is a different exchange and must not have the greeting put
+in front of it. Nothing listening by voice means nothing is written, and
+no conversation is created for a client that never heard anything.
+
+It is written only after the words were heard, the same rule the store
+follows: a note of a sentence nobody was told is read back as context by
+the next turn, which then answers something that was never said.
+
+The message is `conversation.Aside`, a kind of its own, because it is
+the only assistant turn with no question in front of it. Its `Detail`
+carries the hour it was said, in the person's zone, and `forModelContent`
+renders it as `[Said aloud at 3:50 pm, unprompted.]`. **The hour has to be
+in the words.** `toProviderTurns` sends the model `Role` and `Text` and
+nothing else -- a stored message has a timestamp and a model reading one
+back does not, so an aside whose hour is not written into it cannot be
+asked how long ago it was.
+
+Consecutive assistant messages are already merged by `ForModel`, so an
+aside beside an answer raises no alternation problem.
+
 **Speaking outlives the request that asked for it.** The announcement
 blocks until the words have finished playing, and the caller does not
 wait that long: Home Assistant's `rest_command` gave up after ten

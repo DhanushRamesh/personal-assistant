@@ -105,6 +105,10 @@ type Options struct {
 	// Reminders : What is waiting to be said. Nil selects an empty store,
 	// so a test that does not care need not build one.
 	Reminders remind.Store
+
+	// Aside : Where what the server said unasked is noted down. Nil notes
+	// nothing.
+	Aside remind.Aside
 }
 
 // Env : A server, its dependencies, and a client already logged in.
@@ -180,6 +184,7 @@ func NewWith(t *testing.T, opts Options) *Env {
 			Messages:         repo,
 			Reminders:        opts.Reminders,
 			Announcer:        opts.Announcer,
+			Aside:            opts.Aside,
 			Runner:           chatRunner,
 			Events:           bus,
 			AllowCrossOrigin: opts.AllowCrossOrigin,
