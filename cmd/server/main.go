@@ -28,6 +28,8 @@ import (
 	"github.com/DhanushRamesh/personal-assistant/internal/environment"
 	"github.com/DhanushRamesh/personal-assistant/internal/environment/platformai"
 	"github.com/DhanushRamesh/personal-assistant/internal/events"
+	"github.com/DhanushRamesh/personal-assistant/internal/google"
+	googlemysql "github.com/DhanushRamesh/personal-assistant/internal/google/mysql"
 	"github.com/DhanushRamesh/personal-assistant/internal/llm"
 	"github.com/DhanushRamesh/personal-assistant/internal/logging"
 	"github.com/DhanushRamesh/personal-assistant/internal/memory"
@@ -263,6 +265,11 @@ func run() error {
 		Logger:        logger.Logger,
 	}
 
+	// One OAuth client for every Google API. Nil when no credentials
+	// are configured, which the endpoints report as "nothing to
+	// connect" rather than failing.
+	googleLink := linkToGoogle(cfg, logger.Logger, db)
+
 	// The first work here that happens because of the clock rather than
 	// because somebody asked. Stopped with the server, so a reminder is
 	// never half said during a shutdown.
@@ -306,6 +313,8 @@ func run() error {
 		Reminders:      reminderStore,
 		Announcer:      speaker,
 		Announcements:  announcements,
+		Google:         googleLink,
+		SettingsURL:    cfg.Google.SettingsURL,
 		Location:       cfg.Assistant.Location,
 		Now:            cfg.Assistant.Now,
 		Runner:         chatRunner,
@@ -385,6 +394,31 @@ func reachableModels(cfg config.Config) []llm.Model {
 // Home Assistant when it is configured, and nowhere otherwise. Nowhere is a
 // working server: it answers when spoken to, which is all it could ever do
 // before.
+// linkToGoogle : The standing permission to reach a person's Google
+// account, or nil when this server has no client credentials.
+//
+// Nil rather than an error: a server with no Google client is a working
+// server that cannot reach Google, exactly as it was before any of this
+// existed.
+func linkToGoogle(cfg config.Config, logger *slog.Logger, db *storage.DB) *google.Link {
+	link, err := google.New(google.Config{
+		ClientID:     cfg.Google.ClientID,
+		ClientSecret: cfg.Google.ClientSecret,
+		Redirect:     cfg.Google.Redirect,
+		Scopes:       cfg.Google.Scopes,
+	}, googlemysql.New(db), cfg.Assistant.Now)
+	if err != nil {
+		if !errors.Is(err, google.ErrNotConfigured) {
+			logger.Warn("cannot set up the Google connection", slog.Any("error", err))
+		}
+		logger.Info("no Google account can be connected")
+		return nil
+	}
+	link.Logger = logger
+	logger.Info("a Google account can be connected", slog.Any("scopes", link.Wanted()))
+	return link
+}
+
 // whereabouts : What tells the firing loop whether anybody is in the room.
 //
 // Nil when nothing is configured, which means every reminder is said aloud

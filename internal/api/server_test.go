@@ -67,6 +67,10 @@ func TestRouteTableIsComplete(t *testing.T) {
 		"GET /v1/reminders":                     true,
 		"POST /v1/reminders/{id}/snooze":        true,
 		"POST /v1/presence/arrived":             true,
+		"GET /v1/google/account":                true,
+		"DELETE /v1/google/account":             true,
+		"POST /v1/google/authorize":             true,
+		"GET /v1/google/callback":               true,
 		"DELETE /v1/reminders/{id}":             true,
 		// Fixed by the caller: Home Assistant appends these to the address it
 		// was given, so they cannot live under /v1 with the rest. /api/chat

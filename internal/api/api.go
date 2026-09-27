@@ -25,12 +25,14 @@ import (
 	"github.com/DhanushRamesh/personal-assistant/internal/api/chats"
 	"github.com/DhanushRamesh/personal-assistant/internal/api/clients"
 	"github.com/DhanushRamesh/personal-assistant/internal/api/conversations"
+	googleapi "github.com/DhanushRamesh/personal-assistant/internal/api/google"
 	"github.com/DhanushRamesh/personal-assistant/internal/api/health"
 	"github.com/DhanushRamesh/personal-assistant/internal/api/middleware"
 	"github.com/DhanushRamesh/personal-assistant/internal/api/presence"
 	"github.com/DhanushRamesh/personal-assistant/internal/api/reminders"
 	"github.com/DhanushRamesh/personal-assistant/internal/chat"
 	"github.com/DhanushRamesh/personal-assistant/internal/conversation"
+	"github.com/DhanushRamesh/personal-assistant/internal/google"
 	"github.com/DhanushRamesh/personal-assistant/internal/llm"
 	"github.com/DhanushRamesh/personal-assistant/internal/persona"
 	"github.com/DhanushRamesh/personal-assistant/internal/remind"
@@ -68,6 +70,16 @@ type Options struct {
 	// Reminders : What is waiting to be said. Optional; without it the
 	// listing is empty and nothing can be called off from the screen.
 	Reminders remind.Store
+
+	// Google : A person's standing permission to reach their own Google
+	// account. Nil means nothing can be connected, which every Google
+	// endpoint reports rather than failing.
+	Google *google.Link
+
+	// SettingsURL : Where a browser is sent after Google hands it back,
+	// such as http://localhost:8000/settings/google. Empty answers the
+	// callback in place instead of redirecting.
+	SettingsURL string
 
 	// Announcements : Where what the server said of its own accord is
 	// noted in the conversation, so the person can answer it. Optional;
@@ -126,6 +138,7 @@ type Server struct {
 	chats         *chats.Handler
 	reminders     *reminders.Handler
 	presence      *presence.Handler
+	google        *googleapi.Handler
 	assist        *assist.Handler
 }
 
@@ -149,6 +162,7 @@ func New(opts Options) *Server {
 		reminders:     reminders.New(opts.Logger, opts.Reminders),
 		presence: presence.New(opts.Logger, opts.Announcer, opts.Reminders,
 			opts.Announcements, opts.Location, opts.Now),
+		google: googleapi.New(opts.Logger, opts.Google, opts.SettingsURL),
 		assist: assist.New(opts.Logger, opts.Chats, opts.Runner, opts.Events),
 	}
 	s.routes()
@@ -191,6 +205,7 @@ func (s *Server) routes() {
 		s.chats.Mount(r)
 		s.reminders.Mount(r)
 		s.presence.Mount(r)
+		s.google.Mount(r)
 		s.assist.Mount(r)
 	})
 }

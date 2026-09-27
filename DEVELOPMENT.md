@@ -754,6 +754,51 @@ asked how long ago it was.
 Consecutive assistant messages are already merged by `ForModel`, so an
 aside beside an answer raises no alternation problem.
 
+## Reaching Google
+
+One OAuth client for every Google API. What may be done with it is
+decided by the scopes asked for, which grow as tools are added, not by
+having a client each. `internal/google` holds the permission and hands
+out `*http.Client`s; nothing above it sees a token.
+
+**The consent screen asks for offline access and forces the prompt.**
+Without offline there is no refresh token at all. Without forcing it,
+Google returns one only the first time a person ever grants this
+client -- so reconnecting after a disconnect yields an access token
+that dies within the hour and nothing that outlives it, which looks
+like a bug an hour after it looked like success.
+
+**The client must be published "In Production", not left in "Testing".**
+A client in Testing issues refresh tokens that expire after seven days.
+Unverified and in production is fine for one person: it caps at 100
+users and shows a warning screen once.
+
+**A refresh token dies for reasons invisible from here** -- the
+password changed, six months passed unused, it was revoked from a
+settings page. `invalid_grant` is the only error treated as fatal;
+everything else is a passing failure and must not mark a working
+connection as broken. When it is fatal the account is marked broken
+once, with words naming the three likely causes, so every tool does not
+discover it separately and report it unhelpfully.
+
+**What Google granted is recorded, not what was asked for.** A person
+can untick part of a consent screen and Google issues a token for the
+rest without complaint. `TokenSource` takes the scopes a caller needs
+and names the missing ones, because the only fix is for the person to
+grant them and they cannot if nobody says which.
+
+**A rotated refresh token is written down before the access token is
+used.** Google occasionally issues a new one; the copy in the database
+is the only one that survives a restart.
+
+Granting a *different* Google account is refused rather than absorbed,
+compared on Google's `sub` rather than the address, since an address can
+change hands.
+
+The tests stand a server in Google's place through `Config.Endpoint`.
+Written after the first pass reached accounts.google.com for real and
+two tests passed for the wrong reason.
+
 **Speaking outlives the request that asked for it.** The announcement
 blocks until the words have finished playing, and the caller does not
 wait that long: Home Assistant's `rest_command` gave up after ten

@@ -60,6 +60,7 @@ type Config struct {
 	Database      Database
 	Assistant     Assistant
 	HomeAssistant HomeAssistant
+	Google        Google
 	Embedding     Embedding
 	Provider      Provider
 	PlatformAI    PlatformAI
@@ -174,6 +175,38 @@ type HomeAssistant struct {
 	// input_boolean.in_the_room. Empty means never hold a reminder back,
 	// which is what this did before presence existed.
 	PresenceEntity string
+}
+
+// Google : The client credentials this assistant asks Google with.
+//
+// One OAuth client serves every Google API. What may be done with it is
+// decided by the scopes asked for, which grow as tools are added, not
+// by having a client each.
+type Google struct {
+	// ClientID and ClientSecret : From the Google Cloud console, for an
+	// OAuth client of type Web application.
+	ClientID     string
+	ClientSecret logging.Secret
+
+	// Redirect : Where Google sends the person back. Must match a
+	// redirect URI registered on that client exactly. Loopback is the
+	// one address Google allows without HTTPS.
+	Redirect string
+
+	// SettingsURL : Where a browser is sent once Google has handed it
+	// back, such as http://localhost:8000/settings/google. Empty
+	// answers the callback in place, which is readable but ugly.
+	SettingsURL string
+
+	// Scopes : What to ask for beyond identity, space separated. Empty
+	// asks for nothing more, which connects successfully and can do
+	// nothing -- which is what proving the plumbing wants.
+	Scopes []string
+}
+
+// Configured : Whether there is enough here to connect an account.
+func (g Google) Configured() bool {
+	return g.ClientID != "" && g.ClientSecret.Reveal() != "" && g.Redirect != ""
 }
 
 // Configured : Whether there is enough here to say anything.
@@ -377,6 +410,13 @@ func Load(path string, lookup Lookup) (Config, error) {
 			Token:          logging.Secret(l.str("homeassistant", "token", "")),
 			Satellite:      l.str("homeassistant", "satellite", ""),
 			PresenceEntity: l.str("homeassistant", "presence_entity", ""),
+		},
+		Google: Google{
+			ClientID:     l.str("google", "client_id", ""),
+			ClientSecret: logging.Secret(l.str("google", "client_secret", "")),
+			Redirect:     l.str("google", "redirect", ""),
+			SettingsURL:  l.str("google", "settings_url", ""),
+			Scopes:       strings.Fields(l.str("google", "scopes", "")),
 		},
 		Embedding: Embedding{
 			URL:     l.str("embedding", "url", ""),
