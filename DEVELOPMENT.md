@@ -791,6 +791,50 @@ Covered: reminders (set, update, snooze, cancel), memories (remember,
 update, forget), conversations (new, switch, rename, archive, delete),
 calendar (add, cancel).
 
+## One mechanism for reading before being asked
+
+**Accuracy before latency, always.** The owner's rule, 27 September
+2026. A prefetch refetches every turn unless a tool says otherwise, and
+no tool does. If a read becomes too slow the answer is to make it
+cheap, not to make it stale.
+
+A tool sets `Prefetch: true` and the runner reads it before the model
+is asked anything, rendering the answer into the prompt. That is the
+whole contract. It replaced three hand-written blocks for one domain,
+which would have become sixty for twenty domains; a new domain now
+marks its listing and touches nothing in the runner.
+
+Only argument-free tools may prefetch, checked when the registry is
+built: nothing supplies arguments to a read nobody asked for, and one
+called with none would answer about the wrong thing.
+
+**A tool carries its own framing, in `WhenUnasked`.** This was learned
+the hard way and the numbers are worth keeping. Asked "I am tired",
+three fresh conversations each time:
+
+| | volunteered a reminder |
+|---|---|
+| the hand-written block it replaced | 0 of 3 |
+| bare listings, general warning at the top of the prompt | 2 of 3 |
+| bare listings, warning in a tool result | 2 of 3 |
+| per-tool framing, plus a general header as well | 1 of 3 |
+| per-tool framing alone | 0 of 3, then 1 of 3 |
+
+Two things fall out of that. A warning has to sit against the listing
+it is about -- several thousand tokens away it is not heeded, and in a
+tool result it is read as data rather than instruction. And a second,
+more general warning on top of a specific one made things worse, not
+better.
+
+The framing belongs to the tool because only the tool knows what its
+answer is for, and that is what keeps the runner free of every domain.
+
+**This is at or near the old behaviour, not provably better than it.**
+Three-sample runs cannot separate 0 from 1 in 3. What is certain is
+the reading itself: twelve prefetches over four turns, three runs, no
+misses -- where the model deciding for itself managed one or two in
+four.
+
 ## Look it up every time
 
 **The owner's standing rule, 27 September 2026: every statement about

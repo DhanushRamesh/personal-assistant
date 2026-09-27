@@ -306,8 +306,9 @@ func amend(diary Diary, clock Clock) tool.Tool {
 // agenda : What the assistant has written down.
 func agenda(diary Diary, clock Clock) tool.Tool {
 	return tool.Tool{
-		Name:    "calendar_list",
-		Purpose: "Read what is in the diary, over the days ahead or across a particular stretch of dates.",
+		Name:     "calendar_list",
+		Prefetch: true,
+		Purpose:  "Read what is in the diary, over the days ahead or across a particular stretch of dates.",
 		UseWhen: "Any question about what is in the diary -- today, tomorrow, this week, a named " +
 			"day, a range of dates, or a day already past. Call it every time, including when the " +
 			"answer seems obvious: a date in the past is still a question about what is stored, and " +

@@ -12,6 +12,7 @@ import (
 	"context"
 	"encoding/json"
 	"strings"
+	"time"
 
 	"github.com/DhanushRamesh/personal-assistant/internal/chat"
 	"github.com/DhanushRamesh/personal-assistant/internal/conversation"
@@ -34,6 +35,42 @@ type Tool struct {
 	Avoid string
 	// Params : What it takes.
 	Params Schema
+
+	// Prefetch : Run before the model is asked anything, and given to
+	// it as though it had called this itself.
+	//
+	// The generic form of a thing that was written by hand, per domain,
+	// three times over: put the current state in front of the model
+	// rather than hope it asks. Measured, a read tool the model must
+	// decide to call is called once or twice in four; one the server
+	// runs is called every turn.
+	//
+	// Only tools that need no arguments may do this, since there is
+	// nobody to supply them. In practice that means the listings.
+	Prefetch bool
+
+	// WhenUnasked : What the model is told about this tool's answer
+	// when it was fetched rather than asked for, written next to it.
+	//
+	// A listing nobody asked for reads as a list of things to raise.
+	// Measured: with a bare listing and a general warning at the top
+	// of the prompt, "I am tired" was answered with somebody's
+	// tablets, two conversations out of three; with the warning
+	// against the listing, none out of three.
+	//
+	// It belongs to the tool because only the tool knows what its
+	// answer is for. That keeps the runner free of any domain: a
+	// twentieth domain writes its own sentence here and nothing else
+	// changes.
+	WhenUnasked string
+
+	// Fresh : How long a prefetched answer may be reused before it is
+	// fetched again. Zero refetches every turn, which is the default
+	// and the right one: accuracy comes before latency here.
+	//
+	// Present for a tool whose read is expensive enough that somebody
+	// decides otherwise, deliberately and in one place.
+	Fresh time.Duration
 	// Channels : Which channels may reach it.
 	//
 	// The gate. A prompt that arrived as sound had no confirmation step: a

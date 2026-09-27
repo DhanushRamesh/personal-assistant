@@ -46,6 +46,7 @@ func All(repo chat.Repository) []tool.Tool {
 func list(repo chat.Repository) tool.Tool {
 	return tool.Tool{
 		Name:     "conversation_list",
+		Prefetch: true,
 		Purpose:  "List the person's conversations, newest first, with their identifiers.",
 		UseWhen:  "You need a conversation's identifier, or the person asks what they have been talking about.",
 		Avoid:    "Do not call it twice in one turn: the identifiers do not change while you are answering.",

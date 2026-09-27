@@ -66,6 +66,15 @@ func (r *Registry) Add(t Tool) error {
 		}
 	}
 
+	// Nothing supplies arguments to a prefetch: it runs before anybody
+	// has been asked anything. A tool that needs them would be called
+	// with none and answer about the wrong thing, which is worse than
+	// not being called.
+	if t.Prefetch && len(t.Params.Required) > 0 {
+		return fmt.Errorf("tool: %s is prefetched but requires %s, and a prefetch has nobody to ask",
+			t.Name, strings.Join(t.Params.Required, ", "))
+	}
+
 	if _, taken := r.tools[t.Name]; taken {
 		return fmt.Errorf("tool: %s is registered twice", t.Name)
 	}
@@ -100,6 +109,21 @@ func (r *Registry) For(c chat.Channel) []Tool {
 	out := make([]Tool, 0, len(r.order))
 	for _, name := range r.order {
 		if t := r.tools[name]; t.Reaches(c) {
+			out = append(out, t)
+		}
+	}
+	return out
+}
+
+// Prefetched : The tools to run before the model is asked, in the
+// order they were registered.
+//
+// Channel-filtered like everything else: a tool a channel cannot reach
+// is not fetched for it either.
+func (r *Registry) Prefetched(c chat.Channel) []Tool {
+	out := make([]Tool, 0, len(r.order))
+	for _, name := range r.order {
+		if t := r.tools[name]; t.Prefetch && t.Reaches(c) {
 			out = append(out, t)
 		}
 	}

@@ -139,7 +139,13 @@ type Runner struct {
 	now             func() time.Time
 	waiting         *remind.Waiting
 	recently        *remind.Recently
-	missing         *remind.Missing
+
+	// freshMu, fresh : Prefetched answers a tool asked to have reused,
+	// keyed by person and tool. Empty for every tool that does not,
+	// which is the default.
+	freshMu sync.Mutex
+	fresh   map[string]held
+	missing *remind.Missing
 
 	// slots : Limits how many chats run at once. A chat holds one for the
 	// whole of its run.
@@ -358,7 +364,7 @@ func (r *Runner) promptFor(ctx context.Context, t *chat.Chat) (string, []remind.
 		r.recalled(ctx, userID, t.Prompt, &note),
 		r.quoted(ctx, userID, t.Prompt, t.ConversationID, &note),
 		r.justSaid(ctx, userID),
-		r.coming(ctx, userID),
+		r.prefetch(ctx, t),
 		unsaid)
 
 	note.TookMS = time.Since(started).Milliseconds()
