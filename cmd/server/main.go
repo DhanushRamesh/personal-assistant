@@ -246,11 +246,6 @@ func run() error {
 		Tools:         tools,
 		Memory:        remembering,
 		Now:           cfg.Assistant.Now,
-		Waiting: &remind.Waiting{
-			Store:    reminderStore,
-			Location: cfg.Assistant.Location,
-			Now:      cfg.Assistant.Now,
-		},
 		Recently: &remind.Recently{
 			Store:    reminderStore,
 			Location: cfg.Assistant.Location,

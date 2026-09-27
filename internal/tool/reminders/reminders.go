@@ -88,6 +88,21 @@ func (c Clock) where() *time.Location {
 	return c.Location
 }
 
+// WhenUnasked : What the model is told about the waiting reminders it
+// is handed before anybody has asked for them.
+//
+// Exported because an eval has to build the same prompt production
+// does. It was a separate copy once, and the eval went on passing
+// against wording the server had stopped using.
+const WhenUnasked = "Reference, for one kind of question only. Say nothing about any of it " +
+	"unless they ask what reminders they have, what is coming, or about one of these " +
+	"in particular. That is the only thing this is for. Everything else is not such a " +
+	"question, however close it sounds. Somebody saying they are tired, or hungry, or " +
+	"that it is late, is telling you how they are, not asking what is on their list. " +
+	"Answer what they said. Bringing up a reminder they did not ask about is not " +
+	"helpful, it is the assistant talking about its own filing, and they will hear it " +
+	"when it goes off anyway."
+
 // All : Every reminder tool, in the order they are offered.
 //
 // Any of them may be said out loud. None destroys anything: a cancelled
@@ -677,17 +692,10 @@ func set(store remind.Store, clock Clock) tool.Tool {
 // list : What is waiting to be said.
 func list(store remind.Store, clock Clock) tool.Tool {
 	return tool.Tool{
-		Name:     "reminder_list",
-		Prefetch: true,
-		WhenUnasked: "Reference, for one kind of question only. Say nothing about any of it " +
-			"unless they ask what reminders they have, what is coming, or about one of these " +
-			"in particular. That is the only thing this is for. Everything else is not such a " +
-			"question, however close it sounds. Somebody saying they are tired, or hungry, or " +
-			"that it is late, is telling you how they are, not asking what is on their list. " +
-			"Answer what they said. Bringing up a reminder they did not ask about is not " +
-			"helpful, it is the assistant talking about its own filing, and they will hear it " +
-			"when it goes off anyway.",
-		Purpose: "List what is waiting to be said, soonest first, with their identifiers.",
+		Name:        "reminder_list",
+		Prefetch:    true,
+		WhenUnasked: WhenUnasked,
+		Purpose:     "List what is waiting to be said, soonest first, with their identifiers.",
 		UseWhen: "Any question about what reminders or timers exist, without exception: what they have, " +
 			"what is left, whether anything is coming, what is set for a particular day. Also when you " +
 			"need an identifier in order to cancel or put one off.",

@@ -88,10 +88,6 @@ func (d *Diary) service(ctx context.Context, userID string) (*gcal.Service, erro
 	return gcal.NewService(ctx, option.WithHTTPClient(client))
 }
 
-// ErrNoCalendar : The assistant's calendar is gone and could not be
-// remade.
-var ErrNoCalendar = errors.New("calendar: there is no calendar to write to")
-
 // mine : The identifier of the assistant's own calendar, making it if
 // there is not one yet.
 //

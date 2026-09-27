@@ -32,7 +32,6 @@ import (
 	"github.com/DhanushRamesh/personal-assistant/internal/environment/platformai"
 	"github.com/DhanushRamesh/personal-assistant/internal/memory"
 	"github.com/DhanushRamesh/personal-assistant/internal/persona"
-	"github.com/DhanushRamesh/personal-assistant/internal/remind"
 	"github.com/DhanushRamesh/personal-assistant/internal/remind/inmemory"
 	"github.com/DhanushRamesh/personal-assistant/internal/tool"
 	reminders "github.com/DhanushRamesh/personal-assistant/internal/tool/reminders"
@@ -135,7 +134,11 @@ func TestAStaleAnswerIsNotRepeated(t *testing.T) {
 		{Memory: memory.Memory{Subject: "Pet name", Body: "Pet name is Toofy."}, Score: 0.36},
 	}) +
 		"\n\n" + stale +
-		"\n\n" + remind.Coming(nil, time.Now(), time.Local)
+		// The same block production hands over before a question, from
+		// the same constant, so this cannot drift from what the server
+		// actually says.
+		"\n\n" + reminders.WhenUnasked +
+		"\n\nreminder_list returned, just now:\nThere is nothing waiting to be said."
 
 	var lookedUp, invented int
 	for _, ask := range asked {
