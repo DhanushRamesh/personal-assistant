@@ -49,6 +49,9 @@ func Run(t *testing.T, open New) {
 		{"older than the window is left out", tooOldIsLeftOut},
 		{"one never said is not said", neverSaidIsNotReturned},
 		{"somebody else's is not listed", anotherPersonsIsNotSpoken},
+		{"one said to nobody is raised", saidToNobodyIsRaised},
+		{"raising it once is enough", saidToNobodyIsRaisedOnce},
+		{"one said to somebody present is not raised", saidToSomebodyIsNotRaised},
 	} {
 		t.Run(c.name, func(t *testing.T) { c.run(t, open) })
 	}
@@ -503,4 +506,73 @@ func ids(all []remind.Reminder) []string {
 		out = append(out, all[i].ID+" ("+all[i].Title+")")
 	}
 	return out
+}
+
+// ------------------------------------------------- said to nobody in particular
+
+// A reminder spoken while nothing could confirm anybody was there comes
+// back to be raised at the door. By the record it was said; in fact it may
+// have gone into an empty room.
+func saidToNobodyIsRaised(t *testing.T, open New) {
+	ctx, s, user := setup(t, open)
+	r := stored(t, s, user, "Tablets", ago(time.Minute), remind.Once)
+
+	if err := s.Fired(ctx, r.ID, now(), time.Time{}); err != nil {
+		t.Fatalf("Fired: %v", err)
+	}
+	if err := s.Unwitnessed(ctx, r.ID, now()); err != nil {
+		t.Fatalf("Unwitnessed: %v", err)
+	}
+
+	unheard, err := s.Unheard(ctx, user)
+	if err != nil {
+		t.Fatalf("Unheard: %v", err)
+	}
+	if len(unheard) != 1 || unheard[0].ID != r.ID {
+		t.Fatalf("Unheard = %v, want the one just said", ids(unheard))
+	}
+	if unheard[0].UnwitnessedAt == nil {
+		t.Error("UnwitnessedAt did not survive the round trip")
+	}
+}
+
+// Raised once. Mentioning it is what clears it, the same as a miss.
+func saidToNobodyIsRaisedOnce(t *testing.T, open New) {
+	ctx, s, user := setup(t, open)
+	r := stored(t, s, user, "Tablets", ago(time.Minute), remind.Once)
+	if err := s.Fired(ctx, r.ID, now(), time.Time{}); err != nil {
+		t.Fatalf("Fired: %v", err)
+	}
+	if err := s.Unwitnessed(ctx, r.ID, now()); err != nil {
+		t.Fatalf("Unwitnessed: %v", err)
+	}
+	if err := s.Mentioned(ctx, []string{r.ID}, now()); err != nil {
+		t.Fatalf("Mentioned: %v", err)
+	}
+
+	unheard, err := s.Unheard(ctx, user)
+	if err != nil {
+		t.Fatalf("Unheard: %v", err)
+	}
+	if len(unheard) != 0 {
+		t.Errorf("Unheard = %v after being raised, want nothing", ids(unheard))
+	}
+}
+
+// An ordinary delivery, to somebody who was confirmed there, is not raised
+// at all.
+func saidToSomebodyIsNotRaised(t *testing.T, open New) {
+	ctx, s, user := setup(t, open)
+	r := stored(t, s, user, "Tablets", ago(time.Minute), remind.Once)
+	if err := s.Fired(ctx, r.ID, now(), time.Time{}); err != nil {
+		t.Fatalf("Fired: %v", err)
+	}
+
+	unheard, err := s.Unheard(ctx, user)
+	if err != nil {
+		t.Fatalf("Unheard: %v", err)
+	}
+	if len(unheard) != 0 {
+		t.Errorf("Unheard = %v, want nothing", ids(unheard))
+	}
 }

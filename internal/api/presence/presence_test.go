@@ -371,3 +371,49 @@ func TestAGreetingNobodyHeardIsNotWrittenDown(t *testing.T) {
 		t.Errorf("wrote down %v", note.texts)
 	}
 }
+
+// A reminder said while nothing could confirm anybody was there is
+// raised at the door, once.
+//
+// By the record it was said; in fact it may have gone into an empty
+// room. Walking back in used to produce a greeting and no mention of
+// it, because only held and never-said ones were reported.
+func TestSomethingSaidToNobodyIsRaisedAtTheDoor(t *testing.T) {
+	store := inmemory.New()
+	sat := &satellite{}
+	e := apitest.NewWith(t, apitest.Options{Announcer: sat, Reminders: store})
+
+	at := time.Now().UTC()
+	r := remind.Reminder{
+		ID: "rem_unheard", UserID: e.User.ID, Scope: remind.ScopeUser,
+		Title: "Come up and work again", Body: "Come up and work again",
+		DueAt: at.Add(-10 * time.Minute), Status: remind.Pending,
+	}
+	if err := store.Create(context.Background(), &r); err != nil {
+		t.Fatalf("creating: %v", err)
+	}
+	if err := store.Fired(context.Background(), r.ID, at.Add(-10*time.Minute), time.Time{}); err != nil {
+		t.Fatalf("firing: %v", err)
+	}
+	if err := store.Unwitnessed(context.Background(), r.ID, at.Add(-10*time.Minute)); err != nil {
+		t.Fatalf("noting: %v", err)
+	}
+
+	got := arrive(t, e)
+
+	if got.Unheard != 1 {
+		t.Fatalf("unheard = %d, want one: %q", got.Unheard, got.Said)
+	}
+	if !strings.Contains(got.Said, "Come up and work again") {
+		t.Errorf("not raised: %q", got.Said)
+	}
+	if !strings.Contains(got.Said, "could not tell whether you were here") {
+		t.Errorf("raised without saying why: %q", got.Said)
+	}
+
+	// Once. A second arrival is not the place to hear it again.
+	again := arrive(t, e)
+	if again.Unheard != 0 {
+		t.Errorf("raised again on the next arrival: %q", again.Said)
+	}
+}

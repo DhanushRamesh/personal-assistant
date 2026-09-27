@@ -400,9 +400,10 @@ func reachableModels(cfg config.Config) []llm.Model {
 // -- what this did before there was any way to tell, and the safe way round.
 func whereabouts(cfg config.Config, logger *slog.Logger) remind.Presence {
 	p, err := hass.NewPresence(hass.PresenceConfig{
-		URL:    cfg.HomeAssistant.URL,
-		Token:  cfg.HomeAssistant.Token,
-		Entity: cfg.HomeAssistant.PresenceEntity,
+		URL:      cfg.HomeAssistant.URL,
+		Token:    cfg.HomeAssistant.Token,
+		Entity:   cfg.HomeAssistant.PresenceEntity,
+		Evidence: cfg.HomeAssistant.PresenceEvidence,
 	})
 	if err != nil {
 		if !errors.Is(err, hass.ErrNotConfigured) {

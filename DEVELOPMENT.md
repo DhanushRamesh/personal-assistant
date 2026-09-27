@@ -1053,6 +1053,42 @@ could say it, and drives the mention-it-once path. Held means something
 could and chose to wait. Its due time is left alone: that is what the
 reminder was for, and what the person is told when they get it.
 
+**"I know they are here" and "I have no idea" are not the same answer.**
+`remind.Presence` returns a `Where`, not a bool: `Away` as before, plus
+`Sure` for whether that answer rests on anything current.
+
+Both still speak. The fail-safe rule was right and is unchanged -- a
+wasted sentence beats a lost reminder. What was missing is that it could
+not tell the two apart afterwards, so a reminder spoken into a room
+nobody could vouch for was recorded as said and was therefore not news
+at the door.
+
+A flag is not asked about its own age. `input_boolean.surely_in_the_room`
+only changes when something decides to change it, so it reads identically
+whether it is right or whether the poller behind it died an hour ago.
+`[homeassistant] presence_evidence` names what it is derived from --
+`sensor.watch_signal_best` -- which moves constantly while the poller is
+alive. Older than `DefaultFresh` (five minutes), unavailable, unknown or
+missing, and the answer is not `Sure`.
+
+A delivery that was not `Sure` gets `unwitnessed_at`, and
+`Store.Unheard` returns those not yet raised. The presence handler reads
+them alongside the misses and reports them in the same breath -- "one
+reminder was said while I could not tell whether you were here" -- then
+marks them mentioned, so each is raised once. It is worded as a fact
+about the circumstances rather than an apology: it may well have been
+heard, and somebody who heard it need only recognise it.
+
+`Unwitnessed` is noted before `Fired`, so a crash between the two leaves
+the reminder looking unsaid rather than heard. The first is repeated;
+the second is lost.
+
+Written after 27 September 2026, when Home Assistant restarted while the
+watch was out of range: for twelve minutes the sensor behind the flag did
+not exist, the flag held its last value, a reminder was spoken into an
+empty room and recorded as delivered, and walking back in produced a
+greeting that mentioned nothing.
+
 **An absent sensor is not an absent person, and was not handled.** The
 poller published "unavailable" only if it had readings to withdraw,
 which is wrong on a cold start: begun with the watch already out of

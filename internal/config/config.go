@@ -174,6 +174,18 @@ type HomeAssistant struct {
 	// input_boolean.in_the_room. Empty means never hold a reminder back,
 	// which is what this did before presence existed.
 	PresenceEntity string
+
+	// PresenceEvidence : What PresenceEntity is worked out from, such as
+	// sensor.watch_signal_best.
+	//
+	// A flag holds its last value for ever when whatever maintains it
+	// stops, and reads exactly like a flag that is right. Its own age
+	// says nothing, so the thing underneath is asked instead: that moves
+	// constantly while it is working, and how long ago it last moved is
+	// the only honest measure of whether the flag still means anything.
+	//
+	// Empty takes every answer as current.
+	PresenceEvidence string
 }
 
 // Configured : Whether there is enough here to say anything.
@@ -373,10 +385,11 @@ func Load(path string, lookup Lookup) (Config, error) {
 			Location: l.location("assistant", "timezone"),
 		},
 		HomeAssistant: HomeAssistant{
-			URL:            l.str("homeassistant", "url", ""),
-			Token:          logging.Secret(l.str("homeassistant", "token", "")),
-			Satellite:      l.str("homeassistant", "satellite", ""),
-			PresenceEntity: l.str("homeassistant", "presence_entity", ""),
+			URL:              l.str("homeassistant", "url", ""),
+			Token:            logging.Secret(l.str("homeassistant", "token", "")),
+			Satellite:        l.str("homeassistant", "satellite", ""),
+			PresenceEntity:   l.str("homeassistant", "presence_entity", ""),
+			PresenceEvidence: l.str("homeassistant", "presence_evidence", ""),
 		},
 		Embedding: Embedding{
 			URL:     l.str("embedding", "url", ""),

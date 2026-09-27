@@ -52,6 +52,9 @@ type ArrivedResponse struct {
 	// Missed : How many never-said reminders were reported, and thereby
 	// marked as told.
 	Missed int `json:"missed,omitempty"`
+	// Unheard : How many were said while nothing could confirm anybody
+	// was there, and so were raised again.
+	Unheard int `json:"unheard,omitempty"`
 }
 
 // Announcements : Somewhere to note what was said at the door, so the next
@@ -133,6 +136,15 @@ func (h *Handler) Arrived(w http.ResponseWriter, r *http.Request) {
 		said += " " + missedText(unsaid, h.where())
 	}
 
+	// And anything spoken while nothing could vouch for somebody being
+	// here. It went out loud into a room that may have been empty, so
+	// by the record it was said and by the fact it may never have been
+	// heard. Raised once, in the same breath as a miss.
+	unheard := h.saidToNobody(ctx, user)
+	if len(unheard) > 0 {
+		said += " " + unheardText(unheard, h.where())
+	}
+
 	if h.announcer == nil || !h.announcer.Available() {
 		httpx.WriteJSON(ctx, w, http.StatusOK, ArrivedResponse{
 			Said: said, Why: "nothing is configured to speak",
@@ -188,15 +200,16 @@ func (h *Handler) Arrived(w http.ResponseWriter, r *http.Request) {
 
 	// Saying it at the door is the telling. Without this the person
 	// hears about the same miss here and again in their next sentence.
-	if len(unsaid) > 0 {
-		if err := h.reminders.Mentioned(speak, remind.IDs(unsaid), h.clock()); err != nil {
+	if told := append(remind.IDs(unsaid), remind.IDs(unheard)...); len(told) > 0 {
+		if err := h.reminders.Mentioned(speak, told, h.clock()); err != nil {
 			h.Logger.WarnContext(speak, "told somebody about a miss but could not record it",
 				slog.Any("error", err))
 		}
 	}
 
 	httpx.WriteJSON(ctx, w, http.StatusOK, ArrivedResponse{
-		Said: said, Spoke: true, Delivered: len(held), Missed: len(unsaid),
+		Said: said, Spoke: true, Delivered: len(held),
+		Missed: len(unsaid), Unheard: len(unheard),
 	})
 }
 
@@ -245,6 +258,52 @@ func missedText(unsaid []remind.Reminder, loc *time.Location) string {
 		b.WriteString(strings.TrimSpace(unsaid[i].Body))
 	}
 	return b.String()
+}
+
+// unheardText : What to say about reminders spoken into a room nobody
+// could confirm was occupied.
+//
+// Said as a fact about the circumstances rather than an apology. It may
+// well have been heard, and somebody who did hear it needs only to
+// recognise it rather than be told it was lost.
+func unheardText(unheard []remind.Reminder, loc *time.Location) string {
+	var b strings.Builder
+	if len(unheard) == 1 {
+		b.WriteString("One reminder was said while I could not tell whether you were here.")
+	} else {
+		fmt.Fprintf(&b, "%d reminders were said while I could not tell whether you were here.",
+			len(unheard))
+	}
+	for i := range unheard {
+		b.WriteString(" At ")
+		b.WriteString(spokenAt(unheard[i]).In(loc).Format("3:04"))
+		b.WriteString(": ")
+		b.WriteString(strings.TrimSpace(unheard[i].Body))
+	}
+	return b.String()
+}
+
+// spokenAt : When it was actually said, falling back to when it was due.
+func spokenAt(r remind.Reminder) time.Time {
+	if r.LastFiredAt != nil {
+		return *r.LastFiredAt
+	}
+	return r.DueAt
+}
+
+// saidToNobody : Reminders spoken with nothing able to confirm anybody
+// was there, and not yet raised.
+func (h *Handler) saidToNobody(ctx context.Context, user string) []remind.Reminder {
+	if h.reminders == nil || user == "" {
+		return nil
+	}
+	unheard, err := h.reminders.Unheard(ctx, user)
+	if err != nil {
+		h.Logger.WarnContext(ctx, "could not read what was said to nobody in particular",
+			slog.Any("error", err))
+		return nil
+	}
+	return unheard
 }
 
 // neverSaid : Misses the person has not been told about yet.
