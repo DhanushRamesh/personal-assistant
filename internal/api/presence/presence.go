@@ -16,8 +16,10 @@ import (
 	"context"
 	"fmt"
 	"log/slog"
+	"math/rand/v2"
 	"net/http"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/go-chi/chi/v5"
@@ -51,6 +53,10 @@ type Handler struct {
 	reminders remind.Store
 	location  *time.Location
 	now       func() time.Time
+
+	mu sync.Mutex
+	// lastGreeting : So the same words are not used twice running.
+	lastGreeting string
 }
 
 // New : Builds the handler. A nil announcer says nothing, which is what a
@@ -169,8 +175,12 @@ func (h *Handler) waiting(ctx context.Context, user string) []remind.Reminder {
 // purpose: a reminder waiting for four o'clock is not news at half past
 // one, and counting them at the door turns a greeting into a status
 // report.
-func (h *Handler) greeting() string {
-	return h.hour() + ", sir."
+func (h *Handler) greeting() string { return h.Greeting() }
+
+// Greeting : The greeting alone, without anything waiting. Exported so a
+// test can ask for it at an hour it chooses.
+func (h *Handler) Greeting() string {
+	return h.hour()
 }
 
 // missedText : What to say about reminders that were never said.
@@ -206,20 +216,58 @@ func (h *Handler) neverSaid(ctx context.Context, user string) []remind.Reminder 
 	return unsaid
 }
 
-// hour : A greeting for the time of day, in the person's own zone.
-func (h *Handler) hour() string {
+// greetings : What to say, by the hour.
+//
+// Several of each, because one fixed line per part of the day is the
+// same sentence every morning for ever, and a greeting somebody can
+// recite along with is not a greeting.
+//
+// "Welcome back" appears nowhere here. It used to be the small hours
+// and the late evening, and it reads as "you have returned" when all it
+// meant was "it is late" -- said to somebody who had not moved. If it
+// comes back it belongs to a long absence, which is a fact about them
+// rather than about the clock.
+var greetings = map[string][]string{
+	"night":     {"Hello, sir.", "Good evening, sir.", "Still up, sir."},
+	"morning":   {"Good morning, sir.", "Morning, sir."},
+	"afternoon": {"Good afternoon, sir.", "Afternoon, sir."},
+	"evening":   {"Good evening, sir.", "Evening, sir."},
+}
+
+// band : Which set the hour falls in, in the person's own zone.
+func (h *Handler) band() string {
 	switch at := h.clock().In(h.where()); {
 	case at.Hour() < 5:
-		return "Welcome back"
+		return "night"
 	case at.Hour() < 12:
-		return "Good morning"
+		return "morning"
 	case at.Hour() < 17:
-		return "Good afternoon"
+		return "afternoon"
 	case at.Hour() < 22:
-		return "Good evening"
+		return "evening"
 	default:
-		return "Welcome back"
+		return "night"
 	}
+}
+
+// hour : A greeting for the time of day, and not the last one used.
+func (h *Handler) hour() string {
+	choices := greetings[h.band()]
+	if len(choices) == 0 {
+		return "Hello, sir."
+	}
+
+	h.mu.Lock()
+	defer h.mu.Unlock()
+
+	// Anything but the one before. Variety that can repeat itself twice
+	// running is not much variety when there are only two of them.
+	pick := choices[rand.IntN(len(choices))]
+	for len(choices) > 1 && pick == h.lastGreeting {
+		pick = choices[rand.IntN(len(choices))]
+	}
+	h.lastGreeting = pick
+	return pick
 }
 
 // clock : Now, in UTC.

@@ -3,6 +3,8 @@ package presence_test
 import (
 	"context"
 	"encoding/json"
+	"io"
+	"log/slog"
 	"net/http"
 	"strings"
 	"sync"
@@ -14,6 +16,9 @@ import (
 	"github.com/DhanushRamesh/personal-assistant/internal/remind"
 	"github.com/DhanushRamesh/personal-assistant/internal/remind/inmemory"
 )
+
+// discard : A logger that writes nowhere.
+func discard() *slog.Logger { return slog.New(slog.NewJSONHandler(io.Discard, nil)) }
 
 // satellite : An announcer that writes down what it was asked to say.
 type satellite struct {
@@ -206,3 +211,42 @@ func TestAGreetingNobodyHeardSaysSo(t *testing.T) {
 type errNoSpeaker struct{}
 
 func (errNoSpeaker) Error() string { return "satellite unreachable" }
+
+// One fixed line per part of the day is the same sentence every morning
+// for ever, and a greeting somebody can recite along with is not one.
+func TestTheGreetingVaries(t *testing.T) {
+	sat := &satellite{}
+	e := apitest.NewWith(t, apitest.Options{Announcer: sat, Reminders: inmemory.New()})
+
+	seen := map[string]bool{}
+	var last string
+	for i := 0; i < 20; i++ {
+		got := arrive(t, e).Said
+		if got == last {
+			t.Fatalf("the same greeting twice running: %q", got)
+		}
+		if strings.Count(got, "sir") != 1 {
+			t.Fatalf("greeting = %q, want one address", got)
+		}
+		seen[got] = true
+		last = got
+	}
+	if len(seen) < 2 {
+		t.Errorf("twenty arrivals produced one greeting: %v", seen)
+	}
+}
+
+// "Welcome back" said to somebody who has not moved reads as a claim
+// that they went away. It belongs to a long absence, not to the clock.
+func TestTheClockNeverSaysWelcomeBack(t *testing.T) {
+	india := time.FixedZone("IST", 5*3600+1800)
+	for hour := 0; hour < 24; hour++ {
+		at := time.Date(2026, 9, 27, hour, 30, 0, 0, india)
+		h := presence.New(discard(), nil, nil, india, func() time.Time { return at })
+		for i := 0; i < 8; i++ {
+			if got := h.Greeting(); strings.Contains(got, "Welcome back") {
+				t.Errorf("at %02d:30 it said %q", hour, got)
+			}
+		}
+	}
+}

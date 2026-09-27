@@ -669,9 +669,19 @@ works out when it has crossed into the room -- and what arrives here is
 the conclusion. This chooses the words and speaks them through the same
 announcer the reminders use.
 
-The greeting is the hour and nothing else: "Good morning, sir",
-"Welcome back, sir". Then any reminders held back while they were out,
-then any that were never said at all. That is the whole of it.
+The greeting is the hour and nothing else. Then any reminders held back
+while they were out, then any that were never said at all. That is the
+whole of it.
+
+Two or three wordings per part of the day, never the same one twice
+running. One fixed line per band is the same sentence every morning for
+ever, and a greeting somebody can recite along with is not one.
+
+"Welcome back" is in none of them. It used to be the small hours and the
+late evening, and it reads as "you have returned" when all it meant was
+"it is late" -- said, in testing at four in the morning, to somebody who
+had not moved. If it comes back it belongs to a long absence, which is a
+fact about the person rather than about the clock.
 
 What is still to come is deliberately left out. A reminder waiting for
 four o'clock is not news at half past one, and counting them at the door
