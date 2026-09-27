@@ -74,6 +74,14 @@ func main() {
 		fmt.Fprintln(os.Stderr, "usage: personal-assistant createuser <username>")
 		os.Exit(1)
 	}
+	if len(os.Args) > 2 && os.Args[1] == "vocabulary" {
+		osExitOnError(runVocabulary(os.Args[2]))
+		return
+	}
+	if len(os.Args) > 1 && os.Args[1] == "vocabulary" {
+		fmt.Fprintln(os.Stderr, "usage: personal-assistant vocabulary <username>")
+		os.Exit(1)
+	}
 
 	if err := run(); err != nil {
 		// Configuration is read before the logger exists, so this cannot be
@@ -306,6 +314,7 @@ func run() error {
 		Reminders:      reminderStore,
 		Announcer:      speaker,
 		Announcements:  announcements,
+		Memories:       memorymysql.New(db),
 		Location:       cfg.Assistant.Location,
 		Now:            cfg.Assistant.Now,
 		Runner:         chatRunner,

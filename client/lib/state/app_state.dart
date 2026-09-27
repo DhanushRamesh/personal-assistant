@@ -482,6 +482,24 @@ class AppState extends ChangeNotifier {
     await loadReminders();
   }
 
+  /// vocabulary : The words speech-to-text is primed with, once read.
+  Vocabulary? get vocabulary => _vocabulary;
+  Vocabulary? _vocabulary;
+
+  /// loadVocabulary : Reads what speech-to-text is primed with.
+  ///
+  /// Only when the page asks. It is built from three stores on every call
+  /// and nothing else on the settings screen needs it.
+  Future<void> loadVocabulary() async {
+    _set(busy: true, error: null);
+    try {
+      _vocabulary = await api.vocabulary();
+    } on Object catch (e) {
+      _error = _explain(e);
+    }
+    _set(busy: false);
+  }
+
   /// loadReminders : Reads what is waiting to be said, for the settings
   /// screen.
   ///

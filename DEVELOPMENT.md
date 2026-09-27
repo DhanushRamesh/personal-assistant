@@ -691,6 +691,49 @@ A miss is said in words rather than as a count, and saying it here is
 the telling -- it is marked mentioned, so the same miss is not raised
 again in the next sentence.
 
+## The speech vocabulary
+
+Whisper decodes with a language model of its own, so an initial prompt
+biases it towards words it would not otherwise reach for. Without one it
+does not return a misspelling -- it returns a clean, confident, wrong
+word. Typing degrades gracefully because the characters survive and a
+typo announces itself as damage; a mishearing does neither. "GitLab
+Merge Requests" came back as "Kitla BMRs" and "Alekhya" as "Alekia", and
+both were saved into reminders.
+
+The list was maintained by hand in the README and went stale. It is now
+built by `internal/vocabulary` from what the owner has already written
+down: memories first, then conversation names, then reminders. That
+order is how far each can be trusted -- a memory was written
+deliberately, a conversation was named by a model that had read the
+whole exchange, and a reminder title may be the mishearing itself.
+
+`Core` stays hand-written and goes first, because command words
+(unarchive, snooze) are not derivable from anything stored and somebody
+who has never said one still needs it heard right the first time.
+Whisper truncates an over-long prompt from the front, so sending the
+deliberate words first is what makes the observed ones the ones dropped.
+
+A term is taken when it looks like a name rather than ordinary English:
+a capital inside it, capitals throughout, or a capitalised word that is
+not the first of its phrase. The first word is excluded because every
+reminder title starts with a verb -- Call, Check, Watch.
+
+**It can prime a word the owner never said.** "Kitla" is a real reminder
+title and is primed from it. Frequency cannot tell the two apart, since
+every title in the data occurs once. Two defences: anything within two
+edits of a core word is dropped, which is what removes "Alekia" given
+"Alekhya"; and the whole list is on the settings screen under Voice, so
+a wrong word is visible. The fix is to correct the reminder it came
+from, and then it goes. That is why the screen is read-only -- an
+exclusion list would leave the bad title in place.
+
+`./voice on` recreates wyoming-whisper when the words have changed, and
+does nothing when they have not. The words come from
+`./personal-assistant vocabulary <user>` rather than an endpoint: the
+script runs before the server is up, and an endpoint would need the
+server running to configure the thing it speaks through.
+
 **What is said unprompted is an announcement, and there are two kinds.**
 Anything the assistant says without being asked is an announcement:
 `conversation.ReminderAnnouncement` for a reminder or timer whose time

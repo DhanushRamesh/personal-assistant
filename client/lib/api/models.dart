@@ -401,6 +401,51 @@ class Announcement {
   );
 }
 
+/// Vocabulary : The words speech-to-text is primed with.
+///
+/// Shown because it is built from what has been written down, so a word
+/// that was misheard once and saved can end up being primed. Seeing the
+/// list is what makes that fixable.
+class Vocabulary {
+  const Vocabulary({
+    required this.prompt,
+    required this.core,
+    required this.found,
+    required this.used,
+    required this.budget,
+  });
+
+  /// prompt : Exactly what is passed to Whisper.
+  final String prompt;
+
+  /// core : The words primed by hand.
+  final List<String> core;
+
+  /// found : The words taken from reminders, conversations and memories,
+  /// in the order they would be dropped if the budget ran out.
+  final List<String> found;
+
+  final int used;
+  final int budget;
+
+  /// fromJson : Parses the vocabulary as the API returns it.
+  factory Vocabulary.fromJson(Map<String, dynamic> json) => Vocabulary(
+    prompt: json['prompt'] as String? ?? '',
+    core: _strings(json['core']),
+    found: _strings(json['found']),
+    used: json['used'] as int? ?? 0,
+    budget: json['budget'] as int? ?? 0,
+  );
+}
+
+/// _strings : A JSON array of strings, or empty when it is missing.
+List<String> _strings(Object? raw) => raw is List
+    ? [
+        for (final v in raw)
+          if (v is String) v,
+      ]
+    : const [];
+
 /// Identity : Who is calling and from what.
 class Identity {
   const Identity({required this.user, required this.client});
