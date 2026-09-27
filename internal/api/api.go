@@ -69,6 +69,11 @@ type Options struct {
 	// listing is empty and nothing can be called off from the screen.
 	Reminders remind.Store
 
+	// Announcements : Where what the server said of its own accord is
+	// noted in the conversation, so the person can answer it. Optional;
+	// without it a greeting is spoken and not written down.
+	Announcements presence.Announcements
+
 	// Announcer : Where the server speaks of its own accord. Optional;
 	// without it a greeting is composed and not said.
 	Announcer announce.Announcer
@@ -139,11 +144,11 @@ func New(opts Options) *Server {
 		health:        health.New(opts.Logger, opts.DB),
 		authn:         authn.New(opts.Logger, opts.Chats),
 		clients:       clients.New(opts.Logger, opts.Chats, opts.Models, opts.DefaultModel, opts.Persona),
-		conversations: conversations.New(opts.Logger, opts.Chats),
+		conversations: conversations.New(opts.Logger, opts.Chats, opts.Messages),
 		chats:         chats.New(opts.Logger, opts.Chats, opts.Messages, opts.Runner, opts.Events),
 		reminders:     reminders.New(opts.Logger, opts.Reminders),
 		presence: presence.New(opts.Logger, opts.Announcer, opts.Reminders,
-			opts.Location, opts.Now),
+			opts.Announcements, opts.Location, opts.Now),
 		assist: assist.New(opts.Logger, opts.Chats, opts.Runner, opts.Events),
 	}
 	s.routes()

@@ -3,6 +3,7 @@ package presence_test
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"io"
 	"log/slog"
 	"net/http"
@@ -307,5 +308,66 @@ func TestGivingUpOnTheRequestDoesNotStopTheGreeting(t *testing.T) {
 	}
 	if len(left) != 0 {
 		t.Errorf("%d reminders still held after being said", len(left))
+	}
+}
+
+// notebook : Somewhere asides are written down.
+type notebook struct {
+	texts []string
+}
+
+func (n *notebook) Arrived(_ context.Context, _ string, text string) {
+	n.texts = append(n.texts, text)
+}
+
+// The greeting, and everything said along with it, goes into the
+// conversation.
+//
+// Somebody told at the door that they should have done something at ten to
+// four replies to that sentence. Spoken and not written down, the reply
+// arrived in a conversation showing no sign of them having been spoken to,
+// and there was nothing for "how late was I" to refer to.
+func TestWhatIsSaidAtTheDoorIsWrittenDown(t *testing.T) {
+	store := inmemory.New()
+	sat := &satellite{}
+	note := &notebook{}
+	e := apitest.NewWith(t, apitest.Options{Announcer: sat, Reminders: store, Announcements: note})
+
+	at := time.Now().UTC()
+	r := remind.Reminder{
+		ID: "rem_door", UserID: e.User.ID, Scope: remind.ScopeUser,
+		Title: "Call the bank", Body: "Call the bank",
+		DueAt: at.Add(-time.Minute), Status: remind.Pending,
+	}
+	if err := store.Create(context.Background(), &r); err != nil {
+		t.Fatalf("creating: %v", err)
+	}
+	if err := store.Hold(context.Background(), r.ID, at); err != nil {
+		t.Fatalf("holding: %v", err)
+	}
+
+	got := arrive(t, e)
+
+	if len(note.texts) != 1 {
+		t.Fatalf("wrote down %v, want the one greeting", note.texts)
+	}
+	if note.texts[0] != got.Said {
+		t.Errorf("wrote %q but said %q", note.texts[0], got.Said)
+	}
+	if !strings.Contains(note.texts[0], "Call the bank") {
+		t.Errorf("the held reminder is missing from what was written: %q", note.texts[0])
+	}
+}
+
+// Nothing is written when nothing was heard.
+func TestAGreetingNobodyHeardIsNotWrittenDown(t *testing.T) {
+	note := &notebook{}
+	sat := &satellite{fail: errors.New("the satellite is unreachable")}
+	e := apitest.NewWith(t, apitest.Options{Announcer: sat, Announcements: note})
+
+	arrive(t, e)
+
+	if len(note.texts) != 0 {
+		t.Errorf("wrote down %v", note.texts)
 	}
 }

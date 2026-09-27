@@ -25,6 +25,8 @@ class AppTurn extends StatelessWidget {
     this.timestamp,
     this.trailing,
     this.footer,
+    this.label,
+    this.unprompted = false,
   });
 
   final AppSpeaker speaker;
@@ -65,6 +67,17 @@ class AppTurn extends StatelessWidget {
   /// Below rather than beside, so it never competes with the answer.
   final Widget? footer;
 
+  /// label : What to call the speaker, when "You" or "Assistant" is not
+  /// what this is. An announcement says what prompted it instead.
+  final String? label;
+
+  /// unprompted : Whether the assistant said this without being asked.
+  ///
+  /// Marked, because a reader scanning the conversation needs to know which
+  /// lines answer a question and which arrived on their own. Nothing above
+  /// an announcement explains why it is there.
+  final bool unprompted;
+
   @override
   Widget build(BuildContext context) {
     final colors = context.colors;
@@ -74,6 +87,8 @@ class AppTurn extends StatelessWidget {
         ? colors.danger
         : isYou
         ? colors.borderStrong
+        : unprompted
+        ? colors.textMuted
         : colors.accent;
 
     var style = context.text.body;
@@ -115,11 +130,17 @@ class AppTurn extends StatelessWidget {
                   Row(
                     children: [
                       Text(
-                        isYou ? 'You' : 'Assistant',
+                        label ?? (isYou ? 'You' : 'Assistant'),
                         style: context.text.label.copyWith(
-                          color: isYou ? colors.textMuted : colors.accent,
+                          color: isYou || unprompted
+                              ? colors.textMuted
+                              : colors.accent,
                         ),
                       ),
+                      if (unprompted) ...[
+                        const SizedBox(width: AppSpacing.sm),
+                        Text('announced', style: context.text.caption),
+                      ],
                       if (timestamp != null) ...[
                         const SizedBox(width: AppSpacing.sm),
                         Text(timestamp!, style: context.text.caption),

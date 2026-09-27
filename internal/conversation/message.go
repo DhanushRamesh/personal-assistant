@@ -57,7 +57,33 @@ const (
 	// history that omits the request leaves the model contradicting a world
 	// it changed.
 	Interruption Kind = "stopped"
+
+	// ReminderAnnouncement : A reminder or timer said aloud as its time
+	// came.
+	//
+	// Announcements are the assistant speaking without having been asked,
+	// and they are kinds of their own rather than plain Chat because they
+	// are the only assistant turns with no question in front of them.
+	// What follows one is usually a reply to it: somebody who hears "you
+	// should have done this at ten to four" and answers "how late was I"
+	// is talking about the announcement, and without it in the
+	// conversation the question lands on nothing.
+	//
+	// Told apart by what prompted them rather than lumped together,
+	// because a person reading the conversation back wants to know
+	// whether the assistant spoke because a time came or because they
+	// walked in.
+	ReminderAnnouncement Kind = "reminder"
+
+	// PresenceAnnouncement : A greeting, and whatever was held back,
+	// said as somebody came into the room.
+	PresenceAnnouncement Kind = "presence"
 )
+
+// Announcement : Whether this is the assistant having spoken unprompted.
+func (k Kind) Announcement() bool {
+	return k == ReminderAnnouncement || k == PresenceAnnouncement
+}
 
 // known : Whether this is a kind the store will accept.
 //
@@ -66,7 +92,7 @@ const (
 // interruption was rejected by the store for a morning without anything
 // louder than a line in the log.
 func (k Kind) known() bool {
-	return k == Chat || k == Failure || k == Interruption
+	return k == Chat || k == Failure || k == Interruption || k.Announcement()
 }
 
 // Role : Who said something.
@@ -192,6 +218,26 @@ func Failed(conversationID, content, detail string, at time.Time) Message {
 	}
 }
 
+// Announced : The assistant saying something nobody asked for.
+//
+// [kind] says what prompted it, and must be an announcement kind.
+//
+// [when] is the time it was said, already written in the person's own zone,
+// because a stored message carries a timestamp and a model reading one back
+// does not: only the words reach the provider. An announcement whose hour is
+// not in its words cannot be asked how long ago it was.
+func Announced(conversationID string, kind Kind, content, when string, at time.Time) Message {
+	return Message{
+		ID:             NewMessageID(),
+		ConversationID: conversationID,
+		Kind:           kind,
+		Detail:         strings.TrimSpace(when),
+		Role:           Assistant,
+		Content:        content,
+		At:             at,
+	}
+}
+
 // Valid : Reports whether a message can be stored, and why not if it cannot.
 //
 // A message carries exactly one of three things: words, tool calls, or tool
@@ -290,10 +336,35 @@ func (m Message) empty() bool {
 // repeat: a spoken answer should still be the sentence, and the detail is
 // there so that asking for it gets the truth.
 func forModelContent(m Message) string {
-	if m.Kind != Failure || m.Detail == "" {
-		return m.Content
+	switch {
+	case m.Kind == Failure && m.Detail != "":
+		return m.Content + "\n\n[Exact error, for reference if asked: " + m.Detail + "]"
+
+	// Marked, because an announcement is the one assistant turn that
+	// answers nothing, and because its hour is the thing most likely to
+	// be asked about next. Said plainly as a fact, the way an
+	// interruption is: it is there to be referred to, not to be
+	// apologised for or repeated.
+	case m.Kind.Announcement():
+		return "[" + announcedAs(m.Kind, m.Detail) + "] " + m.Content
 	}
-	return m.Content + "\n\n[Exact error, for reference if asked: " + m.Detail + "]"
+	return m.Content
+}
+
+// announcedAs : How an announcement is introduced to the model.
+//
+// What prompted it is said as well as when, because the two are answered
+// differently: "why did you tell me that" about a reminder is about its
+// time, and about a greeting is about the door.
+func announcedAs(kind Kind, when string) string {
+	at := ""
+	if when != "" {
+		at = " at " + when
+	}
+	if kind == PresenceAnnouncement {
+		return "Announced aloud" + at + ", as they came into the room."
+	}
+	return "Reminder announced aloud" + at + "."
 }
 
 // ForPerson : The messages a person sees, oldest first.

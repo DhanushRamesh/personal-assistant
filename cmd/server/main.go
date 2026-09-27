@@ -17,6 +17,7 @@ import (
 
 	"github.com/DhanushRamesh/personal-assistant/internal/announce"
 	"github.com/DhanushRamesh/personal-assistant/internal/announce/hass"
+	"github.com/DhanushRamesh/personal-assistant/internal/announcement"
 	"github.com/DhanushRamesh/personal-assistant/internal/api"
 	"github.com/DhanushRamesh/personal-assistant/internal/chat"
 	chatmysql "github.com/DhanushRamesh/personal-assistant/internal/chat/mysql"
@@ -249,6 +250,19 @@ func run() error {
 		return err
 	}
 
+	// What the assistant says without being asked is written into the
+	// conversation the voice client is talking in, so that answering it
+	// is possible at all. Without this a greeting and the reminders
+	// behind it are spoken into a conversation that shows no trace of
+	// them, and "how late was I" has nothing to refer to.
+	announcements := &announcement.Writer{
+		Conversations: chats,
+		Clients:       chats,
+		Location:      cfg.Assistant.Location,
+		Now:           cfg.Assistant.Now,
+		Logger:        logger.Logger,
+	}
+
 	// The first work here that happens because of the clock rather than
 	// because somebody asked. Stopped with the server, so a reminder is
 	// never half said during a shutdown.
@@ -257,9 +271,10 @@ func run() error {
 		Presence: whereabouts(cfg, logger.Logger),
 		Speaker: remind.Everywhere{
 			To: []remind.Speaker{remind.Aloud{
-				Announcer: speaker,
-				Location:  cfg.Assistant.Location,
-				Now:       cfg.Assistant.Now,
+				Announcer:     speaker,
+				Location:      cfg.Assistant.Location,
+				Now:           cfg.Assistant.Now,
+				Announcements: announcements,
 			}},
 			Logger: logger.Logger,
 		},
@@ -290,6 +305,7 @@ func run() error {
 		Messages:       chats,
 		Reminders:      reminderStore,
 		Announcer:      speaker,
+		Announcements:  announcements,
 		Location:       cfg.Assistant.Location,
 		Now:            cfg.Assistant.Now,
 		Runner:         chatRunner,
