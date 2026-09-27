@@ -190,3 +190,77 @@ func TestNoCalendarAtAll(t *testing.T) {
 		t.Errorf("result = %+v", got)
 	}
 }
+
+// asked : The window a listing reports having looked at.
+func asked(t *testing.T, d *diary, args string) string {
+	t.Helper()
+	return run(t, d, "calendar_list", args).Content
+}
+
+// A named date means that whole day, not the instant it begins.
+func TestADateMeansTheWholeDay(t *testing.T) {
+	d := &diary{}
+	got := asked(t, d, `{"from":"2026-09-03"}`)
+
+	if !strings.Contains(got, "Thursday 3 September") {
+		t.Errorf("content = %q, want it to name the day it looked at", got)
+	}
+}
+
+// A day already past is a fair question, and the answer says which day
+// rather than talking about days ahead.
+func TestAPastDayCanBeAskedAbout(t *testing.T) {
+	d := &diary{mine: []calendar.Event{{
+		ID: "e1", Title: "Something", Mine: true,
+		Starts: time.Date(2026, 9, 3, 9, 30, 0, 0, time.UTC),
+		Ends:   time.Date(2026, 9, 3, 10, 30, 0, 0, time.UTC),
+	}}}
+	got := asked(t, d, `{"from":"2026-09-03"}`)
+
+	if strings.Contains(got, "next") {
+		t.Errorf("content = %q, want it to name the date rather than days ahead", got)
+	}
+	if !strings.Contains(got, "Something") {
+		t.Errorf("content = %q, want the event", got)
+	}
+}
+
+// A range covers both ends inclusively and says so.
+func TestARangeCoversBothEnds(t *testing.T) {
+	d := &diary{}
+	got := asked(t, d, `{"from":"2026-09-03","to":"2026-09-05"}`)
+
+	if !strings.Contains(got, "3 September") || !strings.Contains(got, "5 September") {
+		t.Errorf("content = %q, want both ends named", got)
+	}
+}
+
+// Without dates it behaves as it did: a count of days ahead.
+func TestWithoutDatesItCountsDaysAhead(t *testing.T) {
+	got := asked(t, &diary{}, `{"days":3}`)
+	if !strings.Contains(got, "next 3 days") {
+		t.Errorf("content = %q", got)
+	}
+	got = asked(t, &diary{}, `{}`)
+	if !strings.Contains(got, "next 7 days") {
+		t.Errorf("content = %q, want seven days by default", got)
+	}
+}
+
+// A range that ends before it starts is refused rather than silently
+// returning nothing, which would read as "your day was empty".
+func TestABackwardsRangeIsRefused(t *testing.T) {
+	got := run(t, &diary{}, "calendar_list", `{"from":"2026-09-05","to":"2026-09-03"}`)
+	if got.Outcome != "failed" {
+		t.Errorf("outcome = %q, want it refused: %s", got.Outcome, got.Content)
+	}
+}
+
+// An empty answer still says this is not their real calendar, whichever
+// window was asked for.
+func TestAnEmptyRangeStillWarns(t *testing.T) {
+	got := asked(t, &diary{}, `{"from":"2026-09-03"}`)
+	if !strings.Contains(got, "their own") {
+		t.Errorf("content = %q, want the warning", got)
+	}
+}

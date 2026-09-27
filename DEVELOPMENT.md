@@ -754,6 +754,40 @@ asked how long ago it was.
 Consecutive assistant messages are already merged by `ForModel`, so an
 aside beside an answer raises no alternation problem.
 
+## Look it up every time
+
+**The owner's standing rule, 27 September 2026: every statement about
+how things are comes from a tool call in the current turn. Never from
+memory, never from earlier in the conversation.** The reason is that
+the data changes every moment -- by them, by another device, by the
+clock -- so a remembered answer is only ever a guess about the past.
+This applies to every tool, not the calendar alone.
+
+It is in `persona.go` under honesty, worded as the rule above the
+others, with the cost stated both ways: looking again when nothing has
+changed costs a second, not looking when something has costs the truth.
+Three specific traps are named because each has happened: reasoning
+that a past date must be empty, reusing something read out one turn
+ago, and padding a tool's answer with a remembered item that the tool
+did not return.
+
+**Prose has not been enough, and the cause is structural.** Measured
+the same afternoon: in a conversation with history, four questions in a
+row about the diary and the reminders produced no tool calls at all --
+every answer came from context. The same question in a conversation
+with no history called the tool immediately, every time.
+
+So the model is not ignoring an instruction it failed to read. It is
+reusing material that is in front of it, and the material is stale
+tool results and its own earlier answers, which this server puts there.
+The fix worth trying is to stop serving them: redact the content of
+tool results from earlier turns when building the window, leaving a
+marker that a listing was returned and may be out of date. Removing
+what is being reused is the only lever that has moved this.
+
+That is partial by itself. The model's own prose answers also carry the
+data and cannot be redacted without wrecking the transcript.
+
 ## The calendar
 
 Two scopes, both non-sensitive, and the division between them is the

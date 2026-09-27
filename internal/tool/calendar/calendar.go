@@ -172,24 +172,42 @@ func add(diary Diary, clock Clock) tool.Tool {
 func agenda(diary Diary, clock Clock) tool.Tool {
 	return tool.Tool{
 		Name:    "calendar_list",
-		Purpose: "Read what is in the diary over a stretch of days.",
-		UseWhen: "They ask what is on -- today, tomorrow, this week, or before a particular date.",
-		Avoid: "This shows only what the assistant put there. It cannot see the person's own " +
-			"meetings, so never say the day is empty on the strength of it: say that nothing was " +
-			"written down here, and use calendar_free to find out whether they are actually busy.",
+		Purpose: "Read what is in the diary, over the days ahead or across a particular stretch of dates.",
+		UseWhen: "Any question about what is in the diary -- today, tomorrow, this week, a named " +
+			"day, a range of dates, or a day already past. Call it every time, including when the " +
+			"answer seems obvious: a date in the past is still a question about what is stored, and " +
+			"the only way to know what is stored is to look.",
+		Avoid: "Do not answer from what was said earlier in the conversation, and do not reason that " +
+			"a date must be empty because it is in the past or because nothing was mentioned. Both are " +
+			"claims about the diary, and a claim about the diary needs this tool to have just run.\n\n" +
+			"What comes back is only what the assistant put there; it cannot see the person's own " +
+			"meetings. So never call a day empty on the strength of it -- say nothing was written down " +
+			"here, and use calendar_free for whether they are actually busy.",
 		Channels: []chat.Channel{chat.ChannelVoice, chat.ChannelDirect},
 		Params: tool.Schema{
 			Properties: map[string]tool.Property{
+				"from": {
+					Type: "string",
+					Description: "First day to look at, as 2026-09-03, or a moment as " +
+						"2026-09-03T15:00. Given on its own it means that one day.",
+				},
+				"to": {
+					Type: "string",
+					Description: "Last day to look at, as 2026-09-05. The whole of that day is " +
+						"included. Ignored without 'from'.",
+				},
 				"days": {
 					Type: "integer",
-					Description: "How many days ahead to look, counting today. One is the rest " +
-						"of today. Left out, seven.",
+					Description: "Instead of dates: how many days ahead to look, counting today. " +
+						"One is the rest of today. Used only when 'from' is absent; left out, seven.",
 				},
 			},
 		},
 		Run: func(ctx context.Context, in tool.Invocation) tool.Result {
 			var args struct {
-				Days int `json:"days"`
+				From string `json:"from"`
+				To   string `json:"to"`
+				Days int    `json:"days"`
 			}
 			_ = json.Unmarshal(in.Args, &args)
 
@@ -200,25 +218,22 @@ func agenda(diary Diary, clock Clock) tool.Tool {
 				return tool.Failed("This request did not come from a known person.")
 			}
 
-			days := args.Days
-			if days <= 0 {
-				days = 7
+			from, to, said, err := window(args.From, args.To, args.Days, clock)
+			if err != nil {
+				return tool.Failed(err.Error())
 			}
-			from := clock.now()
-			to := from.AddDate(0, 0, days)
 
 			found, err := diary.Mine(ctx, in.Caller.UserID, from, to)
 			if err != nil {
 				return whenTrouble(err)
 			}
 			if len(found) == 0 {
-				return tool.OK(fmt.Sprintf("Nothing is written in the diary in the next %d days. "+
-					"That is only what was put there through you; it says nothing about their own "+
-					"calendar.", days))
+				return tool.OK("Nothing is written in the diary " + said + ". That is only what " +
+					"was put there through you; it says nothing about their own calendar.")
 			}
 
 			var b strings.Builder
-			fmt.Fprintf(&b, "In the diary over the next %d days:", days)
+			b.WriteString("In the diary " + said + ":")
 			for _, e := range found {
 				b.WriteString("\n- ")
 				b.WriteString(describe(e, clock.where()))
@@ -229,6 +244,56 @@ func agenda(diary Diary, clock Clock) tool.Tool {
 			return tool.OK(b.String())
 		},
 	}
+}
+
+// window : The stretch of time to read, and how to say which it was.
+//
+// Dates win over a count of days when both are given, because somebody
+// who named a date meant it. A date on its own is that whole day, since
+// "what is on the third" is a question about a day and not about the
+// instant it begins.
+//
+// The description comes back with the times because the answer has to
+// name the window it looked at. "Nothing in the diary" is a different
+// statement about tomorrow than about the whole of last month, and a
+// model given only the events cannot tell the person which it checked.
+func window(from, to string, days int, clock Clock) (time.Time, time.Time, string, error) {
+	loc := clock.where()
+
+	if strings.TrimSpace(from) == "" {
+		if days <= 0 {
+			days = 7
+		}
+		start := clock.now()
+		return start, start.AddDate(0, 0, days),
+			fmt.Sprintf("over the next %d days", days), nil
+	}
+
+	start, err := when(from, loc)
+	if err != nil {
+		return time.Time{}, time.Time{}, "", err
+	}
+
+	// A bare date means the whole of that day, so the end is the moment
+	// the next one begins.
+	end := start.AddDate(0, 0, 1)
+	said := "on " + start.In(loc).Format("Monday 2 January")
+
+	if strings.TrimSpace(to) != "" {
+		last, err := when(to, loc)
+		if err != nil {
+			return time.Time{}, time.Time{}, "", err
+		}
+		if last.Before(start) {
+			return time.Time{}, time.Time{}, "",
+				fmt.Errorf("that range ends before it starts")
+		}
+		end = last.AddDate(0, 0, 1)
+		said = "between " + start.In(loc).Format("Monday 2 January") +
+			" and " + last.In(loc).Format("Monday 2 January")
+	}
+
+	return start, end, said, nil
 }
 
 // free : Whether a time is taken, across every calendar they have.
