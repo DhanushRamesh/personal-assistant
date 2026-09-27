@@ -1053,6 +1053,37 @@ could say it, and drives the mention-it-once path. Held means something
 could and chose to wait. Its due time is left alone: that is what the
 reminder was for, and what the person is told when they get it.
 
+**Two flags, because the welcome and the hold want opposite mistakes.**
+Greeting somebody who never left wastes a sentence. Holding a reminder
+from somebody sitting right there loses it until they think to ask. One
+threshold cannot be right for both, and every change to it has only
+moved the fault from one to the other.
+
+`input_boolean.in_the_room` stays responsive and drives the welcome.
+`input_boolean.surely_in_the_room` is strict and is the only thing
+`[homeassistant] presence_entity` points at, so it alone can hold a
+reminder.
+
+**The strict one reads a peak, not a median.** `sensor.watch_signal_best`
+is the strongest reading in the last three minutes. Sitting at the desk
+with an arm across the watch drags the thirty-second median to -84 while
+the signal still touches -37 and -51 whenever the arm moves; another
+room does neither. Measured over nine hours: the median called absence
+**twenty-one** times, every one of them wrong, and one swallowed a
+reminder that was due. The peak at -82 called it three times and never
+once while the owner was measurably at the desk.
+
+Both flags keep the same polarity -- on means here -- because
+`hass.Presence.Away` treats the literal state `"off"` as away. A flag
+named for the opposite sense would make pointing the server at the wrong
+one silent and total. `surely_in_the_room` starts `on`, because a flag
+that starts off means away and a fresh Home Assistant would hold
+everything until the rule next ran.
+
+Coming back has no wait at all, unlike everything else here: this flag
+only ever stops reminders being spoken, so clearing it early costs
+nothing and clearing it late costs a reminder.
+
 **The thresholds, and why each direction has its own.** Arriving reads
 `sensor.watch_signal`, a three-sample median, and wants **above -72 held
 for a second and a half**. Leaving reads `sensor.watch_signal_settled`,
