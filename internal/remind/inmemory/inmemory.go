@@ -114,7 +114,7 @@ func (s *Store) Fired(_ context.Context, id string, at, next time.Time) error {
 	defer s.mu.Unlock()
 
 	r, ok := s.kept[id]
-	if !ok || r.Status != remind.Pending {
+	if !ok || (r.Status != remind.Pending && r.Status != remind.Held) {
 		return remind.ErrNotFound
 	}
 
@@ -171,6 +171,35 @@ func (s *Store) Mentioned(_ context.Context, ids []string, at time.Time) error {
 		}
 	}
 	return nil
+}
+
+// Hold : Keeps a reminder back because nobody was there to hear it.
+func (s *Store) Hold(_ context.Context, id string, at time.Time) error {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+
+	r, ok := s.kept[id]
+	if !ok || r.Status != remind.Pending {
+		return remind.ErrNotFound
+	}
+	r.Status, r.UpdatedAt = remind.Held, at.UTC()
+	s.kept[id] = r
+	return nil
+}
+
+// Waiting : Reminders held back for somebody, oldest first.
+func (s *Store) Waiting(_ context.Context, userID string) ([]remind.Reminder, error) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+
+	out := make([]remind.Reminder, 0, len(s.kept))
+	for _, r := range s.kept {
+		if r.UserID == userID && r.Status == remind.Held {
+			out = append(out, r)
+		}
+	}
+	soonestFirst(out)
+	return out, nil
 }
 
 // Snooze : Puts a reminder off until a later time.

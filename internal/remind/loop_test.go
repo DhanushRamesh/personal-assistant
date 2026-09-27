@@ -346,3 +346,97 @@ func TestALateReminderFromYesterdayNamesTheDay(t *testing.T) {
 		t.Errorf("Spoken does not name the day:\n%s", got)
 	}
 }
+
+// elsewhere : A presence that answers however the test says.
+type elsewhere struct{ away bool }
+
+func (e elsewhere) Away(context.Context, string) bool { return e.away }
+
+// held : A reminder due now, for the presence tests.
+func heldCase(t *testing.T, repeats remind.Repeat) (*inmemory.Store, *remind.Reminder) {
+	t.Helper()
+	store := inmemory.New()
+	r, err := remind.New("usr_1", "", remind.ScopeUser, "Tablets", "Take your tablets.",
+		time.Now().UTC().Add(-time.Second), repeats)
+	if err != nil {
+		t.Fatalf("remind.New: %v", err)
+	}
+	if err := store.Create(context.Background(), r); err != nil {
+		t.Fatalf("Create: %v", err)
+	}
+	return store, r
+}
+
+// Nobody in the room, so it is kept back rather than said to an empty one.
+func TestAReminderIsHeldWhenNobodyIsThere(t *testing.T) {
+	store, r := heldCase(t, remind.Once)
+	sat := &heard{}
+	loop := &remind.Loop{Store: store, Speaker: sat, Presence: elsewhere{away: true}}
+
+	pass := loop.Once(context.Background())
+
+	if pass.Held != 1 || pass.Said != 0 {
+		t.Errorf("pass = %+v, want one held and nothing said", pass)
+	}
+	got, err := store.Get(context.Background(), "usr_1", r.ID)
+	if err != nil {
+		t.Fatalf("Get: %v", err)
+	}
+	if got.Status != remind.Held {
+		t.Errorf("status = %q, want held", got.Status)
+	}
+	if !got.DueAt.Equal(r.DueAt) {
+		t.Error("holding moved its due time; it says what the reminder was for")
+	}
+}
+
+// The rule that matters. Anything short of a confident "they are out"
+// speaks: presence here is a signal that has already been seen to drift
+// ten decibels in half an hour, and a reminder withheld from somebody
+// sitting there is lost until they think to ask.
+func TestNotKnowingMeansSayingIt(t *testing.T) {
+	for _, c := range []struct {
+		name string
+		p    remind.Presence
+	}{
+		{"nothing configured", nil},
+		{"it says they are here", elsewhere{away: false}},
+	} {
+		t.Run(c.name, func(t *testing.T) {
+			store, _ := heldCase(t, remind.Once)
+			sat := &heard{}
+			loop := &remind.Loop{Store: store, Speaker: sat, Presence: c.p}
+
+			if pass := loop.Once(context.Background()); pass.Said != 1 || pass.Held != 0 {
+				t.Errorf("pass = %+v, want it said", pass)
+			}
+		})
+	}
+}
+
+// A repeating one is not held. Its next turn is along soon enough, and
+// holding one would queue a morning alarm to go off at lunchtime.
+func TestARepeatingReminderIsNotHeld(t *testing.T) {
+	store, _ := heldCase(t, remind.Daily)
+	sat := &heard{}
+	loop := &remind.Loop{Store: store, Speaker: sat, Presence: elsewhere{away: true}}
+
+	if pass := loop.Once(context.Background()); pass.Held != 0 || pass.Said != 1 {
+		t.Errorf("pass = %+v, want the repeating one said, not held", pass)
+	}
+}
+
+// What is held is what gets delivered, oldest first.
+func TestWhatIsHeldIsWaiting(t *testing.T) {
+	store, r := heldCase(t, remind.Once)
+	loop := &remind.Loop{Store: store, Speaker: &heard{}, Presence: elsewhere{away: true}}
+	loop.Once(context.Background())
+
+	waiting, err := store.Waiting(context.Background(), "usr_1")
+	if err != nil {
+		t.Fatalf("Waiting: %v", err)
+	}
+	if len(waiting) != 1 || waiting[0].ID != r.ID {
+		t.Errorf("Waiting = %v, want the held one", waiting)
+	}
+}

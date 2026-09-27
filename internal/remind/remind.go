@@ -90,6 +90,13 @@ const (
 	// Missed : Its time passed while nothing was listening, too long ago to
 	// say now. Kept rather than deleted, so it can be mentioned once.
 	Missed Status = "missed"
+	// Held : Its time came while the person was out of the room, so it was
+	// kept back rather than said to nobody.
+	//
+	// Not the same as missed. Missed means nothing could say it; held means
+	// something could and chose to wait. The person gets a held one when
+	// they walk back in, and is told a missed one happened.
+	Held Status = "held"
 	// Cancelled : Called off before it fired.
 	Cancelled Status = "cancelled"
 )
@@ -97,7 +104,7 @@ const (
 // Valid : Whether the status is one the code knows.
 func (s Status) Valid() bool {
 	switch s {
-	case Pending, Done, Missed, Cancelled:
+	case Pending, Done, Missed, Held, Cancelled:
 		return true
 	}
 	return false
@@ -186,7 +193,7 @@ func Snoozable(r *Reminder) error {
 		return ErrNotFound
 	case r.Repeats != Once:
 		return ErrSnoozeRepeats
-	case r.Status != Pending && r.Status != Done:
+	case r.Status != Pending && r.Status != Done && r.Status != Held:
 		return ErrNotSnoozable
 	}
 	return nil

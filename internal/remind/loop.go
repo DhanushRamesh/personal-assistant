@@ -22,6 +22,19 @@ const (
 	DefaultGrace = time.Hour
 )
 
+// Presence : Whether somebody is there to hear a reminder.
+//
+// Deliberately a single question with a single safe answer. Anything that
+// is not a confident, current "they are elsewhere" must come back false,
+// because the cost of the two mistakes is not equal: speaking to an empty
+// room wastes a sentence, and holding a reminder back from somebody who
+// was sitting there loses it for as long as they take to notice.
+type Presence interface {
+	// Away : Whether the person is known to be out of the room. False
+	// when it cannot be told.
+	Away(ctx context.Context, userID string) bool
+}
+
 // Loop : Says reminders when their time comes.
 //
 // The first work in this server that happens because of the clock rather
@@ -31,6 +44,9 @@ type Loop struct {
 	Store Store
 	// Speaker : Where they are said. Required.
 	Speaker Speaker
+	// Presence : Whether anybody is there to hear it. Nil says everything
+	// aloud, which is what this did before there was any way to tell.
+	Presence Presence
 	// Location : The person's zone, for working out when a repeating one
 	// next falls. Nil is UTC.
 	Location *time.Location
@@ -83,6 +99,8 @@ type Pass struct {
 	Missed int
 	// Moved : Repeating ones whose turn was too late, put to their next.
 	Moved int
+	// Held : Kept back because nobody was in the room to hear them.
+	Held int
 	// Failed : Ones nothing would take, left pending to try again.
 	Failed int
 }
@@ -132,6 +150,20 @@ func (l *Loop) one(ctx context.Context, r Reminder, at time.Time, pass *Pass) {
 			pass.Missed++
 			l.note(ctx, "a reminder was missed", r)
 		}
+		return
+	}
+
+	// Nobody in the room. Kept back rather than said to an empty one, and
+	// delivered when they walk in. A repeating one is not held: its next
+	// turn is along soon enough, and holding one would queue up a morning
+	// alarm to go off the moment somebody walked past at lunchtime.
+	if !repeating && l.Presence != nil && l.Presence.Away(ctx, r.UserID) {
+		if err := l.Store.Hold(ctx, r.ID, at); err != nil {
+			l.log(ctx, "cannot hold a reminder back", err)
+			return
+		}
+		pass.Held++
+		l.note(ctx, "held a reminder back, nobody was in the room", r)
 		return
 	}
 

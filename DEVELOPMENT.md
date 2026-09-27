@@ -858,9 +858,42 @@ and did not. The spoken list comes from `LastSpoken`, which is bounded,
 so when the bound is reached the tool says there may be more rather than
 implying the list is everything.
 
-Holding a reminder back because nobody was in the room is a third
-category and does not exist yet. That is the other half of this, and it
-needs the server to know where somebody is.
+A held one is the third category: not said yet, and not missed either.
+
+### A reminder is not said to an empty room
+
+A reminder whose time comes while nobody is in the room is **held**
+rather than spoken, and said when they walk back in, after the greeting.
+
+`held` is its own status because it is its own fact. Missed means nothing
+could say it, and drives the mention-it-once path. Held means something
+could and chose to wait. Its due time is left alone: that is what the
+reminder was for, and what the person is told when they get it.
+
+**The rule is fail-safe, and that is the whole design.** `remind.Presence`
+asks one question and anything short of a confident, current "they are
+elsewhere" comes back false, so the reminder is spoken. An error, an
+unavailable entity, a state nobody recognises, nothing configured at all
+-- every one of those speaks. The two mistakes do not cost the same:
+speaking to an empty room wastes a sentence, and withholding a reminder
+from somebody sitting right there loses it until they think to ask. The
+signal this rests on has already been seen to drift ten decibels in half
+an hour, which is the argument rather than a hypothetical.
+
+Home Assistant is asked at firing time rather than told in advance. It is
+the only thing that knows, and asking it means there is no second copy
+here to go stale. `[homeassistant] presence_entity` names what to ask;
+empty means never hold, which is what this did before.
+
+A repeating one is never held. Its next turn is along soon enough, and
+holding one would queue a morning alarm to go off the moment somebody
+walked past at lunchtime.
+
+`Fired` accepts a held reminder as well as a pending one, which it did
+not at first: the delivery was spoken and then could not be recorded, so
+it stayed held and would have been said again on the next arrival. The
+log said so -- "said a held reminder but could not record it" -- which is
+the honest half of that failure working.
 
 ### A length of time is the server's arithmetic, not the model's
 

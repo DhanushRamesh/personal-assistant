@@ -36,6 +36,9 @@ type ArrivedResponse struct {
 	Spoke bool `json:"spoke"`
 	// Why : Why nothing was said, when nothing was.
 	Why string `json:"why,omitempty"`
+	// Delivered : How many held-back reminders were said along with the
+	// greeting.
+	Delivered int `json:"delivered,omitempty"`
 }
 
 // Handler : Serves the presence endpoints.
@@ -87,6 +90,14 @@ func (h *Handler) Arrived(w http.ResponseWriter, r *http.Request) {
 
 	said := h.greeting(ctx, user)
 
+	// Anything kept back while they were out is said now, after the
+	// greeting, in the order it was for. Recorded as said only once it
+	// has been: a delivery nobody heard must stay held.
+	held := h.waiting(ctx, user)
+	for i := range held {
+		said += " " + remind.Spoken(held[i], h.clock(), h.where())
+	}
+
 	if h.announcer == nil || !h.announcer.Available() {
 		httpx.WriteJSON(ctx, w, http.StatusOK, ArrivedResponse{
 			Said: said, Why: "nothing is configured to speak",
@@ -104,7 +115,31 @@ func (h *Handler) Arrived(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	httpx.WriteJSON(ctx, w, http.StatusOK, ArrivedResponse{Said: said, Spoke: true})
+	// Only now. Said and not recorded is better than recorded and not
+	// said: the first is heard twice, the second is lost.
+	for i := range held {
+		if err := h.reminders.Fired(ctx, held[i].ID, h.clock(), time.Time{}); err != nil {
+			h.Logger.WarnContext(ctx, "said a held reminder but could not record it",
+				slog.String("reminder_id", held[i].ID), slog.Any("error", err))
+		}
+	}
+
+	httpx.WriteJSON(ctx, w, http.StatusOK, ArrivedResponse{
+		Said: said, Spoke: true, Delivered: len(held),
+	})
+}
+
+// waiting : What was kept back while they were out.
+func (h *Handler) waiting(ctx context.Context, user string) []remind.Reminder {
+	if h.reminders == nil || user == "" {
+		return nil
+	}
+	held, err := h.reminders.Waiting(ctx, user)
+	if err != nil {
+		h.Logger.WarnContext(ctx, "cannot read what was held back", slog.Any("error", err))
+		return nil
+	}
+	return held
 }
 
 // greeting : What to say to somebody who has just walked in.

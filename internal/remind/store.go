@@ -31,6 +31,11 @@ type Store interface {
 	//
 	// A zero next finishes it. Otherwise it is due again then, which is how
 	// a repeating one comes back.
+	//
+	// Pending or held, and nothing else. Pending is the firing loop saying
+	// it; held is a delivery to somebody who has just walked in. Both are
+	// one-way claims, so the guard against two passes saying the same
+	// reminder twice still holds.
 	Fired(ctx context.Context, id string, at time.Time, next time.Time) error
 
 	// Missed : Records that a reminder's time passed with nothing listening,
@@ -44,6 +49,19 @@ type Store interface {
 	// Mentioned : Records that a miss has been brought up, so it is brought
 	// up once and not on every turn afterwards.
 	Mentioned(ctx context.Context, ids []string, at time.Time) error
+
+	// Hold : Keeps a reminder back because nobody was there to hear it.
+	//
+	// Its due time is left alone: it says when the reminder was for, and
+	// that is what the person is told when they come back. Only a pending
+	// one can be held, so a firing loop and this cannot both claim it.
+	Hold(ctx context.Context, id string, at time.Time) error
+
+	// Waiting : Reminders held back for somebody, oldest first.
+	//
+	// What to say when they walk in. Oldest first because that is the
+	// order they were for.
+	Waiting(ctx context.Context, userID string) ([]Reminder, error)
 
 	// Snooze : Puts a reminder off until a later time.
 	//

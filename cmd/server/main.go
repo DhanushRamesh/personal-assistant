@@ -248,7 +248,8 @@ func run() error {
 	// because somebody asked. Stopped with the server, so a reminder is
 	// never half said during a shutdown.
 	reminding := &remind.Loop{
-		Store: reminderStore,
+		Store:    reminderStore,
+		Presence: whereabouts(cfg, logger.Logger),
 		Speaker: remind.Everywhere{
 			To: []remind.Speaker{remind.Aloud{
 				Announcer: speaker,
@@ -363,6 +364,28 @@ func reachableModels(cfg config.Config) []llm.Model {
 // Home Assistant when it is configured, and nowhere otherwise. Nowhere is a
 // working server: it answers when spoken to, which is all it could ever do
 // before.
+// whereabouts : What tells the firing loop whether anybody is in the room.
+//
+// Nil when nothing is configured, which means every reminder is said aloud
+// -- what this did before there was any way to tell, and the safe way round.
+func whereabouts(cfg config.Config, logger *slog.Logger) remind.Presence {
+	p, err := hass.NewPresence(hass.PresenceConfig{
+		URL:    cfg.HomeAssistant.URL,
+		Token:  cfg.HomeAssistant.Token,
+		Entity: cfg.HomeAssistant.PresenceEntity,
+	})
+	if err != nil {
+		if !errors.Is(err, hass.ErrNotConfigured) {
+			logger.Warn("cannot ask Home Assistant who is in the room", slog.Any("error", err))
+		}
+		logger.Info("reminders are said whoever is in the room")
+		return nil
+	}
+	logger.Info("reminders are held back when nobody is in the room",
+		slog.String("asking", p.Describe()))
+	return p
+}
+
 func announcer(cfg config.Config, logger *slog.Logger) announce.Announcer {
 	speaker, err := hass.New(hass.Config{
 		URL:       cfg.HomeAssistant.URL,

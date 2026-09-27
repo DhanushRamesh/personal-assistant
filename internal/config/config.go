@@ -169,6 +169,11 @@ type HomeAssistant struct {
 	// Satellite : The entity to speak through, such as
 	// assist_satellite.laptop_lva_assist_satellite.
 	Satellite string
+	// PresenceEntity : What Home Assistant calls the thing that says
+	// whether the owner is in the room, such as
+	// input_boolean.in_the_room. Empty means never hold a reminder back,
+	// which is what this did before presence existed.
+	PresenceEntity string
 }
 
 // Configured : Whether there is enough here to say anything.
@@ -368,9 +373,10 @@ func Load(path string, lookup Lookup) (Config, error) {
 			Location: l.location("assistant", "timezone"),
 		},
 		HomeAssistant: HomeAssistant{
-			URL:       l.str("homeassistant", "url", ""),
-			Token:     logging.Secret(l.str("homeassistant", "token", "")),
-			Satellite: l.str("homeassistant", "satellite", ""),
+			URL:            l.str("homeassistant", "url", ""),
+			Token:          logging.Secret(l.str("homeassistant", "token", "")),
+			Satellite:      l.str("homeassistant", "satellite", ""),
+			PresenceEntity: l.str("homeassistant", "presence_entity", ""),
 		},
 		Embedding: Embedding{
 			URL:     l.str("embedding", "url", ""),

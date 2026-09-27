@@ -121,8 +121,9 @@ func recent(store remind.Store, clock Clock) tool.Tool {
 		UseWhen: "The person asks whether they missed anything, what they missed while they were out, or " +
 			"what has already gone off.",
 		Avoid: "This is about what has already happened. For what is still to come, that is reminder_list. " +
-			"Say which of the two each one was: being told a thing and never being told it are different, " +
-			"and running them together tells the person they heard something they did not.",
+			"Say which of the three each one was: being told a thing, never being told it, and it still " +
+			"waiting to be told are different, and running them together tells the person they heard " +
+			"something they did not.",
 		Channels: []chat.Channel{chat.ChannelVoice, chat.ChannelDirect},
 		Params: tool.Schema{
 			Properties: map[string]tool.Property{
@@ -171,8 +172,12 @@ func recent(store remind.Store, clock Clock) tool.Tool {
 			if err != nil {
 				return tool.Failed(err.Error())
 			}
+			held, err := store.Waiting(ctx, in.Caller.UserID)
+			if err != nil {
+				return tool.Failed(err.Error())
+			}
 
-			return tool.OK(recap(said, within(missed, since), hours, len(said), clock))
+			return tool.OK(recap(said, within(missed, since), held, hours, len(said), clock))
 		},
 	}
 }
@@ -193,13 +198,13 @@ func within(all []remind.Reminder, since time.Time) []remind.Reminder {
 // The two lists are kept apart and labelled. A reminder that was spoken and
 // one that was never spoken are different facts, and a recap that runs them
 // together tells somebody they heard a thing they did not.
-func recap(said, missed []remind.Reminder, hours, spokenCount int, clock Clock) string {
+func recap(said, missed, held []remind.Reminder, hours, spokenCount int, clock Clock) string {
 	window := "the last hour"
 	if hours != 1 {
 		window = fmt.Sprintf("the last %d hours", hours)
 	}
 
-	if len(said) == 0 && len(missed) == 0 {
+	if len(said) == 0 && len(missed) == 0 && len(held) == 0 {
 		return "Nothing has been said and nothing was missed in " + window + "."
 	}
 
@@ -216,6 +221,19 @@ func recap(said, missed []remind.Reminder, hours, spokenCount int, clock Clock) 
 		// implying the list is everything.
 		if spokenCount >= remind.DefaultSpokenLimit {
 			b.WriteString("\n(That is as many as this returns; there may be more.)")
+		}
+	}
+	if len(held) > 0 {
+		if b.Len() > 0 {
+			b.WriteString("\n\n")
+		}
+		b.WriteString("Still waiting, kept back because nobody was in the room. " +
+			"These have not been said yet and will be when the person is next greeted:")
+		for i := range held {
+			b.WriteString("\n- ")
+			b.WriteString(spell(held[i].DueAt, clock.where()))
+			b.WriteString(": ")
+			b.WriteString(held[i].Body)
 		}
 	}
 	if len(missed) > 0 {

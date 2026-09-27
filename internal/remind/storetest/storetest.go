@@ -38,6 +38,8 @@ func Run(t *testing.T, open New) {
 		{"a cancelled one is not put off", aCancelledOneIsRefused},
 		{"somebody else's is not theirs to move", anotherPersonsIsNotFound},
 		{"put off until nothing is refused", noTimeIsRefused},
+		{"one held back is waiting", aHeldOneIsWaiting},
+		{"a held one can be recorded as said", aHeldOneCanBeDelivered},
 		{"what was just said comes back", whatWasSaidComesBack},
 		{"the most recent is first", theMostRecentIsFirst},
 		{"two said together both come back", twoTogetherBothComeBack},
@@ -294,6 +296,60 @@ func anotherPersonsIsNotSpoken(t *testing.T, open New) {
 	}
 	if len(got) != 0 {
 		t.Errorf("LastSpoken = %v, want nothing of somebody else's", ids(got))
+	}
+}
+
+// Kept back because nobody was there to hear it. Its due time is left
+// alone: that is what the reminder was for, and what the person is told.
+func aHeldOneIsWaiting(t *testing.T, open New) {
+	ctx, s, user := setup(t, open)
+	due := ago(time.Minute)
+	r := stored(t, s, user, "Tablets", due, remind.Once)
+
+	if err := s.Hold(ctx, r.ID, now()); err != nil {
+		t.Fatalf("Hold: %v", err)
+	}
+
+	got := read(t, s, user, r.ID)
+	if got.Status != remind.Held {
+		t.Errorf("status = %q, want held", got.Status)
+	}
+	if !got.DueAt.Equal(due) {
+		t.Errorf("due moved to %v, want %v: it says what the reminder was for", got.DueAt, due)
+	}
+
+	waiting, err := s.Waiting(ctx, user)
+	if err != nil {
+		t.Fatalf("Waiting: %v", err)
+	}
+	if len(waiting) != 1 || waiting[0].ID != r.ID {
+		t.Errorf("Waiting = %v, want the held one", ids(waiting))
+	}
+}
+
+// Delivering one on arrival has to be recordable, or it is said and stays
+// held and is said again on the next arrival.
+func aHeldOneCanBeDelivered(t *testing.T, open New) {
+	ctx, s, user := setup(t, open)
+	r := stored(t, s, user, "Tablets", ago(time.Minute), remind.Once)
+	if err := s.Hold(ctx, r.ID, now()); err != nil {
+		t.Fatalf("Hold: %v", err)
+	}
+
+	if err := s.Fired(ctx, r.ID, now(), time.Time{}); err != nil {
+		t.Fatalf("Fired on a held one: %v", err)
+	}
+
+	got := read(t, s, user, r.ID)
+	if got.Status != remind.Done {
+		t.Errorf("status = %q, want done", got.Status)
+	}
+	waiting, err := s.Waiting(ctx, user)
+	if err != nil {
+		t.Fatalf("Waiting: %v", err)
+	}
+	if len(waiting) != 0 {
+		t.Errorf("still waiting after delivery: %v", ids(waiting))
 	}
 }
 

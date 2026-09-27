@@ -206,10 +206,11 @@ func (s *Store) Fired(ctx context.Context, id string, at, next time.Time) error 
 		changes["due_at"] = next.UTC()
 	}
 
-	// Only while it is still pending, so two passes of the firing loop
-	// cannot both claim it.
+	// Pending or held, and nothing else: pending is the firing loop
+	// saying it, held is a delivery to somebody who has just come back.
+	// Both are one-way, so two passes still cannot both claim one.
 	out := s.db.WithContext(ctx).Model(&row{}).
-		Where("id = ? AND status = ?", id, string(remind.Pending)).
+		Where("id = ? AND status IN ?", id, []string{string(remind.Pending), string(remind.Held)}).
 		Updates(changes)
 	if out.Error != nil {
 		return fmt.Errorf("remind: recording that %s fired: %w", id, out.Error)
@@ -262,6 +263,38 @@ func (s *Store) Mentioned(ctx context.Context, ids []string, at time.Time) error
 		return fmt.Errorf("remind: recording that a miss was mentioned: %w", err)
 	}
 	return nil
+}
+
+// Hold : Keeps a reminder back because nobody was there to hear it.
+func (s *Store) Hold(ctx context.Context, id string, at time.Time) error {
+	// Only while pending, so the firing loop cannot hold one it has
+	// already said, and two passes cannot both claim it.
+	out := s.db.WithContext(ctx).Model(&row{}).
+		Where("id = ? AND status = ?", id, string(remind.Pending)).
+		Updates(map[string]any{
+			"status":     string(remind.Held),
+			"updated_at": at.UTC(),
+		})
+	if out.Error != nil {
+		return fmt.Errorf("remind: holding %s back: %w", id, out.Error)
+	}
+	if out.RowsAffected == 0 {
+		return remind.ErrNotFound
+	}
+	return nil
+}
+
+// Waiting : Reminders held back for somebody, oldest first.
+func (s *Store) Waiting(ctx context.Context, userID string) ([]remind.Reminder, error) {
+	var rows []row
+	err := s.db.WithContext(ctx).
+		Where("user_id = ? AND status = ?", userID, string(remind.Held)).
+		Order("due_at ASC, id ASC").
+		Find(&rows).Error
+	if err != nil {
+		return nil, fmt.Errorf("remind: reading what is being held: %w", err)
+	}
+	return toReminders(rows), nil
 }
 
 // Snooze : Puts a reminder off until a later time.
