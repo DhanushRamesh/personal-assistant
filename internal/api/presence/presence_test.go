@@ -6,6 +6,7 @@ import (
 	"io"
 	"log/slog"
 	"net/http"
+	"net/http/httptest"
 	"strings"
 	"sync"
 	"testing"
@@ -233,5 +234,78 @@ func TestTheGreetingVaries(t *testing.T) {
 	}
 	if len(seen) < 2 {
 		t.Errorf("twenty arrivals produced one greeting: %v", seen)
+	}
+}
+
+// giveUp : A satellite that abandons the request while it is speaking, the
+// way Home Assistant's rest_command does when the words outlast its ten
+// second timeout.
+type giveUp struct {
+	satellite
+	cancel context.CancelFunc
+	// cancelled : Whether speaking was itself cut short by that.
+	cancelled bool
+}
+
+func (g *giveUp) Say(ctx context.Context, message string) error {
+	g.cancel()
+	// Whatever the caller did, this has to be able to finish. A real
+	// satellite blocks here until the words have played.
+	select {
+	case <-ctx.Done():
+		g.cancelled = true
+	case <-time.After(10 * time.Millisecond):
+	}
+	return g.satellite.Say(ctx, message)
+}
+
+// The caller hanging up does not stop the greeting, and does not lose the
+// reminders said along with it.
+//
+// Speaking blocks until the words have finished playing and the caller
+// does not wait that long: Home Assistant gives up after ten seconds. Tied
+// to the request, that cancelled the announcement halfway through, so
+// nothing was spoken and nothing was recorded -- and the held reminders
+// stayed held, to be lost the same way at the next arrival.
+func TestGivingUpOnTheRequestDoesNotStopTheGreeting(t *testing.T) {
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+
+	store := inmemory.New()
+	sat := &giveUp{cancel: cancel}
+	e := apitest.NewWith(t, apitest.Options{Announcer: sat, Reminders: store})
+
+	at := time.Now().UTC()
+	r := remind.Reminder{
+		ID: "rem_held", UserID: e.User.ID, Scope: remind.ScopeUser,
+		Title: "Wake up", Body: "Wake up",
+		DueAt: at.Add(-time.Minute), Status: remind.Pending,
+	}
+	if err := store.Create(context.Background(), &r); err != nil {
+		t.Fatalf("creating: %v", err)
+	}
+	if err := store.Hold(context.Background(), r.ID, at); err != nil {
+		t.Fatalf("holding: %v", err)
+	}
+
+	req := httptest.NewRequest(http.MethodPost, "/v1/presence/arrived", nil).WithContext(ctx)
+	req.Header.Set("Authorization", "Bearer "+e.Token)
+	e.Serve(req)
+
+	if sat.cancelled {
+		t.Error("speaking was cut short when the caller gave up")
+	}
+	said := sat.spoken()
+	if len(said) != 1 || !strings.Contains(said[0], "Wake up") {
+		t.Fatalf("said %v, want a greeting carrying the held reminder", said)
+	}
+
+	// And recorded, so the next arrival does not say it again.
+	left, err := store.Waiting(context.Background(), e.User.ID)
+	if err != nil {
+		t.Fatalf("reading what is still held: %v", err)
+	}
+	if len(left) != 0 {
+		t.Errorf("%d reminders still held after being said", len(left))
 	}
 }

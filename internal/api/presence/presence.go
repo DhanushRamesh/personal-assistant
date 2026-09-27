@@ -30,6 +30,14 @@ import (
 	"github.com/DhanushRamesh/personal-assistant/internal/remind"
 )
 
+// SpeakingFor : How long a greeting and everything behind it may take to
+// say, once the request that asked for it has gone.
+//
+// Long enough for a greeting and a handful of held reminders read at
+// speaking pace, and short enough that a satellite which never finishes
+// does not hold a database row open all afternoon.
+const SpeakingFor = 3 * time.Minute
+
 // ArrivedResponse : What the caller is told was done.
 type ArrivedResponse struct {
 	// Said : The words spoken, or empty if nothing was.
@@ -122,11 +130,30 @@ func (h *Handler) Arrived(w http.ResponseWriter, r *http.Request) {
 		})
 		return
 	}
-	if err := h.announcer.Say(ctx, said); err != nil {
+
+	// Saying it outlives the request that asked for it. Speaking blocks
+	// until the words have finished playing, and the caller does not wait
+	// that long: Home Assistant's rest_command gives up after ten seconds,
+	// which closes the connection and cancels this request. A greeting
+	// with three held reminders behind it takes longer than that.
+	//
+	// Cancelled halfway through, nothing was spoken and nothing was
+	// recorded, so the held ones stayed held and the next arrival did the
+	// same thing again. Three reminders sat unheard through two arrivals
+	// that way.
+	//
+	// Values are kept -- the user, the request id, the logger -- so a
+	// failure is still traceable to the arrival that caused it. Only the
+	// cancellation is dropped, and a deadline of its own replaces it so
+	// nothing here can wait for ever.
+	speak, done := context.WithTimeout(context.WithoutCancel(ctx), SpeakingFor)
+	defer done()
+
+	if err := h.announcer.Say(speak, said); err != nil {
 		// Not the caller's fault and not worth a failure: it asked for a
 		// greeting and the speaker was busy or unreachable. Said so
 		// plainly rather than reported as success.
-		h.Logger.WarnContext(ctx, "could not speak a greeting", slog.Any("error", err))
+		h.Logger.WarnContext(speak, "could not speak a greeting", slog.Any("error", err))
 		httpx.WriteJSON(ctx, w, http.StatusOK, ArrivedResponse{
 			Said: said, Why: "could not be spoken: " + err.Error(),
 		})
@@ -136,8 +163,8 @@ func (h *Handler) Arrived(w http.ResponseWriter, r *http.Request) {
 	// Only now. Said and not recorded is better than recorded and not
 	// said: the first is heard twice, the second is lost.
 	for i := range held {
-		if err := h.reminders.Fired(ctx, held[i].ID, h.clock(), time.Time{}); err != nil {
-			h.Logger.WarnContext(ctx, "said a held reminder but could not record it",
+		if err := h.reminders.Fired(speak, held[i].ID, h.clock(), time.Time{}); err != nil {
+			h.Logger.WarnContext(speak, "said a held reminder but could not record it",
 				slog.String("reminder_id", held[i].ID), slog.Any("error", err))
 		}
 	}
@@ -145,8 +172,8 @@ func (h *Handler) Arrived(w http.ResponseWriter, r *http.Request) {
 	// Saying it at the door is the telling. Without this the person
 	// hears about the same miss here and again in their next sentence.
 	if len(unsaid) > 0 {
-		if err := h.reminders.Mentioned(ctx, remind.IDs(unsaid), h.clock()); err != nil {
-			h.Logger.WarnContext(ctx, "told somebody about a miss but could not record it",
+		if err := h.reminders.Mentioned(speak, remind.IDs(unsaid), h.clock()); err != nil {
+			h.Logger.WarnContext(speak, "told somebody about a miss but could not record it",
 				slog.Any("error", err))
 		}
 	}

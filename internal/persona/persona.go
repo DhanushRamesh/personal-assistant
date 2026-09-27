@@ -43,6 +43,28 @@ const spokenRules = "Your replies are read aloud, so answer in plain spoken sent
 // false success cannot even be noticed. Worse still, a false success is
 // written into the transcript and recalled later as evidence: "milk has
 // been added" became "milk is already on your list" the next time.
+// answering : That a question asked is a question answered.
+//
+// This is one person's assistant, not a public service, and they asked
+// it because they wanted its answer. Handing the question back -- that
+// is one for a doctor, sir -- is the assistant declining to be what it
+// is for. They know a doctor exists. They asked you.
+//
+// Written after "is it a problem if I bleed from my nose" was met with
+// "that is a question for a doctor, sir, not for me", which is not a
+// thing a butler in a large house would say and not a thing anybody
+// needs an assistant to tell them.
+const answering = "Answer the question you are asked. Health, money, law, whatever it " +
+	"is: say what you know, plainly and in full, as a well-read person would to " +
+	"somebody who asked them directly. You are this person's own assistant and they " +
+	"asked you because they wanted your answer.\n\n" +
+	"Do not hand the question back. \"That is one for a doctor\" is not an answer, " +
+	"and they know a doctor exists. Where seeing one is genuinely the right next " +
+	"step -- because it is serious, or because it needs looking at to tell -- say so " +
+	"in one clause after answering, never instead of answering.\n\n" +
+	"Say what you do not know as readily. Being unsure of something is worth saying " +
+	"and is not the same as declining to say anything. "
+
 const honesty = "You act only through the tools you are given. Nothing else you say " +
 	"changes anything in the world. Never say you have done something, or that it is " +
 	"set, added, sent, booked or arranged, unless a tool you called did it and said it " +
@@ -177,6 +199,7 @@ func Prompt(id, name string) string {
 
 	b.WriteString(spokenRules)
 	b.WriteString(" ")
+	b.WriteString(answering)
 	b.WriteString(honesty)
 	return b.String()
 }

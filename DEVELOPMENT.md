@@ -691,6 +691,25 @@ A miss is said in words rather than as a count, and saying it here is
 the telling -- it is marked mentioned, so the same miss is not raised
 again in the next sentence.
 
+**Speaking outlives the request that asked for it.** The announcement
+blocks until the words have finished playing, and the caller does not
+wait that long: Home Assistant's `rest_command` gave up after ten
+seconds, which closed the connection and cancelled the request. A
+greeting with three held reminders behind it is longer than that.
+
+Cancelled halfway, nothing was spoken and nothing was recorded, so the
+held ones stayed held and the next arrival did exactly the same again.
+Found on 27 September 2026 with three reminders unheard through two
+arrivals: the owner's watch was on the desk and the reminder they were
+waiting for never came.
+
+So the handler speaks and records on a context detached from the
+request, with `SpeakingFor` as its own deadline. Values are kept, so a
+failure is still traceable to the arrival that caused it; only the
+cancellation is dropped. The `rest_command` timeout was raised to match,
+which changes nothing about correctness and stops Home Assistant logging
+an error for work that succeeded.
+
 **The model is not asked, and this was tried both ways.** A greeting
 that lands after somebody has sat down is not a greeting: detection
 takes about two seconds and a Platform AI call has measured between two

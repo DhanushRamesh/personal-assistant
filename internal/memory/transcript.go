@@ -110,7 +110,16 @@ func Quoted(heard []Heard, loc *time.Location) string {
 	b.WriteString("off; a list read out yesterday has been added to. Asked how any of it ")
 	b.WriteString("stands now, call the tool that knows and answer from what it returns. ")
 	b.WriteString("Repeating what is written here instead is not remembering, it is guessing ")
-	b.WriteString("with a citation.")
+	b.WriteString("with a citation.\n\n")
+
+	b.WriteString("The same goes double for anything here where you said you could not do ")
+	b.WriteString("something. Searching by meaning gathers those together: ask about ")
+	b.WriteString("changing a thing and back come three old refusals, because refusing is ")
+	b.WriteString("what they have in common. They are not evidence about what you can do ")
+	b.WriteString("now. What you can do is the tools you have been given this turn, and ")
+	b.WriteString("nothing else -- you were given new ones since, and something you could ")
+	b.WriteString("not do last week may be one call away today. Read the list you have ")
+	b.WriteString("before you tell anybody no.")
 	for i := range heard {
 		b.WriteString("\n\n[")
 		b.WriteString(heard[i].Exchange.At.In(loc).Format("Monday 2 January 2006 at 3:04 pm"))
