@@ -1,6 +1,7 @@
 package conversation
 
 import (
+	"github.com/DhanushRamesh/personal-assistant/internal/prompt"
 	"strings"
 	"unicode"
 )
@@ -116,31 +117,21 @@ func Whereabouts(id, title string) string {
 // decoder offered "Alikia", "Alakia" and "alakia chintada" for one name in
 // a single evening. Guessing there is how the wrong person gets texted.
 func Heard() string {
-	return "What the person said reached you as speech turned into text, and it can be " +
-		"wrong in ways typing is not: a word may be replaced by another that sounds like " +
-		"it, leaving a sentence that reads correctly and means something else. Read for " +
-		"what they meant. Where a word does not fit what is being discussed, consider what " +
-		"similar-sounding word would, and act on that. " +
-		"Where two readings are both plausible and one of them deletes or destroys " +
-		"something, ask which was meant rather than choosing. " +
-
-		"A name is the exception to all of that. Where what is being named is a " +
-		"person, a place, a film, a song, a book or anything else with a spelling of " +
-		"its own, do not reach for a name that sounds similar and do not settle on " +
-		"the one you happen to know. Speech-to-text is at its worst on names, and a " +
-		"name you have never heard and a name it has mangled look exactly alike, so " +
-		"there is nothing to tell them apart by. Say back what you heard and ask them " +
-		"to spell it. " +
-
-		"Ask before you use it, not after. Do not write a heard name into a memory " +
-		"or a reminder, do not search on it, and do not answer about it, until they " +
-		"have spelt it: a name stored wrongly stays wrong, and nothing later will " +
-		"find it to correct. If you had to complete or repair the name to recognise " +
-		"it at all, say what you took it to be and have them confirm it before you " +
-		"go on. " +
-
-		"That is the one place to end on a question. A question mark keeps the " +
-		"microphone open for the answer, which is the whole point of asking."
+	return prompt.Text(
+		"What the person said reached you as speech turned into text, and it can be wrong in ways typing is not: a word may be replaced by another that sounds like it, leaving a sentence that reads correctly and means something else.",
+		"Read for what they meant.",
+		"Where a word does not fit what is being discussed, consider what similar-sounding word would, and act on that.",
+		"Where two readings are both plausible and one of them deletes or destroys something, ask which was meant rather than choosing.",
+		"A name is the exception to all of that.",
+		"Where what is being named is a person, a place, a film, a song, a book or anything else with a spelling of its own, do not reach for a name that sounds similar and do not settle on the one you happen to know.",
+		"Speech-to-text is at its worst on names, and a name you have never heard and a name it has mangled look exactly alike, so there is nothing to tell them apart by.",
+		"Say back what you heard and ask them to spell it.",
+		"Ask before you use it, not after.",
+		"Do not write a heard name into a memory or a reminder, do not search on it, and do not answer about it, until they have spelt it: a name stored wrongly stays wrong, and nothing later will find it to correct.",
+		"If you had to complete or repair the name to recognise it at all, say what you took it to be and have them confirm it before you go on.",
+		"That is the one place to end on a question.",
+		"A question mark keeps the microphone open for the answer, which is the whole point of asking.",
+	)
 }
 
 // AnnounceTitlesSetting : What the choice to hear a new name is stored under.

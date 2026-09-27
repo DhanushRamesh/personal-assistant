@@ -791,6 +791,37 @@ Covered: reminders (set, update, snooze, cancel), memories (remember,
 update, forget), conversations (new, switch, rename, archive, delete),
 calendar (add, cancel).
 
+## How prompt text is written
+
+`internal/prompt` joins the pieces: `Text` for sentences of one
+paragraph, `Block` for paragraphs separated by a blank line, `Lines`
+for a list. Empty pieces vanish, so a caller may pass something
+conditional without guarding it.
+
+Everything the model is told used to be one expression of string
+literals joined by `+`, carrying its own spacing: `"...given. " +
+"Nothing else..."`. That is fragile in a way the compiler cannot see.
+A missing trailing space joins two words silently, a doubled one is
+invisible in the source, and where a paragraph begins depends on
+remembering to end a literal with a newline. Now the separator is the
+function and the pieces are a list, so the spacing cannot be got wrong
+by forgetting something.
+
+One sentence per line, which also makes a diff show which sentence
+changed rather than which line wrapped.
+
+**Converted against a byte-for-byte check.** The rendered prompt was
+captured before and after each step and diffed; a first attempt at
+this mangled it -- dropped sentences and turned real newlines into
+literal backslash-n -- and the diff is the only reason that was caught
+rather than shipped. Anything converted later should be done the same
+way.
+
+Done: the persona rules, the manners, `conversation.Heard`, and
+`reminders.WhenUnasked`. Not yet: the `Purpose`, `UseWhen` and `Avoid`
+fields on about a hundred tool definitions, which are the same idea at
+a smaller scale.
+
 ## When the tool list outgrows the turn
 
 Not a problem at 22 tools, which cost about 17,900 characters of

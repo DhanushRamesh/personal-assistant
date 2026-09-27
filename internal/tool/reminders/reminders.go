@@ -16,6 +16,7 @@ import (
 	"time"
 
 	"github.com/DhanushRamesh/personal-assistant/internal/chat"
+	"github.com/DhanushRamesh/personal-assistant/internal/prompt"
 	"github.com/DhanushRamesh/personal-assistant/internal/remind"
 	"github.com/DhanushRamesh/personal-assistant/internal/tool"
 )
@@ -94,14 +95,15 @@ func (c Clock) where() *time.Location {
 // Exported because an eval has to build the same prompt production
 // does. It was a separate copy once, and the eval went on passing
 // against wording the server had stopped using.
-const WhenUnasked = "Reference, for one kind of question only. Say nothing about any of it " +
-	"unless they ask what reminders they have, what is coming, or about one of these " +
-	"in particular. That is the only thing this is for. Everything else is not such a " +
-	"question, however close it sounds. Somebody saying they are tired, or hungry, or " +
-	"that it is late, is telling you how they are, not asking what is on their list. " +
-	"Answer what they said. Bringing up a reminder they did not ask about is not " +
-	"helpful, it is the assistant talking about its own filing, and they will hear it " +
-	"when it goes off anyway."
+var WhenUnasked = prompt.Text(
+	"Reference, for one kind of question only.",
+	"Say nothing about any of it unless they ask what reminders they have, what is coming, or about one of these in particular.",
+	"That is the only thing this is for.",
+	"Everything else is not such a question, however close it sounds.",
+	"Somebody saying they are tired, or hungry, or that it is late, is telling you how they are, not asking what is on their list.",
+	"Answer what they said.",
+	"Bringing up a reminder they did not ask about is not helpful, it is the assistant talking about its own filing, and they will hear it when it goes off anyway.",
+)
 
 // All : Every reminder tool, in the order they are offered.
 //
