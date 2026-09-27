@@ -447,15 +447,30 @@ class AppState extends ChangeNotifier {
     notifyListeners();
   }
 
+  /// _showPast : Whether the reminders list includes what already
+  /// happened.
+  bool _showPast = false;
+
+  /// showPast : Whether finished and cancelled reminders are showing.
+  bool get showPast => _showPast;
+
+  /// togglePast : Shows or hides what has already happened, and reads
+  /// the list again, since the server decides what the list holds.
+  Future<void> togglePast() async {
+    _showPast = !_showPast;
+    await loadReminders();
+  }
+
   /// loadReminders : Reads what is waiting to be said, for the settings
   /// screen.
   ///
-  /// Only what is still coming. Everything that ever fired is a log, and
-  /// nobody opens a settings screen for one.
+  /// What is coming, plus anything held back or never said. What already
+  /// happened only when asked for: it is a log, and a screen that opens
+  /// on a log buries the two things actually coming.
   Future<void> loadReminders() async {
     _set(busy: true, error: null);
     try {
-      _reminders = await api.listReminders();
+      _reminders = await api.listReminders(all: _showPast);
     } on Object catch (e) {
       _error = _explain(e);
     }

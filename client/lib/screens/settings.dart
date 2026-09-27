@@ -462,24 +462,29 @@ class _RemindersModule extends StatelessWidget {
   Widget build(BuildContext context) => _Section(
     title: 'Reminders',
     subtitle:
-        'Everything waiting to be said, soonest first, and anything that was '
-        'never said at all. These are spoken through the voice satellite when '
-        'their time comes, whether or not anything is open here.',
-    action: InkWell(
-      onTap: state.loadReminders,
-      borderRadius: BorderRadius.circular(AppRadius.xs),
-      child: Padding(
-        padding: const EdgeInsets.all(AppSpacing.xxs),
-        child: Text(
-          'Refresh',
-          style: context.text.caption.copyWith(color: context.colors.accent),
+        'Everything waiting to be said, soonest first, anything kept back '
+        'until you were in the room, and anything that was never said at all. '
+        'These are spoken through the voice satellite when their time comes, '
+        'whether or not anything is open here. Show past adds the ones that '
+        'have already happened.',
+    action: Row(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        _SectionLink(
+          label: state.showPast ? 'Hide past' : 'Show past',
+          onTap: state.togglePast,
         ),
-      ),
+        const SizedBox(width: AppSpacing.md),
+        _SectionLink(label: 'Refresh', onTap: state.loadReminders),
+      ],
     ),
     child: state.reminders.isEmpty
         ? Text(
-            'Nothing waiting. Ask for a timer or a reminder and it appears '
-            'here.',
+            state.showPast
+                ? 'Nothing at all, past or present. Ask for a timer or a '
+                      'reminder and it appears here.'
+                : 'Nothing waiting. Ask for a timer or a reminder and it '
+                      'appears here.',
             style: context.text.caption.copyWith(
               color: context.colors.textSecondary,
             ),
@@ -509,6 +514,27 @@ Future<void> _snooze(
   if (said != null && context.mounted) {
     ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(said)));
   }
+}
+
+/// _SectionLink : A word in the corner of a section that does something.
+class _SectionLink extends StatelessWidget {
+  const _SectionLink({required this.label, required this.onTap});
+
+  final String label;
+  final VoidCallback onTap;
+
+  @override
+  Widget build(BuildContext context) => InkWell(
+    onTap: onTap,
+    borderRadius: BorderRadius.circular(AppRadius.xs),
+    child: Padding(
+      padding: const EdgeInsets.all(AppSpacing.xxs),
+      child: Text(
+        label,
+        style: context.text.caption.copyWith(color: context.colors.accent),
+      ),
+    ),
+  );
 }
 
 /// _SnoozeButton : Put it off, by one of a few lengths.
@@ -582,6 +608,9 @@ class _ReminderTile extends StatelessWidget {
     // was how a reminder disappeared: not spoken, not here, nothing at
     // all to show it had existed.
     final missed = reminder.status == 'missed';
+    // Already happened, one way or the other. Nothing to put off and
+    // nothing to call off, so it is shown and left alone.
+    final over = reminder.status == 'done' || reminder.status == 'cancelled';
 
     return Padding(
       padding: const EdgeInsets.only(top: AppSpacing.md),
@@ -589,11 +618,13 @@ class _ReminderTile extends StatelessWidget {
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           Icon(
-            missed
-                ? Icons.notifications_off_outlined
-                : reminder.repeating
-                ? Icons.repeat
-                : Icons.alarm_outlined,
+            switch (reminder.status) {
+              'missed' => Icons.notifications_off_outlined,
+              'held' => Icons.pause_circle_outline,
+              'done' => Icons.check,
+              'cancelled' => Icons.close,
+              _ => reminder.repeating ? Icons.repeat : Icons.alarm_outlined,
+            },
             size: 15,
             color: missed ? colors.warning : colors.textMuted,
           ),
@@ -609,7 +640,13 @@ class _ReminderTile extends StatelessWidget {
                     ),
                     const SizedBox(width: AppSpacing.sm),
                     Text(
-                      missed ? 'missed, ${_when(reminder)}' : _when(reminder),
+                      switch (reminder.status) {
+                        'missed' => 'missed, ${_when(reminder)}',
+                        'held' => 'waiting for you, ${_when(reminder)}',
+                        'done' => 'said ${_when(reminder)}',
+                        'cancelled' => 'called off, was ${_when(reminder)}',
+                        _ => _when(reminder),
+                      },
                       style: context.text.caption.copyWith(
                         color: missed ? colors.warning : null,
                       ),
@@ -631,14 +668,17 @@ class _ReminderTile extends StatelessWidget {
           const SizedBox(width: AppSpacing.sm),
           // Not offered on a missed one. Its time came and went unheard,
           // so there is nothing still to come to put off.
-          if (!missed) _SnoozeButton(onSnooze: onSnooze),
-          AppButton(
-            // Nothing is called off about one that already failed to
-            // happen; the only thing left is to stop looking at it.
-            label: missed ? 'Dismiss' : 'Cancel',
-            variant: AppButtonVariant.ghost,
-            onPressed: onCancel,
-          ),
+          if (!missed && !over) _SnoozeButton(onSnooze: onSnooze),
+          // Nothing to do to one that has already happened. It is here
+          // to be read, not acted on.
+          if (!over)
+            AppButton(
+              // Nothing is called off about one that already failed to
+              // happen; the only thing left is to stop looking at it.
+              label: missed ? 'Dismiss' : 'Cancel',
+              variant: AppButtonVariant.ghost,
+              onPressed: onCancel,
+            ),
         ],
       ),
     );

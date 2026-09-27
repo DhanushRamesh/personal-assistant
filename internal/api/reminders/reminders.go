@@ -76,8 +76,12 @@ func (h *Handler) Mount(r chi.Router) {
 //
 // Missed ones are included because leaving them out was how a reminder
 // disappeared: never spoken, not on this screen, and nothing to show it
-// had ever existed. Everything that fired as it should is left out, since
-// a list of those is a log and nobody opens a settings screen for one.
+// had ever existed. Held ones for the same reason -- they are waiting,
+// they just cannot be said until somebody is there to hear them.
+//
+// What already happened is left out unless asked for with all=true. It
+// is a log, and a screen that opens on a log buries the two things
+// actually coming.
 func (h *Handler) List(w http.ResponseWriter, r *http.Request) {
 	ctx := r.Context()
 	if h.store == nil {
@@ -85,7 +89,10 @@ func (h *Handler) List(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	states := []remind.Status{remind.Pending, remind.Missed}
+	// Held belongs here too: it is waiting to be said, and leaving it
+	// out made a reminder kept back while somebody was out of the room
+	// vanish from the one screen that lists them.
+	states := []remind.Status{remind.Pending, remind.Held, remind.Missed}
 	if r.URL.Query().Get("all") == "true" {
 		states = nil
 	}

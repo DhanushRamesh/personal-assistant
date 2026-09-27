@@ -330,3 +330,36 @@ func TestAnAbsurdLengthIsRefused(t *testing.T) {
 		}
 	}
 }
+
+// A held reminder is waiting, and leaving it off the screen made one
+// kept back while somebody was out of the room vanish.
+func TestAHeldReminderIsListed(t *testing.T) {
+	e, store := env(t)
+	r := put(t, e, store, "Tablets", time.Now().UTC().Add(-time.Minute))
+	if err := store.Hold(t.Context(), r.ID, time.Now().UTC()); err != nil {
+		t.Fatalf("Hold: %v", err)
+	}
+
+	got := listed(t, e, "/v1/reminders")
+	if len(got.Reminders) != 1 || got.Reminders[0].Status != "held" {
+		t.Fatalf("got %v, want the held one", got.Reminders)
+	}
+}
+
+// What already happened is asked for, not shown by default: a screen
+// that opens on a log buries the things actually coming.
+func TestWhatHappenedIsOnlyShownWhenAsked(t *testing.T) {
+	e, store := env(t)
+	r := put(t, e, store, "Gone", time.Now().UTC().Add(-time.Hour))
+	if err := store.Fired(t.Context(), r.ID, time.Now().UTC(), time.Time{}); err != nil {
+		t.Fatalf("Fired: %v", err)
+	}
+
+	if got := listed(t, e, "/v1/reminders"); len(got.Reminders) != 0 {
+		t.Errorf("got %v, want nothing by default", got.Reminders)
+	}
+	got := listed(t, e, "/v1/reminders?all=true")
+	if len(got.Reminders) != 1 || got.Reminders[0].Status != "done" {
+		t.Errorf("got %v, want the finished one", got.Reminders)
+	}
+}

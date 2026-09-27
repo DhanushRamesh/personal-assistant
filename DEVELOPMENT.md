@@ -780,6 +780,22 @@ Nothing here makes a double-say impossible: a call that fails after the
 words are out will always look like one that never said them. It removes
 the way it actually happened.
 
+### The reminders screen shows what is coming, and what happened if asked
+
+`GET /v1/reminders` lists what is pending, what is held and what was
+missed. `?all=true` adds what already happened, which the screen asks
+for behind a Show past link, off by default: a screen that opens on a
+log buries the two or three things actually coming.
+
+Held was left out of that list when holding was added, which made a
+reminder kept back because nobody was in the room invisible -- not
+spoken, and on no screen. That is the same fault this page exists to
+prevent, reintroduced by the feature next to it.
+
+An entry says which it is rather than looking the same: said, called
+off, waiting for you, missed. One that has already happened offers no
+Snooze and no Cancel, since there is nothing left to do to it.
+
 ### The reminders screen shows what is coming, not what happened
 
 `GET /v1/reminders` lists what is still pending, and `DELETE
