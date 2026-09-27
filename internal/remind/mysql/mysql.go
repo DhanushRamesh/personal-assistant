@@ -19,22 +19,21 @@ import (
 // persistence tags. The timestamps disable GORM's automatic ones, which
 // would otherwise overwrite what the domain recorded.
 type row struct {
-	ID            string     `gorm:"column:id;primaryKey"`
-	UserID        string     `gorm:"column:user_id"`
-	ClientID      *string    `gorm:"column:client_id"`
-	Scope         string     `gorm:"column:scope"`
-	Title         string     `gorm:"column:title"`
-	Body          string     `gorm:"column:body"`
-	SaidLate      *string    `gorm:"column:said_late"`
-	DueAt         time.Time  `gorm:"column:due_at"`
-	Repeats       *string    `gorm:"column:repeats"`
-	Status        string     `gorm:"column:status"`
-	CreatedAt     time.Time  `gorm:"column:created_at;autoCreateTime:false"`
-	UpdatedAt     time.Time  `gorm:"column:updated_at;autoUpdateTime:false"`
-	LastFiredAt   *time.Time `gorm:"column:last_fired_at"`
-	MentionedAt   *time.Time `gorm:"column:mentioned_at"`
-	UnwitnessedAt *time.Time `gorm:"column:unwitnessed_at"`
-	Fires         int        `gorm:"column:fires"`
+	ID          string     `gorm:"column:id;primaryKey"`
+	UserID      string     `gorm:"column:user_id"`
+	ClientID    *string    `gorm:"column:client_id"`
+	Scope       string     `gorm:"column:scope"`
+	Title       string     `gorm:"column:title"`
+	Body        string     `gorm:"column:body"`
+	SaidLate    *string    `gorm:"column:said_late"`
+	DueAt       time.Time  `gorm:"column:due_at"`
+	Repeats     *string    `gorm:"column:repeats"`
+	Status      string     `gorm:"column:status"`
+	CreatedAt   time.Time  `gorm:"column:created_at;autoCreateTime:false"`
+	UpdatedAt   time.Time  `gorm:"column:updated_at;autoUpdateTime:false"`
+	LastFiredAt *time.Time `gorm:"column:last_fired_at"`
+	MentionedAt *time.Time `gorm:"column:mentioned_at"`
+	Fires       int        `gorm:"column:fires"`
 }
 
 // TableName : Names the table this row maps to.
@@ -65,32 +64,27 @@ func (r *row) toReminder() remind.Reminder {
 		at := r.MentionedAt.UTC()
 		out.MentionedAt = &at
 	}
-	if r.UnwitnessedAt != nil {
-		at := r.UnwitnessedAt.UTC()
-		out.UnwitnessedAt = &at
-	}
 	return out
 }
 
 // toRow : Converts a reminder into the row that stores it.
 func toRow(r *remind.Reminder) *row {
 	return &row{
-		ID:            r.ID,
-		UserID:        r.UserID,
-		ClientID:      nullable(r.ClientID),
-		Scope:         string(r.Scope),
-		Title:         r.Title,
-		Body:          r.Body,
-		SaidLate:      nullable(r.SaidLate),
-		DueAt:         r.DueAt.UTC(),
-		Repeats:       nullable(string(r.Repeats)),
-		Status:        string(r.Status),
-		CreatedAt:     r.CreatedAt,
-		UpdatedAt:     r.UpdatedAt,
-		LastFiredAt:   r.LastFiredAt,
-		MentionedAt:   r.MentionedAt,
-		UnwitnessedAt: r.UnwitnessedAt,
-		Fires:         r.Fires,
+		ID:          r.ID,
+		UserID:      r.UserID,
+		ClientID:    nullable(r.ClientID),
+		Scope:       string(r.Scope),
+		Title:       r.Title,
+		Body:        r.Body,
+		SaidLate:    nullable(r.SaidLate),
+		DueAt:       r.DueAt.UTC(),
+		Repeats:     nullable(string(r.Repeats)),
+		Status:      string(r.Status),
+		CreatedAt:   r.CreatedAt,
+		UpdatedAt:   r.UpdatedAt,
+		LastFiredAt: r.LastFiredAt,
+		MentionedAt: r.MentionedAt,
+		Fires:       r.Fires,
 	}
 }
 
@@ -275,35 +269,6 @@ func (s *Store) Mentioned(ctx context.Context, ids []string, at time.Time) error
 		return fmt.Errorf("remind: recording that a miss was mentioned: %w", err)
 	}
 	return nil
-}
-
-// Unwitnessed : Notes that a reminder was said with nothing able to
-// confirm somebody was there.
-//
-// Only for one that has just been said, and only once: a second pass
-// must not move the time, or the note ages backwards.
-func (s *Store) Unwitnessed(ctx context.Context, id string, at time.Time) error {
-	err := s.db.WithContext(ctx).Model(&row{}).
-		Where("id = ? AND unwitnessed_at IS NULL", id).
-		Updates(map[string]any{"unwitnessed_at": at.UTC(), "updated_at": at.UTC()}).Error
-	if err != nil {
-		return fmt.Errorf("remind: noting a reminder said to nobody: %w", err)
-	}
-	return nil
-}
-
-// Unheard : Reminders said into a silence nobody could vouch for and not
-// yet raised, oldest first.
-func (s *Store) Unheard(ctx context.Context, userID string) ([]remind.Reminder, error) {
-	var rows []row
-	err := s.db.WithContext(ctx).
-		Where("user_id = ? AND unwitnessed_at IS NOT NULL AND mentioned_at IS NULL", userID).
-		Order("due_at ASC, id ASC").
-		Find(&rows).Error
-	if err != nil {
-		return nil, fmt.Errorf("remind: reading what was said to nobody: %w", err)
-	}
-	return toReminders(rows), nil
 }
 
 // Hold : Keeps a reminder back because nobody was there to hear it.

@@ -12,7 +12,6 @@ enum SettingsModule {
   account('Account', Icons.person_outline),
   clients('Clients', Icons.devices_other_outlined),
   reminders('Reminders', Icons.alarm_outlined),
-  voice('Voice', Icons.mic_none_outlined),
   server('Server', Icons.dns_outlined);
 
   const SettingsModule(this.title, this.icon);
@@ -178,7 +177,6 @@ class _SettingsScreenState extends State<SettingsScreen> {
                         SettingsModule.reminders => _RemindersModule(
                           state: state,
                         ),
-                        SettingsModule.voice => _VoiceModule(state: state),
                         SettingsModule.server => _ServerModule(state: state),
                       },
                     ],
@@ -516,158 +514,6 @@ Future<void> _snooze(
   if (said != null && context.mounted) {
     ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(said)));
   }
-}
-
-/// _VoiceModule : What speech-to-text is primed with.
-///
-/// Shown because the list is no longer written by hand: it is built from
-/// reminders, conversation names and memories, so a word that was misheard
-/// once and saved is primed from then on. "Kitla BMRs" is a real reminder
-/// title and would teach the mistake. Nothing here can be edited, because
-/// the fix is to correct whatever it came from -- rename the reminder and
-/// the word goes.
-class _VoiceModule extends StatefulWidget {
-  const _VoiceModule({required this.state});
-
-  final AppState state;
-
-  @override
-  State<_VoiceModule> createState() => _VoiceModuleState();
-}
-
-class _VoiceModuleState extends State<_VoiceModule> {
-  @override
-  void initState() {
-    super.initState();
-    // After the frame, because loading notifies listeners and doing that
-    // during a build is what Flutter forbids.
-    WidgetsBinding.instance.addPostFrameCallback(
-      (_) => widget.state.loadVocabulary(),
-    );
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    final v = widget.state.vocabulary;
-    return _Section(
-      title: 'Speech vocabulary',
-      subtitle:
-          'Words the speech recogniser is told to expect before it hears '
-          'anything. Without them it returns a clean, confident wrong word '
-          'rather than a misspelling, which is why a name it has never met '
-          'comes back as something else entirely.',
-      action: _SectionLink(
-        label: 'Refresh',
-        onTap: widget.state.loadVocabulary,
-      ),
-      child: v == null
-          ? Text(
-              'Reading it.',
-              style: context.text.caption.copyWith(
-                color: context.colors.textSecondary,
-              ),
-            )
-          : Column(
-              crossAxisAlignment: CrossAxisAlignment.stretch,
-              children: [
-                _WordGroup(
-                  label: 'From your reminders, conversations and memories',
-                  words: v.found,
-                  empty:
-                      'Nothing yet. These are collected from what you have '
-                      'asked to be reminded of and what has been remembered '
-                      'about you.',
-                  note:
-                      'A word here that you never said came from something '
-                      'stored wrongly. Correct the reminder or memory it came '
-                      'from and it goes.',
-                ),
-                const SizedBox(height: AppSpacing.lg),
-                _WordGroup(
-                  label: 'Primed by hand',
-                  words: v.core,
-                  empty: 'None.',
-                ),
-                const SizedBox(height: AppSpacing.lg),
-                Text(
-                  '\${v.used} of \${v.budget} characters used. Past the limit the '
-                  'recogniser keeps the end of the list, so the hand-written '
-                  'words go first — they are sent first to survive it.',
-                  style: context.text.caption.copyWith(
-                    color: context.colors.textSecondary,
-                  ),
-                ),
-              ],
-            ),
-    );
-  }
-}
-
-/// _WordGroup : One labelled set of words, wrapped as chips.
-class _WordGroup extends StatelessWidget {
-  const _WordGroup({
-    required this.label,
-    required this.words,
-    required this.empty,
-    this.note,
-  });
-
-  final String label;
-  final List<String> words;
-  final String empty;
-  final String? note;
-
-  @override
-  Widget build(BuildContext context) => Column(
-    crossAxisAlignment: CrossAxisAlignment.start,
-    children: [
-      Text(label, style: context.text.label),
-      const SizedBox(height: AppSpacing.sm),
-      if (words.isEmpty)
-        Text(
-          empty,
-          style: context.text.caption.copyWith(
-            color: context.colors.textSecondary,
-          ),
-        )
-      else
-        Wrap(
-          spacing: AppSpacing.sm,
-          runSpacing: AppSpacing.sm,
-          children: [for (final w in words) _Word(word: w)],
-        ),
-      if (note != null && words.isNotEmpty) ...[
-        const SizedBox(height: AppSpacing.sm),
-        Text(
-          note!,
-          style: context.text.caption.copyWith(
-            color: context.colors.textSecondary,
-          ),
-        ),
-      ],
-    ],
-  );
-}
-
-/// _Word : One primed word.
-class _Word extends StatelessWidget {
-  const _Word({required this.word});
-
-  final String word;
-
-  @override
-  Widget build(BuildContext context) => Container(
-    padding: const EdgeInsets.symmetric(
-      horizontal: AppSpacing.sm,
-      vertical: AppSpacing.xs,
-    ),
-    decoration: BoxDecoration(
-      color: context.colors.surfaceRaised,
-      borderRadius: BorderRadius.circular(AppRadius.xs),
-      border: Border.all(color: context.colors.border),
-    ),
-    child: Text(word, style: context.text.caption),
-  );
 }
 
 /// _SectionLink : A word in the corner of a section that does something.

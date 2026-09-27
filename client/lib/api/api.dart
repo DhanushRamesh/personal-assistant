@@ -377,10 +377,6 @@ class AssistantApi {
   Future<AnswerTimeline> steps(String chatId) async =>
       AnswerTimeline.fromJson(await _send('GET', '/v1/chats/$chatId/steps'));
 
-  /// vocabulary : Returns the words speech-to-text is primed with.
-  Future<Vocabulary> vocabulary() async =>
-      Vocabulary.fromJson(await _send('GET', '/v1/voice/vocabulary'));
-
   /// listChats : Returns recent chats, newest first, without their answers.
   Future<List<ChatSummary>> listChats({ChatStatus? status, int? limit}) async =>
       parseList(

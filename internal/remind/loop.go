@@ -22,29 +22,17 @@ const (
 	DefaultGrace = time.Hour
 )
 
-// Where : What is known about whether somebody is there to hear.
-type Where struct {
-	// Away : The person is known to be out of the room. False when it
-	// cannot be told, which is what makes the rule fail-safe: speaking
-	// to an empty room wastes a sentence, and holding a reminder back
-	// from somebody sitting there loses it until they think to ask.
-	Away bool
-
-	// Sure : The answer rests on evidence that is current.
-	//
-	// The fail-safe rule cannot tell "they are here" from "I have no
-	// idea", and treats both as here. Both still speak -- that part was
-	// right -- but only one of them means anybody heard it. When this
-	// is false the delivery is noted as unwitnessed, so it can be
-	// raised at the door instead of passing as news already given.
-	Sure bool
-}
-
 // Presence : Whether somebody is there to hear a reminder.
+//
+// Deliberately a single question with a single safe answer. Anything that
+// is not a confident, current "they are elsewhere" must come back false,
+// because the cost of the two mistakes is not equal: speaking to an empty
+// room wastes a sentence, and holding a reminder back from somebody who
+// was sitting there loses it for as long as they take to notice.
 type Presence interface {
-	// Look : What is known right now. A zero Where -- not away, not
-	// sure -- is the safe answer and what any failure returns.
-	Look(ctx context.Context, userID string) Where
+	// Away : Whether the person is known to be out of the room. False
+	// when it cannot be told.
+	Away(ctx context.Context, userID string) bool
 }
 
 // Loop : Says reminders when their time comes.
@@ -202,12 +190,7 @@ func (l *Loop) one(ctx context.Context, r Reminder, at time.Time, pass *Pass) {
 	// delivered when they walk in. A repeating one is not held: its next
 	// turn is along soon enough, and holding one would queue up a morning
 	// alarm to go off the moment somebody walked past at lunchtime.
-	where := Where{Sure: true}
-	if l.Presence != nil {
-		where = l.Presence.Look(ctx, r.UserID)
-	}
-
-	if !repeating && where.Away {
+	if !repeating && l.Presence != nil && l.Presence.Away(ctx, r.UserID) {
 		if err := l.Store.Hold(ctx, r.ID, at); err != nil {
 			l.log(ctx, "cannot hold a reminder back", err)
 			return
@@ -223,16 +206,6 @@ func (l *Loop) one(ctx context.Context, r Reminder, at time.Time, pass *Pass) {
 		pass.Failed++
 		l.log(ctx, "cannot say a reminder, leaving it to try again", err)
 		return
-	}
-
-	// Said, but nothing could confirm anybody was there. Noted before
-	// the delivery is recorded, so a crash between the two leaves it
-	// looking unsaid rather than heard: the first is repeated, the
-	// second is lost.
-	if !where.Sure {
-		if err := l.Store.Unwitnessed(ctx, r.ID, at); err != nil {
-			l.log(ctx, "cannot note that a reminder was said to nobody in particular", err)
-		}
 	}
 
 	if !repeating {

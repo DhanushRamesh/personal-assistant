@@ -144,16 +144,6 @@ type Reminder struct {
 	UpdatedAt time.Time
 	// LastFiredAt : When it was last said, or nil if never.
 	LastFiredAt *time.Time
-	// UnwitnessedAt : When it was said without anything being able to
-	// confirm somebody was there, or nil if it was said to a confirmed
-	// listener -- or not said at all.
-	//
-	// Presence is fail-safe and speaks whenever it cannot be sure, which
-	// is right: a wasted sentence beats a lost reminder. This records
-	// which of those the assistant was actually doing, so a reminder
-	// spoken into an unverified silence can still be raised at the door.
-	UnwitnessedAt *time.Time
-
 	// MentionedAt : When a miss was brought up, or nil if it has not been.
 	// Only ever set on a missed one, and only once.
 	MentionedAt *time.Time

@@ -54,21 +54,6 @@ type Store interface {
 	// up once and not on every turn afterwards.
 	Mentioned(ctx context.Context, ids []string, at time.Time) error
 
-	// Unwitnessed : Records that a reminder was said without anything
-	// being able to confirm somebody was there to hear it.
-	//
-	// Separate from Fired rather than an argument to it, because it is a
-	// note about the circumstances and not about the delivery. Fired
-	// must succeed or the reminder is said again; this failing costs
-	// only the mention at the door.
-	Unwitnessed(ctx context.Context, id string, at time.Time) error
-
-	// Unheard : Reminders said into a silence nobody could vouch for and
-	// not yet raised, oldest first.
-	//
-	// Cleared by Mentioned, the same as a miss, so each is raised once.
-	Unheard(ctx context.Context, userID string) ([]Reminder, error)
-
 	// Hold : Keeps a reminder back because nobody was there to hear it.
 	//
 	// Its due time is left alone: it says when the reminder was for, and

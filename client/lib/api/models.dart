@@ -323,18 +323,10 @@ class Conversation {
 
 /// ConversationDetail : A conversation together with its chats, oldest first.
 class ConversationDetail {
-  const ConversationDetail({
-    required this.conversation,
-    required this.chats,
-    this.announcements = const [],
-  });
+  const ConversationDetail({required this.conversation, required this.chats});
 
   final Conversation conversation;
   final List<ChatSummary> chats;
-
-  /// announcements : What the assistant said without being asked, which
-  /// belongs in the conversation as much as an answer does.
-  final List<Announcement> announcements;
 
   /// fromJson : Parses a conversation detail as the API returns it.
   factory ConversationDetail.fromJson(Map<String, dynamic> json) =>
@@ -343,108 +335,8 @@ class ConversationDetail {
           json['conversation'] as Map<String, dynamic>,
         ),
         chats: _list(json['chats'], ChatSummary.fromJson),
-        announcements: _list(json['announcements'], Announcement.fromJson),
       );
 }
-
-/// AnnouncementKind : What made the assistant speak.
-enum AnnouncementKind {
-  /// reminder : A reminder or timer whose time came.
-  reminder,
-
-  /// presence : A greeting, and whatever was held back, as somebody came
-  /// into the room.
-  presence,
-
-  /// unknown : A kind this build does not know, so that a newer server
-  /// adding one does not break an older client.
-  unknown;
-
-  static AnnouncementKind parse(String wire) => switch (wire) {
-    'reminder' => AnnouncementKind.reminder,
-    'presence' => AnnouncementKind.presence,
-    _ => AnnouncementKind.unknown,
-  };
-
-  /// label : What to call it above the words.
-  String get label => switch (this) {
-    AnnouncementKind.reminder => 'Reminder',
-    AnnouncementKind.presence => 'Welcome',
-    AnnouncementKind.unknown => 'Announcement',
-  };
-}
-
-/// Announcement : Something the assistant said without being asked.
-///
-/// Not a chat: there is no question above it, no status and nothing to
-/// cancel. It is shown in the conversation because the person was spoken to
-/// and usually answers it.
-class Announcement {
-  const Announcement({
-    required this.id,
-    required this.kind,
-    required this.text,
-    required this.at,
-  });
-
-  final String id;
-  final AnnouncementKind kind;
-  final String text;
-  final DateTime at;
-
-  /// fromJson : Parses an announcement as the API returns it.
-  factory Announcement.fromJson(Map<String, dynamic> json) => Announcement(
-    id: json['id'] as String? ?? '',
-    kind: AnnouncementKind.parse(json['kind'] as String? ?? ''),
-    text: json['text'] as String? ?? '',
-    at: DateTime.parse(json['at'] as String).toLocal(),
-  );
-}
-
-/// Vocabulary : The words speech-to-text is primed with.
-///
-/// Shown because it is built from what has been written down, so a word
-/// that was misheard once and saved can end up being primed. Seeing the
-/// list is what makes that fixable.
-class Vocabulary {
-  const Vocabulary({
-    required this.prompt,
-    required this.core,
-    required this.found,
-    required this.used,
-    required this.budget,
-  });
-
-  /// prompt : Exactly what is passed to Whisper.
-  final String prompt;
-
-  /// core : The words primed by hand.
-  final List<String> core;
-
-  /// found : The words taken from reminders, conversations and memories,
-  /// in the order they would be dropped if the budget ran out.
-  final List<String> found;
-
-  final int used;
-  final int budget;
-
-  /// fromJson : Parses the vocabulary as the API returns it.
-  factory Vocabulary.fromJson(Map<String, dynamic> json) => Vocabulary(
-    prompt: json['prompt'] as String? ?? '',
-    core: _strings(json['core']),
-    found: _strings(json['found']),
-    used: json['used'] as int? ?? 0,
-    budget: json['budget'] as int? ?? 0,
-  );
-}
-
-/// _strings : A JSON array of strings, or empty when it is missing.
-List<String> _strings(Object? raw) => raw is List
-    ? [
-        for (final v in raw)
-          if (v is String) v,
-      ]
-    : const [];
 
 /// Identity : Who is calling and from what.
 class Identity {

@@ -173,36 +173,6 @@ func (s *Store) Mentioned(_ context.Context, ids []string, at time.Time) error {
 	return nil
 }
 
-// Unwitnessed : Notes that a reminder was said with nothing able to
-// confirm somebody was there.
-func (s *Store) Unwitnessed(_ context.Context, id string, at time.Time) error {
-	s.mu.Lock()
-	defer s.mu.Unlock()
-
-	when := at.UTC()
-	if r, ok := s.kept[id]; ok && r.UnwitnessedAt == nil {
-		r.UnwitnessedAt = &when
-		s.kept[id] = r
-	}
-	return nil
-}
-
-// Unheard : Reminders said into a silence nobody could vouch for and not
-// yet raised, oldest first.
-func (s *Store) Unheard(_ context.Context, userID string) ([]remind.Reminder, error) {
-	s.mu.Lock()
-	defer s.mu.Unlock()
-
-	out := make([]remind.Reminder, 0, len(s.kept))
-	for _, r := range s.kept {
-		if r.UserID == userID && r.UnwitnessedAt != nil && r.MentionedAt == nil {
-			out = append(out, r)
-		}
-	}
-	soonestFirst(out)
-	return out, nil
-}
-
 // Hold : Keeps a reminder back because nobody was there to hear it.
 func (s *Store) Hold(_ context.Context, id string, at time.Time) error {
 	s.mu.Lock()

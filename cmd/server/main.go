@@ -17,7 +17,6 @@ import (
 
 	"github.com/DhanushRamesh/personal-assistant/internal/announce"
 	"github.com/DhanushRamesh/personal-assistant/internal/announce/hass"
-	"github.com/DhanushRamesh/personal-assistant/internal/announcement"
 	"github.com/DhanushRamesh/personal-assistant/internal/api"
 	"github.com/DhanushRamesh/personal-assistant/internal/chat"
 	chatmysql "github.com/DhanushRamesh/personal-assistant/internal/chat/mysql"
@@ -72,14 +71,6 @@ func main() {
 	}
 	if len(os.Args) > 1 && os.Args[1] == "createuser" {
 		fmt.Fprintln(os.Stderr, "usage: personal-assistant createuser <username>")
-		os.Exit(1)
-	}
-	if len(os.Args) > 2 && os.Args[1] == "vocabulary" {
-		osExitOnError(runVocabulary(os.Args[2]))
-		return
-	}
-	if len(os.Args) > 1 && os.Args[1] == "vocabulary" {
-		fmt.Fprintln(os.Stderr, "usage: personal-assistant vocabulary <username>")
 		os.Exit(1)
 	}
 
@@ -258,19 +249,6 @@ func run() error {
 		return err
 	}
 
-	// What the assistant says without being asked is written into the
-	// conversation the voice client is talking in, so that answering it
-	// is possible at all. Without this a greeting and the reminders
-	// behind it are spoken into a conversation that shows no trace of
-	// them, and "how late was I" has nothing to refer to.
-	announcements := &announcement.Writer{
-		Conversations: chats,
-		Clients:       chats,
-		Location:      cfg.Assistant.Location,
-		Now:           cfg.Assistant.Now,
-		Logger:        logger.Logger,
-	}
-
 	// The first work here that happens because of the clock rather than
 	// because somebody asked. Stopped with the server, so a reminder is
 	// never half said during a shutdown.
@@ -279,10 +257,9 @@ func run() error {
 		Presence: whereabouts(cfg, logger.Logger),
 		Speaker: remind.Everywhere{
 			To: []remind.Speaker{remind.Aloud{
-				Announcer:     speaker,
-				Location:      cfg.Assistant.Location,
-				Now:           cfg.Assistant.Now,
-				Announcements: announcements,
+				Announcer: speaker,
+				Location:  cfg.Assistant.Location,
+				Now:       cfg.Assistant.Now,
 			}},
 			Logger: logger.Logger,
 		},
@@ -313,8 +290,6 @@ func run() error {
 		Messages:       chats,
 		Reminders:      reminderStore,
 		Announcer:      speaker,
-		Announcements:  announcements,
-		Memories:       memorymysql.New(db),
 		Location:       cfg.Assistant.Location,
 		Now:            cfg.Assistant.Now,
 		Runner:         chatRunner,
@@ -400,10 +375,9 @@ func reachableModels(cfg config.Config) []llm.Model {
 // -- what this did before there was any way to tell, and the safe way round.
 func whereabouts(cfg config.Config, logger *slog.Logger) remind.Presence {
 	p, err := hass.NewPresence(hass.PresenceConfig{
-		URL:      cfg.HomeAssistant.URL,
-		Token:    cfg.HomeAssistant.Token,
-		Entity:   cfg.HomeAssistant.PresenceEntity,
-		Evidence: cfg.HomeAssistant.PresenceEvidence,
+		URL:    cfg.HomeAssistant.URL,
+		Token:  cfg.HomeAssistant.Token,
+		Entity: cfg.HomeAssistant.PresenceEntity,
 	})
 	if err != nil {
 		if !errors.Is(err, hass.ErrNotConfigured) {

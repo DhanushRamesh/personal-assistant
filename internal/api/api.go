@@ -29,13 +29,11 @@ import (
 	"github.com/DhanushRamesh/personal-assistant/internal/api/middleware"
 	"github.com/DhanushRamesh/personal-assistant/internal/api/presence"
 	"github.com/DhanushRamesh/personal-assistant/internal/api/reminders"
-	"github.com/DhanushRamesh/personal-assistant/internal/api/voice"
 	"github.com/DhanushRamesh/personal-assistant/internal/chat"
 	"github.com/DhanushRamesh/personal-assistant/internal/conversation"
 	"github.com/DhanushRamesh/personal-assistant/internal/llm"
 	"github.com/DhanushRamesh/personal-assistant/internal/persona"
 	"github.com/DhanushRamesh/personal-assistant/internal/remind"
-	"github.com/DhanushRamesh/personal-assistant/internal/vocabulary"
 )
 
 // DefaultRequestTimeout : The per-request deadline applied when Options does
@@ -70,15 +68,6 @@ type Options struct {
 	// Reminders : What is waiting to be said. Optional; without it the
 	// listing is empty and nothing can be called off from the screen.
 	Reminders remind.Store
-
-	// Memories : What has been remembered about the person, which is one
-	// of the places the speech vocabulary is drawn from. Optional.
-	Memories vocabulary.Memories
-
-	// Announcements : Where what the server said of its own accord is
-	// noted in the conversation, so the person can answer it. Optional;
-	// without it a greeting is spoken and not written down.
-	Announcements presence.Announcements
 
 	// Announcer : Where the server speaks of its own accord. Optional;
 	// without it a greeting is composed and not said.
@@ -132,7 +121,6 @@ type Server struct {
 	chats         *chats.Handler
 	reminders     *reminders.Handler
 	presence      *presence.Handler
-	voice         *voice.Handler
 	assist        *assist.Handler
 }
 
@@ -151,16 +139,11 @@ func New(opts Options) *Server {
 		health:        health.New(opts.Logger, opts.DB),
 		authn:         authn.New(opts.Logger, opts.Chats),
 		clients:       clients.New(opts.Logger, opts.Chats, opts.Models, opts.DefaultModel, opts.Persona),
-		conversations: conversations.New(opts.Logger, opts.Chats, opts.Messages),
+		conversations: conversations.New(opts.Logger, opts.Chats),
 		chats:         chats.New(opts.Logger, opts.Chats, opts.Messages, opts.Runner, opts.Events),
 		reminders:     reminders.New(opts.Logger, opts.Reminders),
 		presence: presence.New(opts.Logger, opts.Announcer, opts.Reminders,
-			opts.Announcements, opts.Location, opts.Now),
-		voice: voice.New(opts.Logger, vocabulary.Sources{
-			Memories:      opts.Memories,
-			Conversations: opts.Chats,
-			Reminders:     opts.Reminders,
-		}),
+			opts.Location, opts.Now),
 		assist: assist.New(opts.Logger, opts.Chats, opts.Runner, opts.Events),
 	}
 	s.routes()
@@ -203,7 +186,6 @@ func (s *Server) routes() {
 		s.chats.Mount(r)
 		s.reminders.Mount(r)
 		s.presence.Mount(r)
-		s.voice.Mount(r)
 		s.assist.Mount(r)
 	})
 }

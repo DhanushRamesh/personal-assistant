@@ -354,16 +354,9 @@ func TestALateReminderFromYesterdayNamesTheDay(t *testing.T) {
 }
 
 // elsewhere : A presence that answers however the test says.
-type elsewhere struct {
-	away bool
-	// unsure : Nothing current backs the answer up. The zero value is a
-	// confident one, so the tests that predate this read unchanged.
-	unsure bool
-}
+type elsewhere struct{ away bool }
 
-func (e elsewhere) Look(context.Context, string) remind.Where {
-	return remind.Where{Away: e.away, Sure: !e.unsure}
-}
+func (e elsewhere) Away(context.Context, string) bool { return e.away }
 
 // held : A reminder due now, for the presence tests.
 func heldCase(t *testing.T, repeats remind.Repeat) (*inmemory.Store, *remind.Reminder) {
@@ -559,96 +552,5 @@ func TestWithoutAPastTenseWordingItFallsBack(t *testing.T) {
 		if !strings.Contains(got, want) {
 			t.Errorf("Spoken = %q, missing %q", got, want)
 		}
-	}
-}
-
-// A reminder said while nothing could confirm anybody was there is
-// delivered, and noted as unwitnessed so it can be raised at the door.
-//
-// Presence is fail-safe and speaks whenever it cannot be sure, which is
-// right. But it cannot tell "they are here" from "I have no idea", and
-// treated both as heard: a reminder spoken into a twelve-minute hole
-// where the sensor did not exist was recorded as said, so walking back
-// in produced a greeting and no mention of it.
-func TestAReminderSaidWithNobodyConfirmedIsNoted(t *testing.T) {
-	store, r := heldCase(t, remind.Once)
-	say := &heard{}
-
-	loop := &remind.Loop{
-		Store: store, Speaker: say,
-		Presence: elsewhere{away: false, unsure: true},
-	}
-	pass := loop.Once(context.Background())
-
-	if pass.Said != 1 {
-		t.Fatalf("pass = %+v, want it said", pass)
-	}
-
-	unheard, err := store.Unheard(context.Background(), r.UserID)
-	if err != nil {
-		t.Fatalf("reading what was said to nobody: %v", err)
-	}
-	if len(unheard) != 1 || unheard[0].ID != r.ID {
-		t.Fatalf("unheard = %v, want the one just said", unheard)
-	}
-	if unheard[0].UnwitnessedAt == nil {
-		t.Error("it was not marked as said to nobody in particular")
-	}
-}
-
-// Said with somebody confirmed there is an ordinary delivery, and is not
-// raised again.
-func TestAReminderSaidToSomebodyPresentIsNotRaisedAgain(t *testing.T) {
-	store, r := heldCase(t, remind.Once)
-	say := &heard{}
-
-	loop := &remind.Loop{
-		Store: store, Speaker: say,
-		Presence: elsewhere{away: false},
-	}
-	if pass := loop.Once(context.Background()); pass.Said != 1 {
-		t.Fatalf("pass = %+v, want it said", pass)
-	}
-
-	unheard, err := store.Unheard(context.Background(), r.UserID)
-	if err != nil {
-		t.Fatalf("reading what was said to nobody: %v", err)
-	}
-	if len(unheard) != 0 {
-		t.Errorf("unheard = %v, want nothing", unheard)
-	}
-}
-
-// Being unsure does not hold anything back. Speaking is still the right
-// answer; the note is only so the delivery can be questioned later.
-func TestBeingUnsureStillSpeaks(t *testing.T) {
-	store, _ := heldCase(t, remind.Once)
-	say := &heard{}
-
-	loop := &remind.Loop{
-		Store: store, Speaker: say,
-		Presence: elsewhere{away: false, unsure: true},
-	}
-	pass := loop.Once(context.Background())
-
-	if pass.Held != 0 {
-		t.Errorf("pass = %+v, want nothing held", pass)
-	}
-	if say.count() != 1 {
-		t.Errorf("spoke %d times, want one", say.count())
-	}
-}
-
-// Known away still holds, unsure or not: a confident "elsewhere" is the
-// one answer that stops a reminder.
-func TestAConfidentAwayStillHolds(t *testing.T) {
-	store, _ := heldCase(t, remind.Once)
-
-	loop := &remind.Loop{
-		Store: store, Speaker: &heard{},
-		Presence: elsewhere{away: true},
-	}
-	if pass := loop.Once(context.Background()); pass.Held != 1 {
-		t.Fatalf("pass = %+v, want it held", pass)
 	}
 }
