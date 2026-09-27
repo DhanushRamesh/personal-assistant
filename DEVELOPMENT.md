@@ -1053,6 +1053,19 @@ could say it, and drives the mention-it-once path. Held means something
 could and chose to wait. Its due time is left alone: that is what the
 reminder was for, and what the person is told when they get it.
 
+**An absent sensor is not an absent person, and was not handled.** The
+poller published "unavailable" only if it had readings to withdraw,
+which is wrong on a cold start: begun with the watch already out of
+range it has none, so the sensors were never created and every rule
+waiting on them waited for an entity that did not exist.
+
+Found on 27 September 2026 when Home Assistant was restarted while the
+watch was away. Nothing published, so nothing marked the owner absent,
+so `in_the_room` stayed on, so their return crossed no threshold and
+went ungreeted -- a silence leaving no trace in any log, because
+nothing failed. It now says unavailable whether or not anything came
+before.
+
 **Two flags, because the welcome and the hold want opposite mistakes.**
 Greeting somebody who never left wastes a sentence. Holding a reminder
 from somebody sitting right there loses it until they think to ask. One
