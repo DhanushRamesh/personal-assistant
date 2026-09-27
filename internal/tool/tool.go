@@ -91,6 +91,22 @@ type Caller struct {
 type Result struct {
 	// Outcome : Whether it worked, did not, or did part of it.
 	Outcome conversation.Outcome
+
+	// MustSay : Facts the person has to be told, checked against the
+	// answer once the turn is finished.
+	//
+	// A tool that verified a write knows something the person cannot
+	// check by ear -- what a value was before, how many things are left
+	// -- and telling them is the whole point of having looked. Asking
+	// the model nicely does not work: measured, it was handed "the time
+	// was 9:00 pm, is now 10:00 pm" and said "Moved to 10:00 pm, sir."
+	//
+	// So the obligation is carried out of the tool and enforced after.
+	MustSay []string
+
+	// Else : The sentence appended when any of MustSay is missing from
+	// the answer. Written to read as a continuation of it.
+	Else string
 	// Content : What it produced, or exactly what went wrong.
 	//
 	// A failure says why, in the words of whatever actually refused. A tool

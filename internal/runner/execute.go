@@ -12,6 +12,7 @@ import (
 	"github.com/DhanushRamesh/personal-assistant/internal/environment"
 	"github.com/DhanushRamesh/personal-assistant/internal/events"
 	"github.com/DhanushRamesh/personal-assistant/internal/failure"
+	"github.com/DhanushRamesh/personal-assistant/internal/tool"
 )
 
 // execute : Runs one chat from start to a terminal status.
@@ -75,6 +76,11 @@ func (r *Runner) consume(runCtx, ctx context.Context, t *chat.Chat, systemPrompt
 	turns := toProviderTurns(window.Messages)
 	prompt := t.Prompt
 
+	// What the tools this turn ran have obliged the answer to mention.
+	// Gathered as they run and settled once, at the end, because the
+	// model may take several rounds to get to its answer.
+	var owed []tool.Owed
+
 	for hop := 0; ; hop++ {
 		// The last round is offered nothing. A model that has run out of
 		// rounds must answer from what it gathered, and saying what it
@@ -128,7 +134,7 @@ func (r *Runner) consume(runCtx, ctx context.Context, t *chat.Chat, systemPrompt
 			return
 
 		case final.Kind != environment.KindToolCalls:
-			r.complete(ctx, t, final.Text)
+			r.complete(ctx, t, tool.Ensure(final.Text, owed))
 			return
 		}
 
@@ -137,7 +143,9 @@ func (r *Runner) consume(runCtx, ctx context.Context, t *chat.Chat, systemPrompt
 		// in the history now, and asking it twice would have the model answer
 		// it twice.
 		turns = append(turns, asUserTurn(prompt)...)
-		turns = append(turns, r.runTools(ctx, t, final.ToolCalls)...)
+		ranTurns, ranOwed := r.runTools(ctx, t, final.ToolCalls)
+		turns = append(turns, ranTurns...)
+		owed = append(owed, ranOwed...)
 		prompt = ""
 
 		if runCtx.Err() != nil {

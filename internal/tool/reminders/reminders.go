@@ -11,6 +11,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"strconv"
 	"strings"
 	"time"
 
@@ -192,6 +193,14 @@ func update(store remind.Store, clock Clock) tool.Tool {
 				change.DueAt = &due
 			}
 
+			// Read before the change so there is something to compare
+			// against afterwards. A person listening cannot check a
+			// diff they were never given.
+			before, err := store.Get(ctx, in.Caller.UserID, args.ID)
+			if err != nil && !errors.Is(err, remind.ErrNotFound) {
+				return tool.Failed(err.Error())
+			}
+
 			changed, err := remind.Amend(ctx, store, in.Caller.UserID, args.ID, change)
 			switch {
 			case errors.Is(err, remind.ErrNothingToChange):
@@ -206,9 +215,16 @@ func update(store remind.Store, clock Clock) tool.Tool {
 				return tool.Failed(err.Error())
 			}
 
-			return tool.OK(fmt.Sprintf("Changed. %q is now due at %s%s and says: %s. Tell the person "+
-				"what is different, in their words rather than as a date.",
-				changed.Title, spell(changed.DueAt, clock.where()), repeating(changed.Repeats), changed.Body))
+			// Read it back. Amend returned what it believes it wrote;
+			// this is what is actually stored, which is the only thing
+			// worth telling somebody.
+			after, err := store.Get(ctx, in.Caller.UserID, args.ID)
+			if err != nil || after == nil {
+				return tool.Unverified("Changing that reminder", "it can no longer be read back")
+			}
+			_ = changed
+
+			return tool.Changed("Changed the reminder", diff(before, after, clock)...)
 		},
 	}
 }
@@ -459,8 +475,17 @@ func snooze(store remind.Store, clock Clock) tool.Tool {
 					existing.Title, existing.Repeats, spell(existing.DueAt, clock.where()),
 					spell(until, clock.where())))
 			}
-			return tool.OK(fmt.Sprintf("Put off: %q will now be said at %s. Tell the person when, "+
-				"in their words rather than as a date.", existing.Title, spell(until, clock.where())))
+			// Read back rather than reporting the time that was asked
+			// for: what matters is when it will actually go off.
+			after, err := store.Get(ctx, in.Caller.UserID, existing.ID)
+			if err != nil || after == nil {
+				return tool.Unverified("Putting that reminder off", "it can no longer be read back")
+			}
+			return tool.Changed("Put off "+strconv.Quote(existing.Title), tool.Change{
+				What: "the time",
+				From: spell(existing.DueAt, clock.where()),
+				To:   spell(after.DueAt, clock.where()),
+			})
 		},
 	}
 }
@@ -628,13 +653,23 @@ func set(store remind.Store, clock Clock) tool.Tool {
 			if err != nil {
 				return tool.Failed(err.Error())
 			}
+			before := count(ctx, store, in.Caller.UserID)
 			if err := store.Create(ctx, r); err != nil {
 				return tool.Failed(err.Error())
 			}
 
-			return tool.OK(fmt.Sprintf("Set: %q, %s%s. Its identifier is %s. Tell the person when it will happen, "+
-				"in their words rather than as a date.",
-				r.Title, spell(r.DueAt, clock.where()), repeating(r.Repeats), r.ID))
+			// Read it back. A create that reported success and stored
+			// nothing is the one failure that cannot be noticed by ear.
+			stored, err := store.Get(ctx, in.Caller.UserID, r.ID)
+			if err != nil || stored == nil {
+				return tool.Unverified("Setting that reminder", "it cannot be read back")
+			}
+
+			return tool.OK(fmt.Sprintf("Set and read back: %q, %s%s. Its identifier is %s. "+
+				"There %s %d waiting before, and there %s %d now. Tell the person when it will "+
+				"happen, in their words rather than as a date.",
+				stored.Title, spell(stored.DueAt, clock.where()), repeating(stored.Repeats), stored.ID,
+				wasWere(before), before, wasWere(before+1), count(ctx, store, in.Caller.UserID)))
 		},
 	}
 }
@@ -736,12 +771,71 @@ func cancel(store remind.Store) tool.Tool {
 				}
 				return tool.Failed(err.Error())
 			}
+			before := count(ctx, store, in.Caller.UserID)
+
 			if err := store.Cancel(ctx, in.Caller.UserID, args.ID); err != nil {
 				return tool.Failed(err.Error())
 			}
-			return tool.OK(fmt.Sprintf("Called off %q.", existing.Title))
+
+			// Confirm it actually went, rather than trusting that the
+			// write said so.
+			if still, err := store.Get(ctx, in.Caller.UserID, args.ID); err == nil && still != nil &&
+				still.Status != remind.Cancelled {
+				return tool.Unverified("Calling off "+strconv.Quote(existing.Title),
+					"it is still there and still "+string(still.Status))
+			}
+			return tool.Removed("Called off "+strconv.Quote(existing.Title),
+				before, count(ctx, store, in.Caller.UserID), "reminder")
 		},
 	}
+}
+
+// wasWere : Agreement for a count, since this is read aloud.
+func wasWere(n int) string {
+	if n == 1 {
+		return "was"
+	}
+	return "were"
+}
+
+// count : How many reminders are waiting, for saying what a deletion
+// cost. Zero when it cannot be read, which reads as an unknown rather
+// than as an empty list.
+func count(ctx context.Context, store remind.Store, userID string) int {
+	found, err := store.List(ctx, userID, remind.Pending, remind.Held)
+	if err != nil {
+		return 0
+	}
+	return len(found)
+}
+
+// diff : What moved between two versions of a reminder.
+//
+// Every field the tool can change is compared, so nothing is announced
+// that did not move and nothing that moved is left out. Times are
+// spelled the way they would be said, because that is what goes to the
+// person.
+func diff(before, after *remind.Reminder, clock Clock) []tool.Change {
+	if before == nil || after == nil {
+		return nil
+	}
+	loc := clock.where()
+	return []tool.Change{
+		{What: "the name", From: before.Title, To: after.Title},
+		{What: "what it says", From: before.Body, To: after.Body},
+		{What: "the time", From: spell(before.DueAt, loc), To: spell(after.DueAt, loc)},
+		{What: "how often it repeats",
+			From: repeated(before.Repeats), To: repeated(after.Repeats)},
+		{What: "what it says when late", From: before.SaidLate, To: after.SaidLate},
+	}
+}
+
+// repeated : How often it repeats, in words, or "not at all".
+func repeated(r remind.Repeat) string {
+	if r == "" || r == remind.Once {
+		return "not at all"
+	}
+	return string(r)
 }
 
 // when : The moment a reminder is due, or why it cannot be worked out.

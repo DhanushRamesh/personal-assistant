@@ -63,7 +63,7 @@ func (r *Runner) runTools(
 	ctx context.Context,
 	t *chat.Chat,
 	calls []environment.ToolCall,
-) []environment.Turn {
+) ([]environment.Turn, []tool.Owed) {
 	asked := make([]conversation.ToolCall, 0, len(calls))
 	for _, c := range calls {
 		asked = append(asked, conversation.ToolCall{ID: c.ID, Name: c.Name, Arguments: c.Arguments})
@@ -74,6 +74,7 @@ func (r *Runner) runTools(
 	caller := r.callerFor(ctx, t)
 
 	got := make([]conversation.ToolResult, 0, len(calls))
+	ran := make([]tool.Result, 0, len(calls))
 	for _, c := range calls {
 		started := time.Now()
 		result := r.tools.Call(ctx, c.Name, tool.Invocation{
@@ -86,6 +87,7 @@ func (r *Runner) runTools(
 			slog.String("outcome", string(result.Outcome)),
 			slog.Duration("took", time.Since(started)))
 
+		ran = append(ran, result)
 		got = append(got, conversation.ToolResult{
 			ID:      c.ID,
 			Name:    c.Name,
@@ -98,7 +100,7 @@ func (r *Runner) runTools(
 	results := conversation.ToolsReturned(t.ConversationID, got, time.Now().UTC())
 	r.remember(ctx, t, results)
 
-	return toProviderTurns([]conversation.Message{call, results})
+	return toProviderTurns([]conversation.Message{call, results}), tool.Owing(ran)
 }
 
 // callerFor : Who a tool is acting for.

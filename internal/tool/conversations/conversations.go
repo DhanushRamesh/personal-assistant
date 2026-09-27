@@ -11,6 +11,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"strconv"
 	"strings"
 	"time"
 
@@ -171,16 +172,28 @@ func switchTo(repo chat.Repository) tool.Tool {
 				return tool.Failed("This request did not come from a known client, so there is nothing to switch.")
 			}
 
+			was := titleOf(ctx, repo, in.Caller.UserID, in.Caller.ConversationID)
+
 			err := repo.SetActiveConversation(ctx, in.Caller.UserID, in.Caller.ClientID, args.ConversationID)
 			if err != nil {
 				return tool.Failed(refusal(err, args.ConversationID))
+			}
+
+			// Read back which one the client is actually in. A switch
+			// that silently did not take leaves them talking into the
+			// old conversation and wondering why nothing lands.
+			if now := activeOf(ctx, repo, in.Caller.UserID, in.Caller.ClientID); now != args.ConversationID {
+				return tool.Unverified("Switching conversation",
+					"this client is still in "+was)
 			}
 			// The instruction is imperative because the model would
 			// otherwise read this, act on it, and say nothing. From the
 			// person's side that is indistinguishable from a fault: they
 			// asked for something in the new conversation and the reply
 			// appeared in the old one with no explanation.
-			return tool.OK("Switched, and it takes effect from the next thing the person says. " +
+			return tool.OK("Switched to " + strconv.Quote(titleOf(ctx, repo, in.Caller.UserID, args.ConversationID)) +
+				" from " + strconv.Quote(was) + ", read back to be sure. " +
+				"It takes effect from the next thing the person says. " +
 				"This reply will still be recorded in the conversation you began in. " +
 				"You must tell the person both of those things. " +
 				"If they asked for something to be said in the new conversation, say plainly " +
@@ -221,9 +234,14 @@ func create(repo chat.Repository) tool.Tool {
 				return tool.Failed("There is nobody to start a conversation for.")
 			}
 
+			before := howMany(ctx, repo, in.Caller.UserID)
+
 			c := chat.NewConversation(in.Caller.UserID, args.Title)
 			if err := repo.CreateConversation(ctx, c); err != nil {
 				return tool.Failed("The conversation could not be created: " + err.Error())
+			}
+			if made, err := repo.GetConversation(ctx, c.ID); err != nil || made == nil {
+				return tool.Unverified("Creating the conversation", "it cannot be read back")
 			}
 			if in.Caller.ClientID != "" {
 				if err := repo.SetActiveConversation(ctx, in.Caller.UserID, in.Caller.ClientID, c.ID); err != nil {
@@ -233,7 +251,9 @@ func create(repo chat.Repository) tool.Tool {
 					return tool.Partial("The conversation was created but this client could not be switched to it: " + err.Error())
 				}
 			}
-			return tool.OK("Created, and switched to from the next thing the person says. " +
+			return tool.OK(fmt.Sprintf("Created and read back. There %s %d %s before, and %s now. ",
+				wereThey(before), before, conversationWord(before), nowThere(howMany(ctx, repo, in.Caller.UserID))) +
+				"Switched to from the next thing the person says. " +
 				"This reply will still be recorded in the conversation you began in. " +
 				"You must tell the person both of those things. " +
 				"If they asked for something to be said in the new conversation, say plainly " +
@@ -279,16 +299,21 @@ func rename(repo chat.Repository) tool.Tool {
 				return tool.Failed(bad)
 			}
 
+			was := titleOf(ctx, repo, in.Caller.UserID, id)
+
 			if err := repo.RenameConversation(ctx, in.Caller.UserID, id, args.Title); err != nil {
 				if errors.Is(err, chat.ErrTitleTooLong) {
 					return tool.Failed("That name is too long. It may be up to 200 characters.")
 				}
 				return tool.Failed(refusal(err, id))
 			}
-			if strings.TrimSpace(args.Title) == "" {
-				return tool.OK("The name was cleared.")
+
+			now := titleOf(ctx, repo, in.Caller.UserID, id)
+			if now == was {
+				return tool.Unverified("Renaming the conversation", "it is still called "+was)
 			}
-			return tool.OK("Renamed to " + args.Title + ".")
+			return tool.Changed("Renamed the conversation",
+				tool.Change{What: "the name", From: was, To: now})
 		},
 	}
 }
@@ -330,13 +355,21 @@ func archive(repo chat.Repository) tool.Tool {
 				return tool.Failed(bad)
 			}
 
+			was := shelved(ctx, repo, in.Caller.UserID, id)
+
 			if err := repo.SetConversationArchived(ctx, in.Caller.UserID, id, args.Archived); err != nil {
 				return tool.Failed(refusal(err, id))
 			}
-			if args.Archived {
-				return tool.OK("Put away. Nothing said in it was lost, and it can be brought back.")
+
+			now := shelved(ctx, repo, in.Caller.UserID, id)
+			if now == was {
+				return tool.Unverified("Putting that conversation away", "it is still "+was)
 			}
-			return tool.OK("Brought back.")
+			did := "Put the conversation away"
+			if !args.Archived {
+				did = "Brought the conversation back"
+			}
+			return tool.Changed(did, tool.Change{What: "it", From: was, To: now})
 		},
 	}
 }
@@ -395,10 +428,17 @@ func remove(repo chat.Repository) tool.Tool {
 					c.Title, args.ConfirmTitle))
 			}
 
+			before := howMany(ctx, repo, in.Caller.UserID)
+
 			if err := repo.DeleteConversation(ctx, in.Caller.UserID, args.ConversationID); err != nil {
 				return tool.Failed(refusal(err, args.ConversationID))
 			}
-			return tool.OK("Deleted, with everything said in it.")
+
+			if still, err := repo.GetConversation(ctx, args.ConversationID); err == nil && still != nil {
+				return tool.Unverified("Deleting "+strconv.Quote(c.Title), "it is still there")
+			}
+			return tool.Removed("Deleted "+strconv.Quote(c.Title)+", with everything said in it",
+				before, howMany(ctx, repo, in.Caller.UserID), "conversation")
 		},
 	}
 }
@@ -533,4 +573,78 @@ func ago(at time.Time) string {
 	default:
 		return fmt.Sprintf("%d days ago", int(d.Hours()/24))
 	}
+}
+
+// titleOf : What a conversation is called, or "untitled" when it has no
+// name. Read rather than assumed, because the point of asking twice is
+// to find out what actually happened.
+func titleOf(ctx context.Context, repo chat.Repository, userID, id string) string {
+	c, err := repo.GetConversation(ctx, id)
+	if err != nil || c == nil {
+		return "untitled"
+	}
+	if strings.TrimSpace(c.Title) == "" {
+		return "untitled"
+	}
+	return c.Title
+}
+
+// shelved : Whether a conversation is put away, in words.
+func shelved(ctx context.Context, repo chat.Repository, userID, id string) string {
+	c, err := repo.GetConversation(ctx, id)
+	if err != nil || c == nil {
+		return "gone"
+	}
+	if c.ArchivedAt != nil {
+		return "put away"
+	}
+	return "in the list"
+}
+
+// howMany : How many conversations there are, for saying what a
+// deletion cost.
+func howMany(ctx context.Context, repo chat.Repository, userID string) int {
+	found, err := repo.ListConversations(ctx, userID, chat.MaxListLimit)
+	if err != nil {
+		return 0
+	}
+	return len(found)
+}
+
+// activeOf : Which conversation a client is actually in, read back
+// rather than assumed.
+func activeOf(ctx context.Context, repo chat.Repository, userID, clientID string) string {
+	clients, err := repo.ListClients(ctx, userID, false)
+	if err != nil {
+		return ""
+	}
+	for _, c := range clients {
+		if c.ID == clientID {
+			return c.ActiveConversationID
+		}
+	}
+	return ""
+}
+
+// wereThey, conversationWord, nowThere : Agreement for counts read
+// aloud, so a single conversation does not read as "1 conversations".
+func wereThey(n int) string {
+	if n == 1 {
+		return "was"
+	}
+	return "were"
+}
+
+func conversationWord(n int) string {
+	if n == 1 {
+		return "conversation"
+	}
+	return "conversations"
+}
+
+func nowThere(n int) string {
+	if n == 1 {
+		return "there is 1 conversation"
+	}
+	return fmt.Sprintf("there are %d conversations", n)
 }

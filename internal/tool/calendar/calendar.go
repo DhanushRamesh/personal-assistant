@@ -14,6 +14,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"strconv"
 	"strings"
 	"time"
 
@@ -59,7 +60,7 @@ func All(diary Diary, clock Clock) []tool.Tool {
 		add(diary, clock),
 		agenda(diary, clock),
 		free(diary, clock),
-		cancel(diary),
+		cancel(diary, clock),
 	}
 }
 
@@ -156,6 +157,9 @@ func add(diary Diary, clock Clock) tool.Tool {
 				ends = starts
 			}
 
+			day := starts.AddDate(0, 0, 1)
+			before := len(onTheDay(ctx, diary, in.Caller.UserID, starts, day))
+
 			made, err := diary.Add(ctx, in.Caller.UserID, calendar.Event{
 				Title: args.Title, Where: args.Where, Notes: args.Notes,
 				Starts: starts, Ends: ends, AllDay: args.AllDay,
@@ -163,7 +167,18 @@ func add(diary Diary, clock Clock) tool.Tool {
 			if err != nil {
 				return whenTrouble(err)
 			}
-			return tool.OK("Put in the diary: " + describe(*made, clock.where()))
+
+			// Read the day back from Google rather than trusting what
+			// the insert returned. An event that was accepted and is
+			// not there is the one failure nobody can hear.
+			after := onTheDay(ctx, diary, in.Caller.UserID, starts, day)
+			if !among(after, made.ID) {
+				return tool.Unverified("Putting "+strconv.Quote(args.Title)+" in the diary",
+					"reading that day back does not show it")
+			}
+			return tool.OK(fmt.Sprintf("Put in the diary and read back: %s. That day had %d %s "+
+				"before and has %d now. Tell them what was added and when.",
+				describe(*made, clock.where()), before, thing(before), len(after)))
 		},
 	}
 }
@@ -369,7 +384,7 @@ func free(diary Diary, clock Clock) tool.Tool {
 }
 
 // cancel : Takes something out of the diary.
-func cancel(diary Diary) tool.Tool {
+func cancel(diary Diary, clock Clock) tool.Tool {
 	return tool.Tool{
 		Name:    "calendar_cancel",
 		Purpose: "Remove an event the assistant put in the diary.",
@@ -399,10 +414,21 @@ func cancel(diary Diary) tool.Tool {
 				return tool.Failed("Which event? Use calendar_list to find its identifier.")
 			}
 
+			// A wide window either side, so the count means something
+			// whenever the event actually was.
+			from := clock.now().AddDate(0, 0, -365)
+			to := clock.now().AddDate(0, 0, 365)
+			before := onTheDay(ctx, diary, in.Caller.UserID, from, to)
+
 			if err := diary.Cancel(ctx, in.Caller.UserID, args.ID); err != nil {
 				return whenTrouble(err)
 			}
-			return tool.OK("Taken out of the diary.")
+
+			after := onTheDay(ctx, diary, in.Caller.UserID, from, to)
+			if among(after, args.ID) {
+				return tool.Unverified("Taking that out of the diary", "it is still there")
+			}
+			return tool.Removed("Taken out of the diary", len(before), len(after), "event")
 		},
 	}
 }
@@ -442,4 +468,33 @@ func describe(e calendar.Event, loc *time.Location) string {
 		b.WriteString(", at " + w)
 	}
 	return b.String()
+}
+
+// onTheDay : What is in the diary across a window, or nothing when it
+// cannot be read. A failure to count is not a failure to write, so it
+// costs the count and not the operation.
+func onTheDay(ctx context.Context, diary Diary, userID string, from, to time.Time) []calendar.Event {
+	found, err := diary.Mine(ctx, userID, from, to)
+	if err != nil {
+		return nil
+	}
+	return found
+}
+
+// among : Whether an event with this identifier is in the list.
+func among(events []calendar.Event, id string) bool {
+	for _, e := range events {
+		if e.ID == id {
+			return true
+		}
+	}
+	return false
+}
+
+// thing : "event" or "events", for a count read aloud.
+func thing(n int) string {
+	if n == 1 {
+		return "event"
+	}
+	return "events"
 }

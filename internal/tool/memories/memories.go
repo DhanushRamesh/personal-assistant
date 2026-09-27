@@ -11,6 +11,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"strconv"
 	"strings"
 
 	"github.com/DhanushRamesh/personal-assistant/internal/chat"
@@ -133,8 +134,11 @@ func remember(recall *memory.Recall) tool.Tool {
 					"Remembered %q, with the identifier %s. It could not be indexed for searching by meaning (%s), "+
 						"so until that is working it will only be found when the wording matches.", m.Subject, m.ID, err))
 			}
+			if stored, err := store.Get(ctx, in.Caller.UserID, m.ID); err != nil || stored == nil {
+				return tool.Unverified("Remembering that", "it cannot be read back")
+			}
 			return tool.OK(fmt.Sprintf(
-				"Remembered %q, with the identifier %s. Tell the person you have noted it and what you noted, "+
+				"Remembered %q and read it back, with the identifier %s. Tell the person you have noted it and what you noted, "+
 					"briefly and at the end of your reply. They did not necessarily ask you to keep it, so a memory "+
 					"they are not told about is one they cannot correct.", m.Subject, m.ID))
 		},
@@ -239,6 +243,10 @@ func update(recall *memory.Recall) tool.Tool {
 				return tool.Failed(notFound(err, args.ID))
 			}
 
+			// Kept before it is overwritten, so there is something to
+			// say it moved from.
+			was := *existing
+
 			existing.Subject, existing.Body = strings.TrimSpace(args.Subject), strings.TrimSpace(args.Body)
 			existing.Tier = memory.TierRecall
 			if args.Always {
@@ -253,7 +261,15 @@ func update(recall *memory.Recall) tool.Tool {
 					"Changed %s. It could not be re-indexed for searching by meaning (%s), "+
 						"so until that is working it will only be found when the wording matches.", args.ID, err))
 			}
-			return tool.OK(fmt.Sprintf("Changed %s to say: %s", args.ID, existing.Text()))
+			after, err := store.Get(ctx, in.Caller.UserID, args.ID)
+			if err != nil || after == nil {
+				return tool.Unverified("Changing that memory", "it can no longer be read back")
+			}
+			return tool.Changed("Changed the memory",
+				tool.Change{What: "the subject", From: was.Subject, To: after.Subject},
+				tool.Change{What: "what it says", From: was.Body, To: after.Body},
+				tool.Change{What: "when it is used", From: held(was.Tier), To: held(after.Tier)},
+			)
 		},
 	}
 }
@@ -307,12 +323,39 @@ func forget(recall *memory.Recall) tool.Tool {
 					"Nothing was forgotten: %s is %q, not %q. Search again and use the subject exactly as it came back.",
 					args.ID, existing.Subject, args.Confirm))
 			}
+			before := kept(ctx, store, in.Caller.UserID)
 			if err := store.Forget(ctx, in.Caller.UserID, args.ID); err != nil {
 				return tool.Failed(err.Error())
 			}
-			return tool.OK(fmt.Sprintf("Forgotten %q.", existing.Subject))
+			if still, err := store.Get(ctx, in.Caller.UserID, args.ID); err == nil && still != nil {
+				return tool.Unverified("Forgetting "+strconv.Quote(existing.Subject),
+					"it is still there")
+			}
+			return tool.Removed("Forgotten "+strconv.Quote(existing.Subject),
+				before, kept(ctx, store, in.Caller.UserID), "memory")
 		},
 	}
+}
+
+// kept : How many memories are held, for saying what a deletion cost.
+func kept(ctx context.Context, store memory.Store, userID string) int {
+	var n int
+	for _, tier := range []memory.Tier{memory.TierAlways, memory.TierRecall} {
+		held, err := store.All(ctx, userID, tier)
+		if err != nil {
+			continue
+		}
+		n += len(held)
+	}
+	return n
+}
+
+// held : When a memory is used, in words rather than as a tier name.
+func held(tier memory.Tier) string {
+	if tier == memory.TierAlways {
+		return "always in front of you"
+	}
+	return "only when it is searched for"
 }
 
 // storeFor : The store to act on, or the result to return instead.

@@ -754,6 +754,43 @@ asked how long ago it was.
 Consecutive assistant messages are already merged by `ForModel`, so an
 aside beside an answer raises no alternation problem.
 
+## Every write is read back, and the answer has to say so
+
+**The owner's rule, 27 September 2026: after every change, read it back
+and say what moved, from what to what. After every deletion, count and
+say there were n and now there are n-1.** Spoken aloud, because they
+are listening rather than looking and have no way to check otherwise,
+and because they trust it.
+
+**The verification lives in Go, not in the prompt.** Every mutating
+tool now reads before, writes, reads back, and returns both ends. The
+model is not asked to make a second call: a check it can skip is worth
+nothing, and today it skipped everything it was asked to do by prose.
+`tool.Changed`, `tool.Removed` and `tool.Unverified` give every domain
+the same sentence shapes.
+
+`Unverified` is the case worth building all of it for. A write that
+reported success and did not survive being read back is reported as a
+failure, not a success. Before this, every one of these tools would
+have said "done".
+
+**Saying it is enforced too, because asking did not work.** Measured:
+handed "the time was 9:00 pm, is now 10:00 pm", the model answered
+"Moved to 10:00 pm, sir." The before is the half the person cannot
+reconstruct.
+
+So a `Result` carries `MustSay` and `Else`: the facts the answer has to
+contain, and the sentence appended when it does not. `tool.Ensure`
+applies it in the runner once the turn finishes. Appended rather than
+rewritten -- what the model said is usually better, and this only adds
+back what it dropped. Matching is a plain substring, deliberately: a
+false negative costs one redundant clause, a false positive costs the
+person the thing they asked to be told.
+
+Covered: reminders (set, update, snooze, cancel), memories (remember,
+update, forget), conversations (new, switch, rename, archive, delete),
+calendar (add, cancel).
+
 ## Look it up every time
 
 **The owner's standing rule, 27 September 2026: every statement about
