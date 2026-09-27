@@ -22,6 +22,7 @@ type row struct {
 	Subject      string     `gorm:"column:subject"`
 	RefreshToken string     `gorm:"column:refresh_token"`
 	Scopes       string     `gorm:"column:scopes"`
+	CalendarID   *string    `gorm:"column:calendar_id"`
 	ConnectedAt  time.Time  `gorm:"column:connected_at"`
 	RefreshedAt  *time.Time `gorm:"column:refreshed_at"`
 	BrokenAt     *time.Time `gorm:"column:broken_at"`
@@ -145,6 +146,33 @@ func (s *Store) Forget(ctx context.Context, userID string) error {
 	err := s.db.WithContext(ctx).Where("user_id = ?", userID).Delete(&row{}).Error
 	if err != nil {
 		return fmt.Errorf("google: forgetting the connection: %w", err)
+	}
+	return nil
+}
+
+// Calendar : Which calendar the assistant made for itself.
+func (s *Store) Calendar(ctx context.Context, userID string) (string, error) {
+	var r row
+	err := s.db.WithContext(ctx).Where("user_id = ?", userID).First(&r).Error
+	if errors.Is(err, gorm.ErrRecordNotFound) {
+		return "", google.ErrNotConnected
+	}
+	if err != nil {
+		return "", fmt.Errorf("google: reading which calendar is ours: %w", err)
+	}
+	if r.CalendarID == nil {
+		return "", nil
+	}
+	return *r.CalendarID, nil
+}
+
+// SetCalendar : Records which calendar the assistant made.
+func (s *Store) SetCalendar(ctx context.Context, userID, calendarID string) error {
+	err := s.db.WithContext(ctx).Model(&row{}).
+		Where("user_id = ?", userID).
+		Update("calendar_id", calendarID).Error
+	if err != nil {
+		return fmt.Errorf("google: recording which calendar is ours: %w", err)
 	}
 	return nil
 }

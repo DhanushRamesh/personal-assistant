@@ -35,6 +35,15 @@ type Store interface {
 
 	// Forget : Removes the permission entirely.
 	Forget(ctx context.Context, userID string) error
+
+	// Calendar, SetCalendar : Which calendar the assistant made for
+	// itself, empty until it has made one.
+	//
+	// Kept beside the connection because it belongs to it: revoke the
+	// permission and the calendar is no longer reachable, so the
+	// identifier is worth nothing without the row it sits in.
+	Calendar(ctx context.Context, userID string) (string, error)
+	SetCalendar(ctx context.Context, userID, calendarID string) error
 }
 
 // Timestamp : A moment, in UTC.

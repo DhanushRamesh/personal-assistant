@@ -19,6 +19,7 @@ import (
 	"github.com/DhanushRamesh/personal-assistant/internal/announce/hass"
 	"github.com/DhanushRamesh/personal-assistant/internal/announcement"
 	"github.com/DhanushRamesh/personal-assistant/internal/api"
+	"github.com/DhanushRamesh/personal-assistant/internal/calendar"
 	"github.com/DhanushRamesh/personal-assistant/internal/chat"
 	chatmysql "github.com/DhanushRamesh/personal-assistant/internal/chat/mysql"
 	"github.com/DhanushRamesh/personal-assistant/internal/config"
@@ -40,6 +41,7 @@ import (
 	"github.com/DhanushRamesh/personal-assistant/internal/runner"
 	"github.com/DhanushRamesh/personal-assistant/internal/storage"
 	"github.com/DhanushRamesh/personal-assistant/internal/tool"
+	calendartool "github.com/DhanushRamesh/personal-assistant/internal/tool/calendar"
 	"github.com/DhanushRamesh/personal-assistant/internal/tool/conversations"
 	"github.com/DhanushRamesh/personal-assistant/internal/tool/memories"
 	"github.com/DhanushRamesh/personal-assistant/internal/tool/reminders"
@@ -208,6 +210,11 @@ func run() error {
 	reminderStore := remindmysql.New(db)
 	clock := reminders.Clock{Now: cfg.Assistant.Now, Location: cfg.Assistant.Location}
 
+	// One OAuth client for every Google API. Nil when no credentials
+	// are configured, which the endpoints report as "nothing to
+	// connect" rather than failing.
+	googleLink := linkToGoogle(cfg, logger.Logger, db)
+
 	// What the assistant can do as well as say. A registry that will not
 	// build is a programming mistake, not a configuration one, so it stops
 	// the server rather than quietly offering nothing.
@@ -215,6 +222,9 @@ func run() error {
 		conversations.All(chats),
 		memories.All(remembering),
 		reminders.All(reminderStore, clock),
+		calendartool.All(diaryOf(googleLink, cfg), calendartool.Clock{
+			Now: cfg.Assistant.Now, Location: cfg.Assistant.Location,
+		}),
 	)...)
 	if err != nil {
 		return err
@@ -273,11 +283,6 @@ func run() error {
 		Now:           cfg.Assistant.Now,
 		Logger:        logger.Logger,
 	}
-
-	// One OAuth client for every Google API. Nil when no credentials
-	// are configured, which the endpoints report as "nothing to
-	// connect" rather than failing.
-	googleLink := linkToGoogle(cfg, logger.Logger, db)
 
 	// The first work here that happens because of the clock rather than
 	// because somebody asked. Stopped with the server, so a reminder is
@@ -403,6 +408,21 @@ func reachableModels(cfg config.Config) []llm.Model {
 // Home Assistant when it is configured, and nowhere otherwise. Nowhere is a
 // working server: it answers when spoken to, which is all it could ever do
 // before.
+// diaryOf : The calendar, or nothing when no Google account can be
+// connected.
+//
+// A typed nil would satisfy the interface and then fail on every call
+// with a nil pointer, so the nil is returned untyped and the tools say
+// there is no calendar. That is the honest answer on a server with no
+// Google client, and it is the same answer they give before anybody has
+// connected one.
+func diaryOf(link *google.Link, cfg config.Config) calendartool.Diary {
+	if link == nil {
+		return nil
+	}
+	return calendar.New(link, cfg.Assistant.Location, cfg.Assistant.Now)
+}
+
 // linkToGoogle : The standing permission to reach a person's Google
 // account, or nil when this server has no client credentials.
 //

@@ -13,12 +13,15 @@ import (
 
 // Store : Permissions held in a map.
 type Store struct {
-	mu   sync.Mutex
-	kept map[string]google.Account
+	mu        sync.Mutex
+	kept      map[string]google.Account
+	calendars map[string]string
 }
 
 // New : An empty store.
-func New() *Store { return &Store{kept: map[string]google.Account{}} }
+func New() *Store {
+	return &Store{kept: map[string]google.Account{}, calendars: map[string]string{}}
+}
 
 // Get : The account linked to this person.
 func (s *Store) Get(_ context.Context, userID string) (*google.Account, error) {
@@ -96,6 +99,24 @@ func (s *Store) Forget(_ context.Context, userID string) error {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	delete(s.kept, userID)
+	return nil
+}
+
+// Calendar : Which calendar the assistant made for itself.
+func (s *Store) Calendar(_ context.Context, userID string) (string, error) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	if _, ok := s.kept[userID]; !ok {
+		return "", google.ErrNotConnected
+	}
+	return s.calendars[userID], nil
+}
+
+// SetCalendar : Records which calendar the assistant made.
+func (s *Store) SetCalendar(_ context.Context, userID, calendarID string) error {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	s.calendars[userID] = calendarID
 	return nil
 }
 

@@ -2,8 +2,11 @@ package main
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"fmt"
+	"net/http"
+	"net/url"
 	"os"
 	"strings"
 	"time"
@@ -15,6 +18,63 @@ import (
 	"github.com/DhanushRamesh/personal-assistant/internal/logging"
 	"github.com/DhanushRamesh/personal-assistant/internal/storage"
 )
+
+// aliases : Short names Google returns alongside the full scope URLs.
+//
+// "email" and "profile" come back beside their userinfo equivalents and
+// mean the same thing. Counted as extras they made every healthy
+// connection report a mismatch, which is a warning that trains somebody
+// to ignore warnings.
+var aliases = map[string]string{
+	"email":   "https://www.googleapis.com/auth/userinfo.email",
+	"profile": "https://www.googleapis.com/auth/userinfo.profile",
+}
+
+// absent : Which recorded scopes Google does not actually allow.
+//
+// One direction only. Google allowing more than was written down is
+// harmless and usually just an alias; allowing less is the fault worth
+// hearing about, because a tool will then fail on a permission the
+// record says it has.
+func absent(live, recorded []string) []string {
+	allowed := map[string]bool{}
+	for _, s := range live {
+		allowed[s] = true
+		if full, ok := aliases[s]; ok {
+			allowed[full] = true
+		}
+	}
+
+	var missing []string
+	for _, s := range recorded {
+		if !allowed[s] {
+			missing = append(missing, s)
+		}
+	}
+	return missing
+}
+
+// liveScopes : What Google says an access token is allowed to do.
+func liveScopes(ctx context.Context, access string) ([]string, error) {
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet,
+		"https://oauth2.googleapis.com/tokeninfo?access_token="+url.QueryEscape(access), nil)
+	if err != nil {
+		return nil, err
+	}
+	resp, err := http.DefaultClient.Do(req)
+	if err != nil {
+		return nil, err
+	}
+	defer resp.Body.Close()
+
+	var said struct {
+		Scope string `json:"scope"`
+	}
+	if err := json.NewDecoder(resp.Body).Decode(&said); err != nil {
+		return nil, err
+	}
+	return strings.Fields(said.Scope), nil
+}
 
 // runGoogleCheck : Says whether the Google connection still works, and
 // proves it rather than reporting what was last written down.
@@ -87,5 +147,21 @@ func runGoogleCheck(username string) error {
 	}
 	fmt.Printf("\nthe connection works: got an access token of %d characters, good until %s\n",
 		len(token.AccessToken), token.Expiry.Local().Format(time.RFC1123))
+
+	// What Google says the token is actually good for, which is not
+	// always what was written down: the scope list in a token response
+	// can be shorter than what was granted, and a stored list that
+	// disagrees with reality sends somebody to reconnect something
+	// that works, or lets a tool call something it cannot.
+	live, err := liveScopes(ctx, token.AccessToken)
+	if err != nil {
+		fmt.Printf("could not ask Google what it allows: %v\n", err)
+		return nil
+	}
+	fmt.Printf("\nGoogle says the token allows:\n  %s\n", strings.Join(live, "\n  "))
+	if missing := absent(live, account.Scopes); len(missing) > 0 {
+		fmt.Printf("\nrecorded here but not allowed by Google:\n  %s\n",
+			strings.Join(missing, "\n  "))
+	}
 	return nil
 }

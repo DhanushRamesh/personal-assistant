@@ -754,6 +754,44 @@ asked how long ago it was.
 Consecutive assistant messages are already merged by `ForModel`, so an
 aside beside an answer raises no alternation problem.
 
+## The calendar
+
+Two scopes, both non-sensitive, and the division between them is the
+whole shape of the package. `calendar.app.created` gives a calendar of
+its own and complete control of that one; `calendar.freebusy` says when
+the person is busy across every calendar, without saying what they are
+busy with.
+
+So it can write, but only where it cannot disturb anything, and it can
+see that four o'clock is taken without seeing whose meeting it is.
+Confirmed non-sensitive in the console on 27 September 2026, which is
+why they were chosen: no verification, no published privacy policy, and
+no seven-day refresh token. `calendar.events` and `calendar.readonly`
+are sensitive and bring all three back at once.
+
+**The calendar's identifier is remembered, not discovered.** The
+permission that makes this safe is also what stops it looking:
+`CalendarList.list` returns 403 under `app.created`. There is no way to
+ask Google which calendar is mine. The first version listed them and
+failed on the first real call; `google_accounts.calendar_id` holds it
+now, written down before the calendar is used, because made-and-not-
+recorded means a second one next time and a person with five calendars
+called Jarvis.
+
+A calendar deleted by hand shows up as a 404 when next used, and
+another is made in its place.
+
+**`calendar_list` never reports an empty day.** It sees only what the
+assistant put there, so the tool says that nothing was written down
+here and points at `calendar_free` for whether the person is actually
+busy. **`calendar_free` never says what they are doing**, because that
+is not knowable with these scopes and a model left to guess will
+furnish a meeting.
+
+There is no tool for changing the person's real events. There is no
+permission for one, and offering it would have the model promising what
+it cannot do.
+
 ## Reaching Google
 
 One OAuth client for every Google API. What may be done with it is

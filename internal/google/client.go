@@ -164,6 +164,27 @@ func (l *Link) Account(ctx context.Context, userID string) (*Account, error) {
 	return l.store.Get(ctx, userID)
 }
 
+// Calendar : Which calendar the assistant made for itself, empty until
+// it has made one.
+//
+// Passed through from the store rather than held here, because it
+// belongs to the connection: revoke the permission and the identifier
+// is worth nothing.
+func (l *Link) Calendar(ctx context.Context, userID string) (string, error) {
+	if l == nil {
+		return "", ErrNotConfigured
+	}
+	return l.store.Calendar(ctx, userID)
+}
+
+// SetCalendar : Records which calendar the assistant made.
+func (l *Link) SetCalendar(ctx context.Context, userID, calendarID string) error {
+	if l == nil {
+		return ErrNotConfigured
+	}
+	return l.store.SetCalendar(ctx, userID, calendarID)
+}
+
 // Disconnect : Forgets the permission.
 //
 // Only here. Telling Google to revoke it as well would be tidier, but a
