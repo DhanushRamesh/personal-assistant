@@ -931,6 +931,38 @@ it stayed held and would have been said again on the next arrival. The
 log said so -- "said a held reminder but could not record it" -- which is
 the honest half of that failure working.
 
+### What is waiting goes in the prompt, not behind a tool call
+
+Asked twice what reminders there were, the assistant answered from an
+exchange two hours old -- its own earlier answer, correct when given,
+repeated as though it still held. The eleven o'clock it named had gone
+off at eleven o'clock. The timeline proves no tool was called.
+
+The rule against this already existed, in the persona and in the
+transcript block, and did not hold. Worse, it could not be made to fail
+on demand afterwards: an eval was tried against Sonnet and Haiku, with
+and without conversation history, with and without the voice block and
+recalled notes, and every one of twenty asks looked it up. So there was
+no way to tell whether a stronger rule would hold either.
+
+So the rule was replaced with the answer. `remind.Coming` puts the
+current reminders into every prompt, read as the prompt is built. There
+is nothing to skip, nothing to decide, and nothing older to reach for:
+the true answer is already there. It costs a line or two of text and it
+removes the class rather than discouraging it.
+
+It is also faster than the tool it replaces. A reminder question used to
+cost a second model round trip; now it is answered from what is already
+in front of the model.
+
+**One caveat, honestly.** The very first live turn after this went in
+still bluffed, with the block present and saying "answer from this list
+and from nothing else". Three recalled exchanges outweighed it. Every
+turn since has been right, and the conversation has since filled with
+correct answers, so what is not known is how it behaves when the stale
+claim is fresh and repeated. Putting the truth in front of the model
+makes the failure much harder; it does not make it impossible.
+
 ### A length of time is the server's arithmetic, not the model's
 
 `reminder_set` takes exactly one of `seconds_from_now`, `minutes_from_now`

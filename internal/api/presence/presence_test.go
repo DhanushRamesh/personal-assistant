@@ -235,18 +235,3 @@ func TestTheGreetingVaries(t *testing.T) {
 		t.Errorf("twenty arrivals produced one greeting: %v", seen)
 	}
 }
-
-// "Welcome back" said to somebody who has not moved reads as a claim
-// that they went away. It belongs to a long absence, not to the clock.
-func TestTheClockNeverSaysWelcomeBack(t *testing.T) {
-	india := time.FixedZone("IST", 5*3600+1800)
-	for hour := 0; hour < 24; hour++ {
-		at := time.Date(2026, 9, 27, hour, 30, 0, 0, india)
-		h := presence.New(discard(), nil, nil, india, func() time.Time { return at })
-		for i := 0; i < 8; i++ {
-			if got := h.Greeting(); strings.Contains(got, "Welcome back") {
-				t.Errorf("at %02d:30 it said %q", hour, got)
-			}
-		}
-	}
-}

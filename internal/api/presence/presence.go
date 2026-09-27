@@ -222,16 +222,14 @@ func (h *Handler) neverSaid(ctx context.Context, user string) []remind.Reminder 
 // same sentence every morning for ever, and a greeting somebody can
 // recite along with is not a greeting.
 //
-// "Welcome back" appears nowhere here. It used to be the small hours
-// and the late evening, and it reads as "you have returned" when all it
-// meant was "it is late" -- said to somebody who had not moved. If it
-// comes back it belongs to a long absence, which is a fact about them
-// rather than about the clock.
+// "Welcome back" is in every band rather than tied to the hour. It used
+// to be the small hours and the late evening only, which made it mean
+// "it is late" while sounding like "you have returned".
 var greetings = map[string][]string{
-	"night":     {"Hello, sir.", "Good evening, sir.", "Still up, sir."},
-	"morning":   {"Good morning, sir.", "Morning, sir."},
-	"afternoon": {"Good afternoon, sir.", "Afternoon, sir."},
-	"evening":   {"Good evening, sir.", "Evening, sir."},
+	"night":     {"Hello, sir.", "Welcome back, sir.", "Still up, sir."},
+	"morning":   {"Good morning, sir.", "Morning, sir.", "Welcome back, sir."},
+	"afternoon": {"Good afternoon, sir.", "Afternoon, sir.", "Welcome back, sir."},
+	"evening":   {"Good evening, sir.", "Evening, sir.", "Welcome back, sir."},
 }
 
 // band : Which set the hour falls in, in the person's own zone.

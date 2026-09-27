@@ -109,6 +109,9 @@ type Options struct {
 	// nowhere anybody lives but is at least a real time.
 	Now func() time.Time
 
+	// Waiting : What reminders exist right now, read every turn so the
+	// answer cannot come from an older one.
+	Waiting *remind.Waiting
 	// Recently : Reminders just said aloud, so that "that" means one.
 	Recently *remind.Recently
 	// Missing : Reminders that were never said, to be brought up once.
@@ -134,6 +137,7 @@ type Runner struct {
 	tools           *tool.Registry
 	memory          *memory.Recall
 	now             func() time.Time
+	waiting         *remind.Waiting
 	recently        *remind.Recently
 	missing         *remind.Missing
 
@@ -204,6 +208,7 @@ func New(opts Options) (*Runner, error) {
 		tools:           opts.Tools,
 		memory:          opts.Memory,
 		now:             opts.Now,
+		waiting:         opts.Waiting,
 		recently:        opts.Recently,
 		missing:         opts.Missing,
 		slots:           make(chan struct{}, opts.MaxConcurrent),
@@ -353,6 +358,7 @@ func (r *Runner) promptFor(ctx context.Context, t *chat.Chat) (string, []remind.
 		r.recalled(ctx, userID, t.Prompt, &note),
 		r.quoted(ctx, userID, t.Prompt, t.ConversationID, &note),
 		r.justSaid(ctx, userID),
+		r.coming(ctx, userID),
 		unsaid)
 
 	note.TookMS = time.Since(started).Milliseconds()
@@ -444,6 +450,24 @@ func (r *Runner) missed(ctx context.Context, userID string) (string, []remind.Re
 		return "", nil
 	}
 	return block, covered
+}
+
+// coming : What reminders exist, as of this turn.
+//
+// Read every turn rather than when a question looks like it is about
+// reminders, because deciding that is the part that goes wrong. It is a
+// line or two of text and it removes a whole class of untruth.
+func (r *Runner) coming(ctx context.Context, userID string) string {
+	if r.waiting == nil || userID == "" {
+		return ""
+	}
+
+	block, err := r.waiting.Block(ctx, userID)
+	if err != nil {
+		r.logger.WarnContext(ctx, "cannot read what is waiting", slog.Any("error", err))
+		return ""
+	}
+	return block
 }
 
 // justSaid : What was spoken aloud in the last few minutes, if anything.

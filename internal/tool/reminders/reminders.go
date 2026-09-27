@@ -508,10 +508,16 @@ func set(store remind.Store, clock Clock) tool.Tool {
 // list : What is waiting to be said.
 func list(store remind.Store, clock Clock) tool.Tool {
 	return tool.Tool{
-		Name:     "reminder_list",
-		Purpose:  "List what is waiting to be said, soonest first, with their identifiers.",
-		UseWhen:  "The person asks what reminders or timers they have, or you need an identifier in order to cancel one.",
-		Avoid:    "Do not call it twice in one turn: nothing changes while you are answering.",
+		Name:    "reminder_list",
+		Purpose: "List what is waiting to be said, soonest first, with their identifiers.",
+		UseWhen: "Any question about what reminders or timers exist, without exception: what they have, " +
+			"what is left, whether anything is coming, what is set for a particular day. Also when you " +
+			"need an identifier in order to cancel or put one off.",
+		Avoid: "Never answer from the conversation or from a quoted exchange. Your own earlier answer about " +
+			"reminders was true when you gave it and is not evidence of anything now: the ones it named " +
+			"have since gone off, been put off or been called off. There is no question about what is " +
+			"waiting that you may answer without calling this first. Do not call it twice in one turn, " +
+			"though: nothing changes while you are answering.",
 		Channels: []chat.Channel{chat.ChannelVoice, chat.ChannelDirect},
 		Params: tool.Schema{
 			Properties: map[string]tool.Property{
