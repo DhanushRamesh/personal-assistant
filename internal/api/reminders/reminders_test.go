@@ -358,8 +358,25 @@ func TestWhatHappenedIsOnlyShownWhenAsked(t *testing.T) {
 	if got := listed(t, e, "/v1/reminders"); len(got.Reminders) != 0 {
 		t.Errorf("got %v, want nothing by default", got.Reminders)
 	}
-	got := listed(t, e, "/v1/reminders?all=true")
+	got := listed(t, e, "/v1/reminders?past=true")
 	if len(got.Reminders) != 1 || got.Reminders[0].Status != "done" {
 		t.Errorf("got %v, want the finished one", got.Reminders)
+	}
+}
+
+// A cancelled one was never received. Listing it among things that
+// happened says it happened, so past leaves it out and all does not.
+func TestACancelledOneIsNotAPastReminder(t *testing.T) {
+	e, store := env(t)
+	r := put(t, e, store, "Called off", time.Now().UTC().Add(time.Hour))
+	if err := store.Cancel(t.Context(), e.User.ID, r.ID); err != nil {
+		t.Fatalf("Cancel: %v", err)
+	}
+
+	if got := listed(t, e, "/v1/reminders?past=true"); len(got.Reminders) != 0 {
+		t.Errorf("got %v, want nothing: it never reached anybody", got.Reminders)
+	}
+	if got := listed(t, e, "/v1/reminders?all=true"); len(got.Reminders) != 1 {
+		t.Errorf("got %v, want it under the whole record", got.Reminders)
 	}
 }

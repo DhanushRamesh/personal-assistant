@@ -79,9 +79,13 @@ func (h *Handler) Mount(r chi.Router) {
 // had ever existed. Held ones for the same reason -- they are waiting,
 // they just cannot be said until somebody is there to hear them.
 //
-// What already happened is left out unless asked for with all=true. It
-// is a log, and a screen that opens on a log buries the two things
-// actually coming.
+// What already happened is left out unless asked for. past=true adds
+// the ones that were said, which is what a past reminder is: one that
+// reached somebody. all=true adds cancelled ones as well, for anything
+// that wants the whole record.
+//
+// Either way it is asked for rather than shown, because a screen that
+// opens on a log buries the two things actually coming.
 func (h *Handler) List(w http.ResponseWriter, r *http.Request) {
 	ctx := r.Context()
 	if h.store == nil {
@@ -93,8 +97,16 @@ func (h *Handler) List(w http.ResponseWriter, r *http.Request) {
 	// out made a reminder kept back while somebody was out of the room
 	// vanish from the one screen that lists them.
 	states := []remind.Status{remind.Pending, remind.Held, remind.Missed}
-	if r.URL.Query().Get("all") == "true" {
+	switch q := r.URL.Query(); {
+	case q.Get("all") == "true":
+		// Everything there has ever been, cancelled ones included.
 		states = nil
+	case q.Get("past") == "true":
+		// The ones that were actually said, which is what somebody
+		// means by a past reminder: one they got. A cancelled one was
+		// never received, it stopped existing, and listing it among
+		// things that happened says it happened.
+		states = append(states, remind.Done)
 	}
 
 	found, err := h.store.List(ctx, authn.Of(ctx).User.ID, states...)

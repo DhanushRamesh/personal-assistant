@@ -447,11 +447,11 @@ class AppState extends ChangeNotifier {
     notifyListeners();
   }
 
-  /// _showPast : Whether the reminders list includes what already
-  /// happened.
+  /// _showPast : Whether the reminders list includes the ones already
+  /// said.
   bool _showPast = false;
 
-  /// showPast : Whether finished and cancelled reminders are showing.
+  /// showPast : Whether reminders that were already said are showing.
   bool get showPast => _showPast;
 
   /// togglePast : Shows or hides what has already happened, and reads
@@ -464,13 +464,13 @@ class AppState extends ChangeNotifier {
   /// loadReminders : Reads what is waiting to be said, for the settings
   /// screen.
   ///
-  /// What is coming, plus anything held back or never said. What already
-  /// happened only when asked for: it is a log, and a screen that opens
-  /// on a log buries the two things actually coming.
+  /// What is coming, plus anything held back or never said. The ones
+  /// already said only when asked for: it is a log, and a screen that
+  /// opens on a log buries the two things actually coming.
   Future<void> loadReminders() async {
     _set(busy: true, error: null);
     try {
-      _reminders = await api.listReminders(all: _showPast);
+      _reminders = await api.listReminders(past: _showPast);
     } on Object catch (e) {
       _error = _explain(e);
     }

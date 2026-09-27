@@ -783,9 +783,15 @@ the way it actually happened.
 ### The reminders screen shows what is coming, and what happened if asked
 
 `GET /v1/reminders` lists what is pending, what is held and what was
-missed. `?all=true` adds what already happened, which the screen asks
-for behind a Show past link, off by default: a screen that opens on a
-log buries the two or three things actually coming.
+missed. `?past=true` adds the ones that were said, which the screen
+asks for behind a Show past link, off by default: a screen that opens
+on a log buries the two or three things actually coming.
+
+A past reminder is one that reached somebody. A cancelled one never
+did -- it stopped existing before its time -- and listing it among
+things that happened says it happened. So `past` leaves them out.
+`all=true` is still there for the whole record, and nothing on the
+screen asks for it.
 
 Held was left out of that list when holding was added, which made a
 reminder kept back because nobody was in the room invisible -- not

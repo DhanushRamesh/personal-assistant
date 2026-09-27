@@ -465,8 +465,8 @@ class _RemindersModule extends StatelessWidget {
         'Everything waiting to be said, soonest first, anything kept back '
         'until you were in the room, and anything that was never said at all. '
         'These are spoken through the voice satellite when their time comes, '
-        'whether or not anything is open here. Show past adds the ones that '
-        'have already happened.',
+        'whether or not anything is open here. Show past adds the ones you '
+        'have already been told.',
     action: Row(
       mainAxisSize: MainAxisSize.min,
       children: [
@@ -481,8 +481,8 @@ class _RemindersModule extends StatelessWidget {
     child: state.reminders.isEmpty
         ? Text(
             state.showPast
-                ? 'Nothing at all, past or present. Ask for a timer or a '
-                      'reminder and it appears here.'
+                ? 'Nothing waiting, and nothing has been said yet. Ask for a '
+                      'timer or a reminder and it appears here.'
                 : 'Nothing waiting. Ask for a timer or a reminder and it '
                       'appears here.',
             style: context.text.caption.copyWith(

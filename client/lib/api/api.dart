@@ -343,10 +343,12 @@ class AssistantApi {
 
   /// listReminders : What is waiting to be said, soonest first.
   ///
-  /// Only what is still coming unless all is true. Everything that ever
-  /// fired is a log, and nobody opens a settings screen for one.
-  Future<List<Reminder>> listReminders({bool all = false}) async => parseList(
-    await _send('GET', '/v1/reminders', query: {if (all) 'all': 'true'}),
+  /// What is coming, plus anything held back or never said. past adds
+  /// the ones that were actually said, which is what somebody means by a
+  /// past reminder: one that reached them. A cancelled one never did, so
+  /// it is not in there.
+  Future<List<Reminder>> listReminders({bool past = false}) async => parseList(
+    await _send('GET', '/v1/reminders', query: {if (past) 'past': 'true'}),
     'reminders',
     Reminder.fromJson,
   );
