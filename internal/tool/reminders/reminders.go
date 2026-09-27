@@ -418,8 +418,24 @@ func set(store remind.Store, clock Clock) tool.Tool {
 					Description: "A few words naming it, for a listing and for cancelling it later. Not what gets said.",
 				},
 				"say": {
-					Type:        "string",
-					Description: "Exactly what should be spoken when the time comes, as a whole sentence. It is read out with nothing around it, so make it make sense on its own.",
+					Type: "string",
+					Description: "What is actually spoken when the time comes, read out with nothing " +
+						"around it. Write what you would say to them, not what they said to you: " +
+						"\"wish me good morning at nine\" becomes \"Good morning, sir. I hope the day " +
+						"goes well\", not \"Good morning\". Address them, make it a whole sentence or " +
+						"two, and make it worth hearing -- somebody asked for this and will hear it " +
+						"every day. Say nothing in it that you cannot know when it goes off: not how " +
+						"they slept, not what the weather is, not whether they did the thing.",
+				},
+				"say_if_late": {
+					Type: "string",
+					Description: "The same thing in the past tense, for when it is heard after the " +
+						"moment has gone -- because somebody was out of the room, or the speaker " +
+						"could not be reached. \"Time to take your tablets, sir\" becomes \"You " +
+						"should have taken your tablets\". Leave the time out of it entirely: the " +
+						"hour is added when it is spoken, from the clock, so anything you write " +
+						"here would be a guess. Leave the whole thing out for something no later " +
+						"hearing makes sense of, such as a timer.",
 				},
 				"seconds_from_now": {
 					Type:    "integer",
@@ -453,14 +469,17 @@ func set(store remind.Store, clock Clock) tool.Tool {
 			{Ask: "set a timer for thirty seconds",
 				Args: `{"title":"Timer","say":"Your thirty second timer has finished.","seconds_from_now":30}`},
 			{Ask: "remind me to call the roofer at half past four",
-				Args: `{"title":"Call the roofer","say":"Time to call the roofer.","at":"2026-09-26 16:30"}`},
+				Args: `{"title":"Call the roofer","say":"Time to call the roofer, sir.",` +
+					`"say_if_late":"You should have called the roofer","at":"2026-09-26 16:30"}`},
 			{Ask: "wake me at seven every weekday",
-				Args: `{"title":"Wake up","say":"It is seven o'clock.","at":"2026-09-28 07:00","repeats":"weekdays"}`},
+				Args: `{"title":"Wake up","say":"Good morning, sir. It is seven o'clock.",` +
+					`"at":"2026-09-28 07:00","repeats":"weekdays"}`},
 		},
 		Run: func(ctx context.Context, in tool.Invocation) tool.Result {
 			var args struct {
 				Title   string `json:"title"`
 				Say     string `json:"say"`
+				Late    string `json:"say_if_late"`
 				Seconds int    `json:"seconds_from_now"`
 				Minutes int    `json:"minutes_from_now"`
 				At      string `json:"at"`
@@ -489,8 +508,8 @@ func set(store remind.Store, clock Clock) tool.Tool {
 				return tool.Failed("This did not come from a known device, so it cannot be tied to one. Set it without a scope.")
 			}
 
-			r, err := remind.New(in.Caller.UserID, in.Caller.ClientID, scope,
-				args.Title, args.Say, due, remind.Repeat(args.Repeats))
+			r, err := remind.NewLate(in.Caller.UserID, in.Caller.ClientID, scope,
+				args.Title, args.Say, args.Late, due, remind.Repeat(args.Repeats))
 			if err != nil {
 				return tool.Failed(err.Error())
 			}

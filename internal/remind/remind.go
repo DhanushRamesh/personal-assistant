@@ -125,6 +125,13 @@ type Reminder struct {
 	Title string
 	// Body : What is actually said.
 	Body string
+	// SaidLate : The same thing in the past tense, for when it is heard
+	// after the moment has gone. Empty falls back to prefixing Body.
+	//
+	// Written by whoever set the reminder, because it is grammar and the
+	// server cannot conjugate. The hour in it is not: that is put in at
+	// the time, from the clock.
+	SaidLate string
 	// DueAt : When it is next to be said, in UTC.
 	DueAt time.Time
 	// Repeats : How often it comes back. Once for a one-shot.
@@ -216,6 +223,8 @@ func (r *Reminder) Valid() error {
 		return ErrTitleTooLong
 	case utf8.RuneCountInString(r.Body) > MaxBody:
 		return ErrBodyTooLong
+	case utf8.RuneCountInString(r.SaidLate) > MaxBody:
+		return ErrBodyTooLong
 	case r.DueAt.IsZero():
 		return ErrNoTime
 	case !r.Repeats.Valid():
@@ -241,6 +250,12 @@ func ValidID(id string) bool {
 
 // New : A reminder ready to be stored, or why it cannot be.
 func New(userID, clientID string, scope Scope, title, body string, dueAt time.Time, repeats Repeat) (*Reminder, error) {
+	return NewLate(userID, clientID, scope, title, body, "", dueAt, repeats)
+}
+
+// NewLate : A reminder that also knows how to say itself in the past.
+func NewLate(userID, clientID string, scope Scope, title, body, late string,
+	dueAt time.Time, repeats Repeat) (*Reminder, error) {
 	at := now()
 	if scope != ScopeClient {
 		clientID = ""
@@ -253,6 +268,7 @@ func New(userID, clientID string, scope Scope, title, body string, dueAt time.Ti
 		Scope:     scope,
 		Title:     strings.TrimSpace(title),
 		Body:      strings.TrimSpace(body),
+		SaidLate:  strings.TrimSpace(late),
 		DueAt:     dueAt.UTC(),
 		Repeats:   repeats,
 		Status:    Pending,

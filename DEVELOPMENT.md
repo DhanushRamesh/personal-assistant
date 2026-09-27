@@ -963,6 +963,38 @@ correct answers, so what is not known is how it behaves when the stale
 claim is fresh and repeated. Putting the truth in front of the model
 makes the failure much harder; it does not make it impossible.
 
+### A late reminder is said in the past tense
+
+"Time to take your tablets" heard at noon sounds like now. Held and
+missed reminders are both heard after the moment has gone, so they need
+different words, and the words have to be in the past.
+
+The work is split by what each side can do. The **model** writes the
+past form when the reminder is set -- `say_if_late`, "You should have
+taken your tablets" -- because that is grammar and the server cannot
+conjugate. The **server** puts the hour in when it speaks, because that
+is arithmetic and arithmetic is not the model's to get wrong. Out comes
+"You should have taken your tablets at 10:00 am, sir."
+
+The model is told to leave the time out of `say_if_late` entirely.
+Anything it wrote there would be a guess: when a reminder is set nobody
+knows how late it will be heard, or whether it will be late at all.
+
+The alternative was rephrasing at delivery, with a model call when a
+late one is spoken. It would read better still -- only then is the
+actual delay known, so it could say "two hours ago" -- and it was not
+taken. Every attempt that night at letting the model phrase something
+warm produced a claim that was not true: "the coffee is on", "it has
+been in my head". A reminder is the wrong place to risk that, and a
+model call at delivery is also a thing that can fail at the moment it
+is needed.
+
+Reminders made before this have no past form, and neither does one the
+model leaves out. Those fall back to the hour in front of the body:
+"You should have heard this at 10:00 am, sir. Time to take your
+tablets." Said first, because otherwise the words arrive sounding like
+now.
+
 ### A length of time is the server's arithmetic, not the model's
 
 `reminder_set` takes exactly one of `seconds_from_now`, `minutes_from_now`

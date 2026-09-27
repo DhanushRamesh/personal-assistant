@@ -316,10 +316,16 @@ func TestALateReminderSaysSo(t *testing.T) {
 		remind.Reminder{Title: "Call", Body: "Time to call the roofer.", DueAt: due},
 		due.Add(45*time.Minute), india)
 
-	for _, want := range []string{"This is late", "10:00 am", "Time to call the roofer."} {
+	for _, want := range []string{"should have heard this", "10:00 am", "Time to call the roofer."} {
 		if !strings.Contains(got, want) {
 			t.Errorf("Spoken is missing %q:\n%s", want, got)
 		}
+	}
+	// The lateness comes first. "Time to call the roofer" heard at a
+	// quarter to eleven sounds like now unless something says otherwise
+	// before the words arrive.
+	if strings.Index(got, "10:00 am") > strings.Index(got, "Time to call") {
+		t.Errorf("the time it was due comes after the reminder itself:\n%s", got)
 	}
 }
 
@@ -498,5 +504,53 @@ func TestARecentlyHeldReminderIsLeftAlone(t *testing.T) {
 	}
 	if len(waiting) != 1 {
 		t.Errorf("Waiting = %v, want it still held", waiting)
+	}
+}
+
+// The past-tense wording, with the hour put in by the server. The
+// grammar is the model's, written when the reminder was set; the time
+// is arithmetic and arithmetic is not the model's to get wrong.
+func TestALateReminderUsesThePastTenseWording(t *testing.T) {
+	due := at(2026, 9, 26, 10, 0)
+	got := remind.Spoken(remind.Reminder{
+		Title:    "Tablets",
+		Body:     "Time to take your tablets, sir.",
+		SaidLate: "You should have taken your tablets.",
+		DueAt:    due,
+	}, due.Add(2*time.Hour), india)
+
+	want := "You should have taken your tablets at 10:00 am, sir."
+	if got != want {
+		t.Errorf("Spoken = %q, want %q", got, want)
+	}
+}
+
+// On time it says the ordinary thing, whatever past form was written.
+func TestThePastTenseWordingIsOnlyUsedWhenLate(t *testing.T) {
+	due := at(2026, 9, 26, 10, 0)
+	got := remind.Spoken(remind.Reminder{
+		Body:     "Time to take your tablets, sir.",
+		SaidLate: "You should have taken your tablets.",
+		DueAt:    due,
+	}, due, india)
+
+	if got != "Time to take your tablets, sir." {
+		t.Errorf("Spoken = %q, want the ordinary wording", got)
+	}
+}
+
+// Nothing written falls back to the hour in front of the body, which is
+// what every reminder made before this has.
+func TestWithoutAPastTenseWordingItFallsBack(t *testing.T) {
+	due := at(2026, 9, 26, 10, 0)
+	got := remind.Spoken(remind.Reminder{
+		Body:  "Time to take your tablets, sir.",
+		DueAt: due,
+	}, due.Add(2*time.Hour), india)
+
+	for _, want := range []string{"should have heard this", "10:00 am", "Time to take your tablets"} {
+		if !strings.Contains(got, want) {
+			t.Errorf("Spoken = %q, missing %q", got, want)
+		}
 	}
 }

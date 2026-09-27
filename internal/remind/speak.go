@@ -115,7 +115,27 @@ func Spoken(r Reminder, at time.Time, loc *time.Location) string {
 	if at.Sub(r.DueAt) <= LateBy {
 		return body
 	}
-	return "This is late. It was due at " + due(r.DueAt, at, loc) + ". " + body
+
+	// The past-tense wording, with the hour put in here. The grammar is
+	// the model's, written when the reminder was set; the time is the
+	// server's, because it is arithmetic and arithmetic is not the
+	// model's to get wrong.
+	if late := strings.TrimSpace(r.SaidLate); late != "" {
+		return join(late, "at "+due(r.DueAt, at, loc)+", sir.")
+	}
+
+	// Nothing was written, so the body goes as it is with the hour in
+	// front. Said first, because "take your tablets" heard at noon
+	// sounds like now unless something says otherwise before the words.
+	return "You should have heard this at " + due(r.DueAt, at, loc) + ", sir. " + body
+}
+
+// join : A sentence and the phrase that finishes it, without doubling
+// the full stop the model almost certainly left on the end.
+func join(said, tail string) string {
+	said = strings.TrimSpace(said)
+	said = strings.TrimRight(said, ".!? ")
+	return said + " " + tail
 }
 
 // due : When a late reminder was due, as it would be said.

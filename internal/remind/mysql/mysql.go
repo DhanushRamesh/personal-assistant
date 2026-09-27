@@ -25,6 +25,7 @@ type row struct {
 	Scope       string     `gorm:"column:scope"`
 	Title       string     `gorm:"column:title"`
 	Body        string     `gorm:"column:body"`
+	SaidLate    *string    `gorm:"column:said_late"`
 	DueAt       time.Time  `gorm:"column:due_at"`
 	Repeats     *string    `gorm:"column:repeats"`
 	Status      string     `gorm:"column:status"`
@@ -47,6 +48,7 @@ func (r *row) toReminder() remind.Reminder {
 		Scope:     remind.Scope(r.Scope),
 		Title:     r.Title,
 		Body:      r.Body,
+		SaidLate:  value(r.SaidLate),
 		DueAt:     r.DueAt.UTC(),
 		Repeats:   remind.Repeat(value(r.Repeats)),
 		Status:    remind.Status(r.Status),
@@ -74,6 +76,7 @@ func toRow(r *remind.Reminder) *row {
 		Scope:       string(r.Scope),
 		Title:       r.Title,
 		Body:        r.Body,
+		SaidLate:    nullable(r.SaidLate),
 		DueAt:       r.DueAt.UTC(),
 		Repeats:     nullable(string(r.Repeats)),
 		Status:      string(r.Status),
