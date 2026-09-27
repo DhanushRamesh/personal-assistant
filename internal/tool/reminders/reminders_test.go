@@ -74,7 +74,7 @@ func TestMinutesAreCountedHere(t *testing.T) {
 	r, store := harness(t)
 
 	got := call(t, r, "reminder_set",
-		`{"title":"Timer","say":"Your twenty minute timer has finished.","minutes_from_now":20}`)
+		`{"title":"Timer","say":"Your twenty minute timer has finished.","say_if_late":"You should have done it","minutes_from_now":20}`)
 	if got.Outcome != conversation.OutcomeOK {
 		t.Fatalf("outcome = %s: %s", got.Outcome, got.Content)
 	}
@@ -93,7 +93,7 @@ func TestAWrittenTimeIsLocal(t *testing.T) {
 	r, store := harness(t)
 
 	got := call(t, r, "reminder_set",
-		`{"title":"Call","say":"Time to call the roofer.","at":"2026-09-26 16:30"}`)
+		`{"title":"Call","say":"Time to call the roofer.","say_if_late":"You should have done it","at":"2026-09-26 16:30"}`)
 	if got.Outcome != conversation.OutcomeOK {
 		t.Fatalf("outcome = %s: %s", got.Outcome, got.Content)
 	}
@@ -112,7 +112,7 @@ func TestSeveralSpellingsOfATimeWork(t *testing.T) {
 		"2026-09-26T16:30:00", "2026-09-26T16:30:00+05:30",
 	} {
 		r, store := harness(t)
-		got := call(t, r, "reminder_set", `{"title":"Call","say":"Call them.","at":"`+written+`"}`)
+		got := call(t, r, "reminder_set", `{"title":"Call","say":"Call them.","say_if_late":"You should have done it","at":"`+written+`"}`)
 		if got.Outcome != conversation.OutcomeOK {
 			t.Errorf("%q was refused: %s", written, got.Content)
 			continue
@@ -130,7 +130,7 @@ func TestBothWaysOfSayingWhenIsRefused(t *testing.T) {
 	r, _ := harness(t)
 
 	got := call(t, r, "reminder_set",
-		`{"title":"Timer","say":"Up.","minutes_from_now":20,"at":"2026-09-26 16:30"}`)
+		`{"title":"Timer","say":"Up.","say_if_late":"You should have done it","minutes_from_now":20,"at":"2026-09-26 16:30"}`)
 	if got.Outcome != conversation.OutcomeFailed {
 		t.Errorf("outcome = %s, want it refused", got.Outcome)
 	}
@@ -143,7 +143,7 @@ func TestBothWaysOfSayingWhenIsRefused(t *testing.T) {
 func TestNoTimeAtAllIsRefused(t *testing.T) {
 	r, _ := harness(t)
 
-	if got := call(t, r, "reminder_set", `{"title":"Timer","say":"Up."}`); got.Outcome != conversation.OutcomeFailed {
+	if got := call(t, r, "reminder_set", `{"title":"Timer","say":"Up.","say_if_late":"You should have done it"}`); got.Outcome != conversation.OutcomeFailed {
 		t.Errorf("outcome = %s, want it refused", got.Outcome)
 	}
 }
@@ -153,7 +153,7 @@ func TestNoTimeAtAllIsRefused(t *testing.T) {
 func TestATimeInThePastIsRefused(t *testing.T) {
 	r, _ := harness(t)
 
-	got := call(t, r, "reminder_set", `{"title":"Call","say":"Call them.","at":"2026-09-26 09:00"}`)
+	got := call(t, r, "reminder_set", `{"title":"Call","say":"Call them.","say_if_late":"You should have done it","at":"2026-09-26 09:00"}`)
 	if got.Outcome != conversation.OutcomeFailed {
 		t.Fatalf("outcome = %s, want it refused", got.Outcome)
 	}
@@ -167,7 +167,7 @@ func TestATimeInThePastIsRefused(t *testing.T) {
 func TestAMomentJustGoneIsAccepted(t *testing.T) {
 	r, _ := harness(t)
 
-	got := call(t, r, "reminder_set", `{"title":"Now","say":"Now.","at":"2026-09-26 11:59"}`)
+	got := call(t, r, "reminder_set", `{"title":"Now","say":"Now.","say_if_late":"You should have done it","at":"2026-09-26 11:59"}`)
 	if got.Outcome != conversation.OutcomeOK {
 		t.Errorf("a minute ago was refused: %s", got.Content)
 	}
@@ -178,7 +178,7 @@ func TestARepeatIsKept(t *testing.T) {
 	r, store := harness(t)
 
 	call(t, r, "reminder_set",
-		`{"title":"Wake","say":"It is seven o'clock.","at":"2026-09-28 07:00","repeats":"weekdays"}`)
+		`{"title":"Wake","say":"It is seven o'clock.","say_if_late":"You should have done it","at":"2026-09-28 07:00","repeats":"weekdays"}`)
 
 	all, _ := store.List(context.Background(), user, remind.Pending)
 	if len(all) != 1 || all[0].Repeats != remind.Weekdays {
@@ -192,7 +192,7 @@ func TestAnUnknownRepeatIsRefused(t *testing.T) {
 	r, store := harness(t)
 
 	got := call(t, r, "reminder_set",
-		`{"title":"Wake","say":"Up.","minutes_from_now":20,"repeats":"hourly"}`)
+		`{"title":"Wake","say":"Up.","say_if_late":"You should have done it","minutes_from_now":20,"repeats":"hourly"}`)
 	if got.Outcome != conversation.OutcomeFailed {
 		t.Errorf("outcome = %s, want it refused", got.Outcome)
 	}
@@ -206,7 +206,7 @@ func TestAnUnknownRepeatIsRefused(t *testing.T) {
 func TestTheDefaultScopeFollowsThePerson(t *testing.T) {
 	r, store := harness(t)
 
-	call(t, r, "reminder_set", `{"title":"Timer","say":"Up.","minutes_from_now":20}`)
+	call(t, r, "reminder_set", `{"title":"Timer","say":"Up.","say_if_late":"You should have done it","minutes_from_now":20}`)
 
 	all, _ := store.List(context.Background(), user, remind.Pending)
 	if all[0].Scope != remind.ScopeUser {
@@ -218,7 +218,7 @@ func TestTheDefaultScopeFollowsThePerson(t *testing.T) {
 func TestItCanBeTiedToTheDevice(t *testing.T) {
 	r, store := harness(t)
 
-	call(t, r, "reminder_set", `{"title":"Timer","say":"Up.","minutes_from_now":20,"scope":"client"}`)
+	call(t, r, "reminder_set", `{"title":"Timer","say":"Up.","say_if_late":"You should have done it","minutes_from_now":20,"scope":"client"}`)
 
 	all, _ := store.List(context.Background(), user, remind.Pending)
 	if all[0].Scope != remind.ScopeClient || all[0].ClientID != client {
@@ -230,7 +230,7 @@ func TestItCanBeTiedToTheDevice(t *testing.T) {
 // identifier a cancel needs.
 func TestTheListingIsUsable(t *testing.T) {
 	r, _ := harness(t)
-	call(t, r, "reminder_set", `{"title":"Timer","say":"Up.","minutes_from_now":20}`)
+	call(t, r, "reminder_set", `{"title":"Timer","say":"Up.","say_if_late":"You should have done it","minutes_from_now":20}`)
 
 	got := call(t, r, "reminder_list", `{}`)
 	if got.Outcome != conversation.OutcomeOK {
@@ -256,7 +256,7 @@ func TestAnEmptyListingSaysSo(t *testing.T) {
 // Cancelling stops it happening.
 func TestCancellingStopsIt(t *testing.T) {
 	r, store := harness(t)
-	call(t, r, "reminder_set", `{"title":"Timer","say":"Up.","minutes_from_now":20}`)
+	call(t, r, "reminder_set", `{"title":"Timer","say":"Up.","say_if_late":"You should have done it","minutes_from_now":20}`)
 	all, _ := store.List(context.Background(), user, remind.Pending)
 
 	got := call(t, r, "reminder_cancel", `{"id":"`+all[0].ID+`"}`)
@@ -286,7 +286,7 @@ func TestCancellingSomethingThatIsNotThere(t *testing.T) {
 // One person's reminder is not reachable by another.
 func TestAnotherPersonCannotCancelIt(t *testing.T) {
 	r, store := harness(t)
-	call(t, r, "reminder_set", `{"title":"Timer","say":"Up.","minutes_from_now":20}`)
+	call(t, r, "reminder_set", `{"title":"Timer","say":"Up.","say_if_late":"You should have done it","minutes_from_now":20}`)
 	all, _ := store.List(context.Background(), user, remind.Pending)
 
 	got := r.Call(context.Background(), "reminder_cancel", tool.Invocation{
@@ -304,7 +304,7 @@ func TestARequestFromNobodyStoresNothing(t *testing.T) {
 
 	got := r.Call(context.Background(), "reminder_set", tool.Invocation{
 		Caller: tool.Caller{Channel: chat.ChannelDirect},
-		Args:   json.RawMessage(`{"title":"Timer","say":"Up.","minutes_from_now":20}`),
+		Args:   json.RawMessage(`{"title":"Timer","say":"Up.","say_if_late":"You should have done it","minutes_from_now":20}`),
 	})
 	if got.Outcome != conversation.OutcomeFailed {
 		t.Errorf("outcome = %s, want a failure", got.Outcome)
@@ -321,7 +321,7 @@ func TestATimerInSecondsWorks(t *testing.T) {
 	r, store := harness(t)
 
 	got := call(t, r, "reminder_set",
-		`{"title":"Timer","say":"Your thirty second timer has finished.","seconds_from_now":30}`)
+		`{"title":"Timer","say":"Your thirty second timer has finished.","say_if_late":"You should have done it","seconds_from_now":30}`)
 	if got.Outcome != conversation.OutcomeOK {
 		t.Fatalf("outcome = %s: %s", got.Outcome, got.Content)
 	}
@@ -337,7 +337,7 @@ func TestATimerInSecondsWorks(t *testing.T) {
 func TestATimerTooShortIsRefused(t *testing.T) {
 	r, _ := harness(t)
 
-	got := call(t, r, "reminder_set", `{"title":"Timer","say":"Up.","seconds_from_now":1}`)
+	got := call(t, r, "reminder_set", `{"title":"Timer","say":"Up.","say_if_late":"You should have done it","seconds_from_now":1}`)
 	if got.Outcome != conversation.OutcomeFailed {
 		t.Errorf("outcome = %s, want it refused", got.Outcome)
 	}
@@ -348,9 +348,9 @@ func TestOnlyOneWayOfSayingWhen(t *testing.T) {
 	r, _ := harness(t)
 
 	for _, args := range []string{
-		`{"title":"T","say":"Up.","seconds_from_now":30,"minutes_from_now":20}`,
-		`{"title":"T","say":"Up.","seconds_from_now":30,"at":"2026-09-26 16:30"}`,
-		`{"title":"T","say":"Up.","minutes_from_now":20,"at":"2026-09-26 16:30"}`,
+		`{"title":"T","say":"Up.","say_if_late":"You should have done it","seconds_from_now":30,"minutes_from_now":20}`,
+		`{"title":"T","say":"Up.","say_if_late":"You should have done it","seconds_from_now":30,"at":"2026-09-26 16:30"}`,
+		`{"title":"T","say":"Up.","say_if_late":"You should have done it","minutes_from_now":20,"at":"2026-09-26 16:30"}`,
 	} {
 		if got := call(t, r, "reminder_set", args); got.Outcome != conversation.OutcomeFailed {
 			t.Errorf("%s was accepted", args)
@@ -676,5 +676,127 @@ func TestAnAbsurdWindowIsRefused(t *testing.T) {
 	}
 	if !strings.Contains(got.Content, "include_finished") {
 		t.Errorf("the refusal does not say what to use instead: %s", got.Content)
+	}
+}
+
+// Renaming, which is what was missing: the assistant could only cancel
+// and set a new one, which loses how often it has gone off and gives it
+// a different identifier.
+func TestAReminderCanBeRenamed(t *testing.T) {
+	r, store := harness(t)
+	existing, err := remind.New(user, "", remind.ScopeUser, "Thing", "Time to do the thing, sir.",
+		noon.Add(time.Hour), remind.Once)
+	if err != nil {
+		t.Fatalf("remind.New: %v", err)
+	}
+	if err := store.Create(context.Background(), existing); err != nil {
+		t.Fatalf("Create: %v", err)
+	}
+
+	got := call(t, r, "reminder_update", `{"id":"`+existing.ID+`","title":"Tablets"}`)
+	if got.Outcome != conversation.OutcomeOK {
+		t.Fatalf("reminder_update: %s", got.Content)
+	}
+
+	after, err := store.Get(context.Background(), user, existing.ID)
+	if err != nil {
+		t.Fatalf("Get: %v", err)
+	}
+	if after.Title != "Tablets" {
+		t.Errorf("title = %q, want Tablets", after.Title)
+	}
+	if after.ID != existing.ID {
+		t.Error("it got a new identifier, which is what cancel-and-set does")
+	}
+	if after.Body != existing.Body {
+		t.Errorf("what it says changed to %q, and nobody asked", after.Body)
+	}
+	if !after.DueAt.Equal(existing.DueAt) {
+		t.Error("its time moved, and nobody asked")
+	}
+}
+
+// Moving it, and making it repeat.
+func TestAReminderCanBeMovedAndMadeToRepeat(t *testing.T) {
+	r, store := harness(t)
+	existing, err := remind.New(user, "", remind.ScopeUser, "Wake", "It is seven, sir.",
+		noon.Add(time.Hour), remind.Once)
+	if err != nil {
+		t.Fatalf("remind.New: %v", err)
+	}
+	if err := store.Create(context.Background(), existing); err != nil {
+		t.Fatalf("Create: %v", err)
+	}
+
+	got := call(t, r, "reminder_update",
+		`{"id":"`+existing.ID+`","at":"2026-09-27 07:00","repeats":"daily"}`)
+	if got.Outcome != conversation.OutcomeOK {
+		t.Fatalf("reminder_update: %s", got.Content)
+	}
+
+	after, _ := store.Get(context.Background(), user, existing.ID)
+	if after.Repeats != remind.Daily {
+		t.Errorf("repeats = %q, want daily", after.Repeats)
+	}
+	if after.DueAt.In(india).Hour() != 7 {
+		t.Errorf("due at %v, want seven in the morning", after.DueAt.In(india))
+	}
+}
+
+// Asking for nothing is refused rather than quietly doing nothing.
+func TestAnEmptyChangeIsRefused(t *testing.T) {
+	r, store := harness(t)
+	existing, _ := remind.New(user, "", remind.ScopeUser, "Thing", "Do it, sir.",
+		noon.Add(time.Hour), remind.Once)
+	_ = store.Create(context.Background(), existing)
+
+	got := call(t, r, "reminder_update", `{"id":"`+existing.ID+`"}`)
+	if got.Outcome == conversation.OutcomeOK {
+		t.Fatal("an empty change was accepted")
+	}
+	if !strings.Contains(got.Content, "Nothing was given to change") {
+		t.Errorf("got %q", got.Content)
+	}
+}
+
+// One already gone is history. Changing it would rewrite what was said.
+func TestAFinishedReminderCannotBeChanged(t *testing.T) {
+	r, store := harness(t)
+	existing := rang(t, store, "Tablets", "Time to take your tablets.", remind.Once)
+
+	got := call(t, r, "reminder_update", `{"id":"`+existing.ID+`","title":"Something else"}`)
+	if got.Outcome == conversation.OutcomeOK {
+		t.Fatal("a finished reminder was edited")
+	}
+	if !strings.Contains(got.Content, "already happened") {
+		t.Errorf("got %q", got.Content)
+	}
+}
+
+// A change that would leave it unusable is refused before it is written.
+func TestAChangeThatEmptiesItIsRefused(t *testing.T) {
+	r, store := harness(t)
+	existing, _ := remind.New(user, "", remind.ScopeUser, "Thing", "Do it, sir.",
+		noon.Add(time.Hour), remind.Once)
+	_ = store.Create(context.Background(), existing)
+
+	if got := call(t, r, "reminder_update", `{"id":"`+existing.ID+`","say":"   "}`); got.Outcome == conversation.OutcomeOK {
+		t.Error("it was left with nothing to say")
+	}
+	after, _ := store.Get(context.Background(), user, existing.ID)
+	if after.Body != "Do it, sir." {
+		t.Errorf("body = %q, want it untouched", after.Body)
+	}
+}
+
+// Somebody else's is not theirs to change.
+func TestAnotherPersonsIsNotChanged(t *testing.T) {
+	r, store := harness(t)
+	other, _ := remind.New("usr_01M3D477HXQ4YNQX7BNXJZZCV9", "", remind.ScopeUser,
+		"Theirs", "Not yours.", noon.Add(time.Hour), remind.Once)
+	_ = store.Create(context.Background(), other)
+
+	if got := call(t, r, "reminder_update", `{"id":"`+other.ID+`","title":"Mine now"}`); got.Outcome == conversation.OutcomeOK {
+		t.Fatal("somebody else's reminder was renamed")
 	}
 }

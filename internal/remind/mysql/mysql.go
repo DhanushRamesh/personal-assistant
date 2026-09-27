@@ -323,6 +323,37 @@ func (s *Store) Waiting(ctx context.Context, userID string) ([]remind.Reminder, 
 	return toReminders(rows), nil
 }
 
+// Replace : Writes a changed reminder over the stored one.
+func (s *Store) Replace(ctx context.Context, userID string, r *remind.Reminder, was remind.Status) error {
+	if r == nil {
+		return remind.ErrNotFound
+	}
+	if err := r.Valid(); err != nil {
+		return err
+	}
+
+	// Named columns, so that nothing this does not mean to touch is
+	// written: not the identifier, not who owns it, not how many times
+	// it has fired, and not when it last did.
+	out := s.db.WithContext(ctx).Model(&row{}).
+		Where("id = ? AND user_id = ? AND status = ?", r.ID, userID, string(was)).
+		Updates(map[string]any{
+			"title":      r.Title,
+			"body":       r.Body,
+			"said_late":  nullable(r.SaidLate),
+			"due_at":     r.DueAt.UTC(),
+			"repeats":    nullable(string(r.Repeats)),
+			"updated_at": r.UpdatedAt.UTC(),
+		})
+	if out.Error != nil {
+		return fmt.Errorf("remind: changing %s: %w", r.ID, out.Error)
+	}
+	if out.RowsAffected == 0 {
+		return remind.ErrNotFound
+	}
+	return nil
+}
+
 // Snooze : Puts a reminder off until a later time.
 func (s *Store) Snooze(ctx context.Context, userID, id string, until time.Time) error {
 	if until.IsZero() {

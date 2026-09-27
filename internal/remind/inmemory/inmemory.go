@@ -228,6 +228,26 @@ func (s *Store) Waiting(_ context.Context, userID string) ([]remind.Reminder, er
 	return out, nil
 }
 
+// Replace : Writes a changed reminder over the stored one.
+func (s *Store) Replace(_ context.Context, userID string, r *remind.Reminder, was remind.Status) error {
+	if r == nil {
+		return remind.ErrNotFound
+	}
+	if err := r.Valid(); err != nil {
+		return err
+	}
+
+	s.mu.Lock()
+	defer s.mu.Unlock()
+
+	held, ok := s.kept[r.ID]
+	if !ok || held.UserID != userID || held.Status != was {
+		return remind.ErrNotFound
+	}
+	s.kept[r.ID] = *r
+	return nil
+}
+
 // Snooze : Puts a reminder off until a later time.
 func (s *Store) Snooze(_ context.Context, userID, id string, until time.Time) error {
 	if until.IsZero() {

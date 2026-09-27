@@ -75,6 +75,13 @@ type Store interface {
 	// order they were for.
 	Waiting(ctx context.Context, userID string) ([]Reminder, error)
 
+	// Replace : Writes a changed reminder over the stored one.
+	//
+	// Only while it is still in the state it was read in, so one that
+	// fired or was called off in between is refused rather than quietly
+	// brought back.
+	Replace(ctx context.Context, userID string, r *Reminder, was Status) error
+
 	// Snooze : Puts a reminder off until a later time.
 	//
 	// It goes back to pending, whether it was waiting or has just been

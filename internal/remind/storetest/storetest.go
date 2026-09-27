@@ -41,6 +41,8 @@ func Run(t *testing.T, open New) {
 		{"one held back is waiting", aHeldOneIsWaiting},
 		{"a held one can be recorded as said", aHeldOneCanBeDelivered},
 		{"one held too long is given up on", aHeldOneGoesStale},
+		{"a waiting one can be changed", aWaitingOneIsAmended},
+		{"one that moved on is not overwritten", aMovedOneIsNotOverwritten},
 		{"what was just said comes back", whatWasSaidComesBack},
 		{"the most recent is first", theMostRecentIsFirst},
 		{"two said together both come back", twoTogetherBothComeBack},
@@ -397,6 +399,53 @@ func aHeldOneGoesStale(t *testing.T, open New) {
 	}
 	if len(waiting) != 1 || waiting[0].ID != fresh.ID {
 		t.Errorf("Waiting = %v, want the fresh one still held", ids(waiting))
+	}
+}
+
+// Renaming and moving, without touching anything else.
+func aWaitingOneIsAmended(t *testing.T, open New) {
+	ctx, s, user := setup(t, open)
+	r := stored(t, s, user, "Thing", now().Add(time.Hour), remind.Once)
+
+	title, at := "Tablets", now().Add(2*time.Hour)
+	changed, err := remind.Amend(ctx, s, user, r.ID, remind.Change{Title: &title, DueAt: &at})
+	if err != nil {
+		t.Fatalf("Amend: %v", err)
+	}
+	if changed.Title != "Tablets" || !changed.DueAt.Equal(at) {
+		t.Errorf("Amend returned %+v", changed)
+	}
+
+	got := read(t, s, user, r.ID)
+	if got.Title != "Tablets" {
+		t.Errorf("title = %q", got.Title)
+	}
+	if got.Body != r.Body {
+		t.Errorf("body changed to %q and nobody asked", got.Body)
+	}
+	if got.Fires != r.Fires {
+		t.Errorf("fires changed to %d and nobody asked", got.Fires)
+	}
+}
+
+// The check and the write are separate, so a reminder that fired in
+// between must not be quietly brought back by a rename.
+func aMovedOneIsNotOverwritten(t *testing.T, open New) {
+	ctx, s, user := setup(t, open)
+	r := stored(t, s, user, "Thing", ago(time.Minute), remind.Once)
+
+	was := *r
+	// It fires before the change lands.
+	if err := s.Fired(ctx, r.ID, now(), time.Time{}); err != nil {
+		t.Fatalf("Fired: %v", err)
+	}
+
+	was.Title = "Tablets"
+	if err := s.Replace(ctx, user, &was, remind.Pending); !errors.Is(err, remind.ErrNotFound) {
+		t.Errorf("Replace = %v, want ErrNotFound: it was no longer pending", err)
+	}
+	if got := read(t, s, user, r.ID); got.Status != remind.Done {
+		t.Errorf("status = %q, want it left done", got.Status)
 	}
 }
 

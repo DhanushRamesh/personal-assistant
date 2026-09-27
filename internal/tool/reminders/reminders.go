@@ -96,8 +96,120 @@ func All(store remind.Store, clock Clock) []tool.Tool {
 		set(store, clock),
 		list(store, clock),
 		recent(store, clock),
+		update(store, clock),
 		snooze(store, clock),
 		cancel(store),
+	}
+}
+
+// update : Changes a reminder that has not happened yet.
+func update(store remind.Store, clock Clock) tool.Tool {
+	return tool.Tool{
+		Name:    "reminder_update",
+		Purpose: "Change a reminder that has not happened yet: what it is called, what it says, when it is due, how often it repeats.",
+		UseWhen: "The person wants an existing one altered rather than replaced -- rename it, move it, " +
+			"change what it says, make it repeat or stop repeating.",
+		Avoid: "Give only what is changing; everything left out stays as it is. Do not cancel one and set " +
+			"another in its place: that loses how many times it has already gone off and gives it a new " +
+			"identifier. Use reminder_snooze to put one off rather than this, since that is what it is " +
+			"for and it handles a repeating one properly.",
+		Channels: []chat.Channel{chat.ChannelVoice, chat.ChannelDirect},
+		Params: tool.Schema{
+			Required: []string{"id"},
+			Properties: map[string]tool.Property{
+				"id": {
+					Type: "string", Description: "The reminder's identifier, from a listing.",
+					Pattern: idPattern,
+				},
+				"title": {
+					Type:        "string",
+					Description: "A new name for it, for a listing. Not what gets said.",
+				},
+				"say": {
+					Type:        "string",
+					Description: "New words to speak when the time comes, as a whole sentence.",
+				},
+				"say_if_late": {
+					Type: "string",
+					Description: "New words for when it is heard after the moment has gone, in the " +
+						"past tense and with no time in them. An empty string clears it.",
+				},
+				"minutes_from_now": {
+					Type:        "integer",
+					Description: "Move it to this many minutes from now.",
+				},
+				"at": {
+					Type: "string",
+					Description: "Move it to a time or date, written as 2006-01-02 15:04 in the " +
+						"person's own local time.",
+				},
+				"repeats": {
+					Type: "string", Enum: repeatWords(),
+					Description: "How often it comes back. Use once to stop it repeating.",
+				},
+			},
+		},
+		Examples: []tool.Example{
+			{Ask: "rename that reminder to tablets",
+				Args: `{"id":"rem_01M3D477HXQ4YNQX7BNXJZZCV0","title":"Tablets"}`},
+			{Ask: "move my four o'clock to five",
+				Args: `{"id":"rem_01M3D477HXQ4YNQX7BNXJZZCV0","at":"2026-09-27 17:00"}`},
+			{Ask: "make that one daily",
+				Args: `{"id":"rem_01M3D477HXQ4YNQX7BNXJZZCV0","repeats":"daily"}`},
+		},
+		Run: func(ctx context.Context, in tool.Invocation) tool.Result {
+			var args struct {
+				ID      string  `json:"id"`
+				Title   *string `json:"title"`
+				Say     *string `json:"say"`
+				Late    *string `json:"say_if_late"`
+				Minutes int     `json:"minutes_from_now"`
+				At      string  `json:"at"`
+				Repeats *string `json:"repeats"`
+			}
+			_ = json.Unmarshal(in.Args, &args)
+
+			if store == nil {
+				return tool.Failed("There is nowhere to keep reminders on this server.")
+			}
+			if in.Caller.UserID == "" {
+				return tool.Failed("This request did not come from a known person.")
+			}
+
+			change := remind.Change{Title: args.Title, Body: args.Say, SaidLate: args.Late}
+			if args.Repeats != nil {
+				r := remind.Repeat(*args.Repeats)
+				if *args.Repeats == "once" {
+					r = remind.Once
+				}
+				change.Repeats = &r
+			}
+			if args.Minutes > 0 || strings.TrimSpace(args.At) != "" {
+				due, fail := when(clock, 0, args.Minutes, args.At)
+				if fail != "" {
+					return tool.Failed(fail)
+				}
+				change.DueAt = &due
+			}
+
+			changed, err := remind.Amend(ctx, store, in.Caller.UserID, args.ID, change)
+			switch {
+			case errors.Is(err, remind.ErrNothingToChange):
+				return tool.Failed("Nothing was given to change. Say what should be different.")
+			case errors.Is(err, remind.ErrNotAmendable):
+				return tool.Failed("That one has already happened or been called off, so there is " +
+					"nothing to change. Set a new one instead.")
+			case errors.Is(err, remind.ErrNotFound):
+				return tool.Failed(fmt.Sprintf(
+					"There is no reminder with the identifier %s. List them rather than guessing.", args.ID))
+			case err != nil:
+				return tool.Failed(err.Error())
+			}
+
+			return tool.OK(fmt.Sprintf("Changed. %q is now due at %s%s and says: %s. Tell the person "+
+				"what is different, in their words rather than as a date.",
+				changed.Title, spell(changed.DueAt, clock.where()), repeating(changed.Repeats), changed.Body))
+		},
 	}
 }
 
@@ -411,7 +523,7 @@ func set(store remind.Store, clock Clock) tool.Tool {
 			"memory_remember.",
 		Channels: []chat.Channel{chat.ChannelVoice, chat.ChannelDirect},
 		Params: tool.Schema{
-			Required: []string{"title", "say"},
+			Required: []string{"title", "say", "say_if_late"},
 			Properties: map[string]tool.Property{
 				"title": {
 					Type:        "string",
@@ -434,8 +546,9 @@ func set(store remind.Store, clock Clock) tool.Tool {
 						"could not be reached. \"Time to take your tablets, sir\" becomes \"You " +
 						"should have taken your tablets\". Leave the time out of it entirely: the " +
 						"hour is added when it is spoken, from the clock, so anything you write " +
-						"here would be a guess. Leave the whole thing out for something no later " +
-						"hearing makes sense of, such as a timer.",
+						"here would be a guess. Send an empty string, and only an empty string, " +
+						"for something no later hearing makes sense of -- a timer that has " +
+						"finished is not a thing somebody should have done.",
 				},
 				"seconds_from_now": {
 					Type:    "integer",
@@ -465,15 +578,17 @@ func set(store remind.Store, clock Clock) tool.Tool {
 		},
 		Examples: []tool.Example{
 			{Ask: "set a timer for twenty minutes",
-				Args: `{"title":"Timer","say":"Your twenty minute timer has finished.","minutes_from_now":20}`},
+				Args: `{"title":"Timer","say":"Your twenty minute timer has finished, sir.",` +
+					`"say_if_late":"","minutes_from_now":20}`},
 			{Ask: "set a timer for thirty seconds",
-				Args: `{"title":"Timer","say":"Your thirty second timer has finished.","seconds_from_now":30}`},
+				Args: `{"title":"Timer","say":"Your thirty second timer has finished, sir.",` +
+					`"say_if_late":"","seconds_from_now":30}`},
 			{Ask: "remind me to call the roofer at half past four",
 				Args: `{"title":"Call the roofer","say":"Time to call the roofer, sir.",` +
 					`"say_if_late":"You should have called the roofer","at":"2026-09-26 16:30"}`},
 			{Ask: "wake me at seven every weekday",
 				Args: `{"title":"Wake up","say":"Good morning, sir. It is seven o'clock.",` +
-					`"at":"2026-09-28 07:00","repeats":"weekdays"}`},
+					`"say_if_late":"You should have been up","at":"2026-09-28 07:00","repeats":"weekdays"}`},
 		},
 		Run: func(ctx context.Context, in tool.Invocation) tool.Result {
 			var args struct {

@@ -103,8 +103,8 @@ func (h *Handler) Arrived(w http.ResponseWriter, r *http.Request) {
 	// greeting, in the order it was for. Recorded as said only once it
 	// has been: a delivery nobody heard must stay held.
 	held := h.waiting(ctx, user)
-	for i := range held {
-		said += " " + remind.Spoken(held[i], h.clock(), h.where())
+	if len(held) > 0 {
+		said += " " + remind.Delivered(held, h.clock(), h.where())
 	}
 
 	// And anything that was never said at all, which is the one thing
