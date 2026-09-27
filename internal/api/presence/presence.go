@@ -39,6 +39,9 @@ type ArrivedResponse struct {
 	// Delivered : How many held-back reminders were said along with the
 	// greeting.
 	Delivered int `json:"delivered,omitempty"`
+	// Missed : How many never-said reminders were reported, and thereby
+	// marked as told.
+	Missed int `json:"missed,omitempty"`
 }
 
 // Handler : Serves the presence endpoints.
@@ -88,7 +91,7 @@ func (h *Handler) Arrived(w http.ResponseWriter, r *http.Request) {
 	ctx := r.Context()
 	user := authn.Of(ctx).User.ID
 
-	said := h.greeting(ctx, user)
+	said := h.greeting()
 
 	// Anything kept back while they were out is said now, after the
 	// greeting, in the order it was for. Recorded as said only once it
@@ -96,6 +99,15 @@ func (h *Handler) Arrived(w http.ResponseWriter, r *http.Request) {
 	held := h.waiting(ctx, user)
 	for i := range held {
 		said += " " + remind.Spoken(held[i], h.clock(), h.where())
+	}
+
+	// And anything that was never said at all, which is the one thing
+	// worth stopping somebody at the door for. Read once here and marked
+	// as told below, so the same miss is not raised again in their next
+	// sentence.
+	unsaid := h.neverSaid(ctx, user)
+	if len(unsaid) > 0 {
+		said += " " + missedText(unsaid, h.where())
 	}
 
 	if h.announcer == nil || !h.announcer.Available() {
@@ -124,8 +136,17 @@ func (h *Handler) Arrived(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 
+	// Saying it at the door is the telling. Without this the person
+	// hears about the same miss here and again in their next sentence.
+	if len(unsaid) > 0 {
+		if err := h.reminders.Mentioned(ctx, remind.IDs(unsaid), h.clock()); err != nil {
+			h.Logger.WarnContext(ctx, "told somebody about a miss but could not record it",
+				slog.Any("error", err))
+		}
+	}
+
 	httpx.WriteJSON(ctx, w, http.StatusOK, ArrivedResponse{
-		Said: said, Spoke: true, Delivered: len(held),
+		Said: said, Spoke: true, Delivered: len(held), Missed: len(unsaid),
 	})
 }
 
@@ -144,22 +165,45 @@ func (h *Handler) waiting(ctx context.Context, user string) []remind.Reminder {
 
 // greeting : What to say to somebody who has just walked in.
 //
-// The hour, and what is waiting. Nothing else: everything in here is
-// looked up as it is said, so there is nothing for it to be wrong about.
-func (h *Handler) greeting(ctx context.Context, user string) string {
-	parts := []string{h.hour() + ", sir."}
+// The hour and nothing else. What is still to come is left out on
+// purpose: a reminder waiting for four o'clock is not news at half past
+// one, and counting them at the door turns a greeting into a status
+// report.
+func (h *Handler) greeting() string {
+	return h.hour() + ", sir."
+}
 
-	if h.reminders != nil && user != "" {
-		waiting, err := h.reminders.List(ctx, user, remind.Pending)
-		if err != nil {
-			h.Logger.WarnContext(ctx, "could not read what is waiting", slog.Any("error", err))
-		} else if n := len(waiting); n == 1 {
-			parts = append(parts, "One reminder is waiting.")
-		} else if n > 1 {
-			parts = append(parts, fmt.Sprintf("%d reminders are waiting.", n))
-		}
+// missedText : What to say about reminders that were never said.
+//
+// The words themselves, not a count. A count tells somebody they have
+// lost something without telling them what, which is the worst of both.
+func missedText(unsaid []remind.Reminder, loc *time.Location) string {
+	var b strings.Builder
+	if len(unsaid) == 1 {
+		b.WriteString("One reminder was missed while you were out.")
+	} else {
+		fmt.Fprintf(&b, "%d reminders were missed while you were out.", len(unsaid))
 	}
-	return strings.Join(parts, " ")
+	for i := range unsaid {
+		b.WriteString(" At ")
+		b.WriteString(unsaid[i].DueAt.In(loc).Format("3:04"))
+		b.WriteString(": ")
+		b.WriteString(strings.TrimSpace(unsaid[i].Body))
+	}
+	return b.String()
+}
+
+// neverSaid : Misses the person has not been told about yet.
+func (h *Handler) neverSaid(ctx context.Context, user string) []remind.Reminder {
+	if h.reminders == nil || user == "" {
+		return nil
+	}
+	unsaid, err := h.reminders.Unmentioned(ctx, user)
+	if err != nil {
+		h.Logger.WarnContext(ctx, "could not read what was never said", slog.Any("error", err))
+		return nil
+	}
+	return unsaid
 }
 
 // hour : A greeting for the time of day, in the person's own zone.

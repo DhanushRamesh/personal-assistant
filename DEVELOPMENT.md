@@ -669,12 +669,38 @@ works out when it has crossed into the room -- and what arrives here is
 the conclusion. This chooses the words and speaks them through the same
 announcer the reminders use.
 
-The model is not asked. A greeting that lands after somebody has sat
-down is not a greeting: detection takes about two seconds and a Platform
-AI call has measured between two and five, so asking would have more
-than doubled it, for a sentence that varies. What is said instead is the
-hour and what is waiting, both looked up as they are said, which also
-means there is nothing in it to be wrong about.
+The greeting is the hour and nothing else: "Good morning, sir",
+"Welcome back, sir". Then any reminders held back while they were out,
+then any that were never said at all. That is the whole of it.
+
+What is still to come is deliberately left out. A reminder waiting for
+four o'clock is not news at half past one, and counting them at the door
+turns a greeting into a status report.
+
+A miss is said in words rather than as a count, and saying it here is
+the telling -- it is marked mentioned, so the same miss is not raised
+again in the next sentence.
+
+**The model is not asked, and this was tried both ways.** A greeting
+that lands after somebody has sat down is not a greeting: detection
+takes about two seconds and a Platform AI call has measured between two
+and five. Writing it in advance solves the timing -- the next one is
+composed as soon as the last is used -- and was built and tried on 27
+September 2026 with the person's memories and recent conversation fed
+in. It was dropped, by the owner, after three rounds of it going wrong
+in three different directions:
+
+- Given a free hand it wrote *"Get Lucky has been in my head since you
+  last mentioned it"*, claiming an inner life it does not have.
+- Told to be plain it wrote *"the coffee is on"*, turning the fact that
+  the owner likes filter coffee into a claim about the room.
+- Told what it may not claim, it retreated to the bare greeting every
+  time, which is what the plain version does for nothing.
+
+The lesson is narrower than "the model cannot do it". Every personal
+remark that is not a claim about the world turns out to be either an
+opinion or a wish, and the room to be warm without being false is
+smaller than it looks. Worth remembering before adding it again.
 
 Every call greets. It did once refuse to greet the same person twice
 within ten minutes, on the reasoning that nothing upstream promises to

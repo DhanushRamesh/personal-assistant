@@ -94,9 +94,10 @@ func TestEveryArrivalIsGreeted(t *testing.T) {
 	}
 }
 
-// What is waiting is said, because it is looked up as it is said and so
-// cannot be wrong.
-func TestWhatIsWaitingIsMentioned(t *testing.T) {
+// What is still to come is deliberately not said. A reminder waiting for
+// four o'clock is not news at half past one, and counting them at the
+// door turns a greeting into a status report.
+func TestWhatIsStillToComeIsNotMentioned(t *testing.T) {
 	sat := &satellite{}
 	store := inmemory.New()
 	e := apitest.NewWith(t, apitest.Options{Announcer: sat, Reminders: store})
@@ -114,8 +115,62 @@ func TestWhatIsWaitingIsMentioned(t *testing.T) {
 
 	got := arrive(t, e)
 
-	if !strings.Contains(got.Said, "2 reminders are waiting") {
-		t.Errorf("greeting = %q, want what is waiting", got.Said)
+	if strings.Contains(got.Said, "waiting") {
+		t.Errorf("greeting = %q, want nothing about what is still to come", got.Said)
+	}
+}
+
+// A miss is said at the door, in words rather than as a count, and
+// marked as told so the next conversation does not raise it again.
+func TestAMissIsToldAtTheDoorAndOnlyOnce(t *testing.T) {
+	sat := &satellite{}
+	store := inmemory.New()
+	e := apitest.NewWith(t, apitest.Options{Announcer: sat, Reminders: store})
+
+	r, err := remind.New(e.User.ID, "", remind.ScopeUser, "Bins", "Put the bins out.",
+		time.Now().UTC().Add(-2*time.Hour), remind.Once)
+	if err != nil {
+		t.Fatalf("remind.New: %v", err)
+	}
+	if err := store.Create(t.Context(), r); err != nil {
+		t.Fatalf("Create: %v", err)
+	}
+	if err := store.Missed(t.Context(), r.ID, time.Now().UTC()); err != nil {
+		t.Fatalf("Missed: %v", err)
+	}
+
+	got := arrive(t, e)
+	if !strings.Contains(got.Said, "Put the bins out.") {
+		t.Errorf("greeting = %q, want the words of the miss, not a count", got.Said)
+	}
+	if got.Missed != 1 {
+		t.Errorf("Missed = %d, want 1", got.Missed)
+	}
+
+	// And not again. Saying it at the door was the telling.
+	if again := arrive(t, e); strings.Contains(again.Said, "Put the bins out.") {
+		t.Errorf("the same miss was raised twice: %q", again.Said)
+	}
+	left, err := store.Unmentioned(t.Context(), e.User.ID)
+	if err != nil {
+		t.Fatalf("Unmentioned: %v", err)
+	}
+	if len(left) != 0 {
+		t.Error("it was told at the door but not recorded as told")
+	}
+}
+
+// The greeting itself is the hour and nothing more.
+func TestTheGreetingIsJustTheHour(t *testing.T) {
+	sat := &satellite{}
+	e := apitest.NewWith(t, apitest.Options{Announcer: sat, Reminders: inmemory.New()})
+
+	got := arrive(t, e)
+	if !strings.HasSuffix(strings.TrimSpace(got.Said), "sir.") {
+		t.Errorf("greeting = %q", got.Said)
+	}
+	if n := len(strings.Fields(got.Said)); n > 4 {
+		t.Errorf("greeting = %q, %d words: it should be the hour and nothing else", got.Said, n)
 	}
 }
 
