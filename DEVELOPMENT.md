@@ -977,6 +977,19 @@ It is also faster than the tool it replaces. A reminder question used to
 cost a second model round trip; now it is answered from what is already
 in front of the model.
 
+**It had to be told not to volunteer them.** Putting the list in every
+prompt made it salient, and "I'm feeling so tired" was answered with
+"the Go down and eat reminder will be due shortly at 1:10". Two things
+pulled that way: the block said "answer from this list and from nothing
+else", which reads as an instruction to use it, and the persona has a
+licence to raise things somebody would want flagged.
+
+So the block now opens by saying it is for one kind of question only,
+and that being told how somebody is -- tired, hungry, that it is late
+-- is not that question. Unrelated remarks are quiet again. Something
+directly related still gets a mention, which is the behaviour the owner
+asked for elsewhere and is left alone.
+
 **One caveat, honestly.** The very first live turn after this went in
 still bluffed, with the block present and saying "answer from this list
 and from nothing else". Three recalled exchanges outweighed it. Every

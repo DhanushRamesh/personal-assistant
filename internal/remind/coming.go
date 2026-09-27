@@ -32,9 +32,19 @@ func Coming(waiting []Reminder, at time.Time, loc *time.Location) string {
 	}
 
 	var b strings.Builder
-	b.WriteString("The reminders this person has waiting, read from the store as this ")
-	b.WriteString("prompt was built, so it is what is true now and not what was true ")
-	b.WriteString("when anything else here was said.\n\n")
+	b.WriteString("Reference, for one kind of question only. The reminders this person ")
+	b.WriteString("has waiting, read from the store as this prompt was built, so it is ")
+	b.WriteString("what is true now and not what was true when anything else here was ")
+	b.WriteString("said.\n\n")
+	b.WriteString("Say nothing about any of it unless they ask what reminders they have, ")
+	b.WriteString("what is coming, or about one of these in particular. That is the only ")
+	b.WriteString("thing this is for.\n\n")
+	b.WriteString("Everything else is not such a question, however close it sounds. ")
+	b.WriteString("Somebody saying they are tired, or hungry, or that it is late, is ")
+	b.WriteString("telling you how they are, not asking what is on their list. Answer ")
+	b.WriteString("what they said. Bringing up a reminder they did not ask about is not ")
+	b.WriteString("helpful, it is the assistant talking about its own filing, and they ")
+	b.WriteString("will hear it when it goes off anyway.\n\n")
 
 	if len(waiting) == 0 {
 		b.WriteString("There are none. If they ask, tell them so plainly. Do not reach ")
@@ -44,11 +54,9 @@ func Coming(waiting []Reminder, at time.Time, loc *time.Location) string {
 		return b.String()
 	}
 
-	b.WriteString("Answer from this list and from nothing else. Anything said earlier ")
-	b.WriteString("about what is waiting -- including your own answer, which was right ")
-	b.WriteString("when you gave it -- has been overtaken by this. Do not bring them up ")
-	b.WriteString("unless asked; they are here so that you can answer, not so that you ")
-	b.WriteString("can mention them.")
+	b.WriteString("When they do ask, answer from this and from nothing else. Anything ")
+	b.WriteString("said earlier about what is waiting -- including your own answer, ")
+	b.WriteString("which was right when you gave it -- has been overtaken by this.")
 
 	shown := waiting
 	if len(shown) > MostShown {
