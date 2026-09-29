@@ -175,6 +175,39 @@ type HomeAssistant struct {
 	// input_boolean.in_the_room. Empty means never hold a reminder back,
 	// which is what this did before presence existed.
 	PresenceEntity string
+
+	// Notify : Home Assistant notify services that should also hear an
+	// announcement, such as notify.mobile_app_pixel_7. Comma separated,
+	// and empty means the satellite alone.
+	//
+	// For being told something while out of the room. The satellite is a
+	// speaker in one place; a phone is wherever the person is. These do
+	// not reach the phone over the local network or the VPN at all --
+	// Home Assistant hands them to its push service, which reaches the
+	// phone through Google, so they arrive on mobile data and on
+	// somebody else's wifi. The cost of that is the words leaving the
+	// house, which nothing else here does.
+	Notify []string
+
+	// MediaPlayer : The satellite's media player, such as
+	// media_player.laptop_lva_media_player. Used for what is said while a
+	// turn is still running, because that player is not the one the voice
+	// pipeline speaks answers through and playing on it leaves the turn
+	// alone. Empty says nothing during a turn.
+	MediaPlayer string
+	// TTSEngine : Which text-to-speech entity turns those words into
+	// sound, such as tts.piper.
+	TTSEngine string
+	// TTSVoice : Which voice it uses, such as jarvis-medium. Must match
+	// the voice the assist pipeline uses, or a turn is spoken in two
+	// different voices.
+	TTSVoice string
+	// TTSLanguage : The language that voice speaks, such as en_GB.
+	TTSLanguage string
+	// AsideSettleWait : The longest to hold an answer back while what was
+	// said before it is still being spoken. Zero selects the default;
+	// negative cuts the aside off rather than waiting.
+	AsideSettleWait time.Duration
 }
 
 // Google : The client credentials this assistant asks Google with.
@@ -406,10 +439,16 @@ func Load(path string, lookup Lookup) (Config, error) {
 			Location: l.location("assistant", "timezone"),
 		},
 		HomeAssistant: HomeAssistant{
-			URL:            l.str("homeassistant", "url", ""),
-			Token:          logging.Secret(l.str("homeassistant", "token", "")),
-			Satellite:      l.str("homeassistant", "satellite", ""),
-			PresenceEntity: l.str("homeassistant", "presence_entity", ""),
+			URL:             l.str("homeassistant", "url", ""),
+			Token:           logging.Secret(l.str("homeassistant", "token", "")),
+			Satellite:       l.str("homeassistant", "satellite", ""),
+			PresenceEntity:  l.str("homeassistant", "presence_entity", ""),
+			Notify:          l.list("homeassistant", "notify"),
+			MediaPlayer:     l.str("homeassistant", "media_player", ""),
+			TTSEngine:       l.str("homeassistant", "tts_engine", "tts.piper"),
+			TTSVoice:        l.str("homeassistant", "tts_voice", ""),
+			TTSLanguage:     l.str("homeassistant", "tts_language", ""),
+			AsideSettleWait: l.duration("homeassistant", "aside_settle_wait", 0),
 		},
 		Google: Google{
 			ClientID:     l.str("google", "client_id", ""),
@@ -614,6 +653,24 @@ func (l *loader) str(section, key, fallback string) string {
 		return v
 	}
 	return fallback
+}
+
+// list : Returns the setting split on commas, with the blanks dropped.
+//
+// Nothing set is no entries rather than one empty one, so a caller can
+// range over it without checking.
+func (l *loader) list(section, key string) []string {
+	v, ok := l.value(section, key)
+	if !ok {
+		return nil
+	}
+	var out []string
+	for _, part := range strings.Split(v, ",") {
+		if part = strings.TrimSpace(part); part != "" {
+			out = append(out, part)
+		}
+	}
+	return out
 }
 
 // integer : Returns the setting parsed as an int, or fallback if it is not set.

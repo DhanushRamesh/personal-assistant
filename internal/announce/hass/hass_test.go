@@ -294,3 +294,43 @@ func TestAskingIsStillHeldToTheShortTimeout(t *testing.T) {
 		t.Errorf("gave up after %v: the short timeout is not being applied", took)
 	}
 }
+
+// TestOnlyAPositiveAbsenceHoldsAReminderBack : A reminder is held back
+// when the person is known to be out, and never because the question
+// could not be answered.
+//
+// The entity used to be an input_boolean with two states, so every
+// fault in the presence chain -- a dead publisher, a blocked radio, a
+// suspended laptop -- arrived as "off" and reminders were held back
+// from somebody sitting right there. sensor.owner_presence adds
+// "unknown" for exactly that case, and it must not count as away.
+func TestOnlyAPositiveAbsenceHoldsAReminderBack(t *testing.T) {
+	for state, wantAway := range map[string]bool{
+		"away":        true, // the three-state sensor
+		"off":         true, // the input_boolean it replaced
+		"present":     false,
+		"on":          false,
+		"unknown":     false, // the measurement could not be trusted
+		"unavailable": false,
+		"":            false,
+		"nonsense":    false,
+	} {
+		server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+			_ = json.NewEncoder(w).Encode(map[string]string{"state": state})
+		}))
+
+		p, err := hass.NewPresence(hass.PresenceConfig{
+			URL:    server.URL,
+			Token:  logging.Secret("t"),
+			Entity: "sensor.owner_presence",
+		})
+		if err != nil {
+			server.Close()
+			t.Fatalf("state %q: %v", state, err)
+		}
+		if got := p.Away(context.Background(), "user"); got != wantAway {
+			t.Errorf("state %q: away = %v, want %v", state, got, wantAway)
+		}
+		server.Close()
+	}
+}

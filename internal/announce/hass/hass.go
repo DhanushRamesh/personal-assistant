@@ -83,6 +83,13 @@ type Config struct {
 	// Satellite : The entity to speak through, such as
 	// assist_satellite.laptop_lva_assist_satellite.
 	Satellite string
+	// Notify : Notify services that should also hear an announcement,
+	// such as notify.mobile_app_pixel_7. Empty is the satellite alone.
+	//
+	// A satellite is a speaker in one room. Told to say something while
+	// the person is out, it says it to nobody. These carry the same
+	// words to a phone, which is wherever they are.
+	Notify []string
 	// Timeout : How long a call that only asks something may take. Zero
 	// selects DefaultTimeout.
 	Timeout time.Duration
@@ -157,6 +164,26 @@ type announceRequest struct {
 	Preannounce bool `json:"preannounce"`
 }
 
+// notifyRequest : What the notify service is sent.
+//
+// Message is the literal word TTS; the words to say go in Data. That is
+// the Android companion app's own arrangement, not a choice made here.
+type notifyRequest struct {
+	Message string     `json:"message"`
+	Data    notifyData `json:"data"`
+}
+
+// notifyData : How the companion app is told to speak.
+type notifyData struct {
+	// TTSText : The words to say aloud.
+	TTSText string `json:"tts_text"`
+	// MediaStream : Which volume control it obeys. The music stream
+	// rather than the notification one, because the notification stream
+	// is silenced by every do-not-disturb and most quiet-hours rules,
+	// and an announcement nobody hears is the fault this exists to fix.
+	MediaStream string `json:"media_stream"`
+}
+
 // Say : Speaks the message through the configured satellite, once it has
 // finished saying anything else.
 //
@@ -209,6 +236,67 @@ func (s *Speaker) Say(ctx context.Context, message string) error {
 	if resp.StatusCode >= 400 {
 		return fmt.Errorf("hass: announcing: %s: %s",
 			resp.Status, strings.TrimSpace(string(answer)))
+	}
+
+	s.alsoNotify(ctx, message)
+	return nil
+}
+
+// alsoNotify : Sends the same words to every notify service configured.
+//
+// After the satellite, and never instead of it: the speaker in the room
+// is the one the person expects, and a phone that also buzzes is an
+// addition to it.
+//
+// Failures are logged nowhere and returned to nobody. The announcement
+// has already been made by the time this runs, and a phone that could
+// not be reached is not a reason to report that the announcement
+// failed -- doing so would have a caller retry, and the retry would say
+// everything twice in the room where it was already heard.
+func (s *Speaker) alsoNotify(ctx context.Context, message string) {
+	for _, service := range s.cfg.Notify {
+		_ = s.notifyOne(ctx, service, message)
+	}
+}
+
+// notifyOne : Speaks an announcement through one notify service.
+//
+// "TTS" as the message with the words in tts_text is how the Android
+// companion app is asked to say something aloud rather than show it.
+// A phone that only shows it is a phone somebody has to look at, which
+// is not what an announcement is for.
+func (s *Speaker) notifyOne(ctx context.Context, service, message string) error {
+	name := strings.TrimPrefix(strings.TrimSpace(service), "notify.")
+	if name == "" {
+		return nil
+	}
+
+	body, err := json.Marshal(notifyRequest{
+		Message: "TTS",
+		Data:    notifyData{TTSText: message, MediaStream: "music_stream"},
+	})
+	if err != nil {
+		return fmt.Errorf("hass: building notify request: %w", err)
+	}
+
+	url := s.cfg.URL + "/api/services/notify/" + name
+	req, err := http.NewRequestWithContext(ctx, http.MethodPost, url, bytes.NewReader(body))
+	if err != nil {
+		return fmt.Errorf("hass: building notify request: %w", err)
+	}
+	req.Header.Set("Authorization", "Bearer "+s.cfg.Token.Reveal())
+	req.Header.Set("Content-Type", "application/json")
+
+	resp, err := s.http.Do(req)
+	if err != nil {
+		return fmt.Errorf("hass: notifying %s: %w", name, err)
+	}
+	defer resp.Body.Close()
+
+	answer, _ := io.ReadAll(io.LimitReader(resp.Body, maxResponseBytes))
+	if resp.StatusCode >= 400 {
+		return fmt.Errorf("hass: notifying %s: %s: %s",
+			name, resp.Status, strings.TrimSpace(string(answer)))
 	}
 	return nil
 }
