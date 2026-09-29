@@ -817,10 +817,16 @@ literal backslash-n -- and the diff is the only reason that was caught
 rather than shipped. Anything converted later should be done the same
 way.
 
-Done: the persona rules, the manners, `conversation.Heard`, and
-`reminders.WhenUnasked`. Not yet: the `Purpose`, `UseWhen` and `Avoid`
-fields on about a hundred tool definitions, which are the same idea at
-a smaller scale.
+Done: the persona rules, the manners, `conversation.Heard`,
+`reminders.WhenUnasked`, and `calendar_events`. Not yet: the
+`Purpose`, `UseWhen` and `Avoid` fields on the remaining tool
+definitions -- about seventy fields across five files -- which are the
+same idea at a smaller scale.
+
+**Anything newly written uses the constructors from the start.** The
+unconverted fields are a backlog, not a licence: adding another `+`
+chain to them makes the sweep bigger. Said by the owner on 28
+September 2026, after a new `UseWhen` was written the old way.
 
 ## When the tool list outgrows the turn
 
@@ -896,6 +902,443 @@ the reading itself: twelve prefetches over four turns, three runs, no
 misses -- where the model deciding for itself managed one or two in
 four.
 
+**Only memory prefetches, and that is the owner's decision.** 28
+September 2026. `calendar_events`, `reminder_list` and
+`conversation_list` had the flag, lost it silently in a rewrite, and
+were restored -- and the owner then said to take it off all three:
+*"it just increases the tokens and its unwanted"*. Reading three
+domains on a turn that is about none of them is paid for on every
+turn, and most turns are about one domain or none.
+
+Memory is the exception, because it is about the person rather than
+about a domain: there is no question it is irrelevant to.
+
+Where a domain must still be read every time it is relevant -- the
+calendar, for anything to do with a date -- the rule is carried in
+words instead, in the tool's own `UseWhen` and in the persona. That is
+weaker than fetching it, and it is the trade the owner chose.
+
+**Nothing tested which tools prefetch, which is how three lost the
+flag unnoticed.** The whole suite passed; the only symptom was the
+assistant answering about dates without looking. `TestOnlyMemoryIsRead
+BeforeTheQuestion` names the expected set, so a flag appearing or
+disappearing fails there.
+
+## Home Assistant answers first, and Jarvis never hears it
+
+**Its replies are in the assistant's voice now.**
+`custom_sentences/en/jarvis_voice.yaml` overrides 29 responses across
+10 intents. A custom sentence file is merged into the whole intents
+dictionary, `responses` included, and `default_agent` reads
+`intent_responses` from the merged result -- so overriding a built-in
+response needs no code and no fork.
+
+Measured after a `conversation.reload`:
+
+    "hello"                    -> Good day, sir.
+    "who made you"             -> I was put together by the Home Assistant
+                                  community, sir, and furnished here by you.
+    "what is the time"         -> 3:50 PM, sir.
+    "are you always listening" -> Only when you say the wake word, sir.
+
+Only wording changed. The time keeps Home Assistant's own template with
+the address appended, so the computed part is untouched, and every
+sentence these answer still matches exactly as before.
+
+**The manner now has a second home, and that is the cost.** The server
+holds it in `internal/persona`; these lines are a hand-kept copy and
+will drift. They are here rather than in the server because the server
+never sees these questions -- Home Assistant answers and stops. The
+alternative is routing each one to `conversation.jarvis` the way
+`jarvis_timers.yaml` routes the timers, which keeps one voice and
+spends a model round trip on every "hello". Fixed text was chosen for
+the ones where nothing contextual is lost.
+
+**Written to both copies.** `~/voice-setup/home-assistant/custom_sentences/`
+is the repository and `~/homeassistant/custom_sentences/` is what Home
+Assistant reads; the live directory is root-owned, so the file goes in
+with `docker cp`. Editing only the repository copy is a mistake already
+made once, with automations.yaml, and the walk-out test that followed
+was run against unchanged config.
+
+
+The Jarvis pipeline has `prefer_local_intents: True`. Home Assistant
+matches the question against its own sentences before handing anything
+over, and when one matches it answers itself. Measured on 29 September
+2026, from the satellite's own log:
+
+    "what is the time"  ->  "2:38 PM"
+    "hello"             ->  "Hello from Home Assistant."
+
+Neither reached this server. Jarvis would have said "2:38 pm, sir".
+
+There are 41 built-in intents in `home_assistant_intents/data/en.json`,
+and most are device control that Home Assistant should keep. Four
+groups collide with what this assistant is for:
+
+- **Time and date.** `HassGetCurrentTime`, `HassGetCurrentDate`. Two
+  sentence patterns each, and they take the commonest question there
+  is.
+- **Timers.** Eight intents -- start, cancel, cancel all, pause,
+  unpause, increase, decrease, status -- over roughly 320 patterns.
+  Anything phrased as a timer is answered by Home Assistant's timers,
+  which are a different set of things from the reminders this server
+  keeps.
+- **Lists.** `HassShoppingListAddItem`, `HassListAddItem` and their
+  complete and remove variants. The persona says plainly that the
+  assistant keeps no shopping list; Home Assistant will quietly add to
+  one anyway, and answer "Added milk".
+- **Small talk.** `HassRespond` answers hello, "who made you", "what
+  can I say", "are you always listening". `HassNevermind` answers
+  nothing at all.
+
+The typed client is unaffected: it talks to this server directly and
+never passes through Home Assistant. So the same question can be
+answered by two different assistants depending on whether it was typed
+or spoken, which is exactly what makes this hard to notice.
+
+Turning `prefer_local_intents` off sends everything to Jarvis, and
+costs the device control that only Home Assistant can do. Not yet the
+owner's decision.
+
+## Listening that will not end is two faults, not one
+
+The owner, 29 September 2026: it wakes, it hears the question, and
+then it keeps listening until the room happens to fall silent.
+
+Home Assistant decides the end of a command in
+`assist_pipeline/vad.py`, and the numbers there are worth knowing
+because none of them are configurable:
+
+| | |
+|---|---|
+| `relaxed` | 0.7 s of silence |
+| `default` | 0.7 s of silence -- **the same** |
+| `aggressive` | 0.25 s |
+| `before_command_speech_threshold` | 0.2 |
+| `in_command_speech_threshold` | 0.5 |
+
+Two separate things follow. **The trailing wait** is the silence
+window, and `default` was buying nothing that `relaxed` did not:
+switched to `aggressive`, which is the only one of the three that is
+actually shorter.
+
+**The listening that never ends is the other threshold.** Anything the
+VAD scores above 0.5 while a command is running counts as speech and
+restarts the silence timer. A room that keeps producing such sound
+never yields 0.25 seconds of quiet, and the window length is
+irrelevant. Measured on `voice_only` with nobody deliberately
+speaking: median 100 ms level of 323, bursts to 4357, peaks near
+clipping. It is the bursts that hold the door open.
+
+**There is no setting for "only my voice, and only when I am near".**
+Nothing in the pipeline does speaker identification, and the VAD is a
+neural classifier rather than a level gate, so turning the gain down
+suppresses the owner along with the room. What exists is: shorten the
+window (done), suppress noise before the VAD reaches it
+(`mic_noise_suppression`, still `Off`), and the echo-cancel filter --
+which the satellite only actually started using at 14:37 today, when
+the container was first recreated rather than restarted. Any judgement
+about the noise from before that time was made on the raw microphone.
+
+Changed one thing, on the owner's own rule: two audio settings at once
+is what turned "working but slow" into "not waking" on 28 September.
+
+## A different network is a different place
+
+The third presence piece, 29 September 2026, and it is not the one
+that was planned.
+
+The intention was to name the home network and require the laptop to
+be on it. Asked which SSID meant home, the owner said *"it might be
+both, or any wifi"* -- so no list of names can say where home is, and
+the whole approach was wrong.
+
+What the name does say, reliably, is that the laptop **moved**. A
+different network is a different place, whichever place it is. So the
+new rule decides nothing about where anybody is: it says that whatever
+was true before is no longer known to be true, and turns
+`input_boolean.in_the_room` off so the arrival rule has to establish
+presence again from an actual measurement.
+
+If the owner is sitting in front of the laptop when it joins the new
+network, the arrival rule fires within half a second and the greeting
+follows. That is the homecoming that was being missed -- without ever
+knowing which network home is.
+
+`sensor.laptop_network` is published beside the heartbeat, from
+`iwgetid -r` rather than nmcli: it reads the interface directly and
+does not care what brought the link up.
+
+Guarded against the walk past `unknown`. A publisher restart or Home
+Assistant coming up moves the entity from unknown to its value, and
+neither is the laptop going anywhere.
+
+Tested by setting the entity to another name: the rule fired,
+`in_the_room` went off and straight back on, and the server received
+the arrival twenty seconds later. The end state reads `present`, which
+is right -- the owner is at the laptop, in the new place.
+
+**What is still not covered.** A watch switched off or left on its
+charger; and moving between two places on the same network name, which
+a phone would catch and this cannot.
+
+## Present, away, and the third answer
+
+The second of the three presence pieces, 29 September 2026.
+
+`input_boolean.in_the_room` had two states, so every fault in the
+chain arrived as the same word: away. A dead publisher, a suspended
+laptop, a blocked radio -- each one marked the owner absent, held
+reminders back from somebody sitting right there, and greeted them on
+the way out of the fault.
+
+`sensor.owner_presence` is `present`, `away` or **`unknown`**, and
+carries a `reason` attribute saying which. Away means the measurement
+worked and the watch is not here. Unknown means it could not be
+trusted, which is a different thing.
+
+Three parts to it:
+
+- **`sensor.watch_adapter`**, published alongside the heartbeat:
+  `ready`, `soft_blocked`, `hard_blocked` or `missing`, read from
+  `/sys` rather than by running rfkill so it costs nothing per beat.
+  Without it, "no watch in range" and "no radio" were the same
+  silence.
+- **The template sensor**, which is unknown when the publisher is not
+  beating or the adapter is not ready, and otherwise passes through
+  the raw verdict.
+- **A guard on the away rule.** The template alone only describes; the
+  guard is what makes `unknown` protective. The rule now refuses to
+  mark anybody away unless the publisher is alive and the adapter is
+  ready, so a fault can no longer drive a departure or the greeting
+  that follows it.
+
+Measured: publisher stopped, `owner_presence` went to `unknown` with
+*"the publisher is not running"*, and back to `present` on restart --
+where before the signal froze at -45 dBm and read as somebody standing
+at the desk.
+
+**The server holds reminders on a positive absence only.**
+`Presence.Away` accepts `off` and `away`; `unknown` and `unavailable`
+are silence, and silence is not a reason to keep quiet next to
+somebody. `presence_entity` now points at `sensor.owner_presence`.
+
+**What this does not fix.** A watch switched off, or on its charger in
+the next room, still reads as away: no signal here separates that from
+having left. Nor the 24-to-54-second gaps where BlueZ simply stops
+reporting while the adapter is fine -- those are indistinguishable
+from stepping out, which is why the forty-five second line was drawn
+where it was. The remaining piece is the wifi SSID, for leaving with
+the laptop.
+
+## A frozen sensor is worse than a missing one
+
+Built 29 September 2026, the first of three pieces agreed for
+presence.
+
+`sensor.watch_signal` is only ever set to `unavailable` by a publisher
+that is alive and has counted 150 missing samples. A publisher that
+has died, or a laptop that has suspended, writes nothing at all --
+and Home Assistant keeps the last reading for ever. Proven by stopping
+the service: the sensor sat at **-45 dBm**, which reads as somebody
+standing at the desk, and stayed there. Frozen on "here" means
+reminders spoken to an empty room with no clock to expire it.
+
+**The absence of a message is the message.** `watch.py` now counts
+upward into `sensor.watch_publisher_heartbeat` every five seconds,
+before the reading and regardless of it, so a blocked radio leaves the
+heartbeat beating while the signal goes unavailable and the two
+failures can be told apart. The value counts rather than repeats
+because Home Assistant records `last_updated` only when the state
+differs, and a heartbeat that repeated itself would look as stale as
+one that had stopped.
+
+`binary_sensor.watch_publisher_alive` decides from how long ago that
+last moved. **Measured: publisher stopped, `off` 24 seconds later**
+(a 20-second threshold plus up to 10 seconds of trigger granularity),
+and back to `on` within seconds of restarting it.
+
+No watchdog, deliberately. A timer has to guess what "stuck" looks
+like; an elapsed clock cannot be wrong.
+
+**Two things cost time here.** A trigger-based template needs the
+plural `triggers:` key with `trigger:` inside -- the legacy `trigger:`
+key with a modern inner body is accepted by `check_config` and then
+silently creates no entity. And adding `template:` to a configuration
+that did not have it needs a **restart**, not `template.reload`: the
+integration was never set up, so there was nothing for the reload to
+reload. Neither produced a log line.
+
+Still to come: three states instead of two, so a fault reads as
+`unknown` rather than `away`; and the wifi SSID, so leaving with the
+laptop is visible.
+
+## voice_only is not there when PulseAudio starts
+
+The satellite crash-looped nineteen times on 29 September 2026:
+
+    IndexError: no soundcard with id voice_only
+
+Two things had to happen together. The container was recreated rather
+than restarted, so `.env` finally took effect and
+`AUDIO_INPUT_DEVICE="voice_only"` was applied for the first time --
+that setting had been sitting unapplied for a day. And PulseAudio had
+restarted at 14:25:32 without loading `module-echo-cancel`, so
+`voice_only` did not exist.
+
+**The module fails at startup and succeeds a minute later, with
+identical arguments.** `~/.config/pulse/default.pa` is correct;
+loading it by hand afterwards worked first time. The master device it
+attaches to -- `alsa_input.pci-0000_00_1f.3.analog-stereo` -- is
+created asynchronously by udev detection, and the `load-module` line
+runs before it is there. Nothing retries.
+
+So the satellite has a hard dependency on a device that is missing for
+the first moments of every session, and it responds by exiting rather
+than waiting. `docker ps` shows `restarting`, and the only way to see
+why is `docker logs`.
+
+**Loading it by hand needs the quotes kept.** `pactl load-module
+module-echo-cancel ... aec_args="a=1 b=2"` from a shell loses them,
+PulseAudio splits at the space, and it answers "Failed to parse module
+arguments" -- which looks like a broken argument and is not. Single
+quotes round the whole `aec_args="..."` are what survive. This cost a
+detour: the parse error was mistaken for the startup failure, and they
+have different causes.
+
+Not fixed, only restored by hand. What it wants is the same shape as
+the Bluetooth watchdog: something that checks `voice_only` exists,
+loads the module if it does not, and retries until the master device
+has appeared.
+
+## A stray listener is the quietest fault there is
+
+Twice in two days a port held by something unrelated broke a whole
+subsystem, and neither said so anywhere anybody looks.
+
+The satellite would not start for twelve and a half hours because an
+orphaned process still held 6053. The embedding server restarted **411
+times** on 28 September 2026 because `python3 -m http.server 9000`,
+started at two in the afternoon for a different project entirely and
+then orphaned, held the Prometheus port that
+text-embeddings-inference binds alongside its own. It got as far as
+"Warming up model" every time and exited 0.
+
+**The only visible symptom was one grey line under an answer:**
+*"Matched by wording, not meaning: the embedding server was not
+answering."* Memory search silently fell back to the full-text index
+for a day. Nothing was broken enough to notice: answers still came
+back, just worse ones.
+
+Two things worth keeping:
+
+- **Move our own port, do not evict theirs.** The fix was
+  `--prometheus-port 9090`, not killing somebody else's server. A
+  default port is a port somebody else will take, and arguing over it
+  is a fight that recurs.
+- **`docker ps` says "Up 8 seconds" for a container that has never
+  worked.** Restart counts are the thing to read: `docker inspect
+  --format '{{.RestartCount}}'`. Uptime on a restarting container is
+  time since the last death.
+
+## A turn has thirty seconds, and the transcript used to lie about it
+
+Four turns in a row were cut on 29 September 2026. Each was recorded as
+*"[The person stopped this before it finished.]"* and the person had
+not touched any of them.
+
+**Measured: 29.98, 29.98, 29.98, 29.97 seconds from `chat started` to
+`chat cancelled`.** Whatever asks the question closes the connection
+at thirty seconds, the server sees the caller leave, and stops the
+turn -- correctly, since nobody is left to hear the answer.
+
+Where the thirty lives is still unknown. It is not
+`assist_pipeline` (`DEFAULT_PIPELINE_TIMEOUT` is five minutes), not
+the Ollama integration (`DEFAULT_TIMEOUT` is five seconds and is only
+used for the model listing), not the `ollama` client (no timeout
+passed), and not the satellite. The keep-alive chunks the assist
+endpoint already sends do not prevent it, which says it is a limit on
+total duration rather than on idle time. Worth finding, because
+raising it is the one fix that needs no work here.
+
+**What was fixed is the lie.** `conversation.Interrupted` takes the
+reason now; empty still means the person stopped it, which is the
+ordinary case. A caller hanging up says so instead.
+
+Stopping with a reason used to mean failing -- `finishStopped` called
+`Fail` whenever a reason was set, because the only reason that existed
+was the server shutting down. Now only the shutdown fails: the machine
+took away a turn that was going to work. Everything else stays
+cancelled, because the turn did not finish and nothing went wrong with
+it. The reason still reaches the transcript, from the active map,
+which is safe to read there because the entry is deleted only after
+`execute` returns.
+
+**The thirty seconds goes on the model, not on the tools.** Across the
+four cut turns the tools cost microseconds to milliseconds, bar one
+1.5-second calendar read. The shape is always the same: about five to
+seven seconds for the first model call, a tool that returns at once,
+and then a second model call that had not answered twenty-five seconds
+later.
+
+So a turn needing two model calls is already close to the limit, and
+the way out is fewer of them. "Archive everything" over 71
+conversations is the worst case there is: one call per conversation,
+each with a model round trip in front of it. Batch arrays --
+`conversation_archive` taking a list, as `calendar_cancel` already
+does -- would make it two calls instead of seventy.
+
+## A standing description of the person
+
+Owner's idea, 29 September 2026: *"capturing my personality and
+understanding my behaviour ... like my P.A knowing all of me"*. Every
+day, read the conversations and write down what they talk about, the
+people they know, and how they behave.
+
+The memories already held are facts given once -- a birthday, a pet's
+name, that the coffee is filter coffee. True, scattered, and none of
+them says what somebody is like to talk to. `internal/profile` is the
+rest.
+
+**Prose, and the owner chose it knowing the cost.** Offered counted
+observations instead -- *"active 9am to 1am"*, *"reminders are the
+commonest subject, 31 of 120"* -- which a model uses just as well and
+which can be checked. They chose prose. What that buys is a
+description that reads like somebody who knows them; what it costs is
+that a wrong line cannot be found by looking, only by noticing.
+
+Three things keep it honest, none of which limits what it may say:
+
+- **Rebuilt from raw messages every time, never from the previous
+  profile.** A description built from its own last version drifts:
+  each day's wording becomes the next day's evidence, and after a week
+  it describes somebody invented on the Tuesday.
+- **Nothing is written from fewer than twenty messages.** A confident
+  description drawn from a handful of sentences goes into every prompt
+  afterwards and is acted on. A quiet week leaves the existing one
+  standing rather than replacing it with something worse.
+- **It is an ordinary memory**, in the always tier under a fixed
+  subject. `memory_list` shows it, and the owner can have it changed
+  or dropped like any other. That is the only correction mechanism
+  prose has.
+
+A week is read rather than a day: a day is one mood and a handful of
+subjects, and what recurs cannot be told from what came up once.
+
+**The first scheduled work in this server.** Naming, condensing and
+indexing all run after a turn; nothing ran on a clock. `describeDaily`
+is a timer, first firing ten minutes after startup -- not at once,
+because restarting to change something unrelated should not spend a
+model call -- and daily after that. It describes whoever has spoken in
+the last week rather than everybody with an account, so somebody
+silent keeps what they had.
+
+`SaidSince` and `Talkers` are new, and are the first reads that cross
+conversations: reading somebody over a week is a different question
+from reading a conversation, and no number of per-conversation calls
+answers it.
+
 ## Look it up every time
 
 **The owner's standing rule, 27 September 2026: every statement about
@@ -962,20 +1405,112 @@ what is being reused is the only lever that has moved this.
 That is partial by itself. The model's own prose answers also carry the
 data and cannot be redacted without wrecking the transcript.
 
+**And it is not only tool results. Recall is the other mouth.** Both
+recall blocks search by meaning, so a question of the shape *what
+conversations are there* pulls back every previous time that question
+was asked -- each one stored as `They said: ... You answered: ...`,
+each answer right when it was given. On 27 September 2026 the owner
+caught this: three such exchanges came back scoring 0.61, 0.61 and
+0.60, no tool was called, and the model wrote a fourth answer in the
+same shape. The transcript block already carried three paragraphs
+saying exactly why that is wrong. It lost anyway.
+
+So both blocks now **open** with four sentences fixing the order --
+everything here is information, not an answer; if a tool can tell you,
+the tool decides; read this, then call the tool anyway; where they
+disagree the tool is right. Not because the reasons were missing, but
+because they were at the bottom of a long block and the rule needed to
+be at the top and short enough to survive the rest of the prompt. The
+owner's words for it: *"the recalled are just info, tool call is the
+first priority -- if there is a tool, use it"*, and then, sharpening it
+into a decision with two branches: *"the model has to answer whether
+the available tools list can answer the current query -- if yes use
+tool, else say what you got"*.
+
+Both branches are stated because one alone leaves the other unsaid. A
+model told only to prefer tools, asked something no tool covers, still
+has to answer from something, and will offer a note as a present fact
+rather than as a thing that was said. So the second branch -- answer
+from what is here and say where it came from -- is not a softening of
+the rule, it is the remainder of it.
+
+**The timeline hid the fix, which cost more than the fix was worth.**
+A prefetched listing goes into the prompt, not onto the wire as a tool
+result, so it left no tool call for "How this answer was made" to
+draw. The screen showed *Recalled* then *Answered* and omitted the one
+step the answer was actually built from. On 27 September 2026 the
+owner read that screen three times running and concluded, correctly
+from what it showed, that no tool had been called -- while the log and
+the database both said it had, down to a conversation created
+seconds earlier that no memory could have held.
+
+An assistant that is right and cannot be seen to be right is not
+trusted, and the owner is strict here precisely because he trusts it.
+So `chat.Recalled` gained `Tools`, prefetch records each listing it
+read, and the timeline emits a `read_first` step per tool, ahead of
+the recall step. Whatever is enforced in code has to be visible in the
+timeline, or the next silent mechanism buys the same argument again.
+
+**Memory had no listing tool, so there was no call to make.** Asked
+what it remembered, the model answered from recall -- not because it
+skipped a tool but because none of the four memory tools could answer
+the question. `memory_search` requires an `about` and returns the
+nearest few; nothing returned all of them. A rule saying *call the
+tool if one can answer* is satisfied by doing nothing when none can,
+which is the correct behaviour and the wrong outcome.
+
+So `memory_list` exists: every tier, every memory, `Prefetch: true`.
+
+**Memory is the only thing prefetched, and that is a decision, not an
+oversight.** All four domains were, briefly. Prefetching the diary cost
+between 2.4 and 3.2 seconds of Google call on every single turn,
+including turns that had nothing to do with the diary, and the three
+listings between them meant the model had no reason to call a tool for
+any ordinary read -- which also left nothing to narrate while it
+worked. Memory is local, wanted on every turn whatever is asked, and
+answers in under a millisecond. The owner's instruction on 27
+September 2026: *"only memory has to be prefetched"*.
+
+**What that gives back is the risk the prefetch was removing.** For
+reminders, conversations and the diary the model must now choose to
+call the tool, and choosing is the thing it was measured getting wrong.
+What stands in its place is prompt text: the two-branch rule at the
+head of both recall blocks. That is the weaker half and is known to be
+-- see below. If those domains start being answered from recall again,
+this is the paragraph that explains why.
+
+Its renderer opens with **"There are N memories in total"**, because a
+listing that only prints rows invites the model to report the number
+of rows as the number of things. That is not hypothetical: the same
+day, `conversation_list` returned its default ten rows out of sixty-two
+conversations, with no total anywhere, and the answer was "you have
+ten conversations, sir" -- a tool call that happened, a listing that
+was current, and a false answer regardless. Every capped listing owes
+its total.
+
+**Prompt text is the weaker half of this fix and is known to be.**
+The load-bearing half is `Prefetch`, which removes the decision
+instead of arguing with it. Three tools have it -- `reminder_list`,
+`conversation_list`, `calendar_list` -- so those domains are read
+before the question is even put. **Memory has no prefetch**, which is
+why *what have you saved in memory* is still answered from recall
+alone. That is the next gap, not a mystery.
+
 ## The calendar
 
-Two scopes, both non-sensitive, and the division between them is the
-whole shape of the package. `calendar.app.created` gives a calendar of
-its own and complete control of that one; `calendar.freebusy` says when
-the person is busy across every calendar, without saying what they are
-busy with.
+Two scopes to begin with, both non-sensitive, and the division between
+them is the whole shape of the package. `calendar.app.created` gives a
+calendar of its own and complete control of that one;
+`calendar.freebusy` says when the person is busy across every calendar,
+without saying what they are busy with. A third, `calendar.readonly`,
+was added later and is sensitive; see below.
 
 So it can write, but only where it cannot disturb anything, and it can
 see that four o'clock is taken without seeing whose meeting it is.
 Confirmed non-sensitive in the console on 27 September 2026, which is
-why they were chosen: no verification, no published privacy policy, and
-no seven-day refresh token. `calendar.events` and `calendar.readonly`
-are sensitive and bring all three back at once.
+why they were chosen first: no verification, no published privacy
+policy, and no seven-day refresh token. `calendar.events` and
+`calendar.readonly` are sensitive and bring all three back at once.
 
 **The calendar's identifier is remembered, not discovered.** The
 permission that makes this safe is also what stops it looking:
@@ -988,6 +1523,21 @@ called Jarvis.
 
 A calendar deleted by hand shows up as a 404 when next used, and
 another is made in its place.
+
+**Granting permission again used to clear it, and that made a second
+calendar.** `Put` built a row with `calendar_id` left at its zero value
+and handed it to GORM's `Save`, which writes every column of a struct
+including the ones nobody set. So each completed consent screen set
+`calendar_id` to NULL, the next calendar write found none recorded,
+and made another. It is not a once-off: in testing mode with a
+sensitive scope the refresh token dies every seven days, so this was a
+fresh orphan calendar every week, each quietly taking the writes meant
+for the last.
+
+Found on 28 September 2026 with two calendars named Jarvis on the
+account -- the older one holding a birthday the assistant had saved,
+unreachable ever since. `Put` is now an upsert over named columns, and
+`TestPutKeepsTheCalendar` fails against the old code.
 
 **There is a `calendar_update`, and there had better be.** Without one
 the only way to rename an event is to cancel it and add another, which
@@ -1015,8 +1565,207 @@ is not knowable with these scopes and a model left to guess will
 furnish a meeting.
 
 There is no tool for changing the person's real events. There is no
-permission for one, and offering it would have the model promising what
-it cannot do.
+permission for one -- `calendar.readonly` reads and nothing more -- and
+offering it would have the model promising what it cannot do.
+
+**Reading them is a different matter, and for a few hours there was a
+scope with nothing behind it.** `calendar.readonly` was granted on 27
+September 2026 and wired to nothing. Asked that night to read the
+events on `rjdhanush22@gmail.com`, the assistant answered that it
+could not -- true of its tools, false of its permission, and exactly
+what the honesty rule asks for when no tool covers a question. The
+fault was ours for granting a scope and leaving it unused.
+
+`calendar_events` now takes an optional `calendar`. Named, it reads
+that one of the person's own; left out, it reads the assistant's, as
+before. The two are worded apart on purpose: the person's own comes
+back stating the count and saying plainly that it cannot be changed,
+and **without identifiers**, because an identifier is only useful for
+changing a thing and offering one for a read-only calendar invites a
+call that must fail. A name that matches nothing brings back the names
+that do exist, rather than being answered as an empty day.
+
+**Nothing refuses on a name that did not match.** Spoken input is
+wrong more often than it is right, so a name matching nothing means
+the microphone failed, not that the thing is missing. The pattern is
+one mechanism across every domain: the tool fetches the candidates
+itself, hands them back, and says to name the likeliest and ask a
+question answerable with yes or no. `internal/heard` does the
+matching -- exact, then one name inside another, then edit distance at
+`Alike` 0.6, refusing to choose when two are within `Clearer` 0.15 of
+each other. `tool.WhichOne`, `tool.WhichOfThese` and `tool.Confirm`
+give every domain the same words for it.
+
+**What the conversation already holds settles most of it.** The
+calendars had been read out by name one turn earlier when
+`RJDanajtvali.jml.com` arrived; the answer was sitting in the window.
+A name spelt out, listed by a tool or written correctly a moment ago
+is what a garbled one almost certainly is, and the model is told to
+look there before deciding a name is unknown.
+
+**How far the assumption may carry depends on what is done with it.**
+The owner's rule on 28 September 2026: *"these kinds of assumptions
+are safe for get calls, but for create, update, delete, confirmation
+should be asked"*. So a read proceeds on a sound-alike match and names
+what it read, letting the person correct it in the next breath; a
+create, change, rename or deletion has to be agreed first, as a
+yes-or-no. A wrong reading costs a sentence and a wrong deletion
+cannot be undone.
+
+The model cannot tell an exact match from a near one by looking at the
+answer, so the tools say which it was: `tool.BySound` is appended
+whenever what was found is not what was said, and it carries the rule
+with it.
+
+Fetching is the tool's job, not the model's. Told to go and look, the
+model has been seen to skip the looking and answer that the thing does
+not exist -- which about stored state is a claim it cannot support.
+The spoken rules say never to end on a question; this is now the
+second stated exception, because yes and no survive transcription
+where a name does not, and the question mark is what holds the
+microphone open for the answer.
+
+**A calendar named aloud is matched by likeness, never literally.**
+Speech-to-text writes an address down as it sounded:
+`rjdanesh22rjmail.com` was what came back for `rjdhanush22@gmail.com`,
+and `javas` for Jarvis. Matching exactly refuses both, and refusing
+reads to the owner as the assistant being stupid rather than as the
+microphone being imperfect. The order is exact identifier, exact name,
+the words people actually use for their own calendar -- main, primary,
+mine -- then containment, then edit distance over the longer name at
+`Alike` = 0.6.
+
+**Two calendars equally near is a question, not a coin toss.** When
+the best match beats the next by less than `Clearer` = 0.15, nothing
+is chosen: reading the wrong calendar answers something nobody asked.
+
+**Nothing found is also a question.** The tool comes back with the
+calendars that do exist and an instruction to name the likeliest and
+ask, explicitly *not* to say there is no such calendar. The owner's
+words on 28 September 2026: *"it could first fetch calendars, try to
+match something that closely resembles mine, not even exactly; if not
+sure, it can ask me, I can say yes, and then it can go further"*. The
+prompt half matters as much as the matching: the model had refused
+without calling anything at all, so `calendar_events` now says to pass
+a name through however wrong it sounds, and that claiming a calendar
+does not exist is a claim about what the person has, which needs a
+tool to have just run.
+
+**An example beats a schema, and examples written before an argument
+existed teach the model to leave it out.** The `saying` argument was
+filled on the first call of a turn and on none after it, and the cause
+was thirty-seven worked examples that did not have it -- including
+four the same evening written to demonstrate the calendar argument.
+Its description saying "which the examples above leave out but you
+must always include" was noticing the problem and writing round it.
+Every example carries a saying now, and
+`TestEveryExampleMatchesItsSchema` checks examples against the
+narrated schema -- the one the model is actually shown -- and fails an
+example without one.
+
+**A stay of four days was four events, because nothing could say
+otherwise.** `calendar_add` took a start, a length in minutes and an
+all-day flag, so asked for the 26th to the 29th the model wrote four
+one-day entries and then could not change them as one thing. That was
+the schema's fault and not the model's. Both `calendar_add` and
+`calendar_update` take `ends` now, and the read-back covers the whole
+span: reading only the first day makes a multi-day event look missing
+from every day but one.
+
+**The thinking sound and the aside cannot both be had.** What is said
+mid-turn plays through the satellite's music player, because that is
+the one player the voice pipeline never touches -- but the thinking
+sound ducks exactly that player to half volume at INTENT_START, and
+unducks only at `_tts_finished`, after the answer. So for the whole
+window the aside occupies, it is ducked: the aside came out quiet
+while the answer was at full volume. The safety property is the cause.
+
+`switch.laptop_lva_thinking_sound` is off from 28 September 2026. The
+aside is the better version of the same signal -- it says what is
+happening rather than only that something is -- and turning the tick
+off costs nothing and needs no patch. Turning it back on brings the
+quiet aside back with it.
+
+**What is owed has to be something a person would actually say.**
+`Added` owed the whole rendering of the event -- "Gunalan's Birthday,
+all day on Friday 5 February" -- and no model writes that sentence, so
+the check never matched and every single creation was followed by the
+server repeating itself. What the owner heard was: *"Gunalan's birthday
+is marked on the 5th of February, sir. It is Gunalan's Birthday, all
+day on Friday 5 February."* It owes the name alone now, which is the
+part anybody repeats and the part they would notice missing. The
+lesson generalises: an obligation phrased as the server's own wording
+is an obligation that can never be met.
+
+**The sentences the server adds are spoken in the persona.** What
+`Ensure` appends is written in Go, not by the model, and it is read
+aloud as though the assistant said it -- so without help it arrives in
+nobody's voice: a butler's reply ending in a line of flat server
+English. The address is woven in before the full stop, and only when
+the reply has not already used it, since a persona that says sir says
+it once and a reply that says it twice sounds like two people talking.
+A persona that addresses nobody gets nothing added.
+
+The alternative was to hand the answer back to the model and ask it
+again, in its own words. That is kept in reserve: it costs a round
+trip on a voice turn and it can be got wrong twice, where this cannot
+be got wrong at all.
+
+**Counts of the same thing are owed once, not once per call.** Four
+events removed in one turn owed four pairs of numbers -- eight then
+seven, seven then six, six then five, five then four. Read out in a
+row they are gibberish, and they cascade: the answer said "had 8
+events and now has 4", which satisfies neither the first pair nor the
+second, and each sentence appended supplied the number that made the
+next one match. What came out was four contradictory-sounding
+sentences after a correct one. `tool.Merged` collapses tallies of the
+same noun into the net change before `Ensure` runs, keeping the place
+of the first so the answer still reads in the order things happened.
+Different nouns stay apart: reminders and events are not one tally.
+
+**A tool that was refused is not evidence about the world, and it was
+read as such.** Told to delete four one-day events, the assistant made
+four `calendar_cancel` calls carrying
+`<id_for_first_single_day_event>` and the like, had all four refused
+by the identifier pattern, and then told the owner the events did not
+appear to exist. They did exist; it had never looked. Nothing was
+deleted, which is the pattern earning its keep, but the answer was
+false and the failure was its own.
+
+Three things came out of it. A value shaped like a placeholder is now
+named as one -- "a description of the thing rather than its
+identifier. List them and use the identifier exactly as it came back"
+-- rather than being called the wrong shape. Every refused call now
+carries the sentence "this call never ran, so it says nothing about
+what exists". And the honesty rules say it in general: a tool that
+failed did not run, so it is not evidence that a thing is missing, and
+where it asks you to look something up first, do that before asking
+for anything to be removed.
+
+**An identifier the model does not have is invented rather than
+asked for.** A call went out with the literal
+`<identifier_for_the_existing_event>`. Google refused it, for the
+wrong reason. Event identifiers now carry a pattern, the way memory
+identifiers always have, so the refusal says what is actually wrong.
+
+**A calendar and an event are different things, and the tool names
+have to say so.** The tool that reads events was called
+`calendar_list`. Asked on 28 September 2026 to list the calendars, the
+model called `conversation_find` and then `conversation_list`, and
+answered, correctly, that what it had found were conversations rather
+than calendars. It was not guessing: nothing offered to list
+calendars, and the one tool whose name suggested it reads events. It
+is `calendar_events` now, and `calendar_calendars` and
+`calendar_rename` exist.
+
+`calendar_calendars` needs both scopes at once -- `calendar.readonly`
+to list them, since `app.created` forbids it -- and marks which one
+the assistant writes to, because read access and write access look
+alike until something is refused. `calendar_rename` patches rather
+than replaces, so the timezone and description survive, and it renames
+the assistant's own calendar only: the permission reaches no other, and
+refusing here gives the model a sentence to pass on instead of a scope
+error.
 
 ## Reaching Google
 
@@ -1032,21 +1781,173 @@ client -- so reconnecting after a disconnect yields an access token
 that dies within the hour and nothing that outlives it, which looks
 like a bug an hour after it looked like success.
 
-**The client is in Testing, on purpose, for now.** A client in Testing
-issues refresh tokens that expire after seven days -- *unless the app
-requests only name, email address and profile*, which is exactly what
-it requests today. So nothing expires yet.
+**The client is in Testing, on purpose.** A client in Testing issues
+refresh tokens that expire after seven days -- *unless the app requests
+only name, email address and profile*. It requested only those to begin
+with, so nothing expired.
 
 Publishing to production is blocked by Google on a homepage URL and a
 privacy policy URL, which need a public domain nobody here owns. The
 owner chose on 27 September 2026 to leave it in Testing until a
-sensitive scope forces the question. **Adding the Calendar scope is
-what forces it**: from that moment the seven days apply, and the
-connection needs re-granting every week until the app is published.
+sensitive scope forced the question, and later the same day asked for
+the sensitive scopes anyway, knowing the cost. **The seven days are now
+running**: the connection needs re-granting every week until the app is
+published, and `./personal-assistant google <user>` is how to find out
+that it has lapsed before a tool does.
+
+## The sensitive scopes
+
+`calendar.readonly` and `tasks`, granted on 27 September 2026 because
+the owner wanted the real calendars and the real task lists, not only
+the one calendar the assistant made for itself.
+
+They are sensitive, so Google shows an unverified-app warning that has
+to be clicked past, and the Tasks API had to be enabled separately in
+the console. **Neither is granted by asking for it in `config.ini`
+alone.** Three things must all agree: the scope is saved on the Data
+Access screen, the API is enabled, and the consent screen is completed
+with every box ticked. The boxes on the granular consent screen **start
+unticked**, and pressing Continue past them grants nothing while
+looking exactly like success. This has now caught us more than once;
+the way to be sure is to read `.checked` off the page, and afterwards
+to ask Google what the token actually allows rather than trusting what
+was written down.
+
+What that grant sees: eleven calendars, of which two are the owner's
+own -- `rjdhanush22@gmail.com`, the primary, and the assistant's own
+`Jarvis` -- and the rest are read-only Classroom and holiday
+subscriptions. One task list, `My Tasks`.
+
+**There is no Birthdays calendar in the list**, but there are birthday
+events. Google only lists the contacts' birthday calendar when it is
+switched on, and it is not; the birthdays that exist are ordinary
+events on the primary calendar carrying `eventType: birthday`, an
+all-day event with an annual recurrence. So a tool that goes looking
+for a calendar called Birthdays finds nothing, and a tool that reads
+the primary calendar finds them without trying.
+
+**Most of what is on the primary calendar was not put there by hand.**
+Of fifteen events across three years, eight are `eventType:
+fromGmail` -- cinema bookings and hotel stays that Google extracted
+from confirmation mail. They are read-only by Google's rule and cannot
+be created through the API at all. Anything that counts, summarises or
+tidies the diary has to expect that most of it is not the owner's own
+writing, and that it cannot write back the same kind of thing.
+
+`tasks` is read and write; `calendar.readonly` is read only. So the
+assistant can be trusted with a task list and can only look at the
+diary -- which is the right way round for a first attempt at either.
 
 In Testing with an External audience, only listed test users may grant
 access at all, so the owner's own address is on the test user list.
 Without it the consent screen refuses outright.
+
+**And the exception, found the same day.** A word list is not code, it
+is English. `calendar_events` was given an `Insist` predicate that
+matched dates, months, "birthday", "when is" and so on, so the server
+could refuse an answer until the calendar had been read. The owner
+threw it out: *"its not guaranteed that i will speak only english"*.
+A matcher that only works in one language is a bug waiting for the
+first sentence in another, and it fails silently -- the question
+simply is not recognised and the old wrong answer comes back.
+
+So this is the carve-out in the owner's own rule: what cannot genuinely
+be done in code is done in the prompt, and only then. The whole
+mechanism was removed -- the predicate, the registry's `Insisted`, the
+runner pressing an answer back.
+
+**What is used instead, and why those.** Two levers, both already
+measured in this file:
+
+- Framing against the listing. `memory_list` is prefetched on every
+  turn and had no `WhenUnasked` at all, which is what produced the
+  failure: asked when Alekhya's birthday was, the assistant read the
+  memory block, found a birthday belonging to somebody else and a note
+  about Alekhya that was not a birthday, and answered *"I don't have
+  Alekhya's birthday on record, sir"*. It never opened the calendar.
+  The block now says what it is -- what you were told, not a record of
+  their life -- and that anything with a date in it is in the calendar
+  whether or not it also appears here.
+- Examples. `calendar_events` now carries "when is Alekhya's birthday"
+  with a year-wide range. An example teaches the shape of a question
+  rather than its words, which is the part that survives the person
+  speaking another language.
+
+**Code before prompt, wherever code can do it.** The owner's rule, 28
+September 2026: *"wherever something that can be enforced by code
+rather than prompt should be done"*. A prompt is asked; code is
+obeyed. Prompt wording is for what genuinely cannot be settled in the
+server -- tone, judgement, what to say -- and only then.
+
+Reading every calendar is the example that produced the rule. The old
+`UseWhen` told the model it could name a calendar and it did not, so
+the answer was a question back to the owner. The default moved into
+the server instead, and no wording is needed for it any more.
+`readFirst` is the same idea for writes: the registry refuses a write
+whose domain has not been listed this turn, rather than asking the
+model to list it.
+
+**Every calendar is read by default.** Asked *"check if any event is
+there on October 2nd"* the assistant answered *"Nothing written here
+for that day, sir. That only covers what I have put down; shall I
+check your own calendar as well?"* -- while 2 October is Gandhi
+Jayanti and the holiday calendar said so. Offering to look is the
+tell: it knew there was somewhere else and stopped.
+
+`Diary.Everywhere` reads all of them at once and merges them by start
+time. At once rather than one after another, because one calendar
+takes several seconds and five in a row would outlast the question.
+Each event carries the name of the calendar it sits on, which is what
+tells a holiday apart from something the person arranged, and only the
+assistant's own carry identifiers, which is what keeps a holiday from
+being offered up for deletion. Naming a calendar still narrows it to
+that one.
+
+A calendar that will not open is named in the answer. A day called
+empty on the strength of a calendar that failed to load is a wrong
+answer rather than a missing one.
+
+**The calendar is the date and time hub.** The owner's rule, 28
+September 2026: anything to do with a date or a time -- asked about,
+mentioned in passing, or only discussed -- is read from the calendar
+before it is answered. Not only "what is on Tuesday": a birthday named
+while talking about something else, a trip, a deadline, the weekend.
+What was said may already be written down, or may clash with something
+that is, and neither can be known without looking.
+
+This is looking, not offering. `noticing` decides when to offer to
+write something down, and still wants a thing and a time; this decides
+when to read, and the answer is wider. The rule is in the tool's
+`UseWhen` and in `timekeeping` in the persona, in both places because
+framing next to the tool is what has been measured to hold.
+
+**A whole-day event is dates, and a timed one is timestamps, and a
+patch may not swap one for the other.** `Diary.Update` always wrote
+`DateTime`. For a birthday -- which Google stores as `Date` -- that is
+a request to change the kind of event it is, and the API refuses it
+outright. Moving Alekhya's birthday to 10 September 2027 failed twice
+on 28 September 2026 for this reason, and adding the same date as a
+new event succeeded a minute later, because `toGoogle` had the branch
+all along and `Update` did not.
+
+`Amend` now carries `AllDay`, read off the event the tool has already
+fetched rather than asked of the model, and `patchFor` chooses the
+shape. It does not count towards `Empty`: it states what the event
+already is rather than asking for anything, and counting it made
+"nothing was given to change" unreachable. The construction was split
+out of `Update` into `patchFor` so this is testable without Google,
+which is the only reason it is a separate function.
+
+**The failure was reported as something that never happened.** What
+the owner heard was *"The 10th of September 2026 is already past, sir
+-- Google will not accept a date in the past"*, and the model defended
+it when questioned. Nothing in the tool result said that; the tool
+said only that the call failed. A bare failure carries no explanation,
+and the model supplied a plausible one. The persona already says *a
+tool that failed told you nothing about the world* for this reason,
+and it was not enough -- the invented reason was specific, confident
+and repeated. Worth watching whether failures need to carry what went
+wrong in words rather than leaving the gap to be filled.
 
 **A refresh token dies for reasons invisible from here** -- the
 password changed, six months passed unused, it was revoked from a
@@ -1143,6 +2044,27 @@ caller judges it on thirty unbroken seconds of a faint signal, which is
 better evidence than any clock here. A greeting that could not be spoken
 says so rather than reporting success.
 
+**Presence cannot see a return when the laptop travels.** 28 September
+2026: the owner came home from the office and was not greeted.
+Nothing was broken. `sensor.watch_signal` had not been absent for a
+moment since 20:40, averaging -55 to -60 dBm across two and a half
+hours, and `input_boolean.in_the_room` had read `on` the whole time.
+The arrival rule fires on a transition into the room, and there was no
+transition to fire on.
+
+The reason is what the sensor measures: the watch's distance from
+*this laptop*. The laptop went to the office too, so the watch and the
+laptop never separated, and a pair that never separates cannot record
+a departure or a return. It works when the laptop stays put and the
+person leaves; it is blind when they leave together.
+
+Nothing in the thresholds will fix this -- the signal was strong
+throughout, correctly. Telling home from elsewhere needs a second
+signal that knows where the laptop is: the Wi-Fi network it is joined
+to is already to hand, and a phone tracked by the Home Assistant
+companion app is the other obvious one. Not built, and not yet the
+owner's decision which.
+
 **Not in the transcript yet.** The owner asked for what the assistant
 said to be recorded, and it is not: a `chat` requires a prompt, and the
 whole history is prompt-and-answer pairs. Recording something the
@@ -1150,7 +2072,69 @@ assistant said unprompted needs that model changed, which is why
 reminders do not appear there either. Left undone rather than faked with
 a prompt nobody spoke.
 
-### Reminders are said through Home Assistant, and nowhere else
+**And the ask is now wider than greetings.** 28 September 2026: *"a
+conversation rename event should also go into the conversation --
+every event should go into the conversation"*. Not only what the
+assistant said unprompted, but what happened: a conversation renamed,
+a reminder fired, an event written into the diary.
+
+The obstacle recorded here -- that the message model cannot hold a
+thing with no prompt -- had already been solved and this note was out
+of date. `ReminderAnnouncement` and `PresenceAnnouncement` are exactly
+that: assistant messages with no question above them. Naming a
+conversation only needed to join them.
+
+**A rename is an announcement.** `conversation.Renaming`, written by
+`noteTitle` on every channel rather than only the one that heard it
+said. Seeing the new name in the listing is not the same as the
+assistant being able to answer for it: asked *"why did you rename like
+that?"* it replied that it had no record of performing a rename and
+asked what was meant. That was true. The name went to the client as an
+event and into the listing, and nowhere a model could read.
+
+The model is told *"You named this conversation at 11:31 pm, from what
+had been said in it so far"*, because the question that follows a
+rename is why, and the reason is the half that answers it.
+
+Still to come, on the same rule: an event written into the diary, a
+reminder cancelled, a memory saved. Each is a tool result today and
+lands only in the turn that caused it.
+
+### Reminders are said through Home Assistant, to the room and to the phone
+
+Owner's request, 29 September 2026: *"i want the announcement to be
+heard on phone too"*. Too, not instead -- the speaker in the room is
+still the one expected, and the phone is an addition.
+
+`Config.Notify` lists Home Assistant notify services, and `Say` calls
+each after the satellite has spoken. The message sent is the literal
+word `TTS` with the words in `tts_text`, which is how the Android
+companion app is asked to say something rather than show it; a phone
+that only shows it is a phone somebody has to look at, and that is not
+what an announcement is for. `media_stream` is the music stream rather
+than the notification one, because the notification stream is silenced
+by every do-not-disturb rule, and an announcement nobody hears is the
+fault this exists to fix.
+
+**These leave the house, and nothing else here does.** A push
+notification does not travel over the local network or the VPN: Home
+Assistant hands it to its push service, which reaches the phone
+through Google. That is why it arrives on mobile data, on somebody
+else's wifi, and with Tailscale disconnected -- and why the words are
+seen by somebody other than the owner on the way. Worth knowing before
+adding a second service to the list.
+
+Failures are dropped rather than returned. The announcement has
+already been made in the room by the time the phone is tried, and
+reporting failure would have the caller retry, saying everything twice
+where it was already heard.
+
+Still one-way and unconditional: every announcement goes to both. The
+obvious next step is `input_boolean.in_the_room` deciding -- the room
+when they are in it, the phone when they are not -- which would also
+answer reminders being held back entirely when nobody is there.
+
+
 
 Owner's decision. The satellite is the only place a reminder lands.
 Pushing to a browser was planned and dropped as not worth it: the person
@@ -2545,6 +3529,34 @@ the screen. It is never sent to a model: read back as conversation it becomes
 the model explaining an outage it had no part in, and inventing detail to fill
 the gap.
 
+**The exact error is never said, on any channel.** Owner's rule, 28
+September 2026, on hearing the assistant read out *"platformai:
+requesting token: Post https://accounts.zoho.com/oauth/v2/token: dial
+tcp: lookup accounts.zoho.com on 127.0.0.53:53: server misbehaving"*.
+What they want is *"Sir, I am having some difficulty reaching the
+server"*, with the error kept and given if they ask for it.
+
+The voice channel used to append the detail, on the reasoning that
+there is no "more info" on a speaker so withholding it left the person
+with nowhere to go. That reasoning was wrong in its premise: asking is
+where they go, and asking already worked. `ForModel` renders a failure
+with `[Exact error, for reference if asked: ...]`, so *"what went
+wrong"* is answered from the conversation rather than guessed at. The
+sentence is now the whole of what is said, typed or spoken.
+
+**A failure that threw its cause away.** The environment failing to
+start logged the error and called `Fail` with a bare sentence, so the
+one thing the person might ask about was not in the conversation at
+all. It carries the cause as detail now. Worth checking any other
+`Fail` for the same shape.
+
+**Failures speak in the persona's voice.** They are the one reply the
+model has no hand in, and they were landing in flat server English in
+the middle of a butler's conversation. `persona.Addressed` adds the
+address once, and the sentences were rewritten in the first person and
+about "the server" rather than "the service". The helper moved out of
+`internal/tool`, which had the only copy, so there is one.
+
 **Left behind: tool calls.** The owner's instruction was *"don think about
 tool cals now"*, so there is no `tool` role and no `tool_calls` column. Adding
 them later is a migration, which is the right price for not guessing their
@@ -2749,6 +3761,36 @@ networks close a silent connection and a real agent will think for minutes
 without speaking.
 
 ### The satellite is linux-voice-assistant, not wyoming-satellite
+
+**A turn that ends says so.** Owner's request, 29 September 2026: a
+small sound when it goes back to idle. Every other sound the satellite
+makes marks something starting -- the wake chime rises, the processing
+sound holds -- and nothing marked the end. A turn that produced no
+speech, because nothing was heard or there was nothing to say, ended
+in a silence identical to the satellite never having woken. The only
+way to find out whether it was still listening was to keep talking.
+
+Not a rare case: 23 `stt-no-text-recognized` events in the log for one
+day, each one a turn that ended with nobody told.
+
+`_play_idle_sound` hangs off `_tts_finished`, which is the single
+point every turn passes through -- a spoken answer reaches it as the
+TTS done_callback, and a silent turn reaches it from `RUN_END` when
+`_tts_played` is false. One hook covers both.
+
+Two things it must not do. It plays with no `done_callback`, because a
+sound played with one reaches `_tts_finished`, which is what plays it.
+And it is skipped while `_stopping`, because `stop()` calls
+`tts_player.stop()`, that reaches `_tts_finished` too, and the stop
+already has a sound of its own -- two sounds one after the other say
+less than either alone.
+
+`sounds/make-idle-sound.py` generates it: one tone, G4, 55ms, at half
+the amplitude of the stop sound. Single so it cannot be mistaken for
+the stop sound's two falling notes, and quiet because it lands in the
+silence after every single turn.
+
+
 
 The microphone in front of Home Assistant is OHF-Voice's
 `linux-voice-assistant`. It is the ESPHome satellite implementation running on
