@@ -9,6 +9,7 @@ import (
 	"time"
 
 	"gorm.io/gorm"
+	"gorm.io/gorm/clause"
 
 	"github.com/DhanushRamesh/personal-assistant/internal/google"
 	"github.com/DhanushRamesh/personal-assistant/internal/logging"
@@ -77,7 +78,23 @@ func (r *row) toAccount() *google.Account {
 	return out
 }
 
+// granted : The columns a fresh permission replaces.
+//
+// Named rather than implied. Every column left out keeps what it had, and
+// calendar_id is the one that must: it is not part of a permission, it
+// records which calendar the assistant made, and nothing rediscovers it.
+var granted = []string{
+	"email", "subject", "refresh_token", "scopes",
+	"connected_at", "refreshed_at", "broken_at", "broken",
+}
+
 // Put : Stores the permission, replacing any already there.
+//
+// An upsert over the named columns rather than a whole-row save. A save
+// writes every field of the struct, including the ones left at their zero
+// value, so calendar_id was set to NULL each time somebody granted
+// permission again. The next calendar write then found none recorded and
+// made a second one, and the events in the first became unreachable.
 func (s *Store) Put(ctx context.Context, a *google.Account) error {
 	if a == nil {
 		return google.ErrNotConnected
@@ -91,7 +108,10 @@ func (s *Store) Put(ctx context.Context, a *google.Account) error {
 		ConnectedAt:  a.ConnectedAt.UTC(),
 		RefreshedAt:  a.RefreshedAt,
 	}
-	err := s.db.WithContext(ctx).Save(&r).Error
+	err := s.db.WithContext(ctx).Clauses(clause.OnConflict{
+		Columns:   []clause.Column{{Name: "user_id"}},
+		DoUpdates: clause.AssignmentColumns(granted),
+	}).Create(&r).Error
 	if err != nil {
 		return fmt.Errorf("google: storing the connection: %w", err)
 	}
