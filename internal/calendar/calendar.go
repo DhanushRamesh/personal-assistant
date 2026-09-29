@@ -18,6 +18,7 @@ import (
 	"errors"
 	"fmt"
 	"net/http"
+	"strings"
 	"sync"
 	"time"
 
@@ -150,4 +151,79 @@ func (d *Diary) forget(ctx context.Context, userID string) {
 func gone(err error) bool {
 	var api *googleapi.Error
 	return errors.As(err, &api) && (api.Code == http.StatusNotFound || api.Code == http.StatusGone)
+}
+
+// Owned : One calendar the person has, as the assistant sees it.
+type Owned struct {
+	// ID : Google's identifier for it.
+	ID string
+	// Name : What it is called.
+	Name string
+	// Role : What the account may do with it: owner, writer, reader or
+	// freeBusyReader.
+	Role string
+	// Mine : Whether this is the calendar the assistant writes to.
+	Mine bool
+}
+
+// Calendars : Every calendar the person has, with the assistant's own
+// marked.
+//
+// Reading the list needs calendar.readonly; the permission that grants the
+// assistant a calendar of its own forbids it. So this works only while both
+// are granted, and says so plainly rather than returning an empty list.
+func (d *Diary) Calendars(ctx context.Context, userID string) ([]Owned, error) {
+	svc, err := d.service(ctx, userID)
+	if err != nil {
+		return nil, err
+	}
+	ours, _ := d.clients.Calendar(ctx, userID)
+
+	list, err := svc.CalendarList.List().Context(ctx).Do()
+	if err != nil {
+		return nil, fmt.Errorf("calendar: listing the calendars: %w", err)
+	}
+
+	out := make([]Owned, 0, len(list.Items))
+	for _, c := range list.Items {
+		out = append(out, Owned{
+			ID:   c.Id,
+			Name: c.Summary,
+			Role: c.AccessRole,
+			Mine: ours != "" && c.Id == ours,
+		})
+	}
+	return out, nil
+}
+
+// Rename : Changes what the assistant's own calendar is called.
+//
+// Its own and no other. The permission reaches only calendars this app
+// made, so renaming anything else fails at Google; refusing here instead
+// gives the model a sentence it can pass on rather than a scope error.
+func (d *Diary) Rename(ctx context.Context, userID, name string) (*Owned, error) {
+	name = strings.TrimSpace(name)
+	if name == "" {
+		return nil, errors.New("a calendar needs a name")
+	}
+
+	svc, err := d.service(ctx, userID)
+	if err != nil {
+		return nil, err
+	}
+	id, err := d.mine(ctx, userID, svc)
+	if err != nil {
+		return nil, err
+	}
+
+	// Patched rather than replaced, so the timezone and description it was
+	// made with survive being renamed.
+	done, err := svc.Calendars.Patch(id, &gcal.Calendar{Summary: name}).Context(ctx).Do()
+	if err != nil {
+		if gone(err) {
+			d.forget(ctx, userID)
+		}
+		return nil, fmt.Errorf("calendar: renaming my calendar: %w", err)
+	}
+	return &Owned{ID: done.Id, Name: done.Summary, Role: "owner", Mine: true}, nil
 }

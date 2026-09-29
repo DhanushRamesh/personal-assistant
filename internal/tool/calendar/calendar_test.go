@@ -3,6 +3,7 @@ package calendar_test
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"strings"
 	"testing"
 	"time"
@@ -24,7 +25,47 @@ type diary struct {
 	added  []calendar.Event
 	mine   []calendar.Event
 	busy   []calendar.Event
+	held   []calendar.Owned
+	theirs []calendar.Event
+	unread []string
 	refuse error
+}
+
+// Calendars : The calendars, with whichever was marked as the assistant's.
+func (d *diary) Calendars(_ context.Context, _ string) ([]calendar.Owned, error) {
+	if d.refuse != nil {
+		return nil, d.refuse
+	}
+	return append([]calendar.Owned(nil), d.held...), nil
+}
+
+// Theirs : Events on one of the person's own calendars, matched by name.
+func (d *diary) Theirs(_ context.Context, _, which string, _, _ time.Time) (calendar.Owned, []calendar.Event, error) {
+	if d.refuse != nil {
+		return calendar.Owned{}, nil, d.refuse
+	}
+	// Matched the way the real diary matches, so these tests exercise the
+	// matching rather than a stricter copy of it.
+	c, err := calendar.Pick(d.held, which)
+	if err != nil {
+		return calendar.Owned{}, nil, err
+	}
+	return *c, append([]calendar.Event(nil), d.theirs...), nil
+}
+
+// Rename : Renames the one marked as the assistant's, in place.
+func (d *diary) Rename(_ context.Context, _, name string) (*calendar.Owned, error) {
+	if d.refuse != nil {
+		return nil, d.refuse
+	}
+	for i := range d.held {
+		if d.held[i].Mine {
+			d.held[i].Name = name
+			out := d.held[i]
+			return &out, nil
+		}
+	}
+	return nil, errors.New("no calendar of mine")
 }
 
 func (d *diary) Add(_ context.Context, _ string, e calendar.Event) (*calendar.Event, error) {
@@ -36,7 +77,22 @@ func (d *diary) Add(_ context.Context, _ string, e calendar.Event) (*calendar.Ev
 	return &e, nil
 }
 
-func (d *diary) Cancel(_ context.Context, _, _ string) error { return d.refuse }
+// Cancel : Actually removes it, so the read-back a tool does afterwards
+// tests something. A double that accepts a deletion and keeps the row
+// makes every verification look like a failure.
+func (d *diary) Cancel(_ context.Context, _, id string) error {
+	if d.refuse != nil {
+		return d.refuse
+	}
+	kept := d.mine[:0]
+	for _, e := range d.mine {
+		if e.ID != id {
+			kept = append(kept, e)
+		}
+	}
+	d.mine = kept
+	return nil
+}
 
 func (d *diary) One(_ context.Context, _, id string) (*calendar.Event, error) {
 	if d.refuse != nil {
@@ -78,6 +134,30 @@ func (d *diary) Update(_ context.Context, _, id string, a calendar.Amend) (*cale
 	return nil, nil
 }
 
+// Everywhere : Everything, the way the real one merges it -- the
+// assistant's own and each of theirs, with the calendar's name on each
+// event so a test can tell which came from where.
+func (d *diary) Everywhere(_ context.Context, _ string, _, _ time.Time) ([]calendar.Event, []string, error) {
+	if d.refuse != nil {
+		return nil, nil, d.refuse
+	}
+	var all []calendar.Event
+	for _, e := range d.mine {
+		e.Mine = true
+		if e.Calendar == "" {
+			e.Calendar = "Jarvis"
+		}
+		all = append(all, e)
+	}
+	for _, e := range d.theirs {
+		if e.Calendar == "" {
+			e.Calendar = "Personal"
+		}
+		all = append(all, e)
+	}
+	return all, d.unread, nil
+}
+
 func (d *diary) Mine(_ context.Context, _ string, _, _ time.Time) ([]calendar.Event, error) {
 	return d.mine, d.refuse
 }
@@ -93,8 +173,20 @@ func run(t *testing.T, d calendartool.Diary, name, args string) tool.Result {
 		if candidate.Name != name {
 			continue
 		}
+		// Validated the way the registry validates, against the schema
+		// the model is actually shown. Calling Run directly skipped this,
+		// so no test here had ever exercised a schema: a placeholder
+		// identifier sailed through and the tool ran on it.
+		// The saying is supplied when a test has not written one. These
+		// tests are about each tool's own arguments; that one belongs to
+		// every tool and has a test of its own.
+		args = withSaying(args)
+		if err := tool.Validate(tool.Narrated(candidate.Params, "sir"), json.RawMessage(args)); err != nil {
+			return tool.Failed(candidate.Name + " was not called correctly: " + err.Error())
+		}
+		clean, _ := json.Marshal(stripSaying(args))
 		return candidate.Run(context.Background(), tool.Invocation{
-			Args:   json.RawMessage(args),
+			Args:   clean,
 			Caller: tool.Caller{UserID: "usr_1"},
 		})
 	}
@@ -108,7 +200,7 @@ func run(t *testing.T, d calendartool.Diary, name, args string) tool.Result {
 // wrong in a diary is worse than a refusal.
 func TestATimeIsReadInThePersonsZone(t *testing.T) {
 	d := &diary{}
-	got := run(t, d, "calendar_add", `{"title":"Dentist","starts":"2026-09-28T15:00"}`)
+	got := run(t, d, "calendar_add", `{"title":"Dentist","starts":"2026-09-28T15:00","saying":"doing that"}`)
 
 	if len(d.added) != 1 {
 		t.Fatalf("result = %+v, want one event added", got)
@@ -127,7 +219,7 @@ func TestATimeIsReadInThePersonsZone(t *testing.T) {
 // A time it cannot read is refused rather than guessed at.
 func TestAnUnreadableTimeIsRefused(t *testing.T) {
 	d := &diary{}
-	got := run(t, d, "calendar_add", `{"title":"Dentist","starts":"next tuesday"}`)
+	got := run(t, d, "calendar_add", `{"title":"Dentist","starts":"next tuesday","saying":"doing that"}`)
 
 	if got.Outcome != "failed" {
 		t.Errorf("outcome = %q, want it refused: %s", got.Outcome, got.Content)
@@ -137,17 +229,76 @@ func TestAnUnreadableTimeIsRefused(t *testing.T) {
 	}
 }
 
-// An empty diary is never reported as an empty day. The assistant can
-// only see its own calendar, and saying otherwise would be a claim
-// about the person's real one.
-func TestAnEmptyDiaryIsNotAnEmptyDay(t *testing.T) {
-	got := run(t, &diary{}, "calendar_list", `{"days":1}`)
+// An empty day says every calendar was looked at, because now every
+// calendar has been. The warning this replaces -- that the assistant
+// can only see its own -- was true when reading one and is a lie when
+// reading all of them.
+func TestAnEmptyDayNamesWhatWasLookedAt(t *testing.T) {
+	got := run(t, &diary{}, "calendar_events", `{"days":1,"saying":"doing that"}`)
 
 	if got.Outcome != "ok" {
 		t.Fatalf("outcome = %q", got.Outcome)
 	}
-	if !strings.Contains(got.Content, "their own") {
-		t.Errorf("content = %q, want it to say this is not their real calendar", got.Content)
+	if !strings.Contains(got.Content, "any of their calendars") {
+		t.Errorf("content = %q, want it to say all of them were read", got.Content)
+	}
+}
+
+// TestEveryCalendarIsReadWithoutBeingAsked : The default is all of
+// them, in code, not a line of prompt hoping the model passes an
+// argument.
+//
+// Asked whether anything was on 2 October the assistant answered that
+// nothing was written and offered to check their own calendar -- while
+// the holiday calendar had Gandhi Jayanti on it. The offer is the tell:
+// it knew there was somewhere else to look and did not look.
+func TestEveryCalendarIsReadWithoutBeingAsked(t *testing.T) {
+	d := &diary{
+		mine: []calendar.Event{{
+			ID: "evt_1", Title: "Standup",
+			Starts: time.Date(2026, 10, 2, 10, 0, 0, 0, india()),
+			Ends:   time.Date(2026, 10, 2, 10, 15, 0, 0, india()),
+		}},
+		theirs: []calendar.Event{{
+			ID: "hol_1", Title: "Gandhi Jayanti", Calendar: "Holidays in India",
+			Starts: time.Date(2026, 10, 2, 0, 0, 0, 0, india()),
+			Ends:   time.Date(2026, 10, 2, 0, 0, 0, 0, india()),
+			AllDay: true,
+		}},
+	}
+
+	got := run(t, d, "calendar_events", `{"from":"2026-10-02","to":"2026-10-02","saying":"doing that"}`)
+
+	if got.Outcome != "ok" {
+		t.Fatalf("outcome = %q: %s", got.Outcome, got.Content)
+	}
+	if !strings.Contains(got.Content, "Gandhi Jayanti") {
+		t.Errorf("the holiday was not read: %s", got.Content)
+	}
+	if !strings.Contains(got.Content, "Holidays in India") {
+		t.Errorf("which calendar it came from was not said: %s", got.Content)
+	}
+	// The one it may change carries an identifier; the holiday does not.
+	if !strings.Contains(got.Content, "[id evt_1]") {
+		t.Errorf("its own event lost its identifier: %s", got.Content)
+	}
+	if strings.Contains(got.Content, "[id hol_1]") {
+		t.Errorf("a calendar it cannot change was given an identifier: %s", got.Content)
+	}
+}
+
+// TestACalendarThatWouldNotOpenIsNamed : A day is not called empty on
+// the strength of a calendar that failed to load.
+func TestACalendarThatWouldNotOpenIsNamed(t *testing.T) {
+	d := &diary{unread: []string{"Holidays in India"}}
+
+	got := run(t, d, "calendar_events", `{"days":1,"saying":"doing that"}`)
+
+	if !strings.Contains(got.Content, "Holidays in India") {
+		t.Errorf("the calendar that failed was not named: %s", got.Content)
+	}
+	if !strings.Contains(got.Content, "not the whole picture") {
+		t.Errorf("content = %q, want it to say the answer is incomplete", got.Content)
 	}
 }
 
@@ -160,7 +311,7 @@ func TestBusyDoesNotInventWhatTheyAreDoing(t *testing.T) {
 		Ends:   time.Date(2026, 9, 28, 10, 30, 0, 0, time.UTC),
 	}}}
 
-	got := run(t, d, "calendar_free", `{"from":"2026-09-28T15:00"}`)
+	got := run(t, d, "calendar_free", `{"from":"2026-09-28T15:00","saying":"doing that"}`)
 
 	if !strings.Contains(got.Content, "Busy") {
 		t.Errorf("content = %q, want it to say busy", got.Content)
@@ -172,7 +323,7 @@ func TestBusyDoesNotInventWhatTheyAreDoing(t *testing.T) {
 
 // A free window says so plainly.
 func TestFreeSaysFree(t *testing.T) {
-	got := run(t, &diary{}, "calendar_free", `{"from":"2026-09-28T15:00","minutes":30}`)
+	got := run(t, &diary{}, "calendar_free", `{"from":"2026-09-28T15:00","minutes":30,"saying":"doing that"}`)
 
 	if !strings.HasPrefix(got.Content, "Free") {
 		t.Errorf("content = %q, want it to start by saying free", got.Content)
@@ -186,7 +337,7 @@ func TestFreeSaysFree(t *testing.T) {
 // and explicitly not as an empty calendar.
 func TestALapsedConnectionIsNotAnEmptyCalendar(t *testing.T) {
 	d := &diary{refuse: google.ErrNeedsReconnect}
-	got := run(t, d, "calendar_list", `{}`)
+	got := run(t, d, "calendar_events", `{"saying":"doing that"}`)
 
 	if got.Outcome != "failed" {
 		t.Fatalf("outcome = %q, want failed: %s", got.Outcome, got.Content)
@@ -202,7 +353,7 @@ func TestALapsedConnectionIsNotAnEmptyCalendar(t *testing.T) {
 // No account connected is its own answer, not a failure of the calendar.
 func TestNoAccountIsSaidPlainly(t *testing.T) {
 	d := &diary{refuse: google.ErrNotConnected}
-	got := run(t, d, "calendar_add", `{"title":"Dentist","starts":"2026-09-28T15:00"}`)
+	got := run(t, d, "calendar_add", `{"title":"Dentist","starts":"2026-09-28T15:00","saying":"doing that"}`)
 
 	if !strings.Contains(got.Content, "connect") {
 		t.Errorf("content = %q, want it to say to connect an account", got.Content)
@@ -212,7 +363,7 @@ func TestNoAccountIsSaidPlainly(t *testing.T) {
 // An all-day event carries no time and is not given one.
 func TestAnAllDayEventHasNoTime(t *testing.T) {
 	d := &diary{}
-	run(t, d, "calendar_add", `{"title":"Birthday","starts":"2026-10-02","all_day":true}`)
+	run(t, d, "calendar_add", `{"title":"Birthday","starts":"2026-10-02","all_day":true,"saying":"doing that"}`)
 
 	if len(d.added) != 1 {
 		t.Fatal("nothing was added")
@@ -225,7 +376,7 @@ func TestAnAllDayEventHasNoTime(t *testing.T) {
 // Without a server-side calendar the tools say so rather than panicking
 // on a nil.
 func TestNoCalendarAtAll(t *testing.T) {
-	got := run(t, nil, "calendar_list", `{}`)
+	got := run(t, nil, "calendar_events", `{"saying":"doing that"}`)
 	if got.Outcome != "failed" || !strings.Contains(got.Content, "no calendar") {
 		t.Errorf("result = %+v", got)
 	}
@@ -234,7 +385,7 @@ func TestNoCalendarAtAll(t *testing.T) {
 // asked : The window a listing reports having looked at.
 func asked(t *testing.T, d *diary, args string) string {
 	t.Helper()
-	return run(t, d, "calendar_list", args).Content
+	return run(t, d, "calendar_events", args).Content
 }
 
 // A named date means that whole day, not the instant it begins.
@@ -251,7 +402,7 @@ func TestADateMeansTheWholeDay(t *testing.T) {
 // rather than talking about days ahead.
 func TestAPastDayCanBeAskedAbout(t *testing.T) {
 	d := &diary{mine: []calendar.Event{{
-		ID: "e1", Title: "Something", Mine: true,
+		ID: "evt001", Title: "Something", Mine: true,
 		Starts: time.Date(2026, 9, 3, 9, 30, 0, 0, time.UTC),
 		Ends:   time.Date(2026, 9, 3, 10, 30, 0, 0, time.UTC),
 	}}}
@@ -290,18 +441,18 @@ func TestWithoutDatesItCountsDaysAhead(t *testing.T) {
 // A range that ends before it starts is refused rather than silently
 // returning nothing, which would read as "your day was empty".
 func TestABackwardsRangeIsRefused(t *testing.T) {
-	got := run(t, &diary{}, "calendar_list", `{"from":"2026-09-05","to":"2026-09-03"}`)
+	got := run(t, &diary{}, "calendar_events", `{"from":"2026-09-05","to":"2026-09-03","saying":"doing that"}`)
 	if got.Outcome != "failed" {
 		t.Errorf("outcome = %q, want it refused: %s", got.Outcome, got.Content)
 	}
 }
 
-// An empty answer still says this is not their real calendar, whichever
-// window was asked for.
-func TestAnEmptyRangeStillWarns(t *testing.T) {
+// An empty answer says every calendar was read, whichever window was
+// asked for.
+func TestAnEmptyRangeStillSaysWhatWasRead(t *testing.T) {
 	got := asked(t, &diary{}, `{"from":"2026-09-03"}`)
-	if !strings.Contains(got, "their own") {
-		t.Errorf("content = %q, want the warning", got)
+	if !strings.Contains(got, "any of their calendars") {
+		t.Errorf("content = %q, want it to say all of them were read", got)
 	}
 }
 
@@ -316,8 +467,8 @@ func an(id, title string) []calendar.Event {
 
 // Renaming reports both ends, so the person hears what it was called.
 func TestRenamingSaysWhatItWas(t *testing.T) {
-	d := &diary{mine: an("e1", "Meeting for haircut")}
-	got := run(t, d, "calendar_update", `{"id":"e1","title":"My Favorite Date"}`)
+	d := &diary{mine: an("evt001", "Meeting for haircut")}
+	got := run(t, d, "calendar_update", `{"id":"evt001","title":"My Favorite Date","saying":"doing that"}`)
 
 	if got.Outcome != "ok" {
 		t.Fatalf("outcome = %q: %s", got.Outcome, got.Content)
@@ -332,8 +483,8 @@ func TestRenamingSaysWhatItWas(t *testing.T) {
 // Moving the start keeps the length it had, which is what "move it to
 // four" means.
 func TestMovingKeepsTheLength(t *testing.T) {
-	d := &diary{mine: an("e1", "Haircut")}
-	run(t, d, "calendar_update", `{"id":"e1","starts":"2026-10-29T16:00"}`)
+	d := &diary{mine: an("evt001", "Haircut")}
+	run(t, d, "calendar_update", `{"id":"evt001","starts":"2026-10-29T16:00","saying":"doing that"}`)
 
 	if got := d.mine[0].Ends.Sub(d.mine[0].Starts); got != time.Hour {
 		t.Errorf("length = %v, want the hour it had", got)
@@ -343,8 +494,8 @@ func TestMovingKeepsTheLength(t *testing.T) {
 // An identifier that is not there is refused before anything is
 // written, rather than creating something new.
 func TestAnUnknownEventIsRefused(t *testing.T) {
-	d := &diary{mine: an("e1", "Haircut")}
-	got := run(t, d, "calendar_update", `{"id":"nope","title":"Other"}`)
+	d := &diary{mine: an("evt001", "Haircut")}
+	got := run(t, d, "calendar_update", `{"id":"nope","title":"Other","saying":"doing that"}`)
 
 	if got.Outcome != "failed" {
 		t.Errorf("outcome = %q, want it refused", got.Outcome)
@@ -356,8 +507,250 @@ func TestAnUnknownEventIsRefused(t *testing.T) {
 
 // Nothing to change is said rather than reported as a change.
 func TestNothingToChangeIsRefused(t *testing.T) {
-	d := &diary{mine: an("e1", "Haircut")}
-	if got := run(t, d, "calendar_update", `{"id":"e1"}`); got.Outcome != "failed" {
+	d := &diary{mine: an("evt001", "Haircut")}
+	if got := run(t, d, "calendar_update", `{"id":"evt001","saying":"doing that"}`); got.Outcome != "failed" {
 		t.Errorf("outcome = %q: %s", got.Outcome, got.Content)
 	}
+}
+
+// TestCalendarsListsThemWithTheTotal : The listing says how many there are
+// and which one may be written to.
+//
+// The count is stated because a listing that only prints rows invites the
+// number of rows to be reported as the number of things, which is how
+// sixty-two conversations were once answered as ten.
+func TestCalendarsListsThemWithTheTotal(t *testing.T) {
+	d := &diary{held: []calendar.Owned{
+		{ID: "a", Name: "Jarvis", Role: "owner", Mine: true},
+		{ID: "b", Name: "rjdhanush22@gmail.com", Role: "owner"},
+		{ID: "c", Name: "Holidays in India", Role: "reader"},
+	}}
+	got := run(t, d, "calendar_calendars", `{"saying":"doing that"}`)
+
+	if got.Outcome != "ok" {
+		t.Fatalf("outcome = %s, want ok: %s", got.Outcome, got.Content)
+	}
+	for _, want := range []string{"3 calendars in total", "Jarvis", "this is the one you write to",
+		"Holidays in India", "read only"} {
+		if !strings.Contains(got.Content, want) {
+			t.Errorf("listing does not mention %q:\n%s", want, got.Content)
+		}
+	}
+}
+
+// TestRenameSaysWhatItWas : Renaming reports the change from one name to
+// the other, read back rather than assumed.
+func TestRenameSaysWhatItWas(t *testing.T) {
+	d := &diary{held: []calendar.Owned{{ID: "a", Name: "Jarvis", Role: "owner", Mine: true}}}
+	got := run(t, d, "calendar_rename", `{"name":"Personal Assistant","saying":"doing that"}`)
+
+	if got.Outcome != "ok" {
+		t.Fatalf("outcome = %s, want ok: %s", got.Outcome, got.Content)
+	}
+	if !strings.Contains(got.Content, "Jarvis") || !strings.Contains(got.Content, "Personal Assistant") {
+		t.Errorf("does not say what changed from and to:\n%s", got.Content)
+	}
+	if d.held[0].Name != "Personal Assistant" {
+		t.Errorf("calendar name = %q, want it renamed", d.held[0].Name)
+	}
+}
+
+// TestRenameNeedsAName : An empty name is refused rather than applied.
+func TestRenameNeedsAName(t *testing.T) {
+	d := &diary{held: []calendar.Owned{{ID: "a", Name: "Jarvis", Mine: true}}}
+	got := run(t, d, "calendar_rename", `{"name":"   ","saying":"doing that"}`)
+
+	if got.Outcome == "ok" {
+		t.Errorf("an empty name was accepted: %s", got.Content)
+	}
+	if d.held[0].Name != "Jarvis" {
+		t.Errorf("the calendar was renamed anyway, to %q", d.held[0].Name)
+	}
+}
+
+// TestEventsReadsTheirCalendar : Naming a calendar reads that one, and
+// says it cannot be changed.
+func TestEventsReadsTheirCalendar(t *testing.T) {
+	when := time.Date(2026, 9, 29, 15, 0, 0, 0, time.UTC)
+	d := &diary{
+		held:   []calendar.Owned{{ID: "b", Name: "rjdhanush22@gmail.com", Role: "owner"}},
+		theirs: []calendar.Event{{ID: "x1", Title: "Dentist", Starts: when, Ends: when.Add(time.Hour)}},
+	}
+	got := run(t, d, "calendar_events", `{"days":7,"calendar":"rjdhanush22@gmail.com","saying":"doing that"}`)
+
+	if got.Outcome != "ok" {
+		t.Fatalf("outcome = %s: %s", got.Outcome, got.Content)
+	}
+	for _, want := range []string{"1 entries", "rjdhanush22@gmail.com", "Dentist", "cannot change it"} {
+		if !strings.Contains(got.Content, want) {
+			t.Errorf("missing %q:\n%s", want, got.Content)
+		}
+	}
+	// Their events are read only, so an identifier the model could pass to
+	// a change tool must not be offered.
+	if strings.Contains(got.Content, "[id ") {
+		t.Errorf("offered an identifier for a calendar it cannot change:\n%s", got.Content)
+	}
+}
+
+// TestEventsUnknownCalendarAsksWhich : A name that matches nothing brings
+// back the names that do exist, so the model can ask which was meant.
+//
+// It is never answered as an empty day, and never as "there is no such
+// calendar": the name arrived through speech and a mangled one looks
+// exactly like a wrong one.
+func TestEventsUnknownCalendarAsksWhich(t *testing.T) {
+	d := &diary{held: []calendar.Owned{
+		{ID: "a", Name: "Jarvis", Mine: true},
+		{ID: "b", Name: "rjdhanush22@gmail.com"},
+	}}
+	got := run(t, d, "calendar_events", `{"days":7,"calendar":"birthdays","saying":"doing that"}`)
+
+	if got.Outcome == "ok" {
+		t.Errorf("an unknown calendar was answered rather than queried: %s", got.Content)
+	}
+	for _, want := range []string{"Jarvis", "rjdhanush22@gmail.com", "Ask which"} {
+		if !strings.Contains(got.Content, want) {
+			t.Errorf("missing %q:\n%s", want, got.Content)
+		}
+	}
+}
+
+// TestEventsMatchesAMangledName : A name mauled by speech-to-text still
+// finds the calendar it meant.
+func TestEventsMatchesAMangledName(t *testing.T) {
+	when := time.Date(2026, 9, 29, 15, 0, 0, 0, time.UTC)
+	d := &diary{
+		held:   []calendar.Owned{{ID: "b", Name: "rjdhanush22@gmail.com"}},
+		theirs: []calendar.Event{{ID: "x1", Title: "Dentist", Starts: when, Ends: when.Add(time.Hour)}},
+	}
+	got := run(t, d, "calendar_events", `{"days":7,"calendar":"rjdanesh22rjmail.com","saying":"doing that"}`)
+
+	if got.Outcome != "ok" {
+		t.Fatalf("a misheard address was not matched: %s", got.Content)
+	}
+	if !strings.Contains(got.Content, "rjdhanush22@gmail.com") {
+		t.Errorf("does not name the calendar it actually read:\n%s", got.Content)
+	}
+}
+
+// TestEventsWithoutCalendarStillReadsMine : Leaving it out is unchanged.
+func TestEventsWithoutCalendarStillReadsMine(t *testing.T) {
+	when := time.Date(2026, 9, 29, 15, 0, 0, 0, time.UTC)
+	d := &diary{mine: []calendar.Event{{ID: "evt_9", Title: "Standup", Starts: when, Ends: when.Add(time.Hour)}}}
+	got := run(t, d, "calendar_events", `{"days":7,"saying":"doing that"}`)
+
+	if got.Outcome != "ok" {
+		t.Fatalf("outcome = %s: %s", got.Outcome, got.Content)
+	}
+	if !strings.Contains(got.Content, "Standup") || !strings.Contains(got.Content, "[id evt_9]") {
+		t.Errorf("own calendar should still come back with identifiers:\n%s", got.Content)
+	}
+}
+
+// TestNamingYourOwnCalendarIsNotReadOnly : Asking for the assistant's own
+// calendar by name reaches the same place as not naming one.
+//
+// It did not. Reading "Personal Assistant" by name went down the path
+// meant for the person's calendars, which withholds identifiers and says
+// nothing can be changed. The assistant, unable to mend the four one-day
+// entries it had made, added more.
+func TestNamingYourOwnCalendarIsNotReadOnly(t *testing.T) {
+	when := time.Date(2026, 6, 26, 0, 0, 0, 0, time.UTC)
+	d := &diary{
+		held: []calendar.Owned{
+			{ID: "a", Name: "Personal Assistant", Role: "owner", Mine: true},
+			{ID: "b", Name: "rjdhanush22@gmail.com", Role: "owner"},
+		},
+		theirs: []calendar.Event{{ID: "evt_stay", Title: "Stay at Atlantic Inn",
+			Starts: when, Ends: when.AddDate(0, 0, 3), AllDay: true, Mine: true}},
+	}
+	got := run(t, d, "calendar_events", `{"days":30,"calendar":"Personal Assistant","saying":"doing that"}`)
+
+	if got.Outcome != "ok" {
+		t.Fatalf("outcome = %s: %s", got.Outcome, got.Content)
+	}
+	if !strings.Contains(got.Content, "[id evt_stay]") {
+		t.Errorf("own calendar named aloud gave no identifier, so nothing could be changed:\n%s", got.Content)
+	}
+	if strings.Contains(got.Content, "cannot") {
+		t.Errorf("own calendar named aloud was called unchangeable:\n%s", got.Content)
+	}
+}
+
+// TestCancelTakesSeveralAtOnce : Four events removed in one call are
+// counted once, not four times.
+//
+// Four separate calls owed four overlapping pairs of numbers and the
+// person heard "there were 8 before and 7 now, there were 7 before and 6
+// now…". One call, one read-back, one count.
+func TestCancelTakesSeveralAtOnce(t *testing.T) {
+	when := time.Date(2026, 6, 26, 0, 0, 0, 0, time.UTC)
+	d := &diary{}
+	for _, id := range []string{"aaaaa1", "bbbbb2", "ccccc3", "ddddd4", "keeper5"} {
+		d.mine = append(d.mine, calendar.Event{ID: id, Title: "Stay", Starts: when,
+			Ends: when.AddDate(0, 0, 1), AllDay: true, Mine: true})
+	}
+
+	got := run(t, d, "calendar_cancel",
+		`{"ids":["aaaaa1","bbbbb2","ccccc3","ddddd4"],"saying":"removing the duplicates"}`)
+
+	if got.Outcome != "ok" {
+		t.Fatalf("outcome = %s: %s", got.Outcome, got.Content)
+	}
+	if strings.Count(got.Content, "before") != 1 {
+		t.Errorf("expected one count sentence, got:\n%s", got.Content)
+	}
+	if !strings.Contains(got.Content, "5") || !strings.Contains(got.Content, "1 event") {
+		t.Errorf("does not say 5 before and 1 now:\n%s", got.Content)
+	}
+}
+
+// TestCancelRefusesAnEmptyList : A call that would remove nothing is a
+// mistake, not a no-op.
+func TestCancelRefusesAnEmptyList(t *testing.T) {
+	if got := run(t, &diary{}, "calendar_cancel", `{"ids":[],"saying":"removing"}`); got.Outcome == "ok" {
+		t.Errorf("an empty list was accepted: %s", got.Content)
+	}
+}
+
+// TestCancelStillRefusesAPlaceholder : The pattern applies to every
+// element, so an invented identifier is caught inside a list too.
+func TestCancelStillRefusesAPlaceholder(t *testing.T) {
+	got := run(t, &diary{}, "calendar_cancel",
+		`{"ids":["aaaaa1","<id_for_the_second_event>"],"saying":"removing"}`)
+	if got.Outcome == "ok" {
+		t.Errorf("a placeholder inside a list was accepted: %s", got.Content)
+	}
+	if !strings.Contains(got.Content, "ids[1]") {
+		t.Errorf("does not say which element was wrong:\n%s", got.Content)
+	}
+}
+
+// stripSaying : The arguments a tool actually receives, with the saying
+// taken off the way the registry takes it off.
+func stripSaying(args string) map[string]any {
+	var given map[string]any
+	if err := json.Unmarshal([]byte(args), &given); err != nil {
+		return map[string]any{}
+	}
+	delete(given, "saying")
+	return given
+}
+
+// withSaying : The arguments with a saying added if one is missing.
+func withSaying(args string) string {
+	var given map[string]any
+	if err := json.Unmarshal([]byte(args), &given); err != nil {
+		return args
+	}
+	if _, there := given["saying"]; there {
+		return args
+	}
+	given["saying"] = "doing that"
+	out, err := json.Marshal(given)
+	if err != nil {
+		return args
+	}
+	return string(out)
 }

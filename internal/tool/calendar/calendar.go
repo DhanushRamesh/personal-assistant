@@ -21,6 +21,8 @@ import (
 	"github.com/DhanushRamesh/personal-assistant/internal/calendar"
 	"github.com/DhanushRamesh/personal-assistant/internal/chat"
 	"github.com/DhanushRamesh/personal-assistant/internal/google"
+	"github.com/DhanushRamesh/personal-assistant/internal/heard"
+	"github.com/DhanushRamesh/personal-assistant/internal/prompt"
 	"github.com/DhanushRamesh/personal-assistant/internal/tool"
 )
 
@@ -54,6 +56,10 @@ type Diary interface {
 	Cancel(ctx context.Context, userID, eventID string) error
 	Mine(ctx context.Context, userID string, from, to time.Time) ([]calendar.Event, error)
 	Busy(ctx context.Context, userID string, from, to time.Time) ([]calendar.Event, error)
+	Theirs(ctx context.Context, userID, which string, from, to time.Time) (calendar.Owned, []calendar.Event, error)
+	Everywhere(ctx context.Context, userID string, from, to time.Time) ([]calendar.Event, []string, error)
+	Calendars(ctx context.Context, userID string) ([]calendar.Owned, error)
+	Rename(ctx context.Context, userID, name string) (*calendar.Owned, error)
 }
 
 // All : Every calendar tool, in the order they are offered.
@@ -64,6 +70,8 @@ func All(diary Diary, clock Clock) []tool.Tool {
 		agenda(diary, clock),
 		free(diary, clock),
 		cancel(diary, clock),
+		calendars(diary),
+		rename(diary),
 	}
 }
 
@@ -92,6 +100,8 @@ func whenTrouble(err error) tool.Result {
 func add(diary Diary, clock Clock) tool.Tool {
 	return tool.Tool{
 		Name:    "calendar_add",
+		Domain:  "calendar",
+		Writes:  true,
 		Purpose: "Put an event in the diary, on the assistant's own calendar.",
 		UseWhen: "The person wants something written down for a date and time -- an appointment, a " +
 			"meeting, a trip, a birthday. Anything they would look for in a calendar rather than be " +
@@ -117,6 +127,12 @@ func add(diary Diary, clock Clock) tool.Tool {
 					Description: "How long it lasts. Left out, an hour is assumed, which is " +
 						"the ordinary length of an appointment.",
 				},
+				"ends": {
+					Type: "string",
+					Description: "The last day it covers, as 2026-06-29, for something that runs " +
+						"over several days. Use it with all_day for a stay or a trip: one event " +
+						"across the days, never one event per day. Left out, it is a single day.",
+				},
 				"all_day": {
 					Type: "boolean",
 					Description: "True for something that takes the whole day and has no time, " +
@@ -131,6 +147,7 @@ func add(diary Diary, clock Clock) tool.Tool {
 				Title   string `json:"title"`
 				Starts  string `json:"starts"`
 				Minutes int    `json:"minutes"`
+				Ends    string `json:"ends"`
 				AllDay  bool   `json:"all_day"`
 				Where   string `json:"where"`
 				Notes   string `json:"notes"`
@@ -160,7 +177,24 @@ func add(diary Diary, clock Clock) tool.Tool {
 				ends = starts
 			}
 
-			day := starts.AddDate(0, 0, 1)
+			// A stay over several days is one event across them, not one
+			// event per day. Without this the only way to say "the 26th to
+			// the 29th" was four separate entries, which is what the model
+			// did, and then could not update them as one thing.
+			if last := strings.TrimSpace(args.Ends); last != "" {
+				until, err := when(last, clock.where())
+				if err != nil {
+					return tool.Failed(err.Error())
+				}
+				if until.Before(starts) {
+					return tool.Failed("That ends before it starts. Give the later day as 'ends'.")
+				}
+				ends = until
+			}
+
+			// The whole span is read back, not only the first day, or a
+			// multi-day event looks missing from every day but one.
+			day := ends.AddDate(0, 0, 1)
 			before := len(onTheDay(ctx, diary, in.Caller.UserID, starts, day))
 
 			made, err := diary.Add(ctx, in.Caller.UserID, calendar.Event{
@@ -179,9 +213,8 @@ func add(diary Diary, clock Clock) tool.Tool {
 				return tool.Unverified("Putting "+strconv.Quote(args.Title)+" in the diary",
 					"reading that day back does not show it")
 			}
-			return tool.OK(fmt.Sprintf("Put in the diary and read back: %s. That day had %d %s "+
-				"before and has %d now. Tell them what was added and when.",
-				describe(*made, clock.where()), before, thing(before), len(after)))
+			return tool.Added("Put in the diary", made.Title, describe(*made, clock.where()),
+				before, len(after), "event")
 		},
 	}
 }
@@ -195,6 +228,8 @@ func add(diary Diary, clock Clock) tool.Tool {
 func amend(diary Diary, clock Clock) tool.Tool {
 	return tool.Tool{
 		Name:    "calendar_update",
+		Domain:  "calendar",
+		Writes:  true,
 		Purpose: "Change an event already in the diary: its name, when it is, where, or the notes.",
 		UseWhen: "They want an existing event altered rather than replaced -- rename it, move it, " +
 			"make it longer, add a place.",
@@ -206,14 +241,20 @@ func amend(diary Diary, clock Clock) tool.Tool {
 			Required: []string{"id"},
 			Properties: map[string]tool.Property{
 				"id": {
-					Type:        "string",
-					Description: "The event's identifier, from calendar_list. Never guessed.",
+					Type:    "string",
+					Pattern: eventPattern,
+					Description: "The event's identifier, exactly as calendar_events gave it. " +
+						"Never guessed, never a placeholder, and never a description of the event.",
 				},
 				"title":   {Type: "string", Description: "A new name for it."},
 				"starts":  {Type: "string", Description: "A new start, as 2026-09-28T15:00 in their own time."},
 				"minutes": {Type: "integer", Description: "A new length in minutes, counted from the start."},
-				"where":   {Type: "string", Description: "A new place. An empty string clears it."},
-				"notes":   {Type: "string", Description: "New notes. An empty string clears them."},
+				"ends": {Type: "string",
+					Description: "A new last day, as 2026-06-29, for something that runs over " +
+						"several days. This is how a one-day stay becomes a stay from the 26th " +
+						"to the 29th: change the one event, rather than adding one per day."},
+				"where": {Type: "string", Description: "A new place. An empty string clears it."},
+				"notes": {Type: "string", Description: "New notes. An empty string clears them."},
 			},
 		},
 		Run: func(ctx context.Context, in tool.Invocation) tool.Result {
@@ -222,6 +263,7 @@ func amend(diary Diary, clock Clock) tool.Tool {
 				Title   *string `json:"title"`
 				Starts  string  `json:"starts"`
 				Minutes int     `json:"minutes"`
+				Ends    string  `json:"ends"`
 				Where   *string `json:"where"`
 				Notes   *string `json:"notes"`
 			}
@@ -234,7 +276,7 @@ func amend(diary Diary, clock Clock) tool.Tool {
 				return tool.Failed("This request did not come from a known person.")
 			}
 			if strings.TrimSpace(args.ID) == "" {
-				return tool.Failed("Which event? Use calendar_list to find its identifier.")
+				return tool.Failed("Which event? Use calendar_events to find its identifier.")
 			}
 
 			// Read it first, both to have something to compare against
@@ -245,8 +287,7 @@ func amend(diary Diary, clock Clock) tool.Tool {
 				return whenTrouble(err)
 			}
 			if before == nil {
-				return tool.Failed("There is no event with that identifier. List the diary and use " +
-					"the identifier exactly as it came back, rather than guessing.")
+				return missingEvent(ctx, diary, clock, in.Caller.UserID, args.ID)
 			}
 			// Copied, not held by pointer. A Diary that hands back a
 			// pointer into its own storage would otherwise have the
@@ -255,6 +296,13 @@ func amend(diary Diary, clock Clock) tool.Tool {
 			was := *before
 
 			change := calendar.Amend{Title: args.Title, Where: args.Where, Notes: args.Notes}
+			// Carried from the event itself, because Google stores a
+			// whole-day event as dates and a timed one as timestamps,
+			// and it refuses a patch that sends the wrong one. Two
+			// attempts to move a birthday failed this way on 28
+			// September 2026 and were reported as the date being in
+			// the past.
+			change.AllDay = &was.AllDay
 			if strings.TrimSpace(args.Starts) != "" {
 				starts, err := when(args.Starts, clock.where())
 				if err != nil {
@@ -265,17 +313,38 @@ func amend(diary Diary, clock Clock) tool.Tool {
 				// Moving the start alone keeps the length it had, which
 				// is what somebody means by "move it to four".
 				length := was.Ends.Sub(was.Starts)
-				if args.Minutes > 0 {
+				if args.Minutes > 0 && !was.AllDay {
 					length = time.Duration(args.Minutes) * time.Minute
 				}
-				if length <= 0 {
+				// A whole-day event has no length in minutes, and a
+				// one-day one is a span of nothing: an hour's default
+				// would turn a birthday into a morning.
+				if length <= 0 && !was.AllDay {
 					length = time.Hour
 				}
 				ends := starts.Add(length)
 				change.Ends = &ends
-			} else if args.Minutes > 0 {
+			} else if args.Minutes > 0 && !was.AllDay {
 				ends := was.Starts.Add(time.Duration(args.Minutes) * time.Minute)
 				change.Ends = &ends
+			}
+
+			// A named last day wins over any length worked out above: it
+			// is the one way to stretch an event across days rather than
+			// leaving a row of one-day copies behind.
+			if last := strings.TrimSpace(args.Ends); last != "" {
+				until, err := when(last, clock.where())
+				if err != nil {
+					return tool.Failed(err.Error())
+				}
+				from := was.Starts
+				if change.Starts != nil {
+					from = *change.Starts
+				}
+				if until.Before(from) {
+					return tool.Failed("That would end before it starts.")
+				}
+				change.Ends = &until
 			}
 
 			if change.Empty() {
@@ -293,11 +362,11 @@ func amend(diary Diary, clock Clock) tool.Tool {
 			loc := clock.where()
 			return tool.Changed("Changed the event",
 				tool.Change{What: "the name", From: was.Title, To: after.Title},
-				tool.Change{What: "when it is",
+				tool.Change{What: "the time",
 					From: was.Starts.In(loc).Format("3:04 pm on Monday 2 January"),
 					To:   after.Starts.In(loc).Format("3:04 pm on Monday 2 January")},
 				tool.Change{What: "the place", From: was.Where, To: after.Where},
-				tool.Change{What: "the notes", From: was.Notes, To: after.Notes},
+				tool.Change{What: "the note", From: was.Notes, To: after.Notes},
 			)
 		},
 	}
@@ -306,19 +375,49 @@ func amend(diary Diary, clock Clock) tool.Tool {
 // agenda : What the assistant has written down.
 func agenda(diary Diary, clock Clock) tool.Tool {
 	return tool.Tool{
-		Name:     "calendar_list",
-		Prefetch: true,
-		Purpose:  "Read what is in the diary, over the days ahead or across a particular stretch of dates.",
-		UseWhen: "Any question about what is in the diary -- today, tomorrow, this week, a named " +
-			"day, a range of dates, or a day already past. Call it every time, including when the " +
-			"answer seems obvious: a date in the past is still a question about what is stored, and " +
-			"the only way to know what is stored is to look.",
-		Avoid: "Do not answer from what was said earlier in the conversation, and do not reason that " +
-			"a date must be empty because it is in the past or because nothing was mentioned. Both are " +
-			"claims about the diary, and a claim about the diary needs this tool to have just run.\n\n" +
-			"What comes back is only what the assistant put there; it cannot see the person's own " +
-			"meetings. So never call a day empty on the strength of it -- say nothing was written down " +
-			"here, and use calendar_free for whether they are actually busy.",
+		Name:   "calendar_events",
+		Domain: "calendar",
+		Lists:  true,
+		Purpose: prompt.Text(
+			"Read events, over the days ahead or across a stretch of dates.",
+			"Reads every calendar the person has -- their own, the assistant's, holidays, birthdays -- unless one is named in 'calendar', which narrows it to that one.",
+			"All of them can be read; only the assistant's own can be changed.",
+		),
+		UseWhen: prompt.Block(
+			prompt.Text(
+				"Anything to do with a date or a time, whether it is asked about, mentioned in passing, or only discussed.",
+				"The calendar is where dates and times live: a day, a month, a season, a birthday, an anniversary, a trip, a meeting, a deadline, next week, the weekend, before they leave.",
+				"Read it before you answer, every time, even when nobody asked what is in the diary.",
+				"What they said may already be written down, may clash with something, or may be the thing to offer to write down; none of that can be known without looking.",
+			),
+			prompt.Text(
+				"Also any question about what is in the diary -- today, tomorrow, this week, a named day, a range of dates, or a day already past.",
+				"Call it every time, including when the answer seems obvious: a date in the past is still a question about what is stored, and the only way to know what is stored is to look.",
+			),
+			prompt.Text(
+				"Including when they name a calendar you do not recognise.",
+				"The name reached you through speech and is more likely mangled than wrong, so pass it anyway and let it be matched.",
+				"Never answer that a calendar does not exist without having looked: that is a claim about what they have, and it needs a tool to have just run.",
+			),
+			prompt.Text(
+				"There is no limit on how far back or forward this reaches.",
+				"'from' and 'to' take any dates, years apart if that is what was asked for, so never say a stretch of time is out of reach: pick the widest range that answers what they asked and read it.",
+			),
+		),
+		Avoid: prompt.Block(
+			prompt.Text(
+				"Do not answer from what was said earlier in the conversation, and do not reason that a date must be empty because it is in the past or because nothing was mentioned.",
+				"Both are claims about the diary, and a claim about the diary needs this tool to have just run.",
+			),
+			prompt.Text(
+				"Do not narrow it without being asked to.",
+				"Called without 'calendar' it reads everything they have, which is what a question about a day wants; naming one hides the rest, so name one only when they asked about that calendar in particular.",
+			),
+			prompt.Text(
+				"Do not offer to check their own calendar: it has already been read.",
+				"If some calendar would not open the answer says so by name, and that, not silence, is what to pass on.",
+			),
+		),
 		Channels: []chat.Channel{chat.ChannelVoice, chat.ChannelDirect},
 		Params: tool.Schema{
 			Properties: map[string]tool.Property{
@@ -337,13 +436,44 @@ func agenda(diary Diary, clock Clock) tool.Tool {
 					Description: "Instead of dates: how many days ahead to look, counting today. " +
 						"One is the rest of today. Used only when 'from' is absent; left out, seven.",
 				},
+				// 'from' and 'to' take any dates at all, in either
+				// direction and however far apart. Said once here because
+				// the model has claimed the opposite: asked for everything
+				// rather than a month, it answered that it could not reach
+				// indefinitely into the past and future, which is not true
+				// of anything in this schema.
+
+				"calendar": {
+					Type: "string",
+					Description: prompt.Text(
+						"Which single calendar to read, when they asked about one in particular.",
+						"Left out, every calendar they have is read together, which is almost always what is wanted.",
+						"Pass what the person called it, even if it sounds wrong: names spoken aloud arrive mangled and are matched by likeness, so \"rjdanesh22rjmail.com\" finds rjdhanush22@gmail.com and \"javas\" finds Jarvis.",
+						"Their own main one answers to \"main\".",
+						"Reading any of theirs is allowed; changing them is not.",
+					),
+				},
 			},
+		},
+		Examples: []tool.Example{
+			// A question nobody would call a diary question, which is
+			// the point: a birthday is a date, the date is written
+			// down, and answering from memory answers about what you
+			// were told rather than about what exists. A year, because
+			// a birthday is not in the next seven days.
+			{Ask: "when is Alekhya's birthday", Args: `{"from":"2026-09-28","to":"2027-09-28","saying":"looking for that"}`},
+			{Ask: "is anyone's birthday coming up", Args: `{"days":60,"saying":"having a look"}`},
+			{Ask: "what have I got on", Args: `{"days":7,"saying":"looking at your diary"}`},
+			{Ask: "what is on my own calendar this week", Args: `{"days":7,"calendar":"main","saying":"reading your own calendar"}`},
+			{Ask: "read the events in RJDanajtvali.jml.com", Args: `{"days":30,"calendar":"RJDanajtvali.jml.com","saying":"reading that calendar"}`},
+			{Ask: "what is in my gmail calendar in August", Args: `{"from":"2026-08-01","to":"2026-08-31","calendar":"gmail","saying":"reading August on your calendar"}`},
 		},
 		Run: func(ctx context.Context, in tool.Invocation) tool.Result {
 			var args struct {
-				From string `json:"from"`
-				To   string `json:"to"`
-				Days int    `json:"days"`
+				From     string `json:"from"`
+				To       string `json:"to"`
+				Days     int    `json:"days"`
+				Calendar string `json:"calendar"`
 			}
 			_ = json.Unmarshal(in.Args, &args)
 
@@ -359,23 +489,87 @@ func agenda(diary Diary, clock Clock) tool.Tool {
 				return tool.Failed(err.Error())
 			}
 
-			found, err := diary.Mine(ctx, in.Caller.UserID, from, to)
+			// Named, it is one of the person's own and read only. Left
+			// out, it is the assistant's, which is the only one it can
+			// change and the only one whose identifiers are worth having.
+			if strings.TrimSpace(args.Calendar) != "" {
+				on, found, err := diary.Theirs(ctx, in.Caller.UserID, args.Calendar, from, to)
+				if errors.Is(err, calendar.ErrNoSuchCalendar) || errors.Is(err, calendar.ErrWhichCalendar) {
+					return whichCalendar(ctx, diary, in.Caller.UserID, args.Calendar,
+						errors.Is(err, calendar.ErrWhichCalendar))
+				}
+				if err != nil {
+					return whenTrouble(err)
+				}
+				if len(found) == 0 {
+					return tool.OK("There is nothing on " + on.Name + " " + said + ".")
+				}
+
+				var b strings.Builder
+				fmt.Fprintf(&b, "There are %d entries on %s %s. ", len(found), on.Name, said)
+				if on.Mine {
+					// Naming your own calendar has to reach the same place
+					// as not naming one. It did not: asked to read
+					// "Personal Assistant" the assistant was handed its own
+					// events with no identifiers and told it could not
+					// change them, so it added more instead of mending what
+					// was there.
+					b.WriteString("This is your own calendar, the one you write to, so these can " +
+						"be changed and removed.")
+				} else {
+					b.WriteString("This is the person's own calendar: you can read it and cannot " +
+						"change it. Read the titles back exactly as they are written here, " +
+						"misspellings and all: tidying one hides the fact that you are looking at " +
+						"a different thing from the one they meant.")
+				}
+				if !heard.Exactly(on.Name, args.Calendar) {
+					b.WriteString(" " + tool.BySound("calendar", args.Calendar, on.Name))
+				}
+				for _, e := range found {
+					b.WriteString("\n- ")
+					b.WriteString(describe(e, clock.where()))
+					if on.Mine {
+						b.WriteString("  [id " + e.ID + "]")
+					}
+				}
+				return tool.OK(b.String())
+			}
+
+			// Everything they have, which is what a question about a
+			// date means. Naming a calendar narrows it; naming none
+			// used to narrow it to the assistant's own, which answered
+			// "anything on the 2nd of October" with silence while the
+			// holiday calendar had Gandhi Jayanti on it.
+			found, missed, err := diary.Everywhere(ctx, in.Caller.UserID, from, to)
 			if err != nil {
 				return whenTrouble(err)
 			}
-			if len(found) == 0 {
-				return tool.OK("Nothing is written in the diary " + said + ". That is only what " +
-					"was put there through you; it says nothing about their own calendar.")
-			}
 
 			var b strings.Builder
-			b.WriteString("In the diary " + said + ":")
-			for _, e := range found {
-				b.WriteString("\n- ")
-				b.WriteString(describe(e, clock.where()))
-				b.WriteString("  [id ")
-				b.WriteString(e.ID)
-				b.WriteString("]")
+			if len(found) == 0 {
+				b.WriteString("Nothing is written " + said + ", on any of their calendars.")
+			} else {
+				fmt.Fprintf(&b, "There are %d entries %s, across all their calendars. ", len(found), said)
+				b.WriteString("The calendar each one sits on is named after it, and it matters: " +
+					"a holiday or a birthday is not something they arranged. Only entries marked " +
+					"with an identifier can be changed or removed.")
+				for _, e := range found {
+					b.WriteString("\n- ")
+					b.WriteString(describe(e, clock.where()))
+					if e.Calendar != "" {
+						b.WriteString("  (" + e.Calendar + ")")
+					}
+					if e.Mine {
+						b.WriteString("  [id " + e.ID + "]")
+					}
+				}
+			}
+			// Said plainly, because a day called empty on the strength
+			// of a calendar that would not open is a wrong answer
+			// rather than a missing one.
+			if len(missed) > 0 {
+				b.WriteString("\n\nThese would not open, so this is not the whole picture: " +
+					strings.Join(missed, ", ") + ".")
 			}
 			return tool.OK(b.String())
 		},
@@ -436,6 +630,7 @@ func window(from, to string, days int, clock Clock) (time.Time, time.Time, strin
 func free(diary Diary, clock Clock) tool.Tool {
 	return tool.Tool{
 		Name:    "calendar_free",
+		Domain:  "calendar",
 		Purpose: "Say whether the person is free at a time, across all of their calendars.",
 		UseWhen: "They ask whether they are free, whether something clashes, or when they are " +
 			"available. Also before putting anything in the diary at a time they proposed.",
@@ -508,20 +703,39 @@ func free(diary Diary, clock Clock) tool.Tool {
 func cancel(diary Diary, clock Clock) tool.Tool {
 	return tool.Tool{
 		Name:    "calendar_cancel",
+		Domain:  "calendar",
+		Writes:  true,
 		Purpose: "Remove an event the assistant put in the diary.",
-		UseWhen: "They want something taken out that is listed by calendar_list.",
+		UseWhen: "They want something taken out that is listed by calendar_events. " +
+			"Read the listing in this same turn first and take the identifier from it. " +
+			"If you do not have one in front of you, you do not have one: list, then remove.",
 		Avoid: "Only events on the assistant's own calendar can be removed, which is every event it " +
 			"can see. There is no way to touch the person's real meetings and no point trying.",
 		Channels: []chat.Channel{chat.ChannelVoice, chat.ChannelDirect},
 		Params: tool.Schema{
-			Required: []string{"id"},
+			Required: []string{"ids"},
 			Properties: map[string]tool.Property{
-				"id": {Type: "string", Description: "The event's identifier, from a listing."},
+				"ids": {
+					Type: "array", MinItems: tool.Bound(1), MaxItems: tool.Bound(25),
+					Description: "Which events to remove. Give every one you mean in a single " +
+						"call, not one call each: they are counted and read back together, so " +
+						"the person is told once how many went rather than once per event.",
+					Items: &tool.Property{Type: "string", Pattern: eventPattern,
+						Description: "An event identifier, exactly as a listing gave it."},
+				},
 			},
+		},
+		Examples: []tool.Example{
+			{Ask: "cancel that event",
+				Args: `{"ids":["3uhvjlv8681uhvr1kq69flvjt4"],"saying":"cancelling that event"}`},
+			{Ask: "delete the four duplicate stays",
+				Args: `{"ids":["v3fcn5cg5e5g03q5ivq2n98i60","if83k9l3falej69kl5tvt4sb34",` +
+					`"4bk8kf1r6m4s13155skat7qlvg","hnpu9lqtprtpq469du2frd3vo0"],` +
+					`"saying":"removing the four duplicate stays"}`},
 		},
 		Run: func(ctx context.Context, in tool.Invocation) tool.Result {
 			var args struct {
-				ID string `json:"id"`
+				IDs []string `json:"ids"`
 			}
 			_ = json.Unmarshal(in.Args, &args)
 
@@ -531,25 +745,47 @@ func cancel(diary Diary, clock Clock) tool.Tool {
 			if in.Caller.UserID == "" {
 				return tool.Failed("This request did not come from a known person.")
 			}
-			if strings.TrimSpace(args.ID) == "" {
-				return tool.Failed("Which event? Use calendar_list to find its identifier.")
+			if len(args.IDs) == 0 {
+				return tool.Failed("Which events? Use calendar_events to find their identifiers.")
 			}
 
 			// A wide window either side, so the count means something
-			// whenever the event actually was.
+			// whenever the events actually were.
 			from := clock.now().AddDate(0, 0, -365)
 			to := clock.now().AddDate(0, 0, 365)
 			before := onTheDay(ctx, diary, in.Caller.UserID, from, to)
 
-			if err := diary.Cancel(ctx, in.Caller.UserID, args.ID); err != nil {
-				return whenTrouble(err)
+			// Every one is attempted. Stopping at the first failure would
+			// leave the person with some of them gone and no account of
+			// which, which is worse than finishing and saying so.
+			var refused []string
+			for _, id := range args.IDs {
+				if err := diary.Cancel(ctx, in.Caller.UserID, id); err != nil {
+					refused = append(refused, id)
+				}
 			}
 
 			after := onTheDay(ctx, diary, in.Caller.UserID, from, to)
-			if among(after, args.ID) {
-				return tool.Unverified("Taking that out of the diary", "it is still there")
+
+			// Read back rather than trusting the deletes. Anything still
+			// there did not go, whatever its call reported.
+			var stayed []string
+			for _, id := range args.IDs {
+				if among(after, id) {
+					stayed = append(stayed, id)
+				}
 			}
-			return tool.Removed("Taken out of the diary", len(before), len(after), "event")
+			if len(stayed) == len(args.IDs) {
+				return tool.Unverified("Taking those out of the diary", "they are all still there")
+			}
+			if len(stayed) > 0 {
+				return tool.Partly("Taken out of the diary",
+					len(args.IDs)-len(stayed), len(args.IDs), stayed,
+					len(before), len(after), "event")
+			}
+			_ = refused
+			return tool.RemovedMany("Taken out of the diary",
+				len(args.IDs), len(before), len(after), "event")
 		},
 	}
 }
