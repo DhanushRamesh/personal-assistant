@@ -36,6 +36,7 @@ import (
 	"github.com/DhanushRamesh/personal-assistant/internal/memory"
 	memorymysql "github.com/DhanushRamesh/personal-assistant/internal/memory/mysql"
 	"github.com/DhanushRamesh/personal-assistant/internal/persona"
+	"github.com/DhanushRamesh/personal-assistant/internal/profile"
 	"github.com/DhanushRamesh/personal-assistant/internal/remind"
 	remindmysql "github.com/DhanushRamesh/personal-assistant/internal/remind/mysql"
 	"github.com/DhanushRamesh/personal-assistant/internal/runner"
@@ -256,6 +257,7 @@ func run() error {
 			Location: cfg.Assistant.Location,
 			Now:      cfg.Assistant.Now,
 		},
+		Aside: aside(cfg, logger.Logger),
 	})
 	if err != nil {
 		return err
@@ -313,6 +315,27 @@ func run() error {
 	logger.Info("watching for reminders",
 		slog.Duration("every", remind.DefaultEvery),
 		slog.Duration("grace", remind.DefaultGrace))
+
+	// A standing description of the person, rewritten from what they have
+	// actually said. The memories are facts they gave once and none of
+	// them says what somebody is like to talk to; this is the attempt at
+	// the rest.
+	describing := &profile.Builder{
+		Said:     chats,
+		Memories: remembering.Store,
+		Now:      cfg.Assistant.Now,
+		Logger:   logger.Logger,
+		Ask: func(ctx context.Context, ask string) (string, error) {
+			return askOnce(ctx, answerer, cfg.PlatformAI.Vendor, cfg.PlatformAI.Model,
+				environment.PurposeProfile, ask)
+		},
+	}
+	watching.Add(1)
+	go func() {
+		defer watching.Done()
+		describeDaily(remindCtx, chats, describing, cfg.Assistant.Now, logger.Logger)
+	}()
+	logger.Info("describing the person daily", slog.Duration("every", profileEvery))
 
 	handler := api.New(api.Options{
 		Logger:         logger.Logger,
@@ -470,6 +493,7 @@ func announcer(cfg config.Config, logger *slog.Logger) announce.Announcer {
 		URL:       cfg.HomeAssistant.URL,
 		Token:     cfg.HomeAssistant.Token,
 		Satellite: cfg.HomeAssistant.Satellite,
+		Notify:    cfg.HomeAssistant.Notify,
 	})
 	if err != nil {
 		if !errors.Is(err, hass.ErrNotConfigured) {
@@ -480,8 +504,38 @@ func announcer(cfg config.Config, logger *slog.Logger) announce.Announcer {
 	}
 
 	logger.Info("announcing through Home Assistant",
-		slog.String("satellite", cfg.HomeAssistant.Satellite))
+		slog.String("satellite", cfg.HomeAssistant.Satellite),
+		slog.Any("also_notifying", cfg.HomeAssistant.Notify))
 	return speaker
+}
+
+// aside : Where the assistant says what it is about to do, mid-turn.
+//
+// Nil when no media player is configured, which answers exactly as before:
+// silence until the answer. It is deliberately not the satellite. Speaking
+// through the satellite mid-turn ends the turn, because an announcement and
+// an answer share the completion callback that marks a turn finished.
+func aside(cfg config.Config, logger *slog.Logger) runner.Aside {
+	said, err := hass.NewAside(hass.AsideConfig{
+		URL:         cfg.HomeAssistant.URL,
+		Token:       cfg.HomeAssistant.Token,
+		MediaPlayer: cfg.HomeAssistant.MediaPlayer,
+		Engine:      cfg.HomeAssistant.TTSEngine,
+		Voice:       cfg.HomeAssistant.TTSVoice,
+		SettleWait:  cfg.HomeAssistant.AsideSettleWait,
+		Language:    cfg.HomeAssistant.TTSLanguage,
+	})
+	if err != nil {
+		if !errors.Is(err, hass.ErrNoAside) {
+			logger.Warn("cannot reach Home Assistant to say what is being done",
+				slog.Any("error", err))
+		}
+		logger.Info("nothing is said while an answer is being worked out")
+		return nil
+	}
+
+	logger.Info("saying what is being done", slog.String("through", said.Describe()))
+	return said
 }
 
 // embedder : What turns text into vectors.
@@ -642,4 +696,109 @@ func version() string {
 		}
 	}
 	return "dev"
+}
+
+// profileEvery : How often the description is rewritten.
+//
+// Daily. It reads a week each time, so running it more often spends
+// model calls to re-read mostly the same material; running it less
+// often leaves it describing somebody from before whatever changed.
+const profileEvery = 24 * time.Hour
+
+// profileFirst : How long after startup the first rebuild runs.
+//
+// Not at once. Starting the server should not cost a model call, and a
+// restart to change something unrelated should not rewrite the
+// description as a side effect.
+const profileFirst = 10 * time.Minute
+
+// profileTimeout : How long one rebuild may take.
+//
+// Generous, because it reads a week of messages into one prompt and
+// nobody is waiting on the answer.
+const profileTimeout = 3 * time.Minute
+
+// describeDaily : Rewrites everybody's description, for as long as ctx
+// lives.
+//
+// Everybody who has said something recently rather than everybody with
+// an account: somebody who has not spoken in a week keeps what they
+// had, instead of having it rewritten from nothing.
+func describeDaily(
+	ctx context.Context,
+	talkers interface {
+		Talkers(ctx context.Context, since time.Time) ([]string, error)
+	},
+	describing *profile.Builder,
+	now func() time.Time,
+	logger *slog.Logger,
+) {
+	timer := time.NewTimer(profileFirst)
+	defer timer.Stop()
+
+	for {
+		select {
+		case <-ctx.Done():
+			return
+		case <-timer.C:
+		}
+		timer.Reset(profileEvery)
+
+		pass, cancel := context.WithTimeout(ctx, profileTimeout)
+		who, err := talkers.Talkers(pass, now().Add(-profile.Window))
+		if err != nil {
+			logger.Warn("cannot tell who has been talking", slog.Any("error", err))
+			cancel()
+			continue
+		}
+		for _, userID := range who {
+			if err := describing.Build(pass, userID); err != nil {
+				logger.Warn("cannot describe them", slog.Any("error", err))
+				continue
+			}
+			logger.Info("described them from what they said",
+				slog.String("user_id", userID))
+		}
+		cancel()
+	}
+}
+
+// askOnce : Puts one prompt to the provider and returns what it said.
+//
+// The runner has its own copy of this for naming and condensing, where
+// the model comes from the chat being answered. Nothing is being
+// answered here, so the configured default is used instead.
+// The vendor travels with the model, and both or neither. Naming a
+// model without one leaves the vendor empty on the wire -- the provider
+// only reads its own default when no model was named at all -- and the
+// answer is "The server would not accept that request", which says
+// nothing about which field was wrong.
+func askOnce(
+	ctx context.Context,
+	env environment.Environment,
+	vendor, model string,
+	why environment.Purpose,
+	ask string,
+) (string, error) {
+	stream, err := env.Run(ctx, environment.Request{
+		Prompt: ask, Purpose: why, Vendor: vendor, Model: model,
+	})
+	if err != nil {
+		return "", err
+	}
+
+	// Drained to the end whatever it says, so the provider's goroutine is
+	// never left blocked on a send.
+	var last *environment.Message
+	for msg := range stream {
+		m := msg
+		last = &m
+	}
+	if last == nil {
+		return "", fmt.Errorf("the provider said nothing")
+	}
+	if last.Kind == environment.KindError {
+		return "", fmt.Errorf("%s", last.Text)
+	}
+	return last.Text, nil
 }

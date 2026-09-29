@@ -110,3 +110,38 @@ func (m *Repository) SetSummary(_ context.Context, conversationID string, s conv
 	m.summaries[conversationID] = s
 	return nil
 }
+
+// SaidSince : What one person has said across every conversation since a
+// time, oldest first.
+//
+// The in-memory twin of the stored query. Conversations are walked
+// rather than indexed, which is right for a store that exists to make
+// tests quick and holds tens of messages, not thousands.
+func (m *Repository) SaidSince(_ context.Context, userID string, since time.Time, limit int) ([]conversation.Message, error) {
+	if userID == "" {
+		return nil, nil
+	}
+	if limit <= 0 {
+		limit = 500
+	}
+
+	m.mu.Lock()
+	defer m.mu.Unlock()
+
+	var out []conversation.Message
+	for id, msgs := range m.said {
+		if c, ok := m.conversations[id]; !ok || c.UserID != userID {
+			continue
+		}
+		for _, msg := range msgs {
+			if msg.Role == conversation.User && !msg.At.Before(since) {
+				out = append(out, msg)
+			}
+		}
+	}
+	sort.Slice(out, func(i, j int) bool { return out[i].At.Before(out[j].At) })
+	if len(out) > limit {
+		out = out[:limit]
+	}
+	return out, nil
+}

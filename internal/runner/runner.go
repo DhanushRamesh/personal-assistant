@@ -114,6 +114,19 @@ type Options struct {
 	// Missing : Reminders that were never said, to be brought up once.
 	// Nil never mentions them.
 	Missing *remind.Missing
+	// Aside : Where to say what the assistant is about to do, while a
+	// spoken turn is still running. Nil says nothing until the answer.
+	Aside Aside
+}
+
+// Aside : Somewhere to say a sentence beside a turn, and to silence it.
+//
+// An interface so a runner can be built without Home Assistant and so the
+// tests can hear what would have been said.
+type Aside interface {
+	Say(ctx context.Context, message string) error
+	Settled(ctx context.Context) error
+	Stop(ctx context.Context) error
 }
 
 // Runner : Executes chats in the background.
@@ -135,6 +148,7 @@ type Runner struct {
 	memory          *memory.Recall
 	now             func() time.Time
 	recently        *remind.Recently
+	aside           Aside
 
 	// freshMu, fresh : Prefetched answers a tool asked to have reused,
 	// keyed by person and tool. Empty for every tool that does not,
@@ -211,6 +225,7 @@ func New(opts Options) (*Runner, error) {
 		memory:          opts.Memory,
 		now:             opts.Now,
 		recently:        opts.Recently,
+		aside:           opts.Aside,
 		missing:         opts.Missing,
 		slots:           make(chan struct{}, opts.MaxConcurrent),
 		base:            base,
@@ -278,8 +293,17 @@ func (r *Runner) Submit(t *chat.Chat) error {
 }
 
 // Cancel : Stops a running chat. It reports whether one was running.
+//
+// No reason, so it records as the person having stopped it -- which is
+// what it means when it comes from the stop button or the stop word.
+// A caller that merely hung up wants CancelBecause instead.
 func (r *Runner) Cancel(id string) bool {
 	return r.stop(id, "")
+}
+
+// CancelBecause : Stops a running chat and says why, for the transcript.
+func (r *Runner) CancelBecause(id, reason string) bool {
+	return r.stop(id, reason)
 }
 
 // Shutdown : Stops every running chat and waits for them to record their
@@ -315,11 +339,15 @@ func (r *Runner) Shutdown(ctx context.Context) error {
 // Read afresh rather than stamped onto the chat when it was accepted, so a
 // manner chosen in the settings takes effect on the next prompt.
 func (r *Runner) prompt() string {
-	id := persona.Default
+	return persona.Prompt(r.personaID(), r.assistantName)
+}
+
+// personaID : The manner in use, or the default when none is set.
+func (r *Runner) personaID() string {
 	if r.persona != nil {
-		id = r.persona.Current()
+		return r.persona.Current()
 	}
-	return persona.Prompt(id, r.assistantName)
+	return persona.Default
 }
 
 // promptFor : The system prompt, with where this chat is being answered.
@@ -359,7 +387,7 @@ func (r *Runner) promptFor(ctx context.Context, t *chat.Chat) (string, []remind.
 		r.recalled(ctx, userID, t.Prompt, &note),
 		r.quoted(ctx, userID, t.Prompt, t.ConversationID, &note),
 		r.justSaid(ctx, userID),
-		r.prefetch(ctx, t),
+		r.prefetch(ctx, t, &note),
 		unsaid)
 
 	note.TookMS = time.Since(started).Milliseconds()

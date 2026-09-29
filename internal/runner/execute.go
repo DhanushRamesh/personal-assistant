@@ -12,6 +12,7 @@ import (
 	"github.com/DhanushRamesh/personal-assistant/internal/environment"
 	"github.com/DhanushRamesh/personal-assistant/internal/events"
 	"github.com/DhanushRamesh/personal-assistant/internal/failure"
+	"github.com/DhanushRamesh/personal-assistant/internal/persona"
 	"github.com/DhanushRamesh/personal-assistant/internal/tool"
 )
 
@@ -81,6 +82,16 @@ func (r *Runner) consume(runCtx, ctx context.Context, t *chat.Chat, systemPrompt
 	// model may take several rounds to get to its answer.
 	var owed []tool.Owed
 
+	// Whether the model said aloud what it was about to do. Once per turn
+	// at most: a chain of five rounds would otherwise interrupt five times
+	// to describe work the person did not ask about.
+	var spoke bool
+
+	// Every tool that has run in this turn, so a write can insist its own
+	// domain was read first. Prefetched listings count: the model was
+	// shown them before it was asked anything.
+	ran := r.alreadyRead(t)
+
 	for hop := 0; ; hop++ {
 		// The last round is offered nothing. A model that has run out of
 		// rounds must answer from what it gathered, and saying what it
@@ -108,12 +119,18 @@ func (r *Runner) consume(runCtx, ctx context.Context, t *chat.Chat, systemPrompt
 		if err != nil {
 			r.logger.ErrorContext(ctx, "environment would not start", slog.Any("error", err))
 			r.finishWith(ctx, t, func() error {
-				return t.Fail("I could not reach the service that answers this.")
+				// The cause is kept, not only logged. Asked afterwards
+				// what went wrong, the assistant can only answer from
+				// what the conversation holds, and this used to hold
+				// nothing.
+				return t.FailWith(
+					r.failureSentence(failure.Sentence(failure.Unreachable)),
+					string(failure.Unreachable), err.Error())
 			})
 			return
 		}
 
-		final := r.drain(ctx, t, stream)
+		final := r.drain(ctx, t, stream, hop == 0 && !spoke, &spoke)
 
 		switch {
 		case final == nil:
@@ -128,13 +145,14 @@ func (r *Runner) consume(runCtx, ctx context.Context, t *chat.Chat, systemPrompt
 					slog.String("code", final.Code))
 			}
 			r.finishWith(ctx, t, func() error {
-				return t.FailWith(spoken(t.Channel, final.Text, final.Detail),
+				return t.FailWith(r.failureSentence(final.Text),
 					final.Code, final.Detail)
 			})
 			return
 
 		case final.Kind != environment.KindToolCalls:
-			r.complete(ctx, t, tool.Ensure(final.Text, owed))
+			r.complete(ctx, t, tool.Ensure(final.Text,
+				persona.AddressFor(r.personaID()), tool.Merged(owed)))
 			return
 		}
 
@@ -143,7 +161,24 @@ func (r *Runner) consume(runCtx, ctx context.Context, t *chat.Chat, systemPrompt
 		// in the history now, and asking it twice would have the model answer
 		// it twice.
 		turns = append(turns, asUserTurn(prompt)...)
-		ranTurns, ranOwed := r.runTools(ctx, t, final.ToolCalls)
+
+		// What the model said this round of calls is for, taken off the
+		// arguments before anything records or runs them. Said aloud once
+		// per turn, so a chain of rounds does not interrupt at every one.
+		raw := make([]string, 0, len(final.ToolCalls))
+		for _, c := range final.ToolCalls {
+			raw = append(raw, c.Name+" "+c.Arguments)
+		}
+		said := takeSaying(final.ToolCalls)
+		r.logger.InfoContext(ctx, "saying on the call",
+			slog.String("said", said),
+			slog.String("channel", string(t.Channel)),
+			slog.Any("raw", raw))
+		if !spoke && r.sayAside(ctx, t, said) {
+			spoke = true
+		}
+
+		ranTurns, ranOwed := r.runTools(ctx, t, final.ToolCalls, &ran)
 		turns = append(turns, ranTurns...)
 		owed = append(owed, ranOwed...)
 		prompt = ""
@@ -157,22 +192,19 @@ func (r *Runner) consume(runCtx, ctx context.Context, t *chat.Chat, systemPrompt
 	}
 }
 
-// spoken : What a failure says, for the channel it has to be said on.
+// failureSentence : What a failure says, in the voice of whoever is
+// answering.
 //
-// Typed, the sentence alone: the exact error is a click away under "more
-// info", and a wall of service jargon in the transcript buries the part
-// anybody reads.
-//
-// Spoken, both. There is no "more info" on a speaker, so a sentence on its own
-// leaves the person with a failure and no way to reach what caused it. Saying
-// it aloud is ugly and is still better than withholding it.
-func spoken(channel chat.Channel, sentence, detail string) string {
-	detail = strings.TrimSpace(detail)
-	if channel != chat.ChannelVoice || detail == "" {
-		return sentence
-	}
-	return sentence + " The exact error was: " + detail
-
+// The sentence only. The exact error is kept beside it on the message and
+// given to the model if they ask what went wrong, and it is not said
+// otherwise -- on a speaker least of all. It used to be spoken in full on
+// the voice channel, on the reasoning that there is no "more info" on a
+// speaker; what that produced was a butler reading out a DNS failure.
+// Asking is the way to it, and asking works because the detail is in the
+// conversation.
+func (r *Runner) failureSentence(sentence string) string {
+	return persona.Addressed(strings.TrimSpace(sentence),
+		persona.AddressFor(r.personaID()), "")
 }
 
 // asUserTurn : The question as a turn, or nothing when there is none.
@@ -191,12 +223,22 @@ func asUserTurn(prompt string) []environment.Turn {
 //
 // Always read to completion, whatever arrives: the environment blocks on an
 // unread send, so abandoning a stream early leaves its goroutine stuck.
-func (r *Runner) drain(ctx context.Context, t *chat.Chat, stream <-chan environment.Message) *environment.Message {
+func (r *Runner) drain(
+	ctx context.Context,
+	t *chat.Chat,
+	stream <-chan environment.Message,
+	mayspeak bool,
+	spoke *bool,
+) *environment.Message {
 	var final *environment.Message
 	for msg := range stream {
 		switch msg.Kind {
 		case environment.KindUpdate:
 			r.announce(t.ID, msg)
+			if mayspeak && r.sayAside(ctx, t, msg.Text) {
+				*spoke = true
+				mayspeak = false
+			}
 		case environment.KindFinal, environment.KindError, environment.KindToolCalls:
 			m := msg
 			final = &m
@@ -304,7 +346,12 @@ func (r *Runner) recordOutcome(ctx context.Context, t *chat.Chat) {
 	// and once a turn can call tools some of it will have left effects
 	// behind that the next turn has to reason about.
 	if t.Status == chat.StatusCancelled {
-		written = append(written, conversation.Interrupted(t.ConversationID, *said))
+		// Why, when something other than the person stopped it. Read
+		// here rather than carried on the chat because the entry is
+		// still in the active map: it is removed after execute returns,
+		// and this runs inside it.
+		why, _ := r.cancelReason(t.ID)
+		written = append(written, conversation.Interrupted(t.ConversationID, why, *said))
 	}
 
 	for _, m := range written {
@@ -322,7 +369,7 @@ func (r *Runner) complete(ctx context.Context, t *chat.Chat, text string) {
 		r.logger.ErrorContext(ctx, "response too large to store",
 			slog.Int("bytes", len(text)))
 		r.finishWith(ctx, t, func() error {
-			return t.Fail("The answer was too long for me to keep.")
+			return t.Fail(r.failureSentence("The answer was too long for me to keep."))
 		})
 		return
 	}
@@ -334,6 +381,7 @@ func (r *Runner) complete(ctx context.Context, t *chat.Chat, text string) {
 		return
 	}
 	r.recordOutcome(ctx, t)
+	r.settleAside(ctx, t)
 	r.announceOutcome(t)
 	r.logger.InfoContext(ctx, "chat completed",
 		slog.Duration("took", t.Duration()),
@@ -346,19 +394,23 @@ func (r *Runner) finishStopped(ctx context.Context, t *chat.Chat, runErr error) 
 	if errors.Is(runErr, context.DeadlineExceeded) {
 		r.logger.WarnContext(ctx, "chat exceeded its deadline",
 			slog.Duration("timeout", r.chatTimeout))
-		r.finishWith(ctx, t, func() error { return t.Fail(timeoutReason) })
+		r.finishWith(ctx, t, func() error { return t.Fail(r.failureSentence(timeoutReason)) })
 		return
 	}
 
-	// A reason set before cancelling distinguishes a shutdown from a user
-	// stopping the chat themselves.
-	if reason, ok := r.cancelReason(t.ID); ok && reason != "" {
+	// The server going down is a failure: the turn was going to work and
+	// the machine took it away. Anything else that stopped a turn is a
+	// cancellation -- it did not finish, and nothing went wrong with it.
+	// The reason is not lost either way; recordOutcome writes it into the
+	// transcript.
+	reason, _ := r.cancelReason(t.ID)
+	if reason == shutdownReason {
 		r.logger.InfoContext(ctx, "chat stopped", slog.String("reason", reason))
 		r.finishWith(ctx, t, func() error { return t.Fail(reason) })
 		return
 	}
 
-	r.logger.InfoContext(ctx, "chat cancelled")
+	r.logger.InfoContext(ctx, "chat cancelled", slog.String("reason", reason))
 	r.finishWith(ctx, t, func() error { return t.Cancel() })
 }
 
@@ -370,6 +422,7 @@ func (r *Runner) finishWith(ctx context.Context, t *chat.Chat, transition func()
 	}
 	_ = r.save(ctx, t)
 	r.recordOutcome(ctx, t)
+	r.settleAside(ctx, t)
 	r.announceOutcome(t)
 }
 

@@ -173,6 +173,8 @@ const (
 	PurposeTitle Purpose = "title"
 	// PurposeCondense : Condensing the earlier part of a conversation.
 	PurposeCondense Purpose = "condense"
+	// PurposeProfile : Describing the person from what they have said.
+	PurposeProfile Purpose = "profile"
 )
 
 // Request : What an environment is asked to do.

@@ -178,6 +178,7 @@ type recordingProvider struct {
 	failDetail string
 	seen       []environment.Turn
 	system     string
+	prompts    []string
 }
 
 // systemPrompt : What the assistant was last told about itself.
@@ -195,6 +196,7 @@ func (p *recordingProvider) Run(ctx context.Context, req environment.Request) (<
 	if req.Purpose == environment.PurposeChat {
 		p.seen = append([]environment.Turn(nil), req.History...)
 		p.system = req.SystemPrompt
+		p.prompts = append(p.prompts, req.Prompt)
 	}
 
 	ch := make(chan environment.Message, 1)
@@ -207,14 +209,15 @@ func (p *recordingProvider) Run(ctx context.Context, req environment.Request) (<
 	return ch, nil
 }
 
-// Spoken, a failure says the exact error too. There is no "more info" on a
-// speaker, so the sentence alone leaves the person with a failure and no way
-// to reach what caused it.
-func TestAVoiceFailureSaysTheExactError(t *testing.T) {
+// Spoken, a failure says the sentence and not the error. There is no
+// "more info" on a speaker, and reading a DNS failure aloud is not an
+// answer to that: the detail is kept on the message and given to the
+// model, so asking what went wrong reaches it.
+func TestAVoiceFailureKeepsTheExactErrorToItself(t *testing.T) {
 	const detail = "platformai: Output blocked by content filtering policy (HTTP 400)"
 
 	recorder := &recordingProvider{
-		failWith:   "The service would not let me answer that.",
+		failWith:   "The server would not let me answer that.",
 		failCode:   "filtered",
 		failDetail: detail,
 	}
@@ -223,11 +226,11 @@ func TestAVoiceFailureSaysTheExactError(t *testing.T) {
 	tk := h.submitOn(t, chat.ChannelVoice, "do you know the lyrics of Fireflies")
 	done := h.await(t, tk.ID, chat.StatusFailed, chat.StatusCompleted)
 
-	if !strings.Contains(done.Error, "content filtering") {
-		t.Errorf("spoken failure = %q, want the exact error in it", done.Error)
+	if strings.Contains(done.Error, "content filtering") {
+		t.Errorf("spoken failure = %q, want the jargon kept out of the room", done.Error)
 	}
 	if done.ErrorDetail != detail {
-		t.Errorf("detail = %q, want it kept exactly", done.ErrorDetail)
+		t.Errorf("detail = %q, want it kept exactly so it can be asked for", done.ErrorDetail)
 	}
 }
 
@@ -271,5 +274,46 @@ func TestOnlyASpokenTurnIsWarnedAboutMishearing(t *testing.T) {
 	h.await(t, typed.ID, chatDone...)
 	if strings.Contains(recorder.systemPrompt(), "sounds like") {
 		t.Error("a typed turn was warned, and typing means what it says")
+	}
+}
+
+// TestNamingTheConversationIsInTheConversation : The assistant naming a
+// conversation is written into it, so being asked about it can be
+// answered.
+//
+// Asked "why did you rename like that?" the assistant answered that it
+// had no record of performing a rename and asked what was meant. It was
+// telling the truth: the new name went to the client as an event and
+// into the listing, and nowhere a model could read. The owner's rule is
+// that whatever the assistant does unasked belongs in the conversation.
+func TestNamingTheConversationIsInTheConversation(t *testing.T) {
+	recorder := &recordingProvider{}
+	h := newHarness(t, recorder, runner.Options{})
+
+	first := h.submit(t, "what is the time now")
+	h.await(t, first.ID, chat.StatusCompleted, chat.StatusFailed)
+
+	var note *conversation.Message
+	for i, m := range h.repo.Said(h.conversation(t)) {
+		if m.Kind == conversation.Renaming {
+			note = &h.repo.Said(h.conversation(t))[i]
+		}
+	}
+	if note == nil {
+		t.Fatalf("the naming was not written down: %v", contents(h.repo.Said(h.conversation(t))))
+	}
+
+	// Shown, and given to the model with what it was: a rename asked
+	// about afterwards is a question about why, and "you named this
+	// conversation" is the part that answers it.
+	forModel := conversation.ForModel([]conversation.Message{*note})
+	if len(forModel) != 1 {
+		t.Fatalf("the naming was withheld from the model")
+	}
+	if !strings.Contains(forModel[0].Content, "named this conversation") {
+		t.Errorf("the model is not told what happened: %q", forModel[0].Content)
+	}
+	if len(conversation.ForPerson([]conversation.Message{*note})) != 1 {
+		t.Error("the person is not shown the rename they watched happen")
 	}
 }

@@ -278,7 +278,15 @@ func (p *Environment) Run(ctx context.Context, req environment.Request) (<-chan 
 			}
 			p.logger.InfoContext(ctx, "platform ai asked for tools",
 				slog.Duration("after", time.Since(started)),
-				slog.Any("tools", names))
+				slog.Any("tools", names),
+				slog.String("saying", got.Text))
+
+			// What the model said it was about to do, sent as progress
+			// ahead of the calls it goes with. Transient by nature: the
+			// work it describes has not happened yet.
+			if got.Text != "" {
+				send(ctx, ch, environment.Update(got.Text))
+			}
 			send(ctx, ch, environment.ToolCalls(got.ToolCalls))
 			return
 		}

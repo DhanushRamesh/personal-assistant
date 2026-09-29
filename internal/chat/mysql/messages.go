@@ -307,3 +307,61 @@ func readJSON(raw *string, out any) {
 	}
 	_ = json.Unmarshal([]byte(*raw), out)
 }
+
+// SaidSince : What one person has said across every conversation since a
+// time, oldest first.
+//
+// Joined to conversations because a message does not carry a user: it
+// belongs to a conversation and the conversation belongs to somebody.
+//
+// Only what the person typed or spoke. The assistant's own turns are
+// left out on purpose -- the caller is reading the person, and feeding
+// back what the assistant said would have it describing itself.
+func (r *Repository) SaidSince(ctx context.Context, userID string, since time.Time, limit int) ([]conversation.Message, error) {
+	if userID == "" {
+		return nil, nil
+	}
+	if limit <= 0 {
+		limit = 500
+	}
+
+	var rows []conversationMessageRow
+	err := r.db.WithContext(ctx).
+		Joins("JOIN conversations ON conversations.id = messages.conversation_id").
+		Where("conversations.user_id = ?", userID).
+		Where("messages.role = ?", string(conversation.User)).
+		Where("messages.created_at >= ?", since).
+		Order("messages.created_at ASC").
+		Limit(limit).
+		Find(&rows).Error
+	if err != nil {
+		return nil, fmt.Errorf("conversation: reading what %s said: %w", userID, err)
+	}
+
+	out := make([]conversation.Message, 0, len(rows))
+	for i := range rows {
+		out = append(out, rows[i].toMessage())
+	}
+	return out, nil
+}
+
+// Talkers : Everyone who has said something since a time.
+//
+// Who is worth describing. Driving the nightly rebuild from this rather
+// than from a list of accounts means somebody who has not spoken in a
+// week keeps the description they had, instead of having it rewritten
+// from nothing.
+func (r *Repository) Talkers(ctx context.Context, since time.Time) ([]string, error) {
+	var ids []string
+	err := r.db.WithContext(ctx).
+		Table("messages").
+		Joins("JOIN conversations ON conversations.id = messages.conversation_id").
+		Where("messages.role = ?", string(conversation.User)).
+		Where("messages.created_at >= ?", since).
+		Distinct().
+		Pluck("conversations.user_id", &ids).Error
+	if err != nil {
+		return nil, fmt.Errorf("conversation: reading who has been talking: %w", err)
+	}
+	return ids, nil
+}

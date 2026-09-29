@@ -332,22 +332,45 @@ func (p *Environment) attemptChat(ctx context.Context, ask environment.Request) 
 		if msg := errorMessage(raw); msg != "" {
 			return reply{}, resp.StatusCode, &APIError{Message: msg, Status: resp.StatusCode}
 		}
+
+		// The body is logged because without it this is unanswerable. A
+		// success code carrying something unreadable says nothing about
+		// what shape arrived, and it happens rarely enough that nobody
+		// will catch it live. Truncated: a reply can be long, and the
+		// first part is where the shape is.
+		p.logger.WarnContext(ctx, "platform ai answered 200 with nothing usable",
+			slog.Int("bytes", len(raw)),
+			slog.Any("parse_error", err),
+			slog.String("body", excerpt(raw, 700)))
+
 		return reply{}, resp.StatusCode,
-			fmt.Errorf("platformai: chat response was not usable (HTTP %d)", resp.StatusCode)
+			fmt.Errorf("platformai: chat response was not usable (HTTP %d, %d bytes)",
+				resp.StatusCode, len(raw))
 	}
 
-	first := parsed.Data.Messages[0]
+	// Every message, not just the first. One reply may carry the sentence
+	// and the calls in a single message or in separate ones, and reading
+	// only the first turns the second shape into an answer that describes
+	// work nothing ran.
+	var said []string
+	var calls []environment.ToolCall
+	for _, m := range parsed.Data.Messages {
+		if text := strings.TrimSpace(contentText(m.Content)); text != "" {
+			said = append(said, text)
+		}
+		calls = append(calls, fromWireCalls(m.ToolCalls)...)
+	}
+	text := strings.Join(said, " ")
 
-	// Tool calls before text. A model that asks for a tool sometimes sends a
-	// sentence alongside it, and that sentence describes what it is about to
-	// do rather than what happened -- reading it out and stopping would be
-	// telling the person about work that never ran.
-	if calls := fromWireCalls(first.ToolCalls); len(calls) > 0 {
-		return reply{ToolCalls: calls}, resp.StatusCode, nil
+	// A model that asks for a tool sometimes sends a sentence alongside it,
+	// describing what it is about to do rather than what happened. It is
+	// carried back with the calls as progress, never as the answer: on its
+	// own it would tell the person about work that has not run yet.
+	if len(calls) > 0 {
+		return reply{Text: text, ToolCalls: calls}, resp.StatusCode, nil
 	}
 
-	text := contentText(first.Content)
-	if strings.TrimSpace(text) == "" {
+	if text == "" {
 		return reply{}, resp.StatusCode, fmt.Errorf("platformai: the reply was empty")
 	}
 	return reply{Text: text}, resp.StatusCode, nil
@@ -366,6 +389,10 @@ func statusOf(err error) int {
 // contentText : Reads a message's content, which arrives either as a plain
 // string or as an array of blocks each carrying text.
 func contentText(raw json.RawMessage) string {
+	if len(raw) == 0 || string(raw) == "null" {
+		return ""
+	}
+
 	var plain string
 	if json.Unmarshal(raw, &plain) == nil {
 		return plain
@@ -528,4 +555,14 @@ func fromWireCalls(calls []wireToolCall) []environment.ToolCall {
 		})
 	}
 	return out
+}
+
+// excerpt : The first part of a body, for a log line that has to stay one
+// line long.
+func excerpt(raw []byte, most int) string {
+	text := strings.TrimSpace(string(raw))
+	if len(text) <= most {
+		return text
+	}
+	return text[:most] + "…"
 }
