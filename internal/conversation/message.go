@@ -78,11 +78,25 @@ const (
 	// PresenceAnnouncement : A greeting, and whatever was held back,
 	// said as somebody came into the room.
 	PresenceAnnouncement Kind = "presence"
+
+	// Renaming : The assistant giving the conversation its name.
+	//
+	// An announcement although nothing is necessarily said aloud, because
+	// it is the same thing from the model's side: the assistant acted
+	// without being asked, and the next question is about what it did.
+	// Asked "why did you rename like that" the assistant answered that it
+	// had no record of performing a rename and asked what was meant --
+	// true, and useless, because the rename was pushed to the client as
+	// an event and written nowhere the model could read.
+	//
+	// The rule this follows is the owner's: whatever the assistant does
+	// unasked belongs in the conversation, not only in the event stream.
+	Renaming Kind = "renamed"
 )
 
 // Announcement : Whether this is the assistant having spoken unprompted.
 func (k Kind) Announcement() bool {
-	return k == ReminderAnnouncement || k == PresenceAnnouncement
+	return k == ReminderAnnouncement || k == PresenceAnnouncement || k == Renaming
 }
 
 // known : Whether this is a kind the store will accept.
@@ -185,19 +199,29 @@ func Answered(conversationID, content string, at time.Time) Message {
 	}
 }
 
-// Interrupted : A note that the person stopped the turn before it finished.
+// Interrupted : A note that the turn did not finish, and why.
 //
 // Written as the assistant's own turn so the roles still alternate, and
 // worded as a statement of what happened rather than an apology: it is read
 // back to a model, which should treat it as a fact about the conversation and
 // not as something to make up for.
-func Interrupted(conversationID string, at time.Time) Message {
+//
+// [why] is empty when the person stopped it themselves, which is the
+// ordinary case and the only one this used to allow. Anything else names
+// what really happened: a caller that hung up is not a person who
+// changed their mind, and recording it as one puts a thing in the
+// transcript that never took place.
+func Interrupted(conversationID, why string, at time.Time) Message {
+	why = strings.TrimSpace(why)
+	if why == "" {
+		why = "The person stopped this before it finished."
+	}
 	return Message{
 		ID:             NewMessageID(),
 		ConversationID: conversationID,
 		Kind:           Interruption,
 		Role:           Assistant,
-		Content:        "[The person stopped this before it finished.]",
+		Content:        "[" + why + "]",
 		At:             at,
 	}
 }
@@ -373,8 +397,11 @@ func announcedAs(kind Kind, when string) string {
 	if when != "" {
 		at = " at " + when
 	}
-	if kind == PresenceAnnouncement {
+	switch kind {
+	case PresenceAnnouncement:
 		return "Announced aloud" + at + ", as they came into the room."
+	case Renaming:
+		return "You named this conversation" + at + ", from what had been said in it so far."
 	}
 	return "Reminder announced aloud" + at + "."
 }

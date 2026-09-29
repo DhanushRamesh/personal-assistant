@@ -49,6 +49,10 @@ type Runner interface {
 	// Cancel : Stops a queued or running chat, reporting whether one was
 	// found.
 	Cancel(id string) bool
+	// CancelBecause : The same, saying why, for the transcript. Used by
+	// the assist endpoint when Home Assistant hangs up; here so that one
+	// Runner satisfies both.
+	CancelBecause(id, reason string) bool
 }
 
 // Subscriber : Somewhere to listen for a chat's messages as they happen.

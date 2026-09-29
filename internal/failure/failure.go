@@ -59,18 +59,24 @@ const (
 // Written to be heard, so no code, no status number and no jargon. Each one
 // says what happened and whether waiting will help, because that is the only
 // decision the listener has.
+//
+// In the first person, and about a server rather than a service: this is the
+// assistant saying it ran into trouble, not a status page reporting an
+// outage. The register matters because these are the one kind of reply the
+// model has no hand in, and they are read out in the same breath as
+// everything it did write. The address is added by the persona.
 var sentences = map[Code]string{
-	Unreachable:  "I could not reach the service that answers this.",
-	Timeout:      "The service did not answer in time.",
-	Unauthorised: "I am not allowed to reach the service. Its credentials need renewing.",
+	Unreachable:  "I am having some difficulty reaching the server.",
+	Timeout:      "The server took too long to answer.",
+	Unauthorised: "I am not allowed to reach the server. Its credentials need renewing.",
 	Forbidden:    "I am not permitted to do that.",
-	RateLimited:  "The service is busy. Ask me again in a moment.",
-	Unavailable:  "The service is unavailable at the moment. Try again shortly.",
-	BadRequest:   "The service would not accept that request.",
+	RateLimited:  "The server is busy just now. Ask me again in a moment.",
+	Unavailable:  "The server is not taking requests at the moment. Try again shortly.",
+	BadRequest:   "The server would not accept that request.",
 	TooLong:      "This conversation has grown too long. Start a new conversation.",
-	BadResponse:  "The service answered with something I could not use.",
-	Filtered:     "The service would not let me answer that.",
-	Unexpected:   "The service could not complete the request.",
+	BadResponse:  "The server answered with something I could not use.",
+	Filtered:     "The server would not let me answer that.",
+	Unexpected:   "Something went wrong, and I could not finish that.",
 }
 
 // Sentence : What to say for a code.

@@ -114,7 +114,7 @@ func TestForModelKeepsAnInterruption(t *testing.T) {
 func TestInterruptedIsTheAssistantsTurn(t *testing.T) {
 	at := time.Date(2026, 9, 25, 13, 0, 0, 0, time.UTC)
 
-	m := conversation.Interrupted("ses_1", at)
+	m := conversation.Interrupted("ses_1", "", at)
 
 	// Written as the assistant so the roles still alternate. As the user it
 	// would join onto the question before it and read as part of what was
@@ -140,7 +140,7 @@ func TestEveryConstructedMessageIsValid(t *testing.T) {
 		"said":        conversation.Said("ses_1", "what is the time", at),
 		"answered":    conversation.Answered("ses_1", "half past two", at),
 		"failed":      conversation.Failed("ses_1", "it did not work", "HTTP 500", at),
-		"interrupted": conversation.Interrupted("ses_1", at),
+		"interrupted": conversation.Interrupted("ses_1", "", at),
 	} {
 		if err := m.Valid(); err != nil {
 			t.Errorf("%s: %v", name, err)
@@ -160,7 +160,7 @@ func TestEveryMessageGetsItsOwnIdentifier(t *testing.T) {
 		conversation.Said("ses_1", "one", at),
 		conversation.Answered("ses_1", "two", at),
 		conversation.Failed("ses_1", "three", "detail", at),
-		conversation.Interrupted("ses_1", at),
+		conversation.Interrupted("ses_1", "", at),
 	} {
 		if !strings.HasPrefix(m.ID, conversation.MessageIDPrefix) {
 			t.Errorf("id = %q, want the %s prefix", m.ID, conversation.MessageIDPrefix)
@@ -247,6 +247,46 @@ func TestAPersonStillSeesToolResults(t *testing.T) {
 			if !strings.Contains(r.Content, "Tablets") {
 				t.Errorf("a person can no longer see what ran: %q", r.Content)
 			}
+		}
+	}
+}
+
+// TestAnInterruptionSaysWhatStoppedIt : A turn cut short by something
+// other than the person says so.
+//
+// Home Assistant allows a turn thirty seconds and then closes the
+// connection. Four turns in a row were cut that way on 29 September
+// 2026 -- measured at 29.98 seconds each -- and the transcript recorded
+// every one as "The person stopped this before it finished." They had
+// not touched it. The transcript is read back by the assistant and by
+// the owner, and a false account of why something ended is worse than
+// none.
+func TestAnInterruptionSaysWhatStoppedIt(t *testing.T) {
+	at := time.Date(2026, 9, 29, 12, 37, 59, 0, time.UTC)
+
+	const why = "This was cut short after thirty seconds: whatever asked the question stopped waiting."
+	m := conversation.Interrupted("ses_1", why, at)
+
+	if !strings.Contains(m.Content, "stopped waiting") {
+		t.Errorf("content = %q, want it to say what happened", m.Content)
+	}
+	if strings.Contains(m.Content, "The person stopped") {
+		t.Errorf("content = %q, blamed the person for something they did not do", m.Content)
+	}
+
+	// The ordinary case is unchanged: no reason means they stopped it.
+	plain := conversation.Interrupted("ses_1", "", at)
+	if !strings.Contains(plain.Content, "The person stopped this before it finished") {
+		t.Errorf("content = %q, want the usual wording", plain.Content)
+	}
+
+	// Either way it is the same kind of thing, and the model is given it.
+	for _, got := range []conversation.Message{m, plain} {
+		if got.Kind != conversation.Interruption {
+			t.Errorf("kind = %q, want an interruption", got.Kind)
+		}
+		if len(conversation.ForModel([]conversation.Message{got})) != 1 {
+			t.Error("the model was not told the turn was cut short")
 		}
 	}
 }

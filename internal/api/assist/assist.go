@@ -69,7 +69,19 @@ type Runner interface {
 	// Cancel : Stops a queued or running chat, reporting whether one was
 	// found.
 	Cancel(id string) bool
+	// CancelBecause : The same, saying why, for the transcript.
+	CancelBecause(id, reason string) bool
 }
+
+// callerLeft : What the transcript says when Home Assistant hung up.
+//
+// It allows a turn thirty seconds and then closes the connection. Four
+// turns in a row were cut that way on 29 September 2026 -- measured at
+// 29.98 seconds each -- and every one was written down as "The person
+// stopped this before it finished." They had not. The transcript is
+// what the assistant reads back and what the owner reads back, and a
+// false account of why something ended is worse than none.
+const callerLeft = "This was cut short after thirty seconds: whatever asked the question stopped waiting for the answer. Nobody stopped it deliberately."
 
 // Subscriber : Somewhere to listen for a chat's messages as they happen.
 type Subscriber interface {
@@ -337,7 +349,11 @@ func (h *Handler) follow(
 			// This is deliberately unlike the SSE stream, where a dropped
 			// connection is a phone on bad mobile data and the answer must
 			// still be there when it comes back.
-			if h.runner.Cancel(chatID) {
+			// Said as what it was. Home Assistant allows a turn thirty
+			// seconds and then hangs up, and recording that as the
+			// person having stopped it puts a thing in the transcript
+			// that never happened.
+			if h.runner.CancelBecause(chatID, callerLeft) {
 				h.Logger.InfoContext(ctx, "assist caller left, chat cancelled",
 					slog.String("chat_id", chatID))
 			}

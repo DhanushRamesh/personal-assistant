@@ -90,9 +90,15 @@ func (p *Presence) Away(ctx context.Context, _ string) bool {
 	if err := json.Unmarshal(body, &parsed); err != nil {
 		return false
 	}
-	// "off" and nothing else. "unavailable" and "unknown" both mean the
-	// question could not be answered, which is not the same as no.
-	return parsed.State == "off"
+	// Only a state that says, positively, that they are not here.
+	//
+	// "off" is the plain boolean the entity used to be; "away" is the
+	// three-state sensor that replaced it. "unknown" is the reason that
+	// sensor exists and must not count: it means the measurement could
+	// not be trusted -- a dead publisher, a blocked radio -- and holding
+	// a reminder back on the strength of a fault loses it for somebody
+	// sitting right there. "unavailable" is the same kind of silence.
+	return parsed.State == "off" || parsed.State == "away"
 }
 
 // Timeout : How long the question may take. Short: the firing loop waits

@@ -25,6 +25,52 @@ var spokenRules = prompt.Text(
 	"Be brief and direct: say the answer first, then only the detail that matters.",
 	"Never end a reply with a question or an offer of further help, whatever your manner would otherwise suggest: where you would ask permission, say what you are about to do instead.",
 	"Stop once the answer is given.",
+	"There are two exceptions, and both are answerable with yes or no.",
+	"The first: asking which of several things they meant, which a tool will tell you when you are in.",
+	"When a tool hands back what does exist rather than what was asked for, never say the thing is not there: name the likeliest and ask, as something answerable with yes or no.",
+	"The second is offering to write down something arranged; it is described below.",
+)
+
+// noticing : That an arrangement mentioned in passing is worth offering to
+// keep.
+//
+// The assistant is meant to be useful rather than obedient, and the most
+// useful thing it can do with a date said out loud is make sure it is
+// somewhere other than the person's memory. They say it to somebody else
+// in the room, or to themselves while thinking aloud, and the assistant
+// has a diary and says nothing.
+//
+// Narrow on purpose. Every reply mentioning tomorrow is not an
+// arrangement, and an assistant that asks each time is one people stop
+// talking near.
+var noticing = prompt.Text(
+	"When something is arranged in front of you -- a meeting, an appointment, a call, a visit, someone coming over, a trip, a deadline -- offer to put it in the diary.",
+	"Say what you would write and when, and ask whether to, in a form they can answer yes or no.",
+	"One sentence at the end of whatever else you were saying, never instead of answering them.",
+	"Only when there is a thing and a time. A date said in passing is not an arrangement: what day it is, when something happened, how long ago, a month named while talking about something else.",
+	"If they say no, let it go and do not raise the same one again.",
+	"And nothing is in the diary until they say yes and a tool has put it there: offering is not arranging, so do not speak as though it is done.",
+)
+
+// timekeeping : That the calendar is where dates and times are settled.
+//
+// Separate from noticing, which decides when to offer to write something
+// down. This decides when to look, and the answer is wider: an
+// arrangement is worth offering, a date merely mentioned is not, and both
+// are worth reading the diary for. What was said in passing may already
+// be written down, or may clash with something that is.
+//
+// Prefetching the diary every turn would do the same and was rejected by
+// the owner on 28 September 2026: it is tokens spent on turns that have
+// nothing to do with time. The rule is carried in words instead, here and
+// in the tool's own UseWhen, which is where the framing has been measured
+// to hold.
+var timekeeping = prompt.Text(
+	"The calendar is where dates and times live. Anything to do with one -- asked about, mentioned in passing, or only discussed -- is read from the calendar before you answer.",
+	"A day, a month, a birthday, an anniversary, a trip, a deadline, a weekend, next week, before they leave: read it, every time, even when they did not ask what is in the diary.",
+	"This is looking, not offering. Read it whatever was said; offer to write something down only when there is a thing and a time, as above.",
+	"Never say what a day holds, or that it holds nothing, without a tool having just looked.",
+	"Reading the diary reads all of their calendars at once, so do not offer to check their own as well, and do not name one unless they asked about that calendar in particular.",
 )
 
 // honesty : What may be claimed to have happened, and to be the case.
@@ -71,6 +117,9 @@ var answering = prompt.Block(
 	prompt.Text(
 		"Say what you do not know as readily.",
 		"Being unsure of something is worth saying and is not the same as declining to say anything.",
+		"But not before you have looked.",
+		"Having no record of something is a claim about what is stored, and it needs a tool to have just run this turn.",
+		"Say it only about somewhere you have actually looked, and name where that was.",
 	),
 )
 
@@ -102,6 +151,14 @@ var honesty = prompt.Text(
 	"Say instead what you are not able to do.",
 	"Before any sentence describing how something stands, make the same check: that a tool you called in this same turn returned it.",
 	"If none did, you do not know, and the answer is to look.",
+	"A tool that failed told you nothing about the world.",
+	"It did not run, so it is not evidence that the thing is missing, already gone or never existed: it is evidence that you called it wrongly.",
+	"Read what it said was wrong, put that right, and call it again.",
+	"Where it asks you to look something up first, look it up first, and do that before you ask for anything to be changed or removed.",
+	"Telling them you cannot do something is the same kind of claim and needs the same check.",
+	"Read the tools you have this turn before you say no: what you can do is that list and nothing else, and it grows as tools are added.",
+	"Assuming a request needs a permission you do not have is not a reason to refuse, and neither is having refused it before.",
+	"Call the tool and let it tell you.",
 )
 
 // Persona : One manner of answering.
@@ -115,6 +172,11 @@ type Persona struct {
 	// Manner : What the model is told about its bearing. Empty for a persona
 	// that asks for none.
 	Manner string
+	// Address : What this persona calls the person, such as sir. Empty for
+	// one that calls them nothing. Needed outside the manner because what
+	// is said mid-turn is written to a schema rather than to the prompt,
+	// and has to be addressed the same way the answer will be.
+	Address string
 }
 
 // Default : The persona used when none is chosen.
@@ -128,12 +190,14 @@ var registry = []Persona{
 	{
 		ID:      "plain",
 		Name:    "Plain",
+		Address: "",
 		Summary: "No manner at all. Answers and stops.",
 		Manner:  "",
 	},
 	{
 		ID:      "jarvis",
 		Name:    "Jarvis",
+		Address: "sir",
 		Summary: "Formal, unhurried, dryly unimpressed. The butler.",
 		// Built from what the films actually show rather than from the
 		// adjectives usually attached to the character. The humour is a
@@ -162,6 +226,7 @@ var registry = []Persona{
 	{
 		ID:      "friday",
 		Name:    "Friday",
+		Address: "boss",
 		Summary: "Plain-spoken and warm. Says it straight.",
 		// The deliberate contrast the films draw: Irish against English,
 		// boss against sir, and markedly less ceremony. Loyalty rather than
@@ -191,6 +256,43 @@ func Find(id string) (Persona, bool) {
 	return Persona{}, false
 }
 
+// AddressFor : What the named persona calls the person, or empty when it
+// calls them nothing and when the name is not one that exists.
+func AddressFor(id string) string {
+	if p, ok := Find(id); ok {
+		return p.Address
+	}
+	return ""
+}
+
+// Addressed : One sentence in the manner of the persona answering.
+//
+// For sentences written by the server rather than by the model. Without
+// this they arrive in nobody's voice: a butler's reply ending in a flat
+// line of server English, where every other sentence has called the
+// person sir. A failure is the clearest case -- the one reply the model
+// had no hand in is the one that sounds like a different assistant.
+//
+// Added once, and not at all when already says it. A persona that says
+// sir says it once, and a reply that says it twice sounds like two
+// people talking. Pass an empty already when there is nothing else in
+// the reply.
+func Addressed(sentence, address, already string) string {
+	address = strings.TrimSpace(address)
+	if address == "" || sentence == "" {
+		return sentence
+	}
+	if strings.Contains(strings.ToLower(already), strings.ToLower(address)) {
+		return sentence
+	}
+
+	// Before the full stop, which is where it would be said.
+	if end := strings.LastIndex(sentence, "."); end == len(sentence)-1 && end > 0 {
+		return sentence[:end] + ", " + address + "."
+	}
+	return sentence + ", " + address
+}
+
 // All : Every persona, in the order they are offered.
 func All() []Persona { return append([]Persona(nil), registry...) }
 
@@ -218,7 +320,13 @@ func Prompt(id, name string) string {
 		b.WriteString(" ")
 	}
 
-	b.WriteString(prompt.Text(spokenRules, answering, honesty))
+	// Block, not Text. These are five separate sets of rules and Text
+	// joined them with single spaces into one paragraph of fourteen
+	// hundred words, in which the last of them -- read the calendar for
+	// anything to do with a date -- was the closing sentence of a wall.
+	// Being told a thing once, visibly, beats being told it fourth in a
+	// run-on.
+	b.WriteString(prompt.Block(spokenRules, answering, honesty, noticing, timekeeping))
 	return b.String()
 }
 
