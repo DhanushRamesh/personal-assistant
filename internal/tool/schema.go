@@ -33,6 +33,16 @@ type Property struct {
 	Maximum *int
 	// Default : What is used when it is not given. Nil for none.
 	Default any
+
+	// Items : What each element is, for a property of type array. The
+	// element's own constraints apply to every one of them, so a list of
+	// identifiers is pattern-checked the same way a single one would be.
+	Items *Property
+	// MinItems, MaxItems : How many elements are allowed. Nil for no
+	// bound. A minimum of one is worth setting on anything that removes
+	// something, since an empty list is a call that meant to do nothing.
+	MinItems *int
+	MaxItems *int
 }
 
 // MarshalJSON : Renders the schema as the JSON Schema a service expects.
@@ -77,6 +87,15 @@ func (p Property) asMap() map[string]any {
 	}
 	if p.Default != nil {
 		out["default"] = p.Default
+	}
+	if p.Items != nil {
+		out["items"] = p.Items.asMap()
+	}
+	if p.MinItems != nil {
+		out["minItems"] = *p.MinItems
+	}
+	if p.MaxItems != nil {
+		out["maxItems"] = *p.MaxItems
 	}
 	return out
 }

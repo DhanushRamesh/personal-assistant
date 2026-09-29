@@ -215,6 +215,7 @@ func TestAWrongArgumentIsExplained(t *testing.T) {
 		got := r.Call(context.Background(), x.Name, tool.Invocation{
 			Caller: tool.Caller{Channel: chat.ChannelDirect},
 			Args:   []byte(args),
+			Ran:    alreadyListed,
 		})
 		if got.Outcome != conversation.OutcomeFailed {
 			t.Errorf("%s was accepted", args)
@@ -245,6 +246,7 @@ func TestGoodArgumentsReachTheTool(t *testing.T) {
 	got := r.Call(context.Background(), x.Name, tool.Invocation{
 		Caller: tool.Caller{Channel: chat.ChannelDirect},
 		Args:   []byte(`{"limit":5}`),
+		Ran:    alreadyListed,
 	})
 
 	if got.Outcome != conversation.OutcomeOK {
@@ -254,3 +256,9 @@ func TestGoodArgumentsReachTheTool(t *testing.T) {
 		t.Errorf("the tool saw %q, want the arguments as the model wrote them", seen)
 	}
 }
+
+// alreadyListed : Every domain's listings, so a write under test is not
+// refused for want of a read it is not testing.
+var alreadyListed = []string{"memory_list", "memory_search", "conversation_list",
+	"conversation_find", "calendar_events", "calendar_calendars", "reminder_list",
+	"reminder_recent"}

@@ -5,6 +5,7 @@ import (
 	"strings"
 
 	"github.com/DhanushRamesh/personal-assistant/internal/conversation"
+	"github.com/DhanushRamesh/personal-assistant/internal/persona"
 )
 
 // Change : One thing that moved, and what it moved between.
@@ -96,6 +97,7 @@ func Removed(did string, before, after int, noun string) Result {
 		MustSay: []string{fmt.Sprint(before), fmt.Sprint(after)},
 		Else: fmt.Sprintf("There %s %d %s before, and %s now.",
 			were(before), before, plural(noun, before), remaining(after, noun)),
+		Tally: &Tally{Before: before, After: after, Noun: noun},
 	}
 }
 
@@ -151,10 +153,52 @@ func upperFirst(s string) string {
 	return strings.ToUpper(s[:1]) + s[1:]
 }
 
+// Added : A creation that was read back and found to be there.
+//
+// The mirror of Removed. What was made is the part worth enforcing: the
+// person is listening and has no list in front of them, so "done" tells
+// them nothing they can check. The count comes too, and carries a Tally,
+// so several things made in one turn are owed once and not one by one.
+func Added(did, named, described string, before, after int, noun string) Result {
+	var b strings.Builder
+	b.WriteString(did)
+	b.WriteString(", and read back afterwards to be sure. ")
+	fmt.Fprintf(&b, "There %s %d %s before, and %s now. ",
+		were(before), before, plural(noun, before), remaining(after, noun))
+	fmt.Fprintf(&b, "It is %s. ", described)
+	b.WriteString("Tell them what was made, in their own words, not that it is done.")
+
+	// Only the name is owed, not the whole rendering.
+	//
+	// It used to be the full description -- "Gunalan's Birthday, all day
+	// on Friday 5 February" -- and no model writes that sentence, so the
+	// check never matched and every single creation was followed by the
+	// server saying it again in its own words. What came out was "marked
+	// on the 5th of February, sir. It is Gunalan's Birthday, all day on
+	// Friday 5 February." The name is the part a person repeats and the
+	// part they would notice missing.
+	return Result{
+		Outcome: conversation.OutcomeOK, Content: b.String(),
+		MustSay: []string{named},
+		Else:    fmt.Sprintf("It is %s.", described),
+		Tally:   &Tally{Before: before, After: after, Noun: noun},
+	}
+}
+
 // Owed : What a turn still has to say, gathered from the tools it ran.
 type Owed struct {
 	Facts []string
 	Else  string
+	// Tally : Set when the obligation is a count before and after, so
+	// several of them in one turn can be collapsed into the net change.
+	Tally *Tally
+}
+
+// Tally : How many there were and how many there are, for one kind of
+// thing.
+type Tally struct {
+	Before, After int
+	Noun          string
 }
 
 // Owing : The obligations among a turn's results.
@@ -162,7 +206,50 @@ func Owing(results []Result) []Owed {
 	var out []Owed
 	for _, r := range results {
 		if len(r.MustSay) > 0 && strings.TrimSpace(r.Else) != "" {
-			out = append(out, Owed{Facts: r.MustSay, Else: r.Else})
+			out = append(out, Owed{Facts: r.MustSay, Else: r.Else, Tally: r.Tally})
+		}
+	}
+	return out
+}
+
+// Merged : The obligations of a turn, with counts of the same thing
+// collapsed into one.
+//
+// Four things removed one after another owe four pairs of numbers -- eight
+// then seven, seven then six, six then five, five then four -- and read
+// out in a row they are gibberish. Worse, they cascade: an answer
+// mentioning eight and four satisfies neither pair on its own, and each
+// sentence appended supplies a number that makes the next one match.
+// What the person wants is the net change, which is what they would have
+// said themselves: there were eight, there are four.
+//
+// Order is kept, and a merged obligation takes the place of the first of
+// its kind so the answer still reads in the order things happened.
+func Merged(owed []Owed) []Owed {
+	first := map[string]int{}
+	out := make([]Owed, 0, len(owed))
+
+	for _, o := range owed {
+		if o.Tally == nil {
+			out = append(out, o)
+			continue
+		}
+		at, seen := first[o.Tally.Noun]
+		if !seen {
+			first[o.Tally.Noun] = len(out)
+			out = append(out, o)
+			continue
+		}
+
+		// Widen the one already there: its own before, this one's after.
+		was := *out[at].Tally
+		was.After = o.Tally.After
+		out[at] = Owed{
+			Facts: []string{fmt.Sprint(was.Before), fmt.Sprint(was.After)},
+			Else: fmt.Sprintf("There %s %d %s before, and %s now.",
+				were(was.Before), was.Before, plural(was.Noun, was.Before),
+				remaining(was.After, was.Noun)),
+			Tally: &was,
 		}
 	}
 	return out
@@ -178,7 +265,7 @@ func Owing(results []Result) []Owed {
 // crude and deliberately so: a false negative costs one redundant
 // clause, and a false positive costs the person the thing they asked
 // to be told.
-func Ensure(answer string, owed []Owed) string {
+func Ensure(answer, address string, owed []Owed) string {
 	lower := strings.ToLower(answer)
 
 	for _, o := range owed {
@@ -195,8 +282,66 @@ func Ensure(answer string, owed []Owed) string {
 		if strings.TrimSpace(answer) != "" {
 			answer = strings.TrimRight(answer, " ") + " "
 		}
-		answer += o.Else
+		answer += addressed(o.Else, address, lower)
 		lower = strings.ToLower(answer)
 	}
 	return answer
+}
+
+// addressed : One added sentence in the manner of the persona answering.
+//
+// The persona owns this, since the address is its own; this is here so
+// the callers in this package read as they did.
+func addressed(sentence, address, already string) string {
+	return persona.Addressed(sentence, address, already)
+}
+
+// RemovedMany : A batch removal where all of them went.
+//
+// Separate from Removed because "one fewer" is the surprise there and
+// "as many as were asked for" is the surprise here. Four gone when four
+// were asked for is exactly right; Removed would call it partial and
+// tell the person something had gone wrong.
+func RemovedMany(did string, asked, before, after int, noun string) Result {
+	gone := before - after
+	if gone != asked {
+		return Partly(did, gone, asked, nil, before, after, noun)
+	}
+	var b strings.Builder
+	fmt.Fprintf(&b, "%s, and counted afterwards to be sure. ", did)
+	fmt.Fprintf(&b, "There %s %d %s before, and %s now. ",
+		were(before), before, plural(noun, before), remaining(after, noun))
+	fmt.Fprintf(&b, "All %d went. Tell them both numbers: they are listening and cannot see the list.",
+		asked)
+
+	return Result{
+		Outcome: conversation.OutcomeOK, Content: b.String(),
+		MustSay: []string{fmt.Sprint(before), fmt.Sprint(after)},
+		Else: fmt.Sprintf("There %s %d %s before, and %s now.",
+			were(before), before, plural(noun, before), remaining(after, noun)),
+		Tally: &Tally{Before: before, After: after, Noun: noun},
+	}
+}
+
+// Partly : A batch removal where some went and some did not.
+//
+// Reported as partial, never as done. The count is the person's own
+// check, and "I removed them" when one is still sitting there is the
+// failure this whole mechanism exists to prevent. Which ones stayed is
+// named, because the next thing anybody asks is "which".
+func Partly(did string, gone, asked int, stayed []string, before, after int, noun string) Result {
+	var b strings.Builder
+	fmt.Fprintf(&b, "%s, and counted afterwards: %d of %d went. ", did, gone, asked)
+	fmt.Fprintf(&b, "There %s %d %s before, and %s now. ",
+		were(before), before, plural(noun, before), remaining(after, noun))
+	if len(stayed) > 0 {
+		fmt.Fprintf(&b, "Still there: %s. ", strings.Join(stayed, ", "))
+	}
+	b.WriteString("Tell them plainly that not all of them went, and how many did.")
+
+	return Result{
+		Outcome: conversation.OutcomePartial, Content: b.String(),
+		MustSay: []string{fmt.Sprint(gone), fmt.Sprint(asked)},
+		Else:    fmt.Sprintf("%d of the %d were removed; the rest are still there.", gone, asked),
+	}
 }

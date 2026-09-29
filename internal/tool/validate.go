@@ -64,7 +64,20 @@ func check(name string, p Property, value any) string {
 				name, text, strings.Join(p.Enum, ", "))
 		}
 		if p.Pattern != "" {
+			// A pattern that will not compile used to mean no checking at
+			// all: the error was swallowed and every value passed. An
+			// unguarded field is worse than a broken one, because nothing
+			// says so -- an identifier guard sat dead for a day this way.
+			if _, err := regexp.Compile(p.Pattern); err != nil {
+				return fmt.Sprintf("%s cannot be checked: its rule %q is not a valid pattern",
+					name, p.Pattern)
+			}
 			if ok, err := regexp.MatchString(p.Pattern, text); err == nil && !ok {
+				if placeholder(text) {
+					return fmt.Sprintf("%s was %q, which is a description of the thing rather "+
+						"than its identifier. List them and use the identifier exactly as it "+
+						"came back", name, text)
+				}
 				return fmt.Sprintf("%s was %q, which is not the right shape", name, text)
 			}
 		}
@@ -85,6 +98,31 @@ func check(name string, p Property, value any) string {
 		if p.Maximum != nil && int(n) > *p.Maximum {
 			return fmt.Sprintf("%s was %v, and the most allowed is %d", name, n, *p.Maximum)
 		}
+
+	case "array":
+		list, ok := value.([]any)
+		if !ok {
+			return fmt.Sprintf("%s must be a list, and was %s", name, kindOf(value))
+		}
+		if p.MinItems != nil && len(list) < *p.MinItems {
+			return fmt.Sprintf("%s needs at least %d, and had %d", name, *p.MinItems, len(list))
+		}
+		if p.MaxItems != nil && len(list) > *p.MaxItems {
+			return fmt.Sprintf("%s takes at most %d, and had %d", name, *p.MaxItems, len(list))
+		}
+		if p.Items == nil {
+			return ""
+		}
+		// Each element carries the element's own rules, so a list of
+		// identifiers is pattern-checked exactly as one identifier is.
+		// Reported by position, because "the third one" is what somebody
+		// can act on and "one of them" is not.
+		for i, item := range list {
+			if why := check(fmt.Sprintf("%s[%d]", name, i), *p.Items, item); why != "" {
+				return why
+			}
+		}
+		return ""
 
 	case "boolean":
 		if _, ok := value.(bool); !ok {
@@ -137,4 +175,24 @@ func kindOf(value any) string {
 		return "an object"
 	}
 	return "something else"
+}
+
+// placeholder : Whether a value is the shape of something written where an
+// identifier was wanted and none was to hand.
+//
+// A model without an identifier does not leave the argument out; it writes
+// what the identifier would be about. Four events were nearly deleted by
+// calls carrying "<id_for_first_single_day_event>", and telling it only
+// that the shape was wrong had it conclude the events did not exist.
+func placeholder(text string) bool {
+	if strings.ContainsAny(text, "<>{} ") {
+		return true
+	}
+	lower := strings.ToLower(text)
+	for _, tell := range []string{"id_for", "identifier", "example", "placeholder", "your_", "the_"} {
+		if strings.Contains(lower, tell) {
+			return true
+		}
+	}
+	return false
 }

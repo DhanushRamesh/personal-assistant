@@ -33,6 +33,22 @@ type Tool struct {
 	// Avoid : When not to, and what to use instead. Optional, but the way to
 	// separate two tools a model would otherwise confuse.
 	Avoid string
+	// Domain : What this tool is about -- calendar, conversation,
+	// reminder, memory. Tools sharing a domain act on the same things, and
+	// that is what lets a write insist on a read of its own domain first.
+	Domain string
+	// Lists : Whether this is the domain's way of seeing what is there.
+	// Set on the fetch-all and on the search, since either puts real
+	// identifiers in front of the model.
+	Lists bool
+	// Writes : Whether this creates, changes or removes something.
+	//
+	// A write is refused until its domain has been read in the same turn.
+	// Not a hint: the model has been seen to delete from a list it never
+	// fetched, with identifiers it invented, and then report the failures
+	// as proof the things did not exist.
+	Writes bool
+
 	// Params : What it takes.
 	Params Schema
 
@@ -106,6 +122,9 @@ type Invocation struct {
 	Caller Caller
 	// Args : The arguments the model produced, as it wrote them.
 	Args json.RawMessage
+	// Ran : Which tools have already run in this turn, by name. What lets
+	// a write know whether its domain was read first.
+	Ran []string
 }
 
 // Caller : Who a tool is acting for.
@@ -140,6 +159,10 @@ type Result struct {
 	//
 	// So the obligation is carried out of the tool and enforced after.
 	MustSay []string
+	// Tally : How many there were and how many there are, when the thing
+	// owed is a count. Lets several counts of the same thing in one turn
+	// be collapsed into the net change rather than read out in a row.
+	Tally *Tally
 
 	// Else : The sentence appended when any of MustSay is missing from
 	// the answer. Written to read as a continuation of it.

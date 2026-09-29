@@ -164,12 +164,22 @@ func (r *Registry) Call(ctx context.Context, name string, in Invocation) Result 
 			name))
 	}
 
+	// Read before write, for every domain that has something to read.
+	if why := r.readFirst(t, in.Ran); why != "" {
+		return Failed(why)
+	}
+
+	// Taken off before anything else looks at the arguments: it is added
+	// to every schema on the way out and is not an argument of any tool.
+	_, in.Args = TakeSaying(in.Args)
+
 	// Checked before running, and answered rather than refused. A model told
 	// which argument was wrong and what was allowed corrects itself on the
 	// next hop; one told only that the call was invalid guesses again.
 	if err := Validate(t.Params, in.Args); err != nil {
-		return Failed(fmt.Sprintf("%s was not called correctly: %s. Call it again with that fixed.",
-			name, err))
+		return Failed(fmt.Sprintf("%s was not called correctly: %s. Call it again with that fixed. "+
+			"This call never ran, so it says nothing about what exists: do not tell them the thing "+
+			"is not there on the strength of it.", name, err))
 	}
 
 	return t.Run(ctx, in)
