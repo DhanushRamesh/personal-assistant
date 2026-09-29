@@ -8,6 +8,7 @@ import (
 	"github.com/DhanushRamesh/personal-assistant/internal/chat"
 	"github.com/DhanushRamesh/personal-assistant/internal/conversation"
 	"github.com/DhanushRamesh/personal-assistant/internal/environment"
+	"github.com/DhanushRamesh/personal-assistant/internal/persona"
 	"github.com/DhanushRamesh/personal-assistant/internal/tool"
 )
 
@@ -31,10 +32,11 @@ func (r *Runner) offered(t *chat.Chat) []environment.ToolSpec {
 		return nil
 	}
 
+	address := persona.AddressFor(r.personaID())
 	reachable := r.tools.For(t.Channel)
 	out := make([]environment.ToolSpec, 0, len(reachable))
 	for _, x := range reachable {
-		schema, err := x.Params.MarshalJSON()
+		schema, err := tool.Narrated(x.Params, address).MarshalJSON()
 		if err != nil {
 			// Unreachable: the schema is a typed structure of strings. A tool
 			// whose schema will not render is left out rather than offered
@@ -46,7 +48,7 @@ func (r *Runner) offered(t *chat.Chat) []environment.ToolSpec {
 		}
 		out = append(out, environment.ToolSpec{
 			Name:        x.Name,
-			Description: x.Description(),
+			Description: tool.NarratedDescription(x.Description(), address),
 			Parameters:  schema,
 		})
 	}
@@ -63,6 +65,7 @@ func (r *Runner) runTools(
 	ctx context.Context,
 	t *chat.Chat,
 	calls []environment.ToolCall,
+	seen *[]string,
 ) ([]environment.Turn, []tool.Owed) {
 	asked := make([]conversation.ToolCall, 0, len(calls))
 	for _, c := range calls {
@@ -80,7 +83,15 @@ func (r *Runner) runTools(
 		result := r.tools.Call(ctx, c.Name, tool.Invocation{
 			Caller: caller,
 			Args:   []byte(c.Arguments),
+			Ran:    *seen,
 		})
+
+		// Recorded whatever it returned. A listing that failed did not
+		// show the model anything, but one that ran did, and a write may
+		// lean on it however the model phrased its question.
+		if result.Outcome != conversation.OutcomeFailed {
+			*seen = append(*seen, c.Name)
+		}
 
 		r.logger.InfoContext(ctx, "tool ran",
 			slog.String("tool", c.Name),

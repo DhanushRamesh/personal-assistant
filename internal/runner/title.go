@@ -75,7 +75,39 @@ func (r *Runner) title(ctx context.Context, t *chat.Chat) {
 	r.logger.InfoContext(ctx, "conversation named",
 		slog.String("conversation_id", t.ConversationID), slog.String("title", name))
 
+	r.noteTitle(ctx, t, name)
 	r.announceTitle(ctx, t, name)
+}
+
+// noteTitle : Writes the naming into the conversation it named.
+//
+// On every channel, not only the one that heard it said. The name shows
+// up in the listing either way, and being able to see a thing is not the
+// same as the assistant being able to answer for it: asked why it had
+// renamed, it said it had no record of doing so, because it had none.
+//
+// The conversation is known here, so there is no guessing which one was
+// listening the way an announcement has to.
+func (r *Runner) noteTitle(ctx context.Context, t *chat.Chat, name string) {
+	if r.messages == nil || t.ConversationID == "" {
+		return
+	}
+
+	// r.now already carries the person's zone, which is what a written
+	// hour has to be in: the model reads the words and never the
+	// timestamp.
+	at := r.now()
+	m := conversation.Announced(t.ConversationID, conversation.Renaming,
+		conversation.TitleAnnouncement(name),
+		at.Format("3:04 pm"), at)
+
+	// Logged and dropped, like everything else in here. The conversation
+	// has its name; failing to write the note down costs the next turn
+	// its context and is not worth failing the turn over.
+	if _, err := r.messages.Append(ctx, m); err != nil {
+		r.logger.WarnContext(ctx, "cannot record that the conversation was named",
+			slog.String("conversation_id", t.ConversationID), slog.Any("error", err))
+	}
 }
 
 // announceTitle : Says the new name aloud, when the person had no way to see

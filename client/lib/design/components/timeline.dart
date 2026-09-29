@@ -233,6 +233,8 @@ class _StepRow extends StatelessWidget {
         return [if (s.arguments.isNotEmpty) _Mono(text: s.arguments)];
       case AnswerStepKind.toolResult:
         return [if (s.content.isNotEmpty) _Quiet(text: s.content)];
+      case AnswerStepKind.readFirst:
+        return [if (s.content.isNotEmpty) _Quiet(text: s.content)];
       case AnswerStepKind.failed:
         return [
           if (s.text.isNotEmpty) _Quiet(text: s.text),
@@ -269,6 +271,7 @@ class _StepRow extends StatelessWidget {
   static IconData _icon(AnswerStepKind kind) => switch (kind) {
     AnswerStepKind.asked => Icons.north_east,
     AnswerStepKind.recalled => Icons.psychology_outlined,
+    AnswerStepKind.readFirst => Icons.bolt_outlined,
     AnswerStepKind.toolCall => Icons.build_outlined,
     AnswerStepKind.toolResult => Icons.subdirectory_arrow_right,
     AnswerStepKind.answered => Icons.south_west,
@@ -279,6 +282,8 @@ class _StepRow extends StatelessWidget {
   static String _title(AnswerStep s) => switch (s.kind) {
     AnswerStepKind.asked => 'You asked',
     AnswerStepKind.recalled => 'Recalled',
+    AnswerStepKind.readFirst =>
+      s.cached ? 'Read first: ${s.name} (kept)' : 'Read first: ${s.name}',
     AnswerStepKind.toolCall => 'Called ${s.name}',
     AnswerStepKind.toolResult => '${s.name} ${s.outcome}',
     AnswerStepKind.answered => 'Answered',
@@ -289,6 +294,7 @@ class _StepRow extends StatelessWidget {
   static Color _tint(BuildContext context, AnswerStep s) {
     final colors = context.colors;
     if (s.kind == AnswerStepKind.failed) return colors.danger;
+    if (s.kind == AnswerStepKind.readFirst) return colors.success;
     if (s.kind == AnswerStepKind.toolResult) {
       return switch (s.outcome) {
         'ok' => colors.success,

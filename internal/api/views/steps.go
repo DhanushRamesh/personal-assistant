@@ -13,6 +13,8 @@ const (
 	StepAsked = "asked"
 	// StepRecalled : What memory put in front of the model.
 	StepRecalled = "recalled"
+	// StepReadFirst : A listing read before the question, unasked.
+	StepReadFirst = "read_first"
 	// StepToolCall : A tool the model asked for.
 	StepToolCall = "tool_call"
 	// StepToolResult : What that tool returned.
@@ -59,6 +61,8 @@ type Step struct {
 	Content string `json:"content,omitempty"`
 	// TookMS : How long this step took, where that is known.
 	TookMS int64 `json:"took_ms,omitempty"`
+	// Cached : Whether a kept answer was reused, for a read_first step.
+	Cached bool `json:"cached,omitempty"`
 	// Recalled : What memory offered, for the recalled step.
 	Recalled *chat.Recalled `json:"recalled,omitempty"`
 	// ByWords : Whether memory matched wording rather than meaning.
@@ -92,6 +96,24 @@ func OfTimeline(t *chat.Chat, wrote []conversation.Message) Timeline {
 		}
 		ms := when.Sub(*t.StartedAt).Milliseconds()
 		return &w, &ms
+	}
+
+	// Listings read before the question come first: they are taken before
+	// memory is searched and before anything is written down. They are
+	// steps of their own rather than a detail of the recall step, because
+	// what they are is a tool call that happened.
+	if t.Recalled != nil {
+		for _, x := range t.Recalled.Tools {
+			step := Step{
+				Kind: StepReadFirst, Name: x.Name,
+				Content: x.Content, TookMS: x.TookMS, Cached: x.Cached,
+				Outcome: string(conversation.OutcomeOK),
+			}
+			if t.StartedAt != nil {
+				step.At = t.StartedAt
+			}
+			out.Steps = append(out.Steps, step)
+		}
 	}
 
 	// What was recalled happens before anything is written down, so it is

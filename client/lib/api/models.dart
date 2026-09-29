@@ -356,6 +356,9 @@ enum AnnouncementKind {
   /// into the room.
   presence,
 
+  /// renamed : The assistant giving this conversation its name.
+  renamed,
+
   /// unknown : A kind this build does not know, so that a newer server
   /// adding one does not break an older client.
   unknown;
@@ -363,6 +366,7 @@ enum AnnouncementKind {
   static AnnouncementKind parse(String wire) => switch (wire) {
     'reminder' => AnnouncementKind.reminder,
     'presence' => AnnouncementKind.presence,
+    'renamed' => AnnouncementKind.renamed,
     _ => AnnouncementKind.unknown,
   };
 
@@ -370,6 +374,7 @@ enum AnnouncementKind {
   String get label => switch (this) {
     AnnouncementKind.reminder => 'Reminder',
     AnnouncementKind.presence => 'Welcome',
+    AnnouncementKind.renamed => 'Named',
     AnnouncementKind.unknown => 'Announcement',
   };
 }
@@ -629,6 +634,7 @@ class Personas {
 enum AnswerStepKind {
   asked,
   recalled,
+  readFirst,
   toolCall,
   toolResult,
   answered,
@@ -639,6 +645,7 @@ enum AnswerStepKind {
   static AnswerStepKind parse(String? wire) => switch (wire) {
     'asked' => AnswerStepKind.asked,
     'recalled' => AnswerStepKind.recalled,
+    'read_first' => AnswerStepKind.readFirst,
     'tool_call' => AnswerStepKind.toolCall,
     'tool_result' => AnswerStepKind.toolResult,
     'answered' => AnswerStepKind.answered,
@@ -740,6 +747,7 @@ class AnswerStep {
     this.tookMs = 0,
     this.recalled,
     this.byWords = false,
+    this.cached = false,
   });
 
   final AnswerStepKind kind;
@@ -767,6 +775,9 @@ class AnswerStep {
   /// happens when the embedding server is away.
   final bool byWords;
 
+  /// cached : Whether a kept answer was reused, for a read_first step.
+  final bool cached;
+
   factory AnswerStep.fromJson(Map<String, dynamic> json) => AnswerStep(
     kind: AnswerStepKind.parse(json['kind'] as String?),
     at: DateTime.tryParse(json['at'] as String? ?? '')?.toLocal(),
@@ -782,6 +793,7 @@ class AnswerStep {
         ? null
         : Recalled.fromJson(json['recalled'] as Map<String, dynamic>),
     byWords: json['by_words'] as bool? ?? false,
+    cached: json['cached'] as bool? ?? false,
   );
 }
 

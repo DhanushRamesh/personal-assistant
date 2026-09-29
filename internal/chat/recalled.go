@@ -14,6 +14,9 @@ type Recalled struct {
 	Notes []RecalledNote `json:"notes,omitempty"`
 	// Exchanges : The past exchanges found by searching, nearest first.
 	Exchanges []RecalledExchange `json:"exchanges,omitempty"`
+	// Tools : The listings read before the question was read, in the order
+	// they were read.
+	Tools []RecalledTool `json:"tools,omitempty"`
 	// TookMS : How long searching took, in milliseconds.
 	TookMS int64 `json:"took_ms,omitempty"`
 	// ByWords : Whether words were compared rather than meaning, which
@@ -23,7 +26,8 @@ type Recalled struct {
 
 // Empty : Whether nothing was recalled at all.
 func (r Recalled) Empty() bool {
-	return len(r.Always) == 0 && len(r.Notes) == 0 && len(r.Exchanges) == 0
+	return len(r.Always) == 0 && len(r.Notes) == 0 &&
+		len(r.Exchanges) == 0 && len(r.Tools) == 0
 }
 
 // RecalledNote : One memory that was offered.
@@ -48,4 +52,20 @@ type RecalledExchange struct {
 	Score float64 `json:"score"`
 	// At : When it was said.
 	At time.Time `json:"at"`
+}
+
+// RecalledTool : One listing read before the question, and what it said.
+//
+// A prefetched listing goes into the prompt rather than onto the wire as a
+// tool result, so it leaves no tool call behind. This is what records that
+// it ran, for the timeline that shows how an answer was made.
+type RecalledTool struct {
+	// Name : Which tool.
+	Name string `json:"name"`
+	// Content : What it returned, as the model was shown it.
+	Content string `json:"content"`
+	// TookMS : How long the call took, in milliseconds.
+	TookMS int64 `json:"took_ms,omitempty"`
+	// Cached : Whether an earlier answer was reused instead of calling.
+	Cached bool `json:"cached,omitempty"`
 }

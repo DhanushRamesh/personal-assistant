@@ -182,12 +182,23 @@ func TestALongConversationIsCondensedAfterTheTurn(t *testing.T) {
 
 	// The transcript records what was said, so condensing must not remove
 	// any of it.
+	//
+	// Counted without the note the assistant writes when it names the
+	// conversation. That is not something anybody said, and it is added
+	// by the same turn, so a bare total counts it and drifts whenever
+	// another such note is added.
 	said, err := h.repo.All(context.Background(), h.conversation(t))
 	if err != nil {
 		t.Fatalf("All: %v", err)
 	}
-	if len(said) != 96 {
-		t.Errorf("conversation holds %d messages, want all 96 still there", len(said))
+	spoken := 0
+	for _, m := range said {
+		if m.Kind != conversation.Renaming {
+			spoken++
+		}
+	}
+	if spoken != 96 {
+		t.Errorf("conversation holds %d of what was said, want all 96 still there", spoken)
 	}
 }
 
