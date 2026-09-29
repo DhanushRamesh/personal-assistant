@@ -1,6 +1,7 @@
 package conversations_test
 
 import (
+	"strings"
 	"testing"
 
 	"github.com/DhanushRamesh/personal-assistant/internal/chat"
@@ -42,17 +43,29 @@ func TestVoiceCannotDelete(t *testing.T) {
 }
 
 // Every tool shows the model at least one worked call, and the examples have
-// to be valid against the tool's own schema: an example that lies about its
-// arguments teaches the model to get them wrong.
+// to be valid against the schema the model is actually shown: an example
+// that lies about its arguments teaches the model to get them wrong.
+//
+// Checked against the narrated schema rather than the tool's own, because
+// that is the one the model reads. The two differ by the saying argument,
+// which is added on the way out and taken off on the way back, and an
+// example without it teaches the model to leave it out -- which is exactly
+// what happened when these examples were written before it existed.
 func TestEveryExampleMatchesItsSchema(t *testing.T) {
 	for _, x := range conversations.All(nil) {
 		if len(x.Examples) == 0 {
 			t.Errorf("%s shows no example call", x.Name)
 			continue
 		}
+		offered := tool.Narrated(x.Params, "sir")
 		for _, e := range x.Examples {
-			if err := tool.Validate(x.Params, []byte(e.Args)); err != nil {
-				t.Errorf("%s has an example that its own schema refuses: %s — %v", x.Name, e.Args, err)
+			if err := tool.Validate(offered, []byte(e.Args)); err != nil {
+				t.Errorf("%s has an example the model would be refused for copying: %s — %v",
+					x.Name, e.Args, err)
+			}
+			if !strings.Contains(e.Args, `"saying"`) {
+				t.Errorf("%s has an example with no saying, which teaches the model to omit it: %s",
+					x.Name, e.Args)
 			}
 		}
 	}

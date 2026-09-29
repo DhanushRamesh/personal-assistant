@@ -30,7 +30,7 @@ import (
 // Failures are dropped rather than reported. A prefetch nobody asked
 // for that cannot run must not fail a turn, and the model still has
 // the tool if it wants to try itself.
-func (r *Runner) prefetch(ctx context.Context, t *chat.Chat) string {
+func (r *Runner) prefetch(ctx context.Context, t *chat.Chat, note *chat.Recalled) string {
 	if r.tools == nil {
 		return ""
 	}
@@ -63,10 +63,20 @@ func (r *Runner) prefetch(ctx context.Context, t *chat.Chat) string {
 			continue
 		}
 
+		took := time.Since(started)
 		r.logger.InfoContext(ctx, "prefetched",
 			slog.String("tool", x.Name),
 			slog.Bool("cached", cached),
-			slog.Duration("took", time.Since(started)))
+			slog.Duration("took", took))
+
+		if note != nil {
+			note.Tools = append(note.Tools, chat.RecalledTool{
+				Name:    x.Name,
+				Content: strings.TrimSpace(result.Content),
+				TookMS:  took.Milliseconds(),
+				Cached:  cached,
+			})
+		}
 
 		if b.Len() > 0 {
 			b.WriteString("\n\n")
@@ -90,7 +100,9 @@ func (r *Runner) prefetch(ctx context.Context, t *chat.Chat) string {
 	// how the hand-written version worked before this replaced it.
 	//
 	// Nothing is written to the conversation. These were not asked for
-	// and should not fill somebody's transcript.
+	// and should not fill somebody's transcript. They are written to the
+	// chat's record of what it was shown, which is a different thing: not
+	// part of what was said, only part of how the answer came about.
 	return b.String()
 }
 

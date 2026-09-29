@@ -46,6 +46,7 @@ func call(t *testing.T, r *tool.Registry, name, args string) tool.Result {
 	return r.Call(context.Background(), name, tool.Invocation{
 		Caller: tool.Caller{UserID: user, ClientID: client, Channel: chat.ChannelVoice},
 		Args:   json.RawMessage(args),
+		Ran:    alreadyListed,
 	})
 }
 
@@ -292,6 +293,7 @@ func TestAnotherPersonCannotCancelIt(t *testing.T) {
 	got := r.Call(context.Background(), "reminder_cancel", tool.Invocation{
 		Caller: tool.Caller{UserID: "usr_01M3D477HXQ4YNQX7BNXJZZCV1", Channel: chat.ChannelDirect},
 		Args:   json.RawMessage(`{"id":"` + all[0].ID + `"}`),
+		Ran:    alreadyListed,
 	})
 	if got.Outcome != conversation.OutcomeFailed {
 		t.Errorf("outcome = %s, want a failure", got.Outcome)
@@ -305,6 +307,7 @@ func TestARequestFromNobodyStoresNothing(t *testing.T) {
 	got := r.Call(context.Background(), "reminder_set", tool.Invocation{
 		Caller: tool.Caller{Channel: chat.ChannelDirect},
 		Args:   json.RawMessage(`{"title":"Timer","say":"Up.","say_if_late":"You should have done it","minutes_from_now":20}`),
+		Ran:    alreadyListed,
 	})
 	if got.Outcome != conversation.OutcomeFailed {
 		t.Errorf("outcome = %s, want a failure", got.Outcome)
@@ -800,3 +803,9 @@ func TestAnotherPersonsIsNotChanged(t *testing.T) {
 		t.Fatal("somebody else's reminder was renamed")
 	}
 }
+
+// alreadyListed : Every domain's listings, so a write under test is not
+// refused for want of a read it is not testing.
+var alreadyListed = []string{"memory_list", "memory_search", "conversation_list",
+	"conversation_find", "calendar_events", "calendar_calendars", "reminder_list",
+	"reminder_recent"}

@@ -16,6 +16,7 @@ import (
 	"time"
 
 	"github.com/DhanushRamesh/personal-assistant/internal/chat"
+	"github.com/DhanushRamesh/personal-assistant/internal/heard"
 	"github.com/DhanushRamesh/personal-assistant/internal/tool"
 )
 
@@ -46,7 +47,8 @@ func All(repo chat.Repository) []tool.Tool {
 func list(repo chat.Repository) tool.Tool {
 	return tool.Tool{
 		Name:     "conversation_list",
-		Prefetch: true,
+		Domain:   "conversation",
+		Lists:    true,
 		Purpose:  "List the person's conversations, newest first, with their identifiers.",
 		UseWhen:  "You need a conversation's identifier, or the person asks what they have been talking about.",
 		Avoid:    "Do not call it twice in one turn: the identifiers do not change while you are answering.",
@@ -65,7 +67,7 @@ func list(repo chat.Repository) tool.Tool {
 			},
 		},
 		Examples: []tool.Example{
-			{Ask: "what have we been talking about", Args: `{"limit":5}`},
+			{Ask: "what have we been talking about", Args: `{"limit":5,"saying":"looking through your conversations"}`},
 		},
 		Run: func(ctx context.Context, in tool.Invocation) tool.Result {
 			var args struct {
@@ -91,6 +93,8 @@ func list(repo chat.Repository) tool.Tool {
 func find(repo chat.Repository) tool.Tool {
 	return tool.Tool{
 		Name:    "conversation_find",
+		Domain:  "conversation",
+		Lists:   true,
 		Purpose: "Find conversations whose name matches words the person used.",
 		UseWhen: "The person refers to a conversation by name rather than by identifier, which is always the case when speaking.",
 		Avoid: "Do not choose between several matches yourself. If more than one comes back, " +
@@ -106,7 +110,7 @@ func find(repo chat.Repository) tool.Tool {
 			Required: []string{"name"},
 		},
 		Examples: []tool.Example{
-			{Ask: "go back to the roof conversation", Args: `{"name":"roof"}`},
+			{Ask: "go back to the roof conversation", Args: `{"name":"roof","saying":"finding the roof conversation"}`},
 		},
 		Run: func(ctx context.Context, in tool.Invocation) tool.Result {
 			var args struct {
@@ -122,14 +126,25 @@ func find(repo chat.Repository) tool.Tool {
 			matched := matching(found, args.Name)
 			switch len(matched) {
 			case 0:
-				// Said plainly rather than answered with the newest. A
-				// best guess here is a wrong conversation switched into
-				// silently, which is worse than an honest miss.
-				return tool.OK(fmt.Sprintf(
-					"Nothing matches %q. Tell the person so rather than guessing at another conversation.",
-					args.Name))
+				// The ones there are, rather than a dead end: the name was
+				// probably heard rather than read, and a model told only
+				// that nothing matched will say the conversation does not
+				// exist.
+				names := make([]string, 0, len(found))
+				for _, c := range found {
+					title := c.Title
+					if title == "" {
+						title = "(untitled)"
+					}
+					names = append(names, title)
+				}
+				return tool.WhichOne("conversation", args.Name, names)
 			case 1:
-				return tool.OK("One match. " + describe(matched, in.Caller.ConversationID))
+				out := "One match. " + describe(matched, in.Caller.ConversationID)
+				if !heard.Exactly(matched[0].Title, args.Name) {
+					out += "\n\n" + tool.BySound("conversation", args.Name, matched[0].Title)
+				}
+				return tool.OK(out)
 			default:
 				return tool.OK(fmt.Sprintf(
 					"%d conversations match. Ask the person which they meant; do not choose. %s",
@@ -143,6 +158,8 @@ func find(repo chat.Repository) tool.Tool {
 func switchTo(repo chat.Repository) tool.Tool {
 	return tool.Tool{
 		Name:    "conversation_switch",
+		Domain:  "conversation",
+		Writes:  true,
 		Purpose: "Make a conversation the one this client talks in from now on.",
 		UseWhen: "The person asks to go back to, or carry on with, a particular conversation.",
 		Avoid: "Do not use it to answer a question about another conversation's contents: " +
@@ -161,7 +178,7 @@ func switchTo(repo chat.Repository) tool.Tool {
 			Required: []string{"conversation_id"},
 		},
 		Examples: []tool.Example{
-			{Ask: "go back to the roof conversation", Args: `{"conversation_id":"conv_01M3CYNB9SKNBJ4WYX8A722VTX"}`},
+			{Ask: "go back to the roof conversation", Args: `{"conversation_id":"conv_01M3CYNB9SKNBJ4WYX8A722VTX","saying":"finding the roof conversation"}`},
 		},
 		Run: func(ctx context.Context, in tool.Invocation) tool.Result {
 			var args struct {
@@ -208,6 +225,7 @@ func switchTo(repo chat.Repository) tool.Tool {
 func create(repo chat.Repository) tool.Tool {
 	return tool.Tool{
 		Name:    "conversation_new",
+		Domain:  "conversation",
 		Purpose: "Start a fresh conversation and switch to it.",
 		UseWhen: "The person asks to start over, or to begin something separate.",
 		Avoid: "Do not start one merely because the subject changed. " +
@@ -222,8 +240,8 @@ func create(repo chat.Repository) tool.Tool {
 			},
 		},
 		Examples: []tool.Example{
-			{Ask: "start a new conversation", Args: `{}`},
-			{Ask: "start a new conversation about the roof", Args: `{"title":"Roof"}`},
+			{Ask: "start a new conversation", Args: `{"saying":"starting a new conversation"}`},
+			{Ask: "start a new conversation about the roof", Args: `{"title":"Roof","saying":"starting a conversation about the roof"}`},
 		},
 		Run: func(ctx context.Context, in tool.Invocation) tool.Result {
 			var args struct {
@@ -268,6 +286,8 @@ func create(repo chat.Repository) tool.Tool {
 func rename(repo chat.Repository) tool.Tool {
 	return tool.Tool{
 		Name:     "conversation_rename",
+		Domain:   "conversation",
+		Writes:   true,
 		Purpose:  "Change what a conversation is called.",
 		UseWhen:  "The person says what to call this conversation or another one.",
 		Avoid:    "Do not rename to summarise. Only when asked.",
@@ -286,7 +306,7 @@ func rename(repo chat.Repository) tool.Tool {
 			Required: []string{"conversation_id", "title"},
 		},
 		Examples: []tool.Example{
-			{Ask: "call this one roof quotes", Args: `{"conversation_id":"current","title":"Roof Quotes"}`},
+			{Ask: "call this one roof quotes", Args: `{"conversation_id":"current","title":"Roof Quotes","saying":"renaming this conversation to roof quotes"}`},
 		},
 		Run: func(ctx context.Context, in tool.Invocation) tool.Result {
 			var args struct {
@@ -323,6 +343,8 @@ func rename(repo chat.Repository) tool.Tool {
 func archive(repo chat.Repository) tool.Tool {
 	return tool.Tool{
 		Name:    "conversation_archive",
+		Domain:  "conversation",
+		Writes:  true,
 		Purpose: "Put a conversation away, or bring a put-away one back.",
 		UseWhen: "The person is finished with a conversation, or wants one back.",
 		Avoid: "Do not use it to delete. Archiving keeps everything and can be undone, " +
@@ -342,7 +364,7 @@ func archive(repo chat.Repository) tool.Tool {
 			Required: []string{"conversation_id", "archived"},
 		},
 		Examples: []tool.Example{
-			{Ask: "put this conversation away", Args: `{"conversation_id":"current","archived":true}`},
+			{Ask: "put this conversation away", Args: `{"conversation_id":"current","archived":true,"saying":"putting this conversation away"}`},
 		},
 		Run: func(ctx context.Context, in tool.Invocation) tool.Result {
 			var args struct {
@@ -379,6 +401,8 @@ func archive(repo chat.Repository) tool.Tool {
 func remove(repo chat.Repository) tool.Tool {
 	return tool.Tool{
 		Name:    "conversation_delete",
+		Domain:  "conversation",
+		Writes:  true,
 		Purpose: "Destroy a conversation and every message in it. This cannot be undone.",
 		UseWhen: "The person has asked, in those words, for a particular conversation to be deleted.",
 		Avoid: "Never as a tidy-up, and never inferred from the person being finished with something. " +
@@ -403,7 +427,7 @@ func remove(repo chat.Repository) tool.Tool {
 		},
 		Examples: []tool.Example{
 			{Ask: "delete the roof quotes conversation",
-				Args: `{"conversation_id":"conv_01M3CYNB9SKNBJ4WYX8A722VTX","confirm_title":"Roof Quotes"}`},
+				Args: `{"conversation_id":"conv_01M3CYNB9SKNBJ4WYX8A722VTX","confirm_title":"Roof Quotes","saying":"deleting the roof quotes conversation"}`},
 		},
 		Run: func(ctx context.Context, in tool.Invocation) tool.Result {
 			var args struct {
@@ -421,7 +445,7 @@ func remove(repo chat.Repository) tool.Tool {
 				return tool.Failed(refusal(err, args.ConversationID))
 			}
 			if c.UserID != in.Caller.UserID {
-				return tool.Failed("There is no conversation with that identifier.")
+				return missing(ctx, repo, in.Caller.UserID, args.ConversationID)
 			}
 			if c.Title != args.ConfirmTitle {
 				return tool.Failed(fmt.Sprintf(
@@ -475,6 +499,29 @@ func refusal(err error, id string) string {
 	default:
 		return "That could not be done: " + err.Error()
 	}
+}
+
+// missing : What to say when an identifier names no conversation.
+//
+// The conversations are fetched here rather than the model being told to
+// go and look, because a model told to go and look has been seen to give
+// up and say the thing does not exist instead. An identifier that was
+// misremembered and one that was never real look the same from here, and
+// only one of them is worth an apology.
+func missing(ctx context.Context, repo chat.Repository, userID, said string) tool.Result {
+	found, err := listing(ctx, repo, userID, Listed, false)
+	if err != nil || len(found) == 0 {
+		return tool.Failed(fmt.Sprintf("There is no conversation with the identifier %q.", said))
+	}
+	names := make([]string, 0, len(found))
+	for _, c := range found {
+		title := c.Title
+		if title == "" {
+			title = "(untitled)"
+		}
+		names = append(names, title)
+	}
+	return tool.WhichOne("conversation", said, names)
 }
 
 // listing : The conversations to choose from.
@@ -557,7 +604,21 @@ func matching(found []chat.Conversation, name string) []chat.Conversation {
 	if len(all) > 0 {
 		return all
 	}
-	return some
+	if len(some) > 0 {
+		return some
+	}
+
+	// Nothing shared a whole word, which is the usual outcome when the
+	// name was spoken: "javas" shares no word with "Jarvis". Fall back to
+	// likeness, which compares the letters rather than the words.
+	titles := make([]string, len(found))
+	for i := range found {
+		titles[i] = found[i].Title
+	}
+	if at, err := heard.Best(titles, name); err == nil {
+		return []chat.Conversation{found[at]}
+	}
+	return nil
 }
 
 // ago : How long ago, in words, since a model reading a timestamp has to do

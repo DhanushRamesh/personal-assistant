@@ -124,6 +124,8 @@ func All(store remind.Store, clock Clock) []tool.Tool {
 func update(store remind.Store, clock Clock) tool.Tool {
 	return tool.Tool{
 		Name:    "reminder_update",
+		Domain:  "reminder",
+		Writes:  true,
 		Purpose: "Change a reminder that has not happened yet: what it is called, what it says, when it is due, how often it repeats.",
 		UseWhen: "The person wants an existing one altered rather than replaced -- rename it, move it, " +
 			"change what it says, make it repeat or stop repeating.",
@@ -169,11 +171,11 @@ func update(store remind.Store, clock Clock) tool.Tool {
 		},
 		Examples: []tool.Example{
 			{Ask: "rename that reminder to tablets",
-				Args: `{"id":"rem_01M3D477HXQ4YNQX7BNXJZZCV0","title":"Tablets"}`},
+				Args: `{"id":"rem_01M3D477HXQ4YNQX7BNXJZZCV0","title":"Tablets","saying":"renaming the reminder to tablets"}`},
 			{Ask: "move my four o'clock to five",
-				Args: `{"id":"rem_01M3D477HXQ4YNQX7BNXJZZCV0","at":"2026-09-27 17:00"}`},
+				Args: `{"id":"rem_01M3D477HXQ4YNQX7BNXJZZCV0","at":"2026-09-27 17:00","saying":"moving your four o'clock to five"}`},
 			{Ask: "make that one daily",
-				Args: `{"id":"rem_01M3D477HXQ4YNQX7BNXJZZCV0","repeats":"daily"}`},
+				Args: `{"id":"rem_01M3D477HXQ4YNQX7BNXJZZCV0","repeats":"daily","saying":"making that reminder daily"}`},
 		},
 		Run: func(ctx context.Context, in tool.Invocation) tool.Result {
 			var args struct {
@@ -262,6 +264,8 @@ const MaxRecentHours = 168
 func recent(store remind.Store, clock Clock) tool.Tool {
 	return tool.Tool{
 		Name:    "reminder_recent",
+		Domain:  "reminder",
+		Lists:   true,
 		Purpose: "Say what reminders have happened lately: which were said, and which were never said at all.",
 		UseWhen: "The person asks whether they missed anything, what they missed while they were out, or " +
 			"what has already gone off.",
@@ -281,8 +285,8 @@ func recent(store remind.Store, clock Clock) tool.Tool {
 			},
 		},
 		Examples: []tool.Example{
-			{Ask: "did I miss any reminders", Args: `{}`},
-			{Ask: "what did I miss this morning", Args: `{"hours":6}`},
+			{Ask: "did I miss any reminders", Args: `{"saying":"checking what you missed"}`},
+			{Ask: "what did I miss this morning", Args: `{"hours":6,"saying":"checking this morning's reminders"}`},
 		},
 		Run: func(ctx context.Context, in tool.Invocation) tool.Result {
 			var args struct {
@@ -408,6 +412,8 @@ func spokenAt(r remind.Reminder) time.Time {
 func snooze(store remind.Store, clock Clock) tool.Tool {
 	return tool.Tool{
 		Name:    "reminder_snooze",
+		Domain:  "reminder",
+		Writes:  true,
 		Purpose: "Put a reminder off until later, whether it has just gone off or is still to come.",
 		UseWhen: "The person wants one again later: snooze it, not now, in ten minutes, remind me after lunch, " +
 			"push my four o'clock back.",
@@ -439,10 +445,10 @@ func snooze(store remind.Store, clock Clock) tool.Tool {
 			},
 		},
 		Examples: []tool.Example{
-			{Ask: "snooze that", Args: `{}`},
-			{Ask: "remind me again in twenty minutes", Args: `{"minutes_from_now":20}`},
+			{Ask: "snooze that", Args: `{"saying":"snoozing that reminder"}`},
+			{Ask: "remind me again in twenty minutes", Args: `{"minutes_from_now":20,"saying":"setting it again for twenty minutes"}`},
 			{Ask: "push my four o'clock back to five",
-				Args: `{"id":"rem_01M3D477HXQ4YNQX7BNXJZZCV0","at":"2026-09-27 17:00"}`},
+				Args: `{"id":"rem_01M3D477HXQ4YNQX7BNXJZZCV0","at":"2026-09-27 17:00","saying":"pushing your four o'clock back to five"}`},
 		},
 		Run: func(ctx context.Context, in tool.Invocation) tool.Result {
 			var args struct {
@@ -556,6 +562,7 @@ func laterBy(clock Clock, seconds, minutes int, written string) (time.Time, stri
 func set(store remind.Store, clock Clock) tool.Tool {
 	return tool.Tool{
 		Name:    "reminder_set",
+		Domain:  "reminder",
 		Purpose: "Arrange for something to be said out loud at a time, once or repeatedly.",
 		UseWhen: "The person asks to be reminded, wants a timer, or wants telling at a time or on a day.",
 		Avoid: "Give exactly one of seconds_from_now, minutes_from_now or at. Use one of the first two for " +
@@ -621,16 +628,18 @@ func set(store remind.Store, clock Clock) tool.Tool {
 		Examples: []tool.Example{
 			{Ask: "set a timer for twenty minutes",
 				Args: `{"title":"Timer","say":"Your twenty minute timer has finished, sir.",` +
-					`"say_if_late":"","minutes_from_now":20}`},
+					`"say_if_late":"","minutes_from_now":20,"saying":"setting a twenty minute timer"}`},
 			{Ask: "set a timer for thirty seconds",
 				Args: `{"title":"Timer","say":"Your thirty second timer has finished, sir.",` +
-					`"say_if_late":"","seconds_from_now":30}`},
+					`"say_if_late":"","seconds_from_now":30,"saying":"setting a thirty second timer"}`},
 			{Ask: "remind me to call the roofer at half past four",
 				Args: `{"title":"Call the roofer","say":"Time to call the roofer, sir.",` +
-					`"say_if_late":"You should have called the roofer","at":"2026-09-26 16:30"}`},
+					`"say_if_late":"You should have called the roofer","at":"2026-09-26 16:30",` +
+					`"saying":"setting a reminder to call the roofer"}`},
 			{Ask: "wake me at seven every weekday",
 				Args: `{"title":"Wake up","say":"Good morning, sir. It is seven o'clock.",` +
-					`"say_if_late":"You should have been up","at":"2026-09-28 07:00","repeats":"weekdays"}`},
+					`"say_if_late":"You should have been up","at":"2026-09-28 07:00","repeats":"weekdays",` +
+					`"saying":"setting a weekday alarm for seven"}`},
 		},
 		Run: func(ctx context.Context, in tool.Invocation) tool.Result {
 			var args struct {
@@ -695,7 +704,8 @@ func set(store remind.Store, clock Clock) tool.Tool {
 func list(store remind.Store, clock Clock) tool.Tool {
 	return tool.Tool{
 		Name:        "reminder_list",
-		Prefetch:    true,
+		Domain:      "reminder",
+		Lists:       true,
 		WhenUnasked: WhenUnasked,
 		Purpose:     "List what is waiting to be said, soonest first, with their identifiers.",
 		UseWhen: "Any question about what reminders or timers exist, without exception: what they have, " +
@@ -717,7 +727,7 @@ func list(store remind.Store, clock Clock) tool.Tool {
 			},
 		},
 		Examples: []tool.Example{
-			{Ask: "what timers do I have", Args: `{}`},
+			{Ask: "what timers do I have", Args: `{"saying":"checking your timers"}`},
 		},
 		Run: func(ctx context.Context, in tool.Invocation) tool.Result {
 			var args struct {
@@ -753,6 +763,8 @@ func list(store remind.Store, clock Clock) tool.Tool {
 func cancel(store remind.Store) tool.Tool {
 	return tool.Tool{
 		Name:     "reminder_cancel",
+		Domain:   "reminder",
+		Writes:   true,
 		Purpose:  "Call off something that was going to be said.",
 		UseWhen:  "The person asks to cancel or stop a reminder or timer.",
 		Avoid:    "Do not guess the identifier: list them first. If more than one could be the one they mean, ask which.",
@@ -767,7 +779,7 @@ func cancel(store remind.Store) tool.Tool {
 			},
 		},
 		Examples: []tool.Example{
-			{Ask: "cancel that timer", Args: `{"id":"rem_01M3D477HXQ4YNQX7BNXJZZCV0"}`},
+			{Ask: "cancel that timer", Args: `{"id":"rem_01M3D477HXQ4YNQX7BNXJZZCV0","saying":"cancelling that timer"}`},
 		},
 		Run: func(ctx context.Context, in tool.Invocation) tool.Result {
 			var args struct {
@@ -841,7 +853,7 @@ func diff(before, after *remind.Reminder, clock Clock) []tool.Change {
 	loc := clock.where()
 	return []tool.Change{
 		{What: "the name", From: before.Title, To: after.Title},
-		{What: "what it says", From: before.Body, To: after.Body},
+		{What: "the wording", From: before.Body, To: after.Body},
 		{What: "the time", From: spell(before.DueAt, loc), To: spell(after.DueAt, loc)},
 		{What: "how often it repeats",
 			From: repeated(before.Repeats), To: repeated(after.Repeats)},

@@ -93,6 +93,8 @@ func Quoted(heard []Heard, loc *time.Location) string {
 	}
 
 	var b strings.Builder
+	b.WriteString(precedence)
+	b.WriteString("\n\n")
 	b.WriteString("Earlier exchanges found by searching the record of what was actually said. ")
 	b.WriteString("They are a transcript, not something you worked out: quote them as what was ")
 	b.WriteString("said and when, and never state one as a fact of your own. Some arrived through ")

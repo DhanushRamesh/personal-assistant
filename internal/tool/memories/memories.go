@@ -16,6 +16,7 @@ import (
 
 	"github.com/DhanushRamesh/personal-assistant/internal/chat"
 	"github.com/DhanushRamesh/personal-assistant/internal/memory"
+	"github.com/DhanushRamesh/personal-assistant/internal/prompt"
 	"github.com/DhanushRamesh/personal-assistant/internal/tool"
 )
 
@@ -42,6 +43,7 @@ const Duplicate = 0.92
 // cannot be recovered by asking again.
 func All(recall *memory.Recall) []tool.Tool {
 	return []tool.Tool{
+		list(recall),
 		remember(recall),
 		search(recall),
 		update(recall),
@@ -49,10 +51,92 @@ func All(recall *memory.Recall) []tool.Tool {
 	}
 }
 
+// WhenUnasked : What the model is told about the memories it is handed
+// before anybody has asked for them.
+//
+// Memory is the one listing that arrives on every turn, so it is the one
+// most likely to be mistaken for the whole of what is known. It was:
+// asked "when is Alekhya's birthday" the assistant read this block, saw
+// a birthday that was somebody else's and a note about Alekhya that was
+// not a birthday, and answered "I don't have Alekhya's birthday on
+// record, sir" -- while the birthday sat on a calendar it never opened.
+//
+// Nothing here is false. The mistake is treating a list of things it was
+// told as a list of everything there is, and that is what this says.
+var WhenUnasked = prompt.Text(
+	"What you have been told about this person, and only that.",
+	"It is not a record of their life, their diary, their reminders or their conversations, and finding nothing here means only that nobody told you.",
+	"Never answer that you have no record of something on the strength of this block.",
+	"Anything with a date or a time in it -- a birthday, an anniversary, a trip, an appointment -- lives in the calendar whether or not it also appears here, so read the calendar before you answer, every time.",
+	"Something written here may also be out of date, because it was true when it was said and this is not a tool that has just looked.",
+)
+
+// list : Everything that is remembered, in full.
+//
+// Prefetched, so the whole of memory is in front of the model before the
+// question is read, the same way the reminders, the conversations and the
+// diary are. Search cannot stand in for this: it needs a subject to look
+// for and returns only the nearest few, so a question about memory as a
+// whole has no call it can make and gets answered from recall instead.
+func list(recall *memory.Recall) tool.Tool {
+	return tool.Tool{
+		Name:        "memory_list",
+		Domain:      "memory",
+		Lists:       true,
+		Prefetch:    true,
+		WhenUnasked: WhenUnasked,
+		Purpose:     "List everything you have been asked to remember, with their identifiers.",
+		UseWhen:     "The person asks what you remember, what you know about them, or what is in memory.",
+		Avoid:       "Do not call it twice in one turn, and do not use it to look for one subject: memory_search is for that.",
+		Channels:    []chat.Channel{chat.ChannelVoice, chat.ChannelDirect},
+		Params:      tool.Schema{Properties: map[string]tool.Property{}},
+		Examples: []tool.Example{
+			{Ask: "what do you remember about me", Args: `{"saying":"looking through what I have on you"}`},
+		},
+		Run: func(ctx context.Context, in tool.Invocation) tool.Result {
+			store, fail := storeFor(recall, in)
+			if fail != nil {
+				return *fail
+			}
+
+			var held []memory.Memory
+			for _, tier := range memory.Tiers() {
+				found, err := store.All(ctx, in.Caller.UserID, tier)
+				if err != nil {
+					return tool.Failed(err.Error())
+				}
+				held = append(held, found...)
+			}
+			if len(held) == 0 {
+				return tool.OK("Nothing is remembered yet.")
+			}
+			return tool.OK(everything(held))
+		},
+	}
+}
+
+// everything : Every memory as the model should read it.
+//
+// The count leads, so the number of memories is a thing the model was told
+// rather than a thing it counts off a list that might have been cut short.
+func everything(held []memory.Memory) string {
+	var b strings.Builder
+	fmt.Fprintf(&b, "There are %d memories in total. ", len(held))
+	b.WriteString("Each line is an identifier, then what is remembered.\n")
+	for i := range held {
+		b.WriteString("\n")
+		b.WriteString(held[i].ID)
+		b.WriteString("  ")
+		b.WriteString(held[i].Text())
+	}
+	return b.String()
+}
+
 // remember : Writes something down.
 func remember(recall *memory.Recall) tool.Tool {
 	return tool.Tool{
 		Name:    "memory_remember",
+		Domain:  "memory",
 		Purpose: "Write something down so it is known in later conversations, and tell the person you have.",
 		UseWhen: "Something worth keeping has been said, whether or not you were asked to keep it. " +
 			"A preference, a constraint, a decision and why it was taken, a figure agreed, " +
@@ -85,15 +169,15 @@ func remember(recall *memory.Recall) tool.Tool {
 		},
 		Examples: []tool.Example{
 			{Ask: "remember that the roofer quoted forty thousand",
-				Args: `{"subject":"Roof quote","body":"The roofer quoted forty thousand rupees for the terrace work."}`},
+				Args: `{"subject":"Roof quote","body":"The roofer quoted forty thousand rupees for the terrace work.","saying":"writing down the roofer's quote"}`},
 			{Ask: "always answer me briefly",
-				Args: `{"subject":"How to answer","body":"Wants answers kept short and plain, without preamble.","always":true}`},
+				Args: `{"subject":"How to answer","body":"Wants answers kept short and plain, without preamble.","always":true,"saying":"noting that you want brief answers"}`},
 			// Nobody asked. It is a constraint, so it is kept.
 			{Ask: "I cannot take dairy, it gives me a headache",
-				Args: `{"subject":"Dairy","body":"Cannot take dairy; it gives them a headache.","always":true}`},
+				Args: `{"subject":"Dairy","body":"Cannot take dairy; it gives them a headache.","always":true,"saying":"remembering that dairy gives you a headache"}`},
 			// Nobody asked. It is a decision with a reason behind it.
 			{Ask: "we went with MySQL in the end, Postgres would have meant another thing to run",
-				Args: `{"subject":"Database choice","body":"Chose MySQL over Postgres, because Postgres would have been another thing to run."}`},
+				Args: `{"subject":"Database choice","body":"Chose MySQL over Postgres, because Postgres would have been another thing to run.","saying":"writing down why you chose MySQL"}`},
 		},
 		Run: func(ctx context.Context, in tool.Invocation) tool.Result {
 			var args struct {
@@ -149,6 +233,8 @@ func remember(recall *memory.Recall) tool.Tool {
 func search(recall *memory.Recall) tool.Tool {
 	return tool.Tool{
 		Name:     "memory_search",
+		Domain:   "memory",
+		Lists:    true,
 		Purpose:  "Search what you have been asked to remember, and return the closest with their identifiers.",
 		UseWhen:  "The person refers to something you were told before and it is not already in front of you, or you need a memory's identifier in order to change or forget it.",
 		Avoid:    "Do not call it to answer a question that the notes already in front of you answer, and do not call it twice with the same words.",
@@ -167,7 +253,7 @@ func search(recall *memory.Recall) tool.Tool {
 			},
 		},
 		Examples: []tool.Example{
-			{Ask: "what did I say the roof would cost", Args: `{"about":"the quote for the roof"}`},
+			{Ask: "what did I say the roof would cost", Args: `{"about":"the quote for the roof","saying":"searching for what you said about the roof"}`},
 		},
 		Run: func(ctx context.Context, in tool.Invocation) tool.Result {
 			var args struct {
@@ -200,6 +286,8 @@ func search(recall *memory.Recall) tool.Tool {
 func update(recall *memory.Recall) tool.Tool {
 	return tool.Tool{
 		Name:     "memory_update",
+		Domain:   "memory",
+		Writes:   true,
 		Purpose:  "Replace what a memory says, keeping the same identifier.",
 		UseWhen:  "Something you remember has changed or was wrong, and the person has told you what it should say.",
 		Avoid:    "Do not guess the identifier. Search first, and change the memory you found rather than writing a second one about the same thing.",
@@ -222,7 +310,7 @@ func update(recall *memory.Recall) tool.Tool {
 		},
 		Examples: []tool.Example{
 			{Ask: "the roofer actually said fifty thousand",
-				Args: `{"id":"mem_01M3D477HXQ4YNQX7BNXJZZCV0","subject":"Roof quote","body":"The roofer quoted fifty thousand rupees for the terrace work."}`},
+				Args: `{"id":"mem_01M3D477HXQ4YNQX7BNXJZZCV0","subject":"Roof quote","body":"The roofer quoted fifty thousand rupees for the terrace work.","saying":"correcting the roofer's quote"}`},
 		},
 		Run: func(ctx context.Context, in tool.Invocation) tool.Result {
 			var args struct {
@@ -267,8 +355,8 @@ func update(recall *memory.Recall) tool.Tool {
 			}
 			return tool.Changed("Changed the memory",
 				tool.Change{What: "the subject", From: was.Subject, To: after.Subject},
-				tool.Change{What: "what it says", From: was.Body, To: after.Body},
-				tool.Change{What: "when it is used", From: held(was.Tier), To: held(after.Tier)},
+				tool.Change{What: "the wording", From: was.Body, To: after.Body},
+				tool.Change{What: "the kind", From: held(was.Tier), To: held(after.Tier)},
 			)
 		},
 	}
@@ -278,6 +366,8 @@ func update(recall *memory.Recall) tool.Tool {
 func forget(recall *memory.Recall) tool.Tool {
 	return tool.Tool{
 		Name:    "memory_forget",
+		Domain:  "memory",
+		Writes:  true,
 		Purpose: "Forget something, permanently.",
 		UseWhen: "The person asks you to forget something and has made clear which one.",
 		Avoid: "There is no undo. Do not guess the identifier, and do not forget something because it looks wrong or stale -- " +
@@ -300,7 +390,7 @@ func forget(recall *memory.Recall) tool.Tool {
 		},
 		Examples: []tool.Example{
 			{Ask: "forget what I told you about the roof",
-				Args: `{"id":"mem_01M3D477HXQ4YNQX7BNXJZZCV0","confirm_subject":"Roof quote"}`},
+				Args: `{"id":"mem_01M3D477HXQ4YNQX7BNXJZZCV0","confirm_subject":"Roof quote","saying":"forgetting the note about the roof"}`},
 		},
 		Run: func(ctx context.Context, in tool.Invocation) tool.Result {
 			var args struct {

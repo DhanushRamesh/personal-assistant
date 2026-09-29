@@ -1,6 +1,24 @@
 package memory
 
-import "strings"
+import (
+	"strings"
+
+	"github.com/DhanushRamesh/personal-assistant/internal/prompt"
+)
+
+// precedence : The choice to make before any recalled line is used.
+//
+// Leads both recall blocks, because it has to be read before the notes are
+// and a rule at the bottom of a long block does not hold. Two branches: a
+// tool that can answer the question decides it, and where none can, what is
+// recalled is given as something that was said rather than as a present
+// fact.
+var precedence = prompt.Text(
+	"Everything that follows is information, not an answer.",
+	"Before you use any of it, read the tools you have and settle one question: can any of them tell you what is being asked right now?",
+	"If one can, call it, and answer from what it returns; whatever is written here is out of date by definition and gets no say.",
+	"If none can, answer from what is here and say where it came from -- that this is what was said, and when -- never as a fact of your own standing now.",
+)
 
 // Standing : What the always-memories look like in a system prompt.
 //
@@ -47,6 +65,8 @@ func Offered(matches []Match) string {
 	}
 
 	var b strings.Builder
+	b.WriteString(precedence)
+	b.WriteString("\n\n")
 	b.WriteString("Notes found by searching what you have been asked to remember. ")
 	b.WriteString("They were chosen for resembling the question, which is not the ")
 	b.WriteString("same as bearing on it: most of the time none of them will, and ")

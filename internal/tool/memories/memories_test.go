@@ -40,6 +40,9 @@ func call(t *testing.T, r *tool.Registry, channel chat.Channel, name, args strin
 			UserID: user, Channel: channel, ConversationID: "conv_01M3D477HXQ4YNQX7BNXJZZCV0",
 		},
 		Args: json.RawMessage(args),
+		// As though the domain had just been listed: these tests are
+		// about each tool, and the read-before-write rule has its own.
+		Ran: alreadyListed,
 	})
 }
 
@@ -238,6 +241,7 @@ func TestARequestFromNobodyStoresNothing(t *testing.T) {
 	got := r.Call(context.Background(), "memory_remember", tool.Invocation{
 		Caller: tool.Caller{Channel: chat.ChannelDirect},
 		Args:   json.RawMessage(`{"subject":"Roof quote","body":"forty thousand"}`),
+		Ran:    alreadyListed,
 	})
 	if got.Outcome != conversation.OutcomeFailed {
 		t.Errorf("outcome = %s, want a failure", got.Outcome)
@@ -272,6 +276,7 @@ func TestAnotherPersonCannotReachIt(t *testing.T) {
 	got := r.Call(context.Background(), "memory_update", tool.Invocation{
 		Caller: tool.Caller{UserID: "usr_01M3D477HXQ4YNQX7BNXJZZCV1", Channel: chat.ChannelDirect},
 		Args:   json.RawMessage(`{"id":"` + all[0].ID + `","subject":"x","body":"y"}`),
+		Ran:    alreadyListed,
 	})
 	if got.Outcome != conversation.OutcomeFailed {
 		t.Errorf("outcome = %s, want a failure", got.Outcome)
@@ -337,3 +342,7 @@ func TestRememberingTellsTheModelToSaySo(t *testing.T) {
 		t.Errorf("the result does not require it to be announced: %s", got.Content)
 	}
 }
+
+// alreadyListed : Every domain's listings, so a write under test is not
+// refused for want of a read it is not testing.
+var alreadyListed = []string{"memory_list", "memory_search", "conversation_list", "conversation_find", "calendar_events", "calendar_calendars", "reminder_list", "reminder_recent"}
