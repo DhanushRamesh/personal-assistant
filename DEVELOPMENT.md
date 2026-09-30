@@ -902,6 +902,40 @@ the reading itself: twelve prefetches over four turns, three runs, no
 misses -- where the model deciding for itself managed one or two in
 four.
 
+**Refuse-before-read is a different fault, and prefetching is not the
+answer to it.** Asked to move a task to John's list, the assistant
+answered *"I do not have a list called John's on record, sir"* -- a
+claim about what exists, made without looking, about a list it had
+never read.
+
+`readFirst` cannot catch that. The guard lives in `Registry.Call`, so
+it fires when a tool is **attempted**, and refusing to act attempts
+nothing. The rule is read-before-write; this is refuse-before-read.
+
+`task_lists` was prefetched for a few minutes as a fix, and the owner
+took it out again: a domain is read when it is talked about, and
+prefetching is not how that is arranged. The rule is carried in words,
+in the same two places the calendar's is -- the tool's own `UseWhen`,
+and a block in the persona.
+
+**`naming`, and it covers every domain rather than one.** Saying a
+thing does not exist is a claim about what somebody has and needs a
+tool to have just run. The first answer to a name not recognised is to
+look; the second is to name the nearest and ask; denying it is not one
+of them. Said once for calendars, task lists, reminders, memories and
+conversations together, because a paragraph per domain is how a prompt
+becomes a wall nobody weighs evenly.
+
+Whether it holds is not yet known. Prompt has failed on this class of
+thing four times, and the honest position is that this is the
+remaining lever rather than a fix that has been shown to work.
+
+**The test could not see the tasks domain at all.** It named the
+expected prefetch set while building a registry from four domains and
+leaving out the fifth, so a flag appearing there failed nothing. Fixed
+the same day, which is the second time this test has been wrong about
+the thing it exists to check.
+
 **Only memory prefetches, and that is the owner's decision.** 28
 September 2026. `calendar_events`, `reminder_list` and
 `conversation_list` had the flag, lost it silently in a rewrite, and
@@ -1339,6 +1373,60 @@ conversations: reading somebody over a week is a different question
 from reading a conversation, and no number of per-conversation calls
 answers it.
 
+## The names it expects to hear
+
+Owner's ask, 30 September 2026: *"the vocabulary should be shared by
+deepgram and fast whisperer ... create a timer to make a server call
+to get the proper nouns list from the conversation and update the
+proper nouns in the vocabulary list ... I wanna see the vocabulary
+list in home assistant"*.
+
+Speech recognition is primed with a list of words to expect, and a
+word left off it is not merely unhelped: it comes back as whatever
+common words sound like it. `Alekhya` arrived as "a leg near" until
+somebody typed it in. So the list only ever held the mistakes the
+owner had already been annoyed by.
+
+`internal/vocabulary` reads the same week of messages the description
+reads and asks the model for the proper nouns in them -- people, pets,
+places, brands. Those are the words a general model has no reason to
+know and the ones it gets wrong; ordinary words are already in the
+decoder and priming them costs budget a name needs. It is served at
+`GET /v1/vocabulary`.
+
+**Not a memory, though it is built the same way from the same
+messages.** A memory is for the model to read; this is for
+faster-whisper and Deepgram, which never see a prompt. Putting it in
+the memories table would mean fifty names either sitting in every
+system prompt or surfacing as search results whenever somebody is
+asked about. It has its own table for that reason, and not the
+settings table either, whose value column is `VARCHAR(255)`.
+
+**Replaced wholesale each night, never added to.** A list that only
+grows fills with names from one conversation in March and crowds out
+the people somebody actually talks about. The budget is small:
+Deepgram refuses more than a hundred keyterms in total.
+
+**`Clean` exists because an answer is not a contract.** What comes
+back carries bullets, numbering, a leading sentence and explanations
+in brackets, and all of it would be handed to a speech engine as words
+somebody says. Lines that are not names are dropped: too long, too
+many words, starting with punctuation, or holding sentence
+punctuation.
+
+**The server stores and serves; it does not reach the engines.** Those
+live on the machine with the microphones, along with the hand-kept
+half of the list, in `~/voice-setup/vocabulary`. A daily systemd timer
+there fetches this and applies it. Two halves because neither machine
+can do the other's work.
+
+One thing learned by breaking it: **an empty answer must never replace
+names already in place.** The server answers with nothing both when a
+week genuinely held no names and when its nightly job has not run yet,
+and from the fetching end the two are identical. The first run dropped
+three good names that way. A stale list decays slowly and shows its
+date on the dashboard; an emptied one fails at once and silently.
+
 ## Look it up every time
 
 **The owner's standing rule, 27 September 2026: every statement about
@@ -1495,6 +1583,61 @@ instead of arguing with it. Three tools have it -- `reminder_list`,
 before the question is even put. **Memory has no prefetch**, which is
 why *what have you saved in memory* is still answered from recall
 alone. That is the next gap, not a mystery.
+
+## Tasks, and the line between three things that sound alike
+
+Built 30 September 2026, on a scope granted three days earlier and
+never used.
+
+**What a task is not.** An event occupies time and happens whether or
+not anybody acts: four o'clock is gone either way. A reminder is a
+sentence with a moment attached, said aloud and then spent. A task is
+neither -- it takes up no time, there is no instant at which it fails,
+and it waits until somebody ticks it off.
+
+**The API cannot hold a time, and this decides everything.** The
+reference on the `due` field: *"Only date information is recorded; the
+time portion of the timestamp is discarded when setting this field. It
+isn't possible to read or write the time that a task is scheduled for
+using the API."* Confirmed against the owner's own data, which comes
+back as midnight every time. The web UI does let a time be set, so
+Google keeps it somewhere the public API cannot see.
+
+So tasks cannot absorb reminders -- not as a design preference, but
+because the field does not exist. `task_add` refuses a time of day
+rather than accepting it and dropping the hour: a write that silently
+loses half of what was asked for is worse than a refusal, because
+nothing reports it and the person believes it was kept.
+
+**Four tools out of fourteen methods.** `task_lists`, `task_list`,
+`task_add`, `task_done`. Left out: deleting a list, because it takes
+every task on it with no confirmation and no undo and a mis-heard word
+should not reach that; `clear`, which hides completed tasks in bulk
+and reports nothing; `move`, for reordering and subtasks, which nobody
+asks for out loud. Deleting a single task is also left out for now --
+ticking it off is what somebody means nine times in ten, it keeps the
+record, and it can be undone.
+
+**What the API does not give.** No search, so finding one means
+listing and matching, which `heard` already does. No batch, so the
+arrays are in the tool and the loop is underneath. No change feed at
+all, unlike Calendar -- a task ticked off on a phone is invisible here
+until the next look. And `maxResults` defaults to twenty without
+saying so, on a list that can hold twenty thousand: the same trap that
+had `conversation_list` report seventy-one as ten, so it is set
+explicitly and the total is always said.
+
+**How the model is meant to choose.** Follow the words first: "remind
+me" is a reminder, "put it in the diary" is an event, "add it to my
+list" is a task. Only when nothing was said does it fall to what is
+attached -- a duration means an event, a clock time means a reminder,
+neither means a task. That is a judgement about meaning, so it lives
+in the tool descriptions rather than in any matcher.
+
+What makes it safe is not the rule but the answer: every write names
+where it went. "On your list", "in the diary", "I will say that at
+ten twenty" are three sentences nobody can confuse, so a wrong choice
+is caught in the same breath instead of found next week.
 
 ## The calendar
 
