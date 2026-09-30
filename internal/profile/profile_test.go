@@ -192,3 +192,26 @@ func TestThePromptAsksForWhatWasWanted(t *testing.T) {
 		t.Error("what they said is not in the prompt")
 	}
 }
+
+// TestItIsToldNotToGuessOriginOrRecordHealth : The two things the first
+// rebuild got wrong.
+//
+// It wrote "almost certainly Indian, likely based in or around
+// Hyderabad" from a girlfriend's address and the films that had come
+// up, and listed four symptoms mentioned in passing. Neither had been
+// said. A hedge is not a defence: a guess in a description read before
+// every answer is acted on exactly as a fact is.
+func TestItIsToldNotToGuessOriginOrRecordHealth(t *testing.T) {
+	p := profile.Prompt(said(3))
+
+	for _, want := range []string{
+		"Where they live, where they are from, their nationality",
+		"do not reason towards it from somebody else's address",
+		"leave out symptoms, conditions and medicines",
+		"Hedging is not a way round",
+	} {
+		if !strings.Contains(p, want) {
+			t.Errorf("the prompt does not say %q", want)
+		}
+	}
+}

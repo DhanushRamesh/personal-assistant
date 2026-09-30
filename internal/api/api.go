@@ -29,13 +29,17 @@ import (
 	"github.com/DhanushRamesh/personal-assistant/internal/api/health"
 	"github.com/DhanushRamesh/personal-assistant/internal/api/middleware"
 	"github.com/DhanushRamesh/personal-assistant/internal/api/presence"
+	profileapi "github.com/DhanushRamesh/personal-assistant/internal/api/profile"
 	"github.com/DhanushRamesh/personal-assistant/internal/api/reminders"
+	vocabularyapi "github.com/DhanushRamesh/personal-assistant/internal/api/vocabulary"
 	"github.com/DhanushRamesh/personal-assistant/internal/chat"
 	"github.com/DhanushRamesh/personal-assistant/internal/conversation"
 	"github.com/DhanushRamesh/personal-assistant/internal/google"
 	"github.com/DhanushRamesh/personal-assistant/internal/llm"
+	"github.com/DhanushRamesh/personal-assistant/internal/memory"
 	"github.com/DhanushRamesh/personal-assistant/internal/persona"
 	"github.com/DhanushRamesh/personal-assistant/internal/remind"
+	"github.com/DhanushRamesh/personal-assistant/internal/vocabulary"
 )
 
 // DefaultRequestTimeout : The per-request deadline applied when Options does
@@ -85,6 +89,17 @@ type Options struct {
 	// noted in the conversation, so the person can answer it. Optional;
 	// without it a greeting is spoken and not written down.
 	Announcements presence.Announcements
+
+	// Memories : Where the standing description of the person is kept, so
+	// they can read it and correct it. Nil leaves the endpoint answering
+	// as though there were none.
+	Memories memory.Store
+
+	// Vocabulary : Where the names heard in conversation are kept, for
+	// the machine with the microphones to fetch. Nil serves an empty
+	// list rather than failing: speech still works without it, having
+	// only the hand-kept words to go on.
+	Vocabulary vocabulary.Store
 
 	// Announcer : Where the server speaks of its own accord. Optional;
 	// without it a greeting is composed and not said.
@@ -138,6 +153,8 @@ type Server struct {
 	chats         *chats.Handler
 	reminders     *reminders.Handler
 	presence      *presence.Handler
+	profile       *profileapi.Handler
+	vocabulary    *vocabularyapi.Handler
 	google        *googleapi.Handler
 	assist        *assist.Handler
 }
@@ -162,8 +179,10 @@ func New(opts Options) *Server {
 		reminders:     reminders.New(opts.Logger, opts.Reminders),
 		presence: presence.New(opts.Logger, opts.Announcer, opts.Reminders,
 			opts.Announcements, opts.Location, opts.Now),
-		google: googleapi.New(opts.Logger, opts.Google, opts.SettingsURL),
-		assist: assist.New(opts.Logger, opts.Chats, opts.Runner, opts.Events),
+		profile:    profileapi.New(opts.Memories, opts.Now, opts.Logger),
+		vocabulary: vocabularyapi.New(opts.Vocabulary, opts.Logger),
+		google:     googleapi.New(opts.Logger, opts.Google, opts.SettingsURL),
+		assist:     assist.New(opts.Logger, opts.Chats, opts.Runner, opts.Events),
 	}
 	s.routes()
 	return s
@@ -209,6 +228,8 @@ func (s *Server) routes() {
 		s.chats.Mount(r)
 		s.reminders.Mount(r)
 		s.presence.Mount(r)
+		s.profile.Mount(r)
+		s.vocabulary.Mount(r)
 		s.google.Mount(r)
 		s.assist.Mount(r)
 	})

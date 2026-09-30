@@ -16,6 +16,15 @@
 // messages again is more work and is the only thing that keeps it
 // anchored to what was really said.
 //
+// Two things are kept out of it however well the evidence seems to
+// support them: where somebody is from or lives, and their health. The
+// first rebuild wrote "almost certainly Indian, likely based in or
+// around Hyderabad" from a girlfriend's address and the films that had
+// come up, and listed four symptoms mentioned in passing. Neither had
+// been said, both were plausible, and a hedge is not a defence -- a
+// guess in a description that is read before every answer is acted on
+// exactly as a fact is.
+//
 // The owner chose prose over counted observations, knowing that prose
 // cannot be checked. What that buys is a description that reads like
 // somebody who knows them; what it costs is that a wrong line stays

@@ -41,11 +41,15 @@ import (
 	remindmysql "github.com/DhanushRamesh/personal-assistant/internal/remind/mysql"
 	"github.com/DhanushRamesh/personal-assistant/internal/runner"
 	"github.com/DhanushRamesh/personal-assistant/internal/storage"
+	"github.com/DhanushRamesh/personal-assistant/internal/tasks"
 	"github.com/DhanushRamesh/personal-assistant/internal/tool"
 	calendartool "github.com/DhanushRamesh/personal-assistant/internal/tool/calendar"
 	"github.com/DhanushRamesh/personal-assistant/internal/tool/conversations"
 	"github.com/DhanushRamesh/personal-assistant/internal/tool/memories"
 	"github.com/DhanushRamesh/personal-assistant/internal/tool/reminders"
+	taskstool "github.com/DhanushRamesh/personal-assistant/internal/tool/tasks"
+	"github.com/DhanushRamesh/personal-assistant/internal/vocabulary"
+	vocabularymysql "github.com/DhanushRamesh/personal-assistant/internal/vocabulary/mysql"
 )
 
 // main : Runs the server, or the named command.
@@ -223,6 +227,9 @@ func run() error {
 		conversations.All(chats),
 		memories.All(remembering),
 		reminders.All(reminderStore, clock),
+		taskstool.All(listsOf(googleLink), taskstool.Clock{
+			Now: cfg.Assistant.Now, Location: cfg.Assistant.Location,
+		}),
 		calendartool.All(diaryOf(googleLink, cfg), calendartool.Clock{
 			Now: cfg.Assistant.Now, Location: cfg.Assistant.Location,
 		}),
@@ -316,6 +323,8 @@ func run() error {
 		slog.Duration("every", remind.DefaultEvery),
 		slog.Duration("grace", remind.DefaultGrace))
 
+	names := vocabularymysql.New(db)
+
 	// A standing description of the person, rewritten from what they have
 	// actually said. The memories are facts they gave once and none of
 	// them says what somebody is like to talk to; this is the attempt at
@@ -337,6 +346,29 @@ func run() error {
 	}()
 	logger.Info("describing the person daily", slog.Duration("every", profileEvery))
 
+	// The names they say, for speech recognition to expect. Read from
+	// the same week of messages, because a name is only worth the
+	// budget if it keeps coming up. Nothing here reaches the engines:
+	// the machine with the microphones fetches this and decides what to
+	// do with it.
+	listening := &vocabulary.Builder{
+		Said:   chats,
+		Store:  names,
+		Now:    cfg.Assistant.Now,
+		Logger: logger.Logger,
+		Ask: func(ctx context.Context, ask string) (string, error) {
+			return askOnce(ctx, answerer, cfg.PlatformAI.Vendor, cfg.PlatformAI.Model,
+				environment.PurposeVocabulary, ask)
+		},
+	}
+	watching.Add(1)
+	go func() {
+		defer watching.Done()
+		listenDaily(remindCtx, chats, listening, cfg.Assistant.Now, logger.Logger)
+	}()
+	logger.Info("collecting the names they say daily",
+		slog.Duration("every", vocabularyEvery))
+
 	handler := api.New(api.Options{
 		Logger:         logger.Logger,
 		DB:             db,
@@ -350,6 +382,8 @@ func run() error {
 		Location:       cfg.Assistant.Location,
 		Now:            cfg.Assistant.Now,
 		Runner:         chatRunner,
+		Memories:       remembering.Store,
+		Vocabulary:     names,
 		Events:         bus,
 		Models:         reachableModels(cfg),
 		DefaultModel:   cfg.PlatformAI.Model,
@@ -434,6 +468,15 @@ func reachableModels(cfg config.Config) []llm.Model {
 // there is no calendar. That is the honest answer on a server with no
 // Google client, and it is the same answer they give before anybody has
 // connected one.
+// listsOf : The person's to-do lists, or nothing when Google is not
+// configured.
+func listsOf(link *google.Link) taskstool.Lists {
+	if link == nil {
+		return nil
+	}
+	return tasks.New(link)
+}
+
 func diaryOf(link *google.Link, cfg config.Config) calendartool.Diary {
 	if link == nil {
 		return nil
@@ -494,6 +537,7 @@ func announcer(cfg config.Config, logger *slog.Logger) announce.Announcer {
 		Token:     cfg.HomeAssistant.Token,
 		Satellite: cfg.HomeAssistant.Satellite,
 		Notify:    cfg.HomeAssistant.Notify,
+		Logger:    logger,
 	})
 	if err != nil {
 		if !errors.Is(err, hass.ErrNotConfigured) {
@@ -712,6 +756,22 @@ const profileEvery = 24 * time.Hour
 // description as a side effect.
 const profileFirst = 10 * time.Minute
 
+// vocabularyEvery : How often the names are collected again.
+//
+// Nightly, like the description. The list only changes when somebody
+// new comes up, which is not an hourly event, and each pass costs a
+// call to the model.
+const vocabularyEvery = 24 * time.Hour
+
+// vocabularyFirst : How long after startup the first pass runs.
+//
+// After the description rather than beside it, so that a restart does
+// not fire two model calls at once.
+const vocabularyFirst = 20 * time.Minute
+
+// vocabularyTimeout : How long one pass may take.
+const vocabularyTimeout = 3 * time.Minute
+
 // profileTimeout : How long one rebuild may take.
 //
 // Generous, because it reads a week of messages into one prompt and
@@ -757,6 +817,51 @@ func describeDaily(
 				continue
 			}
 			logger.Info("described them from what they said",
+				slog.String("user_id", userID))
+		}
+		cancel()
+	}
+}
+
+// listenDaily : Collects everybody's names again, for as long as ctx
+// lives.
+//
+// Everybody who has said something recently, like the description:
+// somebody who has not spoken in a week keeps the names they had
+// rather than having them collected from nothing.
+func listenDaily(
+	ctx context.Context,
+	talkers interface {
+		Talkers(ctx context.Context, since time.Time) ([]string, error)
+	},
+	listening *vocabulary.Builder,
+	now func() time.Time,
+	logger *slog.Logger,
+) {
+	timer := time.NewTimer(vocabularyFirst)
+	defer timer.Stop()
+
+	for {
+		select {
+		case <-ctx.Done():
+			return
+		case <-timer.C:
+		}
+		timer.Reset(vocabularyEvery)
+
+		pass, cancel := context.WithTimeout(ctx, vocabularyTimeout)
+		who, err := talkers.Talkers(pass, now().Add(-vocabulary.Window))
+		if err != nil {
+			logger.Warn("cannot tell who has been talking", slog.Any("error", err))
+			cancel()
+			continue
+		}
+		for _, userID := range who {
+			if err := listening.Build(pass, userID); err != nil {
+				logger.Warn("cannot collect the names they say", slog.Any("error", err))
+				continue
+			}
+			logger.Info("collected the names they say",
 				slog.String("user_id", userID))
 		}
 		cancel()

@@ -175,6 +175,9 @@ const (
 	PurposeCondense Purpose = "condense"
 	// PurposeProfile : Describing the person from what they have said.
 	PurposeProfile Purpose = "profile"
+	// PurposeVocabulary : Finding the names in what they have said, for
+	// speech recognition to expect.
+	PurposeVocabulary Purpose = "vocabulary"
 )
 
 // Request : What an environment is asked to do.

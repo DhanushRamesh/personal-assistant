@@ -37,6 +37,15 @@ func Prompt(said []conversation.Message) string {
 			"Do not describe what they asked the assistant to do; describe them.",
 			"Do not flatter them, and do not write anything you would not be able to point at a sentence for.",
 		),
+		prompt.Text(
+			"Two things are left out however strongly they seem to follow.",
+			"Where they live, where they are from, their nationality, their age: say none of it unless they said it themselves, and do not reason towards it from somebody else's address or from the languages and films that come up.",
+			"Their health: leave out symptoms, conditions and medicines entirely unless they asked for something to be remembered, which is a different thing from having mentioned it in passing.",
+		),
+		prompt.Text(
+			"Hedging is not a way round either of those.",
+			"'Almost certainly' and 'likely' are still claims, and a hedged guess in a description that is read before every answer is acted on exactly as a plain one is.",
+		),
 		"Here is what they said:",
 		heard(said),
 	)
