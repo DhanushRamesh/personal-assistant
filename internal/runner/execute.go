@@ -92,6 +92,14 @@ func (r *Runner) consume(runCtx, ctx context.Context, t *chat.Chat, systemPrompt
 	// shown them before it was asked anything.
 	ran := r.alreadyRead(t)
 
+	// Whether the model has asked for any tool this turn, and whether
+	// it has already been sent back once to look at what it has.
+	//
+	// Not the same question as whether anything ran: memory is
+	// prefetched on every turn, so something has always run. This is
+	// about what the model chose.
+	var reached, pressed bool
+
 	for hop := 0; ; hop++ {
 		// The last round is offered nothing. A model that has run out of
 		// rounds must answer from what it gathered, and saying what it
@@ -151,10 +159,38 @@ func (r *Runner) consume(runCtx, ctx context.Context, t *chat.Chat, systemPrompt
 			return
 
 		case final.Kind != environment.KindToolCalls:
+			// An answer reached without touching a single tool, on a
+			// turn where tools were offered, is sent back once to
+			// look at them.
+			//
+			// Because the answer that keeps being wrong is "I cannot"
+			// and "there is no such thing": no list called John's,
+			// no birthday on record, and -- with task_list_add sitting
+			// in the same prompt -- "I am not able to create task
+			// lists from here, that needs to be done on your device".
+			// Each was a claim about what exists or what it can do,
+			// made without looking, and each was false.
+			//
+			// The persona says to check before saying no. It did not
+			// hold, five times. This is the same rule with the server
+			// behind it.
+			//
+			// Nothing is forced. Plenty of answers need no tool at
+			// all, and after being asked to look the model is free to
+			// say the same thing again. What it cannot do is never
+			// look.
+			if !reached && !pressed && len(tools) > 0 {
+				r.logger.InfoContext(ctx, "an answer was sent back to look at the tools")
+				pressed = true
+				turns = append(turns, asUserTurn(prompt)...)
+				prompt = lookFirst
+				continue
+			}
 			r.complete(ctx, t, tool.Ensure(final.Text,
 				persona.AddressFor(r.personaID()), tool.Merged(owed)))
 			return
 		}
+		reached = true
 
 		// Tools were asked for. Run them, remember both halves, and go round
 		// again with what they returned. The question is not repeated: it is
@@ -206,6 +242,20 @@ func (r *Runner) failureSentence(sentence string) string {
 	return persona.Addressed(strings.TrimSpace(sentence),
 		persona.AddressFor(r.personaID()), "")
 }
+
+// lookFirst : What the model is told when it answered without looking.
+//
+// Worded to be obeyed and then dropped. It does not ask for a tool to
+// be called; it asks for the list to be read, which is the step that
+// was skipped. An instruction to call something would produce a call
+// for the sake of one, and a reminder nobody can comply with is worse
+// than none.
+const lookFirst = "Before that answer goes out: you did not use any tool this turn. " +
+	"Read the tools you have been given and check whether one of them answers this. " +
+	"If you were about to say you cannot do something, or that something does not exist, " +
+	"that is a claim to check against the list rather than against what you remember -- " +
+	"the tools change, and what you could not do last week you may be able to do now. " +
+	"If a tool fits, use it. If none does, say the same thing again and it will be sent as it is."
 
 // asUserTurn : The question as a turn, or nothing when there is none.
 //

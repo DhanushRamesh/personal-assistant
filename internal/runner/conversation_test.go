@@ -10,6 +10,7 @@ import (
 	"github.com/DhanushRamesh/personal-assistant/internal/conversation"
 	"github.com/DhanushRamesh/personal-assistant/internal/environment"
 	"github.com/DhanushRamesh/personal-assistant/internal/runner"
+	"github.com/DhanushRamesh/personal-assistant/internal/tool"
 )
 
 // contents : What was said in a conversation, as plain strings.
@@ -315,5 +316,81 @@ func TestNamingTheConversationIsInTheConversation(t *testing.T) {
 	}
 	if len(conversation.ForPerson([]conversation.Message{*note})) != 1 {
 		t.Error("the person is not shown the rename they watched happen")
+	}
+}
+
+// offering : A registry with one tool, so a turn has something to look
+// at.
+func offering() *tool.Registry {
+	r, err := tool.NewRegistry(tool.Tool{
+		Name:     "task_list_add",
+		Domain:   "task",
+		Writes:   true,
+		Purpose:  "Start a new to-do list.",
+		UseWhen:  "They ask for a new list.",
+		Channels: []chat.Channel{chat.ChannelVoice, chat.ChannelDirect},
+		Params:   tool.Schema{Properties: map[string]tool.Property{}},
+		Run: func(context.Context, tool.Invocation) tool.Result {
+			return tool.OK("Started it.")
+		},
+	})
+	if err != nil {
+		panic(err)
+	}
+	return r
+}
+
+// TestAnAnswerWithoutToolsIsSentBackToLook : The answer that keeps
+// being wrong is "I cannot".
+//
+// Asked to create a task list, the assistant replied "I am not able to
+// create task lists from here, sir -- that needs to be done on your
+// device", with task_list_add in the same prompt. It had called
+// nothing. The persona already said to check the tools before saying
+// no; it did not hold, five times over.
+func TestAnAnswerWithoutToolsIsSentBackToLook(t *testing.T) {
+	recorder := &recordingProvider{}
+	h := newHarness(t, recorder, runner.Options{Tools: offering()})
+
+	tk := h.submit(t, "create a new task list called premium web complaints")
+	h.await(t, tk.ID, chat.StatusCompleted, chat.StatusFailed)
+
+	if len(recorder.prompts) < 2 {
+		t.Fatalf("the answer went out unchecked: %v", recorder.prompts)
+	}
+	if !strings.Contains(recorder.prompts[1], "did not use any tool") {
+		t.Errorf("it was not told what it skipped: %q", recorder.prompts[1])
+	}
+	if !strings.Contains(recorder.prompts[1], "cannot do something") {
+		t.Errorf("it was not told which claim to check: %q", recorder.prompts[1])
+	}
+}
+
+// TestItIsSentBackOnlyOnce : A model that answered without tools twice
+// has made its case, and the rounds are better spent on the answer.
+func TestItIsSentBackOnlyOnce(t *testing.T) {
+	recorder := &recordingProvider{}
+	h := newHarness(t, recorder, runner.Options{Tools: offering()})
+
+	tk := h.submit(t, "hello")
+	h.await(t, tk.ID, chat.StatusCompleted, chat.StatusFailed)
+
+	if len(recorder.prompts) != 2 {
+		t.Errorf("asked %d times, want the question and one look: %v",
+			len(recorder.prompts), recorder.prompts)
+	}
+}
+
+// TestNothingIsSentBackWhenThereAreNoTools : With nothing to look at,
+// looking is not a thing that can be asked for.
+func TestNothingIsSentBackWhenThereAreNoTools(t *testing.T) {
+	recorder := &recordingProvider{}
+	h := newHarness(t, recorder, runner.Options{})
+
+	tk := h.submit(t, "hello")
+	h.await(t, tk.ID, chat.StatusCompleted, chat.StatusFailed)
+
+	if len(recorder.prompts) != 1 {
+		t.Errorf("a turn with no tools was sent back: %v", recorder.prompts)
 	}
 }

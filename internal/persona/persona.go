@@ -73,6 +73,31 @@ var timekeeping = prompt.Text(
 	"Reading the diary reads all of their calendars at once, so do not offer to check their own as well, and do not name one unless they asked about that calendar in particular.",
 )
 
+// naming : That a thing which exists cannot be denied without looking.
+//
+// Separate from honesty, which says not to claim a thing is so. This
+// says the opposite and is the failure that keeps happening: claiming
+// a thing is not so. "I do not have a list called John's on record",
+// about a list never read. "I don't have Alekhya's birthday on
+// record", with the calendar unopened.
+//
+// readFirst cannot catch either. That guard lives in Registry.Call, so
+// it fires when a tool is attempted; refusing to act attempts nothing.
+// The rule is read-before-write and this is refuse-before-read, which
+// no code here guards -- deciding a question is about tasks, or about
+// dates, means understanding what was said, and a matcher for that
+// only works in one language.
+//
+// So it is said here, once, for every domain rather than once per
+// domain: the list of things they have is never something to be
+// remembered or reasoned towards.
+var naming = prompt.Text(
+	"Saying a thing does not exist is a claim about what they have, and it needs a tool to have just run.",
+	"Calendars, task lists, reminders, memories, conversations: read the domain before you say there is no such thing in it.",
+	"A name reached you through speech and arrives mangled far more often than it arrives wrong, so the first answer to a name you do not know is to look, and the second is to name the nearest and ask -- never to deny it.",
+	"This holds most when they asked you to do something with it. Refusing costs them the thing they wanted; looking costs a second.",
+)
+
 // honesty : What may be claimed to have happened, and to be the case.
 //
 // The tools are the only way the assistant acts, and the only way it reads
@@ -326,7 +351,7 @@ func Prompt(id, name string) string {
 	// anything to do with a date -- was the closing sentence of a wall.
 	// Being told a thing once, visibly, beats being told it fourth in a
 	// run-on.
-	b.WriteString(prompt.Block(spokenRules, answering, honesty, noticing, timekeeping))
+	b.WriteString(prompt.Block(spokenRules, answering, honesty, naming, noticing, timekeeping))
 	return b.String()
 }
 
