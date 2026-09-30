@@ -813,9 +813,22 @@ func when(written string, loc *time.Location) (time.Time, error) {
 func describe(e calendar.Event, loc *time.Location) string {
 	var b strings.Builder
 	b.WriteString(e.Title)
-	if e.AllDay {
+	switch {
+	case e.AllDay && spansDays(e):
+		// A stay from the 26th to the 29th used to read as the 26th
+		// alone, because only the start was said.
+		b.WriteString(", from " + e.Starts.In(loc).Format("Monday 2 January") +
+			" to " + e.Ends.In(loc).Format("Monday 2 January"))
+
+	case e.AllDay && e.Kind == birthday:
+		// No "all day". A birthday is a day, and saying so tells nobody
+		// anything: "Meganadham's birthday today, all day".
+		b.WriteString(", on " + e.Starts.In(loc).Format("Monday 2 January"))
+
+	case e.AllDay:
 		b.WriteString(", all day on " + e.Starts.In(loc).Format("Monday 2 January"))
-	} else {
+
+	default:
 		b.WriteString(", " + e.Starts.In(loc).Format("3:04 pm on Monday 2 January"))
 		if !e.Ends.IsZero() && e.Ends.After(e.Starts) {
 			b.WriteString(" until " + e.Ends.In(loc).Format("3:04 pm"))
@@ -825,6 +838,19 @@ func describe(e calendar.Event, loc *time.Location) string {
 		b.WriteString(", at " + w)
 	}
 	return b.String()
+}
+
+// birthday : What Google calls a birthday, and the yearly things it
+// files with them. Its own word, not one of ours, so it means the same
+// whatever language the title is written in.
+const birthday = "birthday"
+
+// spansDays : Whether a whole-day event covers more than the one day.
+//
+// Ends is the inclusive last day for these, so equal dates are one day.
+func spansDays(e calendar.Event) bool {
+	return !e.Ends.IsZero() && e.Ends.After(e.Starts) &&
+		e.Ends.YearDay() != e.Starts.YearDay()
 }
 
 // onTheDay : What is in the diary across a window, or nothing when it

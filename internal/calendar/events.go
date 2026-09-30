@@ -36,6 +36,17 @@ type Event struct {
 	// Mine : Whether it is on the assistant's own calendar, and so
 	// something it can change. Anything else it only knows the shape of.
 	Mine bool
+	// Kind : What Google calls this sort of event -- "birthday",
+	// "fromGmail", "outOfOffice" and so on, or empty for an ordinary one.
+	//
+	// Structured, so it can be read without guessing from the title. A
+	// birthday is a whole-day event and saying so out loud adds nothing:
+	// "Meganadham's birthday today, all day" is a sentence that tells
+	// somebody a birthday lasts a day. Knowing which events are like
+	// that needs the type, and matching the word "birthday" would only
+	// work in one language.
+	Kind string
+
 	// Calendar : The name of the calendar it sits on.
 	//
 	// Set when several are read together, where the name is the only
@@ -358,7 +369,8 @@ func fromGoogle(g *gcal.Event, mine bool, loc *time.Location) *Event {
 		return nil
 	}
 	out := &Event{
-		ID: g.Id, Title: g.Summary, Where: g.Location, Notes: g.Description, Mine: mine,
+		ID: g.Id, Title: g.Summary, Where: g.Location, Notes: g.Description,
+		Mine: mine, Kind: g.EventType,
 	}
 
 	if g.Start.Date != "" {

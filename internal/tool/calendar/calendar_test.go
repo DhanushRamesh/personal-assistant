@@ -754,3 +754,61 @@ func withSaying(args string) string {
 	}
 	return string(out)
 }
+
+// TestABirthdayIsNotAnnouncedAsAllDay : "Meganadham's birthday today,
+// all day" tells somebody that a birthday lasts a day.
+//
+// Told apart by Google's own event type rather than by the word in the
+// title, which would only work in one language.
+func TestABirthdayIsNotAnnouncedAsAllDay(t *testing.T) {
+	day := time.Date(2026, 9, 30, 0, 0, 0, 0, india())
+	d := &diary{theirs: []calendar.Event{{
+		ID: "b1", Title: "Meganadham's birthday", Calendar: "Birthdays",
+		Starts: day, Ends: day, AllDay: true, Kind: "birthday",
+	}}}
+
+	got := run(t, d, "calendar_events", `{"from":"2026-09-30","to":"2026-09-30","saying":"looking"}`)
+
+	if strings.Contains(got.Content, "all day") {
+		t.Errorf("a birthday was called all day: %s", got.Content)
+	}
+	if !strings.Contains(got.Content, "Meganadham's birthday") {
+		t.Errorf("the birthday went missing: %s", got.Content)
+	}
+}
+
+// TestAnOrdinaryWholeDayEventStillSaysAllDay : The word earns its place
+// where the event is not inherently a day, such as a holiday or a day
+// off.
+func TestAnOrdinaryWholeDayEventStillSaysAllDay(t *testing.T) {
+	day := time.Date(2026, 10, 2, 0, 0, 0, 0, india())
+	d := &diary{theirs: []calendar.Event{{
+		ID: "h1", Title: "Gandhi Jayanti", Calendar: "Holidays in India",
+		Starts: day, Ends: day, AllDay: true,
+	}}}
+
+	got := run(t, d, "calendar_events", `{"from":"2026-10-02","to":"2026-10-02","saying":"looking"}`)
+
+	if !strings.Contains(got.Content, "all day") {
+		t.Errorf("a holiday lost its all day: %s", got.Content)
+	}
+}
+
+// TestAStayOverSeveralDaysSaysBothEnds : It used to say the first day
+// only, so a stay from the 26th to the 29th read as the 26th.
+func TestAStayOverSeveralDaysSaysBothEnds(t *testing.T) {
+	d := &diary{theirs: []calendar.Event{{
+		ID: "t1", Title: "Chennai", Calendar: "Personal",
+		Starts: time.Date(2026, 10, 26, 0, 0, 0, 0, india()),
+		Ends:   time.Date(2026, 10, 29, 0, 0, 0, 0, india()),
+		AllDay: true,
+	}}}
+
+	got := run(t, d, "calendar_events", `{"from":"2026-10-26","to":"2026-10-29","saying":"looking"}`)
+
+	for _, want := range []string{"Monday 26 October", "Thursday 29 October"} {
+		if !strings.Contains(got.Content, want) {
+			t.Errorf("content = %q, want %q in it", got.Content, want)
+		}
+	}
+}
