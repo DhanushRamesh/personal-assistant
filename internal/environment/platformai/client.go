@@ -96,13 +96,49 @@ type chatResponse struct {
 			Content   json.RawMessage `json:"content"`
 			ToolCalls []wireToolCall  `json:"tool_calls"`
 		} `json:"messages"`
+		Usage struct {
+			Stats wireUsage `json:"ai_stats"`
+		} `json:"usage"`
 	} `json:"data"`
+}
+
+// wireUsage : What the endpoint says the call cost.
+//
+// Read because the size of a request is otherwise a guess. The fixed
+// part of every request -- the manner, and the description of every
+// tool -- is sent again on each call and cannot be cached, so it is
+// the thing to watch when latency moves. Estimating it from the
+// source put it near fifteen thousand tokens; this says what it
+// actually was.
+type wireUsage struct {
+	Input  int `json:"input_tokens"`
+	Output int `json:"output_tokens"`
+	Total  int `json:"total_tokens"`
+}
+
+// toolBytes : How much of a request the tool list takes up.
+//
+// Marshalled rather than measured from the prose, because the schema
+// -- property names, types, enums, every description inside it -- is
+// most of it, and counting only the descriptions understated the
+// whole request by nearly half.
+func toolBytes(tools []wireTool) int {
+	if len(tools) == 0 {
+		return 0
+	}
+	out, err := json.Marshal(tools)
+	if err != nil {
+		return 0
+	}
+	return len(out)
 }
 
 // reply : What one call came back with: words, or a request to run tools.
 type reply struct {
 	Text      string
 	ToolCalls []environment.ToolCall
+	// Usage : What the endpoint says it cost. Zero when it did not say.
+	Usage wireUsage
 }
 
 // APIError : A message the service itself returned, in its own error envelope.
@@ -296,12 +332,15 @@ func (p *Environment) attemptChat(ctx context.Context, ask environment.Request) 
 		prompt = ask.SystemPrompt
 	}
 
+	context := withSummary(prompt, ask.Summary)
+	tools := asWireTools(ask.Tools)
+
 	body, err := json.Marshal(chatRequest{
 		Vendor:   vendor,
 		Model:    model,
-		Context:  withSummary(prompt, ask.Summary),
+		Context:  context,
 		Messages: messages,
-		Tools:    asWireTools(ask.Tools),
+		Tools:    tools,
 	})
 	if err != nil {
 		return reply{}, 0, fmt.Errorf("platformai: building chat request: %w", err)
@@ -321,6 +360,20 @@ func (p *Environment) attemptChat(ctx context.Context, ask environment.Request) 
 		return reply{}, 0, fmt.Errorf("platformai: sending chat request: %w", scrubURL(err))
 	}
 	defer resp.Body.Close()
+
+	// What the request was made of, in bytes on the wire.
+	//
+	// The endpoint reports how many tokens it charged for but not what
+	// they were spent on, and there is no caching here -- the manner
+	// and every tool's description are sent again on every call. This
+	// says which of the three is growing, which is the question when a
+	// turn gets slower.
+	p.logger.DebugContext(ctx, "platform ai request",
+		slog.Int("context_bytes", len(context)),
+		slog.Int("tools_bytes", toolBytes(tools)),
+		slog.Int("tool_count", len(tools)),
+		slog.Int("messages_bytes", len(body)-len(context)-toolBytes(tools)),
+		slog.Int("whole_bytes", len(body)))
 
 	raw, err := io.ReadAll(io.LimitReader(resp.Body, maxResponseBytes))
 	if err != nil {
@@ -367,13 +420,14 @@ func (p *Environment) attemptChat(ctx context.Context, ask environment.Request) 
 	// carried back with the calls as progress, never as the answer: on its
 	// own it would tell the person about work that has not run yet.
 	if len(calls) > 0 {
-		return reply{Text: text, ToolCalls: calls}, resp.StatusCode, nil
+		return reply{Text: text, ToolCalls: calls, Usage: parsed.Data.Usage.Stats},
+			resp.StatusCode, nil
 	}
 
 	if text == "" {
 		return reply{}, resp.StatusCode, fmt.Errorf("platformai: the reply was empty")
 	}
-	return reply{Text: text}, resp.StatusCode, nil
+	return reply{Text: text, Usage: parsed.Data.Usage.Stats}, resp.StatusCode, nil
 }
 
 // statusOf : The HTTP status a failure carries, or zero if it carries

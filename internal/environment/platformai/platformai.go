@@ -277,6 +277,8 @@ func (p *Environment) Run(ctx context.Context, req environment.Request) (<-chan 
 				names = append(names, c.Name)
 			}
 			p.logger.InfoContext(ctx, "platform ai asked for tools",
+				slog.Int("in_tokens", got.Usage.Input),
+				slog.Int("out_tokens", got.Usage.Output),
 				slog.Duration("after", time.Since(started)),
 				slog.Any("tools", names),
 				slog.String("saying", got.Text))
@@ -292,6 +294,8 @@ func (p *Environment) Run(ctx context.Context, req environment.Request) (<-chan 
 		}
 
 		p.logger.InfoContext(ctx, "platform ai answered",
+			slog.Int("in_tokens", got.Usage.Input),
+			slog.Int("out_tokens", got.Usage.Output),
 			slog.Duration("after", time.Since(started)),
 			slog.Int("reply_bytes", len(got.Text)))
 		send(ctx, ch, environment.Final(got.Text))
