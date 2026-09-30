@@ -488,6 +488,39 @@ class AppState extends ChangeNotifier {
   /// What is coming, plus anything held back or never said. The ones
   /// already said only when asked for: it is a log, and a screen that
   /// opens on a log buries the two things actually coming.
+  /// personality : What the assistant has noticed about the person, or
+  /// null before it has been read.
+  Personality? get personality => _personality;
+  Personality? _personality;
+
+  /// loadPersonality : Reads the description.
+  Future<void> loadPersonality() async {
+    _set(busy: true, error: null);
+    try {
+      _personality = await api.personality();
+    } on Object catch (e) {
+      _error = _explain(e);
+    }
+    _set(busy: false);
+  }
+
+  /// savePersonality : Replaces it with the person's own words.
+  ///
+  /// Returns whether it was saved, so the page can say so rather than
+  /// leaving somebody wondering whether their correction took.
+  Future<bool> savePersonality(String body) async {
+    _set(busy: true, error: null);
+    var saved = false;
+    try {
+      _personality = await api.savePersonality(body);
+      saved = true;
+    } on Object catch (e) {
+      _error = _explain(e);
+    }
+    _set(busy: false);
+    return saved;
+  }
+
   Future<void> loadReminders() async {
     _set(busy: true, error: null);
     try {

@@ -916,3 +916,33 @@ class Snoozed {
     added: json['added'] as bool? ?? false,
   );
 }
+
+/// Personality : What the assistant has noticed about the person.
+///
+/// Written by a model from a week of what they said, and rewritten every
+/// night. Prose written that way cannot be checked by anything but them,
+/// so it is shown here to be read and corrected: the first one inferred
+/// a nationality from a girlfriend's address and listed four symptoms
+/// mentioned in passing.
+class Personality {
+  const Personality({this.body = '', this.writtenAt, this.mine = false});
+
+  /// body : The description, empty when none has been written yet.
+  final String body;
+
+  /// writtenAt : When it was last written, null when there is none.
+  final DateTime? writtenAt;
+
+  /// mine : Whether the person wrote this themselves rather than the
+  /// model. An edit by hand lasts until the next nightly rebuild, which
+  /// is worth saying out loud on the page.
+  final bool mine;
+
+  bool get isEmpty => body.trim().isEmpty;
+
+  factory Personality.fromJson(Map<String, dynamic> json) => Personality(
+    body: (json['body'] as String?) ?? '',
+    writtenAt: DateTime.tryParse((json['written_at'] as String?) ?? '')?.toLocal(),
+    mine: (json['mine'] as bool?) ?? false,
+  );
+}

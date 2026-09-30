@@ -3,7 +3,7 @@ library;
 
 import 'package:flutter/material.dart';
 
-import '../api/client.dart';
+import '../api/models.dart';
 import '../design/design.dart';
 import '../state/app_state.dart';
 
@@ -12,6 +12,7 @@ enum SettingsModule {
   account('Account', Icons.person_outline),
   clients('Clients', Icons.devices_other_outlined),
   reminders('Reminders', Icons.alarm_outlined),
+  personality('Personality', Icons.psychology_outlined),
   server('Server', Icons.dns_outlined);
 
   const SettingsModule(this.title, this.icon);
@@ -74,6 +75,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
   /// out of date.
   void _read(SettingsModule module) {
     if (module == SettingsModule.reminders) widget.state.loadReminders();
+    if (module == SettingsModule.personality) widget.state.loadPersonality();
     if (module == SettingsModule.clients) widget.state.loadClients();
   }
 
@@ -175,6 +177,9 @@ class _SettingsScreenState extends State<SettingsScreen> {
                           onRevoke: _confirmRevoke,
                         ),
                         SettingsModule.reminders => _RemindersModule(
+                          state: state,
+                        ),
+                        SettingsModule.personality => _PersonalityModule(
                           state: state,
                         ),
                         SettingsModule.server => _ServerModule(state: state),
@@ -453,6 +458,132 @@ class _ClientsModule extends StatelessWidget {
 ///
 /// Only what is still coming. Everything that ever fired is a log, and
 /// nobody opens a settings screen to read one.
+/// _PersonalityModule : What the assistant has noticed about you, to read
+/// and to correct.
+///
+/// A model writes this from a week of what you said and rewrites it every
+/// night, and prose written that way cannot be checked by anything but
+/// you. The first one inferred a nationality from a girlfriend's address
+/// and listed four symptoms mentioned in passing -- plausible, never
+/// said, and in every prompt from then on. Being able to read it and
+/// cross out what is wrong is the part that works whatever it gets wrong
+/// next.
+class _PersonalityModule extends StatefulWidget {
+  const _PersonalityModule({required this.state});
+
+  final AppState state;
+
+  @override
+  State<_PersonalityModule> createState() => _PersonalityModuleState();
+}
+
+class _PersonalityModuleState extends State<_PersonalityModule> {
+  final _text = TextEditingController();
+
+  /// _loaded : The body the field was filled from, so an edit can be told
+  /// from a fresh read. Without it, typing is wiped every time the state
+  /// notifies.
+  String? _loaded;
+  bool _saved = false;
+
+  @override
+  void dispose() {
+    _text.dispose();
+    super.dispose();
+  }
+
+  /// _sync : Fills the field when the description has changed underneath.
+  void _sync() {
+    final body = widget.state.personality?.body ?? '';
+    if (_loaded == body) return;
+    _loaded = body;
+    _text.text = body;
+  }
+
+  Future<void> _save() async {
+    final ok = await widget.state.savePersonality(_text.text);
+    if (!mounted) return;
+    setState(() => _saved = ok);
+    if (ok) _loaded = widget.state.personality?.body ?? '';
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    _sync();
+    final held = widget.state.personality;
+    final edited = held != null && _text.text != held.body;
+
+    return _Section(
+      title: 'Personality',
+      subtitle:
+          'What the assistant has noticed about you, written each night from '
+          'a week of what you said. It is read before every answer, so what '
+          'is written here shapes all of them. Nothing checks it but you: '
+          'cross out anything it got wrong, or anything you would rather it '
+          'did not carry. Clearing it entirely is allowed.',
+      action: _SectionLink(
+        label: 'Refresh',
+        onTap: widget.state.loadPersonality,
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          AppTextField(
+            controller: _text,
+            hint: held == null || held.isEmpty
+                ? 'Nothing written yet. It appears after a week of talking, '
+                      'or you can write it yourself.'
+                : null,
+            minLines: 8,
+            maxLines: 20,
+            onChanged: (_) => setState(() => _saved = false),
+          ),
+          const SizedBox(height: AppSpacing.md),
+          Row(
+            children: [
+              Expanded(
+                child: Text(
+                  _written(held),
+                  style: context.text.caption.copyWith(
+                    color: context.colors.textSecondary,
+                  ),
+                ),
+              ),
+              const SizedBox(width: AppSpacing.md),
+              AppButton(
+                label: _saved && !edited ? 'Saved' : 'Save',
+                compact: true,
+                busy: widget.state.busy,
+                onPressed: edited ? _save : null,
+              ),
+            ],
+          ),
+        ],
+      ),
+    );
+  }
+
+  /// _written : When it was last written, and by whom.
+  ///
+  /// Whose words they are matters more than the date. An edit by hand
+  /// lasts until the nightly rebuild replaces it, and somebody who has
+  /// just corrected something should be told that rather than finding
+  /// out tomorrow.
+  String _written(Personality? held) {
+    if (held == null) return 'Reading…';
+    if (held.isEmpty) return 'Nothing written yet.';
+    final at = held.writtenAt;
+    final when = at == null
+        ? ''
+        : ' on ${at.day}/${at.month} at '
+              '${at.hour.toString().padLeft(2, '0')}:'
+              '${at.minute.toString().padLeft(2, '0')}';
+    return held.mine
+        ? 'Your words$when. The nightly rewrite will replace them.'
+        : 'Written by the assistant$when.';
+  }
+}
+
 class _RemindersModule extends StatelessWidget {
   const _RemindersModule({required this.state});
 

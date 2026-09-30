@@ -370,6 +370,19 @@ class AssistantApi {
   Future<Reminder> cancelReminder(String id) async =>
       Reminder.fromJson(await _send('DELETE', '/v1/reminders/$id'));
 
+  /// personality : What the assistant has noticed about the person.
+  Future<Personality> personality() async =>
+      Personality.fromJson(await _send('GET', '/v1/profile'));
+
+  /// savePersonality : Replaces it with the person's own words.
+  ///
+  /// An empty description clears it rather than storing a blank one,
+  /// which would be an empty line in every prompt.
+  Future<Personality> savePersonality(String body) async =>
+      Personality.fromJson(
+        await _send('PUT', '/v1/profile', body: {'body': body}),
+      );
+
   /// steps : How one answer was made, in the order it happened.
   ///
   /// Everything in it was recorded while the answer was produced. Nothing is
