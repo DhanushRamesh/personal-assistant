@@ -25,8 +25,15 @@ func Prompt(said []conversation.Message) string {
 		),
 		prompt.Text(
 			"Leave out ordinary words, however often they come up: the engine already knows them, and every one included takes the place of a name.",
+			"Leave out a name that is also an everyday word -- a film called Cars, a band called Blur, a place called Reading.",
+			"Priming one of those makes the everyday word worse, which is the opposite of the point: telling the engine to expect \"timer\" and not \"time\" is how \"what is the time\" came back as \"what is the thing\".",
 			"Leave out the assistant's own name and the names of its own abilities.",
 			"Leave out anything you are inventing to fill the list -- a short list is correct when there were few names.",
+		),
+		prompt.Text(
+			"Give a person once, in the form they are usually called.",
+			"Not the first name, the surname and both together as three entries: that is one person taking three of the hundred places there are.",
+			"The same for anything else with a long and a short form -- choose the one that is actually said aloud.",
 		),
 		prompt.Text(
 			"Answer with one name per line and nothing else.",
