@@ -40,7 +40,7 @@ func withDescribe(t *testing.T, tools ...tool.Tool) *tool.Registry {
 	if err != nil {
 		t.Fatalf("NewRegistry: %v", err)
 	}
-	if err := r.Add(tool.Describing(r, func() string { return "sir" })); err != nil {
+	if err := r.Add(tool.Describing(r)); err != nil {
 		t.Fatalf("Add: %v", err)
 	}
 	return r
@@ -141,9 +141,15 @@ func TestAskingAboutOneDescribesIt(t *testing.T) {
 	}
 }
 
-// TestDescribeHandsOverTheArguments : What it returns has to be enough
-// to call the tool with, including the saying argument.
-func TestDescribeHandsOverTheArguments(t *testing.T) {
+// TestDescribeRevealsRatherThanRepeats : It names what is now callable
+// and stops there.
+//
+// Returning the schema here looked helpful and was not. Revealing a
+// tool puts its real description in the next request, so the copy was
+// redundant -- and a tool result is a stored message, so roughly
+// fifteen hundred tokens of duplicate description were then re-sent
+// with every later turn of the conversation.
+func TestDescribeRevealsRatherThanRepeats(t *testing.T) {
 	r := withDescribe(t, plain("task_move"))
 	d, _ := r.Get(tool.DescribeName)
 
@@ -157,12 +163,15 @@ func TestDescribeHandsOverTheArguments(t *testing.T) {
 	if !strings.Contains(got.Content, "task_move") {
 		t.Errorf("did not name the tool: %q", got.Content)
 	}
-	if !strings.Contains(got.Content, tool.Saying) {
-		t.Errorf("handed over a schema without %q, so it would be called without one: %q",
-			tool.Saying, got.Content)
-	}
 	if len(got.Reveal) != 1 || got.Reveal[0] != "task_move" {
 		t.Errorf("Reveal = %v, want the tool it described", got.Reveal)
+	}
+	// The schema belongs in the tool list, not in a stored message.
+	if strings.Contains(got.Content, "properties") || strings.Contains(got.Content, tool.Saying) {
+		t.Errorf("repeated the schema into the conversation: %q", got.Content)
+	}
+	if len(got.Content) > 200 {
+		t.Errorf("content is %d bytes; it should be a sentence: %q", len(got.Content), got.Content)
 	}
 }
 
@@ -233,5 +242,41 @@ func TestTheCatalogueNamesThemAndSaysWhatToDo(t *testing.T) {
 	}
 	if strings.Contains(c, "A second sentence") {
 		t.Errorf("the catalogue carried the whole purpose, not one line: %q", c)
+	}
+}
+
+// TestWithheldNoticesACallThatWasNotOffered : Being left out of the
+// request does not stop the model calling it.
+//
+// Measured on 30 September 2026: thirteen tools were offered, the
+// model read mail_search in the catalogue, called it with the one
+// argument it could guess, and the call arrived. The endpoint forwards
+// a call for a tool it was never given, so the runner has to notice.
+func TestWithheldNoticesACallThatWasNotOffered(t *testing.T) {
+	r := withDescribe(t, plain("task_move"), plain("reminder_set"))
+
+	if !r.Withheld(chat.ChannelVoice, nil, "task_move") {
+		t.Error("task_move is deferred but was not reported as withheld")
+	}
+	if r.Withheld(chat.ChannelVoice, nil, "reminder_set") {
+		t.Error("reminder_set is hot, so it was offered and is not withheld")
+	}
+	if r.Withheld(chat.ChannelVoice, map[string]bool{"task_move": true}, "task_move") {
+		t.Error("a revealed tool was reported as withheld")
+	}
+	if r.Withheld(chat.ChannelVoice, nil, "task_teleport") {
+		t.Error("a tool that does not exist cannot be withheld")
+	}
+}
+
+// Nothing is withheld by a registry that defers nothing, so the check
+// costs nothing where the mechanism is not in use.
+func TestNothingIsWithheldWithoutDescribe(t *testing.T) {
+	r, err := tool.NewRegistry(plain("task_move"))
+	if err != nil {
+		t.Fatalf("NewRegistry: %v", err)
+	}
+	if r.Withheld(chat.ChannelVoice, nil, "task_move") {
+		t.Error("withheld a tool in a registry that cannot defer")
 	}
 }

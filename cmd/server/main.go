@@ -33,6 +33,7 @@ import (
 	googlemysql "github.com/DhanushRamesh/personal-assistant/internal/google/mysql"
 	"github.com/DhanushRamesh/personal-assistant/internal/llm"
 	"github.com/DhanushRamesh/personal-assistant/internal/logging"
+	"github.com/DhanushRamesh/personal-assistant/internal/mail"
 	"github.com/DhanushRamesh/personal-assistant/internal/memory"
 	memorymysql "github.com/DhanushRamesh/personal-assistant/internal/memory/mysql"
 	"github.com/DhanushRamesh/personal-assistant/internal/persona"
@@ -45,6 +46,7 @@ import (
 	"github.com/DhanushRamesh/personal-assistant/internal/tool"
 	calendartool "github.com/DhanushRamesh/personal-assistant/internal/tool/calendar"
 	"github.com/DhanushRamesh/personal-assistant/internal/tool/conversations"
+	mailtool "github.com/DhanushRamesh/personal-assistant/internal/tool/mail"
 	"github.com/DhanushRamesh/personal-assistant/internal/tool/memories"
 	"github.com/DhanushRamesh/personal-assistant/internal/tool/reminders"
 	taskstool "github.com/DhanushRamesh/personal-assistant/internal/tool/tasks"
@@ -233,6 +235,9 @@ func run() error {
 		calendartool.All(diaryOf(googleLink, cfg), calendartool.Clock{
 			Now: cfg.Assistant.Now, Location: cfg.Assistant.Location,
 		}),
+		mailtool.All(mailboxOf(googleLink), mailtool.Clock{
+			Now: cfg.Assistant.Now, Location: cfg.Assistant.Location,
+		}),
 	)...)
 	if err != nil {
 		return err
@@ -243,9 +248,7 @@ func run() error {
 	// built from the finished registry. It describes itself to nobody:
 	// a model that has been told about tool_describe does not need to
 	// ask what tool_describe takes.
-	if err := tools.Add(tool.Describing(tools, func() string {
-		return persona.AddressFor(manner.Current())
-	})); err != nil {
+	if err := tools.Add(tool.Describing(tools)); err != nil {
 		return err
 	}
 	logger.Info("tools registered", slog.Any("tools", tools.Names()),
@@ -485,6 +488,13 @@ func listsOf(link *google.Link) taskstool.Lists {
 		return nil
 	}
 	return tasks.New(link)
+}
+
+func mailboxOf(link *google.Link) mailtool.Mailbox {
+	if link == nil {
+		return nil
+	}
+	return mail.New(link)
 }
 
 func diaryOf(link *google.Link, cfg config.Config) calendartool.Diary {

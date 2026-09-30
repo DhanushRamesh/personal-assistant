@@ -37,7 +37,12 @@ var oneAtLeast, mostAtOnce = 1, mostDescribed
 // one is not the same as being able to call it -- Call checks again --
 // but naming one that is out of reach would still be telling somebody
 // about a thing that is not theirs.
-func Describing(r *Registry, address func() string) Tool {
+//
+// It hands over names rather than schemas. Revealing a tool puts its
+// real description in the next request, so returning one here would
+// be a second copy that is also stored in the conversation and
+// re-sent with every later turn.
+func Describing(r *Registry) Tool {
 	return Tool{
 		Name:    DescribeName,
 		Purpose: "Get the arguments for a tool that was named but not described.",
@@ -85,22 +90,7 @@ func Describing(r *Registry, address func() string) Tool {
 					missing = append(missing, name)
 					continue
 				}
-				// Narrated with the live address, the same way the
-				// runner narrates the tools it offers directly. A
-				// schema handed over without the saying argument gets
-				// called without it, and the person waits in silence.
-				said := ""
-				if address != nil {
-					said = address()
-				}
-				schema, err := Narrated(t.Params, said).MarshalJSON()
-				if err != nil {
-					missing = append(missing, name)
-					continue
-				}
-				described = append(described, name+": "+
-					NarratedDescription(t.Description(), said)+
-					" Arguments: "+string(schema))
+				described = append(described, name)
 				reveal = append(reveal, name)
 			}
 
@@ -110,9 +100,15 @@ func Describing(r *Registry, address func() string) Tool {
 			}
 
 			sort.Strings(described)
-			content := strings.Join(described, "\n\n")
+			// The names, not their schemas. Revealing them puts the
+			// real descriptions in the next request's tool list, so
+			// repeating them here would be a second copy -- and a
+			// tool result is a stored message, so that copy would be
+			// re-sent with every later turn of the conversation.
+			content := "Described to you now, and callable from here on: " +
+				strings.Join(described, ", ") + "."
 			if len(missing) > 0 {
-				content += "\n\nNot found, so not described: " + strings.Join(missing, ", ") +
+				content += " Not found, so not described: " + strings.Join(missing, ", ") +
 					". Do not try to call " + oneOrOther(missing) + "."
 			}
 			return Result{

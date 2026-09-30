@@ -234,7 +234,7 @@ func (r *Runner) consume(runCtx, ctx context.Context, t *chat.Chat, systemPrompt
 			spoke = true
 		}
 
-		ranTurns, ranOwed, reveal := r.runTools(ctx, t, final.ToolCalls, &ran)
+		ranTurns, ranOwed, reveal := r.runTools(ctx, t, final.ToolCalls, &ran, revealed)
 		turns = append(turns, ranTurns...)
 		owed = append(owed, ranOwed...)
 		for _, name := range reveal {

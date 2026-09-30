@@ -185,3 +185,28 @@ func oneLine(purpose string) string {
 // HotCount : How many tools are described on every request, for a log
 // line that says how much of the list is being sent.
 func HotCount() int { return len(hot) }
+
+// Withheld : Whether a tool exists and is reachable but was not
+// described to the model on this round.
+//
+// Needed because being left out of the request is not a gate. The
+// endpoint forwards a call for a tool it was never given -- measured
+// on 30 September 2026: thirteen tools were offered, the model read
+// mail_search in the catalogue, called it anyway with the one argument
+// it could guess, and the call arrived here. So the runner has to
+// notice and hand over the arguments rather than run something built
+// from a name.
+//
+// Not a security boundary either way. Call checks the channel, and
+// that is the boundary; this is about answering correctly instead of
+// failing on a guess.
+func (r *Registry) Withheld(c chat.Channel, revealed map[string]bool, name string) bool {
+	if !r.defers(c) {
+		return false
+	}
+	t, ok := r.tools[name]
+	if !ok || !t.Reaches(c) {
+		return false
+	}
+	return !Hot(name) && !revealed[name] && name != DescribeName
+}

@@ -176,11 +176,17 @@ type Result struct {
 
 	// Reveal : Tools to describe in full from the next round on.
 	//
-	// Only tool_describe sets this. The names it returns have to be
-	// described on the next request or the model cannot call them: it
-	// would be told the arguments in a tool result and then handed a
-	// request that does not list the tool, and a call to something
-	// absent from the list is refused before it reaches anything here.
+	// Set by tool_describe, and by the runner when the model called a
+	// tool it had not been given. Either way the point is the same: a
+	// model told how to call something has to find it in the next
+	// request, or it is being asked to remember arguments it cannot
+	// use.
+	//
+	// Not a gate. The endpoint forwards a call for a tool it was never
+	// given -- measured, with thirteen offered and a fourteenth called
+	// from the catalogue -- so leaving one out of the request only
+	// means the model has to guess the arguments, never that it cannot
+	// try.
 	Reveal []string
 }
 

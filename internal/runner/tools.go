@@ -60,6 +60,31 @@ func (r *Runner) offered(t *chat.Chat, revealed map[string]bool) []environment.T
 	return out
 }
 
+// withheld : What to say when a tool was called before it was
+// described.
+//
+// Short, and that is the point. The first version returned the tool's
+// whole description and schema here, which was both redundant and
+// expensive: revealing it puts the real thing in the next request's
+// tool list, so this was a second copy -- about fifteen hundred
+// tokens of it -- and a tool result is a stored message, so the copy
+// was then re-sent with every later turn of that conversation.
+//
+// Saying it is now available is enough. The model finds it described
+// properly where tools are described.
+func withheld(tools *tool.Registry, name string) tool.Result {
+	if _, ok := tools.Get(name); !ok {
+		return tool.Failed("There is no tool called " + name + ".")
+	}
+	return tool.Result{
+		Outcome: conversation.OutcomePartial,
+		Content: name + " was not run: you had not been given its arguments, so the ones " +
+			"in that call were guessed. It is described to you now -- call it again, " +
+			"with the arguments it actually takes.",
+		Reveal: []string{name},
+	}
+}
+
 // asking : The system prompt for one round, with the names of the tools
 // that round is not describing.
 //
@@ -87,6 +112,7 @@ func (r *Runner) runTools(
 	t *chat.Chat,
 	calls []environment.ToolCall,
 	seen *[]string,
+	revealed map[string]bool,
 ) ([]environment.Turn, []tool.Owed, []string) {
 	asked := make([]conversation.ToolCall, 0, len(calls))
 	for _, c := range calls {
@@ -101,6 +127,29 @@ func (r *Runner) runTools(
 	ran := make([]tool.Result, 0, len(calls))
 	for _, c := range calls {
 		started := time.Now()
+
+		// A tool the model was not given, called anyway. Being left
+		// out of the request does not stop it: the endpoint forwards
+		// the call, and what arrives is built from a name and a guess
+		// at the arguments.
+		//
+		// So it is not run. The arguments are handed over instead --
+		// the same words tool_describe would have given -- and it is
+		// described from the next round on, which costs the round the
+		// model should have spent asking. Not running it also matters
+		// for a write: a guess that happens to validate would act.
+		if r.tools.Withheld(t.Channel, revealed, c.Name) {
+			result := withheld(r.tools, c.Name)
+			r.logger.InfoContext(ctx, "a tool was called before it was described",
+				slog.String("tool", c.Name))
+			ran = append(ran, result)
+			got = append(got, conversation.ToolResult{
+				ID: c.ID, Name: c.Name, Outcome: result.Outcome,
+				Content: result.Content, TookMS: time.Since(started).Milliseconds(),
+			})
+			continue
+		}
+
 		result := r.tools.Call(ctx, c.Name, tool.Invocation{
 			Caller: caller,
 			Args:   []byte(c.Arguments),
