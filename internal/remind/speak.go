@@ -71,7 +71,11 @@ func (a Aloud) Say(ctx context.Context, r Reminder) error {
 		loc = time.UTC
 	}
 	said := Spoken(r, at, loc)
-	if err := a.Announcer.Say(ctx, said); err != nil {
+	// Reach rather than Say: a reminder is the one announcement whose
+	// point is to arrive when the person is somewhere else, so it goes
+	// to the phone as well as the room. The greeting and the
+	// conversation name stay where they are said.
+	if err := a.Announcer.Reach(ctx, said); err != nil {
 		return err
 	}
 

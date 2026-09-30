@@ -13,8 +13,12 @@ import (
 // mouth : An announcer that keeps what it was given, or refuses.
 type mouth struct {
 	said []string
-	fail error
-	off  bool
+	// reached : What went to the phone as well as the room. A reminder
+	// is the only announcement that should, so the two are recorded
+	// apart.
+	reached []string
+	fail    error
+	off     bool
 }
 
 func (m *mouth) Say(_ context.Context, message string) error {
@@ -22,6 +26,15 @@ func (m *mouth) Say(_ context.Context, message string) error {
 		return m.fail
 	}
 	m.said = append(m.said, message)
+	return nil
+}
+
+// Reach : Says it in the room and notes that it also went further.
+func (m *mouth) Reach(ctx context.Context, message string) error {
+	if err := m.Say(ctx, message); err != nil {
+		return err
+	}
+	m.reached = append(m.reached, message)
 	return nil
 }
 
@@ -97,5 +110,31 @@ func TestAReminderThatWasNotHeardIsNotWrittenDown(t *testing.T) {
 				t.Errorf("wrote down %v", note.texts)
 			}
 		})
+	}
+}
+
+// TestAReminderGoesFurtherThanTheRoom : A reminder is the one
+// announcement whose point is to arrive when nobody is there, so it
+// reaches the phone as well as the satellite.
+//
+// The greeting must not, and that is the reason this exists as a test
+// rather than a comment: a greeting is said because somebody has just
+// walked up to the laptop, so a copy in their pocket arrives at the one
+// moment it is certainly not wanted. Getting there also means the words
+// leaving the network, which is worth it for a reminder and not for
+// housekeeping.
+func TestAReminderGoesFurtherThanTheRoom(t *testing.T) {
+	say := &mouth{}
+	aloud := remind.Aloud{Announcer: say, Now: due().DueAt.UTC}
+
+	if err := aloud.Say(context.Background(), due()); err != nil {
+		t.Fatalf("saying it: %v", err)
+	}
+
+	if len(say.said) != 1 {
+		t.Fatalf("spoke %v, want it said in the room", say.said)
+	}
+	if len(say.reached) != 1 {
+		t.Errorf("reached %v, want the reminder sent on as well", say.reached)
 	}
 }

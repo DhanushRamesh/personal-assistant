@@ -12,6 +12,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"log/slog"
 	"net/http"
 	"strings"
 	"time"
@@ -106,6 +107,9 @@ type Config struct {
 	Settle time.Duration
 	// HTTP : The client to use. Optional.
 	HTTP *http.Client
+	// Logger : Where it is recorded that something did or did not reach
+	// the phone. Nil is silent.
+	Logger *slog.Logger
 }
 
 // Speaker : Says things aloud through one Home Assistant satellite.
@@ -238,6 +242,23 @@ func (s *Speaker) Say(ctx context.Context, message string) error {
 			resp.Status, strings.TrimSpace(string(answer)))
 	}
 
+	return nil
+}
+
+// Reach : Says it in the room, and sends it wherever else the person can
+// be reached.
+//
+// Separate from Say because most announcements should not follow
+// anybody about. A greeting fires because they have just walked up to
+// the laptop, so a copy on their phone arrives at the one moment it is
+// certainly not wanted; naming a conversation is housekeeping. Only a
+// reminder is worth the trip, and the trip is a real one -- these leave
+// the network and reach the phone through Google's push service, which
+// nothing else here does.
+func (s *Speaker) Reach(ctx context.Context, message string) error {
+	if err := s.Say(ctx, message); err != nil {
+		return err
+	}
 	s.alsoNotify(ctx, message)
 	return nil
 }
@@ -255,7 +276,21 @@ func (s *Speaker) Say(ctx context.Context, message string) error {
 // everything twice in the room where it was already heard.
 func (s *Speaker) alsoNotify(ctx context.Context, message string) {
 	for _, service := range s.cfg.Notify {
-		_ = s.notifyOne(ctx, service, message)
+		err := s.notifyOne(ctx, service, message)
+		if s.cfg.Logger == nil {
+			continue
+		}
+		// Logged either way. Whether something reached the phone was
+		// not answerable from the log before: failures were dropped and
+		// successes said nothing, so the only way to tell was to read
+		// the code.
+		if err != nil {
+			s.cfg.Logger.WarnContext(ctx, "could not reach the phone",
+				slog.String("service", service), slog.Any("error", err))
+			continue
+		}
+		s.cfg.Logger.InfoContext(ctx, "sent to the phone as well",
+			slog.String("service", service))
 	}
 }
 

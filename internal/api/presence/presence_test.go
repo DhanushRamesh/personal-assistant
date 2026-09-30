@@ -24,9 +24,10 @@ func discard() *slog.Logger { return slog.New(slog.NewJSONHandler(io.Discard, ni
 
 // satellite : An announcer that writes down what it was asked to say.
 type satellite struct {
-	mu   sync.Mutex
-	said []string
-	fail error
+	mu      sync.Mutex
+	said    []string
+	reached []string
+	fail    error
 }
 
 func (s *satellite) Say(_ context.Context, message string) error {
@@ -37,6 +38,18 @@ func (s *satellite) Say(_ context.Context, message string) error {
 	}
 	s.said = append(s.said, message)
 	return nil
+}
+
+// Reach : Recorded apart from Say, so a test can tell the difference.
+//
+// It is the difference that matters here: a greeting must never use
+// Reach, because it is said at the moment somebody has demonstrably
+// walked up to the laptop and a copy on their phone is noise.
+func (s *satellite) Reach(ctx context.Context, message string) error {
+	s.mu.Lock()
+	s.reached = append(s.reached, message)
+	s.mu.Unlock()
+	return s.Say(ctx, message)
 }
 
 func (s *satellite) Available() bool { return true }
@@ -260,6 +273,12 @@ func (g *giveUp) Say(ctx context.Context, message string) error {
 	return g.satellite.Say(ctx, message)
 }
 
+// Reach : The same, for the held reminders said with a greeting, which
+// do go to the phone.
+func (g *giveUp) Reach(ctx context.Context, message string) error {
+	return g.Say(ctx, message)
+}
+
 // The caller hanging up does not stop the greeting, and does not lose the
 // reminders said along with it.
 //
@@ -369,5 +388,26 @@ func TestAGreetingNobodyHeardIsNotWrittenDown(t *testing.T) {
 
 	if len(note.texts) != 0 {
 		t.Errorf("wrote down %v", note.texts)
+	}
+}
+
+// TestAGreetingStaysInTheRoom : A greeting is said because somebody has
+// just walked up to the laptop, so a copy on their phone arrives at the
+// one moment it is certainly not wanted.
+//
+// It also costs something to send: these leave the network and reach
+// the phone through Google's push service, which nothing else here
+// does. Worth it for a reminder, not for "Welcome back".
+func TestAGreetingStaysInTheRoom(t *testing.T) {
+	sat := &satellite{}
+	e := apitest.NewWith(t, apitest.Options{Announcer: sat})
+
+	arrive(t, e)
+
+	if len(sat.said) == 0 {
+		t.Fatal("nothing was said in the room")
+	}
+	if len(sat.reached) != 0 {
+		t.Errorf("the greeting was sent to the phone: %v", sat.reached)
 	}
 }
