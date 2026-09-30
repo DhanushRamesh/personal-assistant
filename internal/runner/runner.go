@@ -584,10 +584,25 @@ func (r *Runner) limitsFor(m chat.Model, alongside int) conversation.Limits {
 // whether the turn uses them or not. The composed prompt is passed in rather
 // than rebuilt: composing it reads the database and searches memory, and it
 // must be the same string the provider is given or the reserve is wrong.
+//
+// Every reachable tool, deliberately, and not the smaller set a request
+// actually carries. A chain can ask to have more of them described as it
+// goes, and the history window is chosen once at the start -- so
+// reserving for the request as it looks on the first hop would leave
+// nothing for the tools described on the fourth. Reserving too much
+// costs some history; reserving too little overflows the model.
 func (r *Runner) alongside(t *chat.Chat, systemPrompt string) int {
 	n := len(systemPrompt)
-	for _, spec := range r.offered(t) {
-		n += len(spec.Name) + len(spec.Description) + len(spec.Parameters)
+	if r.tools == nil {
+		return n
+	}
+	address := persona.AddressFor(r.personaID())
+	for _, x := range r.tools.For(t.Channel) {
+		schema, err := tool.Narrated(x.Params, address).MarshalJSON()
+		if err != nil {
+			continue
+		}
+		n += len(x.Name) + len(tool.NarratedDescription(x.Description(), address)) + len(schema)
 	}
 	return n
 }

@@ -173,6 +173,15 @@ type Result struct {
 	// reporting "could not do that" leaves the model to invent a reason, and
 	// it will.
 	Content string
+
+	// Reveal : Tools to describe in full from the next round on.
+	//
+	// Only tool_describe sets this. The names it returns have to be
+	// described on the next request or the model cannot call them: it
+	// would be told the arguments in a tool result and then handed a
+	// request that does not list the tool, and a call to something
+	// absent from the list is refused before it reaches anything here.
+	Reveal []string
 }
 
 // OK : A result that worked.

@@ -237,9 +237,19 @@ func run() error {
 	if err != nil {
 		return err
 	}
-	logger.Info("tools registered", slog.Any("tools", tools.Names()))
-
 	manner := persona.NewSetting(startingPersona(context.Background(), chats, cfg, logger.Logger))
+
+	// Added after the rest, because it describes them and so has to be
+	// built from the finished registry. It describes itself to nobody:
+	// a model that has been told about tool_describe does not need to
+	// ask what tool_describe takes.
+	if err := tools.Add(tool.Describing(tools, func() string {
+		return persona.AddressFor(manner.Current())
+	})); err != nil {
+		return err
+	}
+	logger.Info("tools registered", slog.Any("tools", tools.Names()),
+		slog.Int("described_always", tool.HotCount()))
 
 	chatRunner, err := runner.New(runner.Options{
 		Repository:    chats,

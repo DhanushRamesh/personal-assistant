@@ -9,6 +9,7 @@ import (
 	"github.com/DhanushRamesh/personal-assistant/internal/conversation"
 	"github.com/DhanushRamesh/personal-assistant/internal/environment"
 	"github.com/DhanushRamesh/personal-assistant/internal/persona"
+	"github.com/DhanushRamesh/personal-assistant/internal/prompt"
 	"github.com/DhanushRamesh/personal-assistant/internal/tool"
 )
 
@@ -27,13 +28,17 @@ const MaxToolHops = 5
 // the model, so a model cannot call what it has not been told exists. The
 // registry checks again when one is actually called, because this is a
 // prompt and a prompt is not a boundary.
-func (r *Runner) offered(t *chat.Chat) []environment.ToolSpec {
+func (r *Runner) offered(t *chat.Chat, revealed map[string]bool) []environment.ToolSpec {
 	if r.tools == nil {
 		return nil
 	}
 
 	address := persona.AddressFor(r.personaID())
-	reachable := r.tools.For(t.Channel)
+	// The hot ones and whatever has been asked about, not everything.
+	// Describing all of them was 72% of a request and the endpoint
+	// caches nothing, so the rest are named in the prompt instead and
+	// described when the model asks.
+	reachable := r.tools.Offered(t.Channel, revealed)
 	out := make([]environment.ToolSpec, 0, len(reachable))
 	for _, x := range reachable {
 		schema, err := tool.Narrated(x.Params, address).MarshalJSON()
@@ -55,6 +60,22 @@ func (r *Runner) offered(t *chat.Chat) []environment.ToolSpec {
 	return out
 }
 
+// asking : The system prompt for one round, with the names of the tools
+// that round is not describing.
+//
+// Unchanged when there are none, so nothing is said about a mechanism
+// that is not in use.
+func (r *Runner) asking(systemPrompt string, t *chat.Chat, revealed map[string]bool) string {
+	if r.tools == nil {
+		return systemPrompt
+	}
+	catalogue := r.tools.Catalogue(t.Channel, revealed)
+	if catalogue == "" {
+		return systemPrompt
+	}
+	return prompt.Block(systemPrompt, catalogue)
+}
+
 // runTools : Runs what the model asked for and records both halves.
 //
 // The call and the answer are both written to the conversation before the
@@ -66,7 +87,7 @@ func (r *Runner) runTools(
 	t *chat.Chat,
 	calls []environment.ToolCall,
 	seen *[]string,
-) ([]environment.Turn, []tool.Owed) {
+) ([]environment.Turn, []tool.Owed, []string) {
 	asked := make([]conversation.ToolCall, 0, len(calls))
 	for _, c := range calls {
 		asked = append(asked, conversation.ToolCall{ID: c.ID, Name: c.Name, Arguments: c.Arguments})
@@ -111,7 +132,14 @@ func (r *Runner) runTools(
 	results := conversation.ToolsReturned(t.ConversationID, got, time.Now().UTC())
 	r.remember(ctx, t, results)
 
-	return toProviderTurns([]conversation.Message{call, results}), tool.Owing(ran)
+	// What tool_describe handed over the arguments for. It has to be
+	// described on the next request or the model cannot call it.
+	var reveal []string
+	for _, x := range ran {
+		reveal = append(reveal, x.Reveal...)
+	}
+
+	return toProviderTurns([]conversation.Message{call, results}), tool.Owing(ran), reveal
 }
 
 // callerFor : Who a tool is acting for.

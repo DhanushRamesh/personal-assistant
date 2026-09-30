@@ -100,18 +100,38 @@ func (r *Runner) consume(runCtx, ctx context.Context, t *chat.Chat, systemPrompt
 	// about what the model chose.
 	var reached, pressed bool
 
+	// revealed : The deferred tools the model has asked about, which are
+	// described from the next round on. Per chat, not per turn: having
+	// been told how to call something once, it is not taken away again
+	// mid-chain.
+	revealed := map[string]bool{}
+
 	for hop := 0; ; hop++ {
 		// The last round is offered nothing. A model that has run out of
 		// rounds must answer from what it gathered, and saying what it
 		// managed is better than being cut off mid-chain with nothing to
 		// show for the work that already ran.
-		tools := r.offered(t)
+		tools := r.offered(t, revealed)
 		if hop >= MaxToolHops-1 {
 			if len(tools) > 0 {
 				r.logger.WarnContext(ctx, "the tool chain ran long, so the last round is asked without tools",
 					slog.Int("hops", hop))
 			}
 			tools = nil
+		}
+
+		// The names of the tools that are not being described, appended
+		// per round rather than built into the prompt: the list shrinks
+		// as the model asks about them, and one that has just been
+		// described must stop appearing under "you have not been given
+		// their arguments yet" or it gets asked about twice.
+		//
+		// Cheap to rebuild -- it reads the registry and nothing else --
+		// unlike the prompt itself, which reads the database and
+		// searches memory.
+		asking := systemPrompt
+		if len(tools) > 0 {
+			asking = r.asking(systemPrompt, t, revealed)
 		}
 
 		stream, err := r.environment.Run(runCtx, environment.Request{
@@ -122,7 +142,7 @@ func (r *Runner) consume(runCtx, ctx context.Context, t *chat.Chat, systemPrompt
 			Model:   t.Model.ID,
 			Tools:   tools,
 
-			SystemPrompt: systemPrompt,
+			SystemPrompt: asking,
 		})
 		if err != nil {
 			r.logger.ErrorContext(ctx, "environment would not start", slog.Any("error", err))
@@ -214,9 +234,12 @@ func (r *Runner) consume(runCtx, ctx context.Context, t *chat.Chat, systemPrompt
 			spoke = true
 		}
 
-		ranTurns, ranOwed := r.runTools(ctx, t, final.ToolCalls, &ran)
+		ranTurns, ranOwed, reveal := r.runTools(ctx, t, final.ToolCalls, &ran)
 		turns = append(turns, ranTurns...)
 		owed = append(owed, ranOwed...)
+		for _, name := range reveal {
+			revealed[name] = true
+		}
 		prompt = ""
 
 		if runCtx.Err() != nil {
