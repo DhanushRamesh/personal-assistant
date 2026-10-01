@@ -27,8 +27,8 @@ func (r *Runner) execute(ctx, lifeCtx context.Context, t *chat.Chat) {
 		defer func() { <-r.slots }()
 	case <-lifeCtx.Done():
 		// Stopped before it ever started. It never ran, so no deadline can
-		// have passed.
-		r.finishStopped(ctx, t, nil)
+		// have passed, and nothing has been said beside it.
+		r.finishStopped(ctx, t, nil, nil)
 		return
 	}
 
@@ -168,7 +168,7 @@ func (r *Runner) consume(runCtx, ctx context.Context, t *chat.Chat, systemPrompt
 		case final == nil:
 			// The stream closed with no terminal message, which the contract
 			// says means the run was stopped rather than finished.
-			r.finishStopped(ctx, t, runCtx.Err())
+			r.finishStopped(ctx, t, aloud, runCtx.Err())
 			return
 
 		case final.Kind == environment.KindError:
@@ -254,7 +254,7 @@ func (r *Runner) consume(runCtx, ctx context.Context, t *chat.Chat, systemPrompt
 		if runCtx.Err() != nil {
 			// Stopped while the tools were running. What ran, ran, and the
 			// transcript already says so.
-			r.finishStopped(ctx, t, runCtx.Err())
+			r.finishStopped(ctx, t, aloud, runCtx.Err())
 			return
 		}
 	}
@@ -477,11 +477,17 @@ func (r *Runner) complete(ctx context.Context, t *chat.Chat, aloud *speech, text
 
 // finishStopped : Records a chat whose stream ended without a result, which
 // happens when it was cancelled or outlived its deadline.
-func (r *Runner) finishStopped(ctx context.Context, t *chat.Chat, runErr error) {
+//
+// The turn's speech is passed so that what it was about to say can be
+// abandoned. A cancelled turn is usually one the person interrupted by
+// speaking again, and its narration carrying on over the answer to their
+// new question is the clearest way to sound like a machine talking to
+// itself.
+func (r *Runner) finishStopped(ctx context.Context, t *chat.Chat, aloud *speech, runErr error) {
 	if errors.Is(runErr, context.DeadlineExceeded) {
 		r.logger.WarnContext(ctx, "chat exceeded its deadline",
 			slog.Duration("timeout", r.chatTimeout))
-		r.finishWith(ctx, t, nil, func() error { return t.Fail(r.failureSentence(timeoutReason)) })
+		r.finishWith(ctx, t, aloud, func() error { return t.Fail(r.failureSentence(timeoutReason)) })
 		return
 	}
 
@@ -493,12 +499,12 @@ func (r *Runner) finishStopped(ctx context.Context, t *chat.Chat, runErr error) 
 	reason, _ := r.cancelReason(t.ID)
 	if reason == shutdownReason {
 		r.logger.InfoContext(ctx, "chat stopped", slog.String("reason", reason))
-		r.finishWith(ctx, t, nil, func() error { return t.Fail(reason) })
+		r.finishWith(ctx, t, aloud, func() error { return t.Fail(reason) })
 		return
 	}
 
 	r.logger.InfoContext(ctx, "chat cancelled", slog.String("reason", reason))
-	r.finishWith(ctx, t, nil, func() error { return t.Cancel() })
+	r.finishWith(ctx, t, aloud, func() error { return t.Cancel() })
 }
 
 // finishWith : Applies a terminal transition and stores the result.
@@ -507,6 +513,18 @@ func (r *Runner) finishWith(ctx context.Context, t *chat.Chat, aloud *speech, tr
 		r.logger.ErrorContext(ctx, "cannot finish chat", slog.Any("error", err))
 		return
 	}
+
+	// A turn that did not succeed stops narrating. The asides describe
+	// work that was about to be done, they are queued a second and a half
+	// apart, and most of a turn's asides are still waiting their turn when
+	// it goes wrong. Left running, they announce the work after it has
+	// already failed and the apology arrives behind all of them: one
+	// failed turn said "creating that list" seven seconds after it had
+	// given up on creating the list.
+	if aloud != nil && (t.Status == chat.StatusFailed || t.Status == chat.StatusCancelled) {
+		aloud.stop()
+	}
+
 	_ = r.save(ctx, t)
 	r.recordOutcome(ctx, t)
 	r.settleAside(ctx, t, aloud)

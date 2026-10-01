@@ -6,6 +6,7 @@ import (
 	"log/slog"
 	"strings"
 	"sync"
+	"sync/atomic"
 	"time"
 
 	"github.com/DhanushRamesh/personal-assistant/internal/chat"
@@ -49,7 +50,27 @@ type speech struct {
 	mu sync.Mutex
 	// done : When the last aside finished being said, zero if none has.
 	done time.Time
+
+	// abandoned : That nothing further should be said beside this turn.
+	//
+	// Atomic rather than under the mutex, because the mutex is held for
+	// as long as a sentence takes to play. A caller abandoning the turn
+	// would otherwise wait out the very sentence it is trying to
+	// prevent the next one of.
+	abandoned atomic.Bool
 }
+
+// stop : Abandons whatever has not been said yet.
+//
+// For a turn that has failed. The asides describe work that was about to
+// happen, and once it is not going to, saying them is worse than silence:
+// the person hears the thing being promised after it has already gone
+// wrong, and the apology arrives last.
+//
+// A sentence already playing is left to finish. Cutting speech off
+// mid-word sounds like a fault in its own right, and it is one sentence,
+// not the queue behind it.
+func (s *speech) stop() { s.abandoned.Store(true) }
 
 // after : How long to wait before the next thing may be said. Called
 // holding the lock.
@@ -85,6 +106,10 @@ func (r *Runner) sayAside(ctx context.Context, t *chat.Chat, s *speech, text str
 		// One at a time, in the order the rounds happened. Held for
 		// as long as the sentence takes to play, so the next round
 		// queues behind it rather than over it.
+		if s.abandoned.Load() {
+			return
+		}
+
 		s.mu.Lock()
 		defer s.mu.Unlock()
 
@@ -94,6 +119,15 @@ func (r *Runner) sayAside(ctx context.Context, t *chat.Chat, s *speech, text str
 			case <-said.Done():
 				return
 			}
+		}
+
+		// Checked again, after the queue and after the gap. Most of an
+		// aside's life is spent waiting for the one in front of it, and
+		// the turn usually fails during that wait rather than before it.
+		if s.abandoned.Load() {
+			r.logger.InfoContext(said, "did not say what was being done, the turn had failed",
+				slog.String("text", text))
+			return
 		}
 
 		if err := r.aside.Say(said, text); err != nil {

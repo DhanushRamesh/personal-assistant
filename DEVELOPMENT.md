@@ -1829,6 +1829,42 @@ happening rather than only that something is -- and turning the tick
 off costs nothing and needs no patch. Turning it back on brings the
 quiet aside back with it.
 
+**A turn that fails stops narrating.** Owner, 1 October 2026, of a
+failed turn: "when it failed it didn't acknowledge even". It had done
+worse than not acknowledge. The chat gave up at 09:38:02 and the
+apology was ready at 09:38:03, but three asides were still queued
+behind the minimum gap, so what the person actually heard was "Let me
+check the proper way to create that list, sir", then "checking how to
+create a list", then "creating that list" -- and only at 09:38:10,
+seven seconds after it had already given up, "I am having some
+difficulty reaching the server, sir". It promised the work three
+times after failing to do it.
+
+The asides are detached from the turn's context on purpose, so a
+sentence is not cut off mid-word when the answer lands. That is right
+for a turn that succeeds and wrong for one that does not.
+`speech.stop()` sets a flag the queued goroutines check, and
+`finishWith` calls it when the chat ended failed or cancelled. Checked
+twice -- before queueing and again after the gap -- because most of an
+aside's life is spent waiting behind the one in front, which is
+exactly when a turn goes wrong.
+
+The flag is an `atomic.Bool` rather than state under the mutex. The
+mutex is held for as long as a sentence plays, so a caller taking it
+to abandon the queue would first wait out the very sentence it is
+trying to prevent the next one of.
+
+A sentence already playing is left to finish: cutting speech off
+mid-word sounds like a fault of its own, and it is one sentence rather
+than the queue behind it.
+
+`finishStopped` was passing `nil` for the turn's speech, so timeouts
+and cancellations went on narrating; it is given the real one now.
+That is the larger half. A cancelled turn is usually one the person
+interrupted by speaking again, and its narration continuing over the
+answer to their new question is the clearest way to sound like a
+machine talking to itself.
+
 **What is owed has to be something a person would actually say.**
 `Added` owed the whole rendering of the event -- "Gunalan's Birthday,
 all day on Friday 5 February" -- and no model writes that sentence, so
