@@ -100,6 +100,10 @@ func (r *Runner) consume(runCtx, ctx context.Context, t *chat.Chat, systemPrompt
 	// about what the model chose.
 	var reached, pressed bool
 
+	// What has been said beside this turn, so each round's sentence
+	// follows the last rather than landing on top of it.
+	aloud := &speech{}
+
 	// revealed : The deferred tools the model has asked about, which are
 	// described from the next round on. Per chat, not per turn: having
 	// been told how to call something once, it is not taken away again
@@ -146,7 +150,7 @@ func (r *Runner) consume(runCtx, ctx context.Context, t *chat.Chat, systemPrompt
 		})
 		if err != nil {
 			r.logger.ErrorContext(ctx, "environment would not start", slog.Any("error", err))
-			r.finishWith(ctx, t, func() error {
+			r.finishWith(ctx, t, aloud, func() error {
 				// The cause is kept, not only logged. Asked afterwards
 				// what went wrong, the assistant can only answer from
 				// what the conversation holds, and this used to hold
@@ -158,7 +162,7 @@ func (r *Runner) consume(runCtx, ctx context.Context, t *chat.Chat, systemPrompt
 			return
 		}
 
-		final := r.drain(ctx, t, stream, hop == 0 && !spoke, &spoke)
+		final := r.drain(ctx, t, stream, aloud, &spoke)
 
 		switch {
 		case final == nil:
@@ -172,7 +176,7 @@ func (r *Runner) consume(runCtx, ctx context.Context, t *chat.Chat, systemPrompt
 				r.logger.WarnContext(ctx, "environment sent an unknown failure code",
 					slog.String("code", final.Code))
 			}
-			r.finishWith(ctx, t, func() error {
+			r.finishWith(ctx, t, aloud, func() error {
 				return t.FailWith(r.failureSentence(final.Text),
 					final.Code, final.Detail)
 			})
@@ -206,7 +210,7 @@ func (r *Runner) consume(runCtx, ctx context.Context, t *chat.Chat, systemPrompt
 				prompt = lookFirst
 				continue
 			}
-			r.complete(ctx, t, tool.Ensure(final.Text,
+			r.complete(ctx, t, aloud, tool.Ensure(final.Text,
 				persona.AddressFor(r.personaID()), tool.Merged(owed)))
 			return
 		}
@@ -230,7 +234,12 @@ func (r *Runner) consume(runCtx, ctx context.Context, t *chat.Chat, systemPrompt
 			slog.String("said", said),
 			slog.String("channel", string(t.Channel)),
 			slog.Any("raw", raw))
-		if !spoke && r.sayAside(ctx, t, said) {
+		// Every round says what it is about to do, not only the
+		// first. A chain that narrates once and then works in silence
+		// for nine seconds reads as having stopped; the gaps in
+		// sayAside are what keep several of them from running
+		// together.
+		if r.sayAside(ctx, t, aloud, said) {
 			spoke = true
 		}
 
@@ -300,17 +309,22 @@ func (r *Runner) drain(
 	ctx context.Context,
 	t *chat.Chat,
 	stream <-chan environment.Message,
-	mayspeak bool,
+	aloud *speech,
 	spoke *bool,
 ) *environment.Message {
 	var final *environment.Message
+	// One per stream. The model narrating twice inside a single round
+	// is describing one piece of work, and saying both would be the
+	// same thought twice; between rounds is where a second sentence
+	// earns its place.
+	saidThisRound := false
 	for msg := range stream {
 		switch msg.Kind {
 		case environment.KindUpdate:
 			r.announce(t.ID, msg)
-			if mayspeak && r.sayAside(ctx, t, msg.Text) {
+			if !saidThisRound && r.sayAside(ctx, t, aloud, msg.Text) {
 				*spoke = true
-				mayspeak = false
+				saidThisRound = true
 			}
 		case environment.KindFinal, environment.KindError, environment.KindToolCalls:
 			m := msg
@@ -436,12 +450,12 @@ func (r *Runner) recordOutcome(ctx context.Context, t *chat.Chat) {
 
 // complete : Records a chat's result, failing it instead if the result cannot
 // be stored.
-func (r *Runner) complete(ctx context.Context, t *chat.Chat, text string) {
+func (r *Runner) complete(ctx context.Context, t *chat.Chat, aloud *speech, text string) {
 	err := t.Complete(text)
 	if errors.Is(err, chat.ErrResponseTooLarge) {
 		r.logger.ErrorContext(ctx, "response too large to store",
 			slog.Int("bytes", len(text)))
-		r.finishWith(ctx, t, func() error {
+		r.finishWith(ctx, t, aloud, func() error {
 			return t.Fail(r.failureSentence("The answer was too long for me to keep."))
 		})
 		return
@@ -454,7 +468,7 @@ func (r *Runner) complete(ctx context.Context, t *chat.Chat, text string) {
 		return
 	}
 	r.recordOutcome(ctx, t)
-	r.settleAside(ctx, t)
+	r.settleAside(ctx, t, aloud)
 	r.announceOutcome(t)
 	r.logger.InfoContext(ctx, "chat completed",
 		slog.Duration("took", t.Duration()),
@@ -467,7 +481,7 @@ func (r *Runner) finishStopped(ctx context.Context, t *chat.Chat, runErr error) 
 	if errors.Is(runErr, context.DeadlineExceeded) {
 		r.logger.WarnContext(ctx, "chat exceeded its deadline",
 			slog.Duration("timeout", r.chatTimeout))
-		r.finishWith(ctx, t, func() error { return t.Fail(r.failureSentence(timeoutReason)) })
+		r.finishWith(ctx, t, nil, func() error { return t.Fail(r.failureSentence(timeoutReason)) })
 		return
 	}
 
@@ -479,23 +493,23 @@ func (r *Runner) finishStopped(ctx context.Context, t *chat.Chat, runErr error) 
 	reason, _ := r.cancelReason(t.ID)
 	if reason == shutdownReason {
 		r.logger.InfoContext(ctx, "chat stopped", slog.String("reason", reason))
-		r.finishWith(ctx, t, func() error { return t.Fail(reason) })
+		r.finishWith(ctx, t, nil, func() error { return t.Fail(reason) })
 		return
 	}
 
 	r.logger.InfoContext(ctx, "chat cancelled", slog.String("reason", reason))
-	r.finishWith(ctx, t, func() error { return t.Cancel() })
+	r.finishWith(ctx, t, nil, func() error { return t.Cancel() })
 }
 
 // finishWith : Applies a terminal transition and stores the result.
-func (r *Runner) finishWith(ctx context.Context, t *chat.Chat, transition func() error) {
+func (r *Runner) finishWith(ctx context.Context, t *chat.Chat, aloud *speech, transition func() error) {
 	if err := transition(); err != nil {
 		r.logger.ErrorContext(ctx, "cannot finish chat", slog.Any("error", err))
 		return
 	}
 	_ = r.save(ctx, t)
 	r.recordOutcome(ctx, t)
-	r.settleAside(ctx, t)
+	r.settleAside(ctx, t, aloud)
 	r.announceOutcome(t)
 }
 
