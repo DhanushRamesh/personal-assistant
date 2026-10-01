@@ -19,6 +19,7 @@ package events
 import (
 	"context"
 	"encoding/json"
+	"io"
 	"log/slog"
 	"net/http"
 	"time"
@@ -123,7 +124,28 @@ func (h *Handler) Record(w http.ResponseWriter, r *http.Request) {
 
 	var batch Batch
 	r.Body = http.MaxBytesReader(w, r.Body, maxRequestBody)
-	if err := json.NewDecoder(r.Body).Decode(&batch); err != nil {
+	raw, readErr := io.ReadAll(r.Body)
+	if readErr != nil {
+		httpx.WriteError(ctx, w, http.StatusBadRequest, "That batch could not be read.")
+		return
+	}
+	if err := json.Unmarshal(raw, &batch); err != nil {
+		// Logged, because the thing sending this is a phone and whoever
+		// is holding it cannot see why it was refused. "That batch could
+		// not be read" is true and useless; the reason names the field
+		// and what was wrong with it, which is usually a variable the
+		// phone did not substitute.
+		//
+		// The reason only, never the body: this carries what somebody
+		// did today.
+		// The reason, never the body: this carries what somebody did
+		// today. The reason alone named every fault during the phone's
+		// setup -- an unsubstituted variable, a splitter that did not
+		// split, a wifi name with quotes in it -- except the last, where
+		// the body was logged for one afternoon and then taken out
+		// again.
+		h.Logger.WarnContext(ctx, "a batch could not be read",
+			slog.String("reason", err.Error()))
 		httpx.WriteError(ctx, w, http.StatusBadRequest, "That batch could not be read.")
 		return
 	}
