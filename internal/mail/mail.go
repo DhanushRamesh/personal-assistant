@@ -34,6 +34,7 @@ import (
 	"fmt"
 	"net/http"
 	"strings"
+	"sync"
 	"time"
 
 	gmail "google.golang.org/api/gmail/v1"
@@ -68,6 +69,28 @@ const Longest = 4000
 // Clients : Where an authenticated HTTP client comes from.
 type Clients interface {
 	Client(ctx context.Context, userID string) (*http.Client, error)
+}
+
+// Thread : An exchange, with the messages in it oldest first.
+//
+// The unit a person actually means. A message cannot say whether it
+// was answered; a thread can, which is the whole reason this exists:
+// "somebody wrote and I never replied" is the most useful thing a
+// mailbox knows, and it is unanswerable one message at a time.
+type Thread struct {
+	// ID : Gmail's identifier for the exchange.
+	ID string
+	// Subject : What the first message called it.
+	Subject string
+	// Messages : Every message in it, oldest first.
+	Messages []Message
+	// Mine : Whether any message in it was sent by the owner.
+	//
+	// Read from Gmail's own SENT label rather than by comparing
+	// addresses, which would have to know every alias they send from.
+	Mine bool
+	// Last : When the newest message in it arrived.
+	Last time.Time
 }
 
 // Message : One email, as much of it as was asked for.
@@ -138,16 +161,46 @@ func (m *Mailbox) Search(ctx context.Context, userID, query string, most int) ([
 	// Metadata only. A listing that fetched bodies would be ten full
 	// messages to answer "anything new", and the format is the whole
 	// difference: metadata returns headers, full returns the thread.
-	out := make([]Message, 0, len(found.Messages))
-	for _, ref := range found.Messages {
-		got, err := svc.Users.Messages.Get(Me, ref.Id).
-			Format("metadata").
-			MetadataHeaders("From", "Subject", "Date").
-			Context(ctx).Do()
-		if err != nil {
-			return nil, fmt.Errorf("mail: reading a result: %w", err)
-		}
-		out = append(out, summarise(got))
+	//
+	// All at once, because the list gives identifiers and nothing
+	// else, so ten messages is one list call and ten reads. In order,
+	// that was measured at 9.8 seconds for a search of ten -- longer
+	// than the model took to think about the answer. Together they
+	// cost about as much as the slowest one.
+	out := make([]Message, len(found.Messages))
+	var (
+		wg     sync.WaitGroup
+		mu     sync.Mutex
+		failed error
+	)
+	for i, ref := range found.Messages {
+		wg.Add(1)
+		go func(i int, id string) {
+			defer wg.Done()
+			got, err := svc.Users.Messages.Get(Me, id).
+				Format("metadata").
+				MetadataHeaders("From", "Subject", "Date").
+				Context(ctx).Do()
+
+			mu.Lock()
+			defer mu.Unlock()
+			if err != nil {
+				// The first failure is the one reported. A search
+				// that half worked is not an answer -- "you have
+				// seven messages" when there were ten is worse than
+				// saying it could not be read.
+				if failed == nil {
+					failed = fmt.Errorf("mail: reading a result: %w", err)
+				}
+				return
+			}
+			out[i] = summarise(got)
+		}(i, ref.Id)
+	}
+	wg.Wait()
+
+	if failed != nil {
+		return nil, failed
 	}
 	return out, nil
 }
@@ -165,6 +218,84 @@ func (m *Mailbox) One(ctx context.Context, userID, id string) (*Message, error) 
 	out := summarise(got)
 	out.Body = shorten(textOf(got.Payload))
 	return &out, nil
+}
+
+// Threads : The exchanges matching a query, newest first.
+//
+// Two calls per thread is the shape of this API: list gives
+// identifiers and get gives the messages, so they go together the way
+// the message listing does.
+func (m *Mailbox) Threads(ctx context.Context, userID, query string, most int) ([]Thread, error) {
+	if most <= 0 || most > Most {
+		most = Most
+	}
+	svc, err := m.service(ctx, userID)
+	if err != nil {
+		return nil, err
+	}
+
+	found, err := svc.Users.Threads.List(Me).Q(query).MaxResults(int64(most)).Context(ctx).Do()
+	if err != nil {
+		return nil, fmt.Errorf("mail: searching the exchanges: %w", err)
+	}
+
+	out := make([]Thread, len(found.Threads))
+	var (
+		wg     sync.WaitGroup
+		mu     sync.Mutex
+		failed error
+	)
+	for i, ref := range found.Threads {
+		wg.Add(1)
+		go func(i int, id string) {
+			defer wg.Done()
+			// Metadata, not full. A thread of twelve replies fetched
+			// whole is the entire correspondence, and what is wanted
+			// here is who said something and when. mail_read still
+			// gets the whole of any one of them.
+			got, err := svc.Users.Threads.Get(Me, id).
+				Format("metadata").
+				MetadataHeaders("From", "Subject", "Date").
+				Context(ctx).Do()
+
+			mu.Lock()
+			defer mu.Unlock()
+			if err != nil {
+				if failed == nil {
+					failed = fmt.Errorf("mail: reading an exchange: %w", err)
+				}
+				return
+			}
+			out[i] = asThread(got)
+		}(i, ref.Id)
+	}
+	wg.Wait()
+
+	if failed != nil {
+		return nil, failed
+	}
+	return out, nil
+}
+
+// asThread : A thread as this package carries it.
+func asThread(g *gmail.Thread) Thread {
+	out := Thread{ID: g.Id}
+	for _, raw := range g.Messages {
+		m := summarise(raw)
+		out.Messages = append(out.Messages, m)
+		if out.Subject == "" && m.Subject != "" {
+			out.Subject = m.Subject
+		}
+		if m.At.After(out.Last) {
+			out.Last = m.At
+		}
+		for _, id := range raw.LabelIds {
+			if id == "SENT" {
+				out.Mine = true
+			}
+		}
+	}
+	return out
 }
 
 // Count : How many unread messages are in the inbox.

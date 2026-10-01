@@ -22,11 +22,30 @@ import (
 // About 2,128 bytes a tool, sent again on every call -- the endpoint
 // offers no prompt caching, so nothing about this is paid once.
 //
-// These twelve are chosen by use, not by judgement: from 570 recorded
-// calls they are 77% of every tool call ever made here. The long tail
-// is real and none of it is dead -- 34 of 36 tools have been called at
-// least once -- which is why the answer is to describe them on demand
-// rather than to remove any.
+// Most are chosen by use, not by judgement: from 570 recorded calls
+// the twelve below them are 77% of every tool call ever made here. The
+// long tail is real and none of it is dead -- 34 of 36 tools have been
+// called at least once -- which is why the answer is to describe them
+// on demand rather than to remove any.
+//
+// The two mail tools are the exception, and it is worth being honest
+// about that. They have no history at all, having existed for an
+// afternoon, so no measurement put them here. They are here because
+// of shape: they are the two ways into the domain, mail_read cannot
+// be called without an identifier one of them returned, and
+// mail_unread is a question people ask rarely. Deferred, the first
+// mail question of every chat spent a round learning the arguments --
+// measured at 17.2s against 11.4s for one that needed no round.
+//
+// mail_thread joined them for a reason that was measured rather than
+// reasoned. Deferred, asked "is there any email I have not replied
+// to", the model used mail_search instead and then answered that it
+// had "no tool to compare incoming mail against your replies" -- with
+// mail_thread named in its catalogue one line above. A name and a
+// sentence were not enough to reach for; the arguments were what it
+// needed to see.
+//
+// If the numbers later say otherwise, the numbers win.
 //
 // Worth revisiting when the numbers move. The list is here, in one
 // place, rather than a flag on each tool, so that revisiting it means
@@ -44,6 +63,11 @@ var hot = []string{
 	"task_add",
 	"conversation_new",
 	"memory_remember",
+
+	// By shape rather than by measurement. See above.
+	"mail_inbox",
+	"mail_search",
+	"mail_thread",
 }
 
 // hotSet : hot, for looking up.

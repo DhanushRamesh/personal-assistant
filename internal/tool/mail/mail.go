@@ -38,6 +38,7 @@ type Mailbox interface {
 	Unread(ctx context.Context, userID string, most int) ([]mail.Message, error)
 	Search(ctx context.Context, userID, query string, most int) ([]mail.Message, error)
 	One(ctx context.Context, userID, id string) (*mail.Message, error)
+	Threads(ctx context.Context, userID, query string, most int) ([]mail.Thread, error)
 	Count(ctx context.Context, userID string) (int, error)
 }
 
@@ -52,6 +53,7 @@ func All(box Mailbox, clock Clock) []tool.Tool {
 	return []tool.Tool{
 		inbox(box),
 		search(box),
+		thread(box),
 		read(box),
 		unread(box),
 	}
@@ -121,8 +123,13 @@ func search(box Mailbox) tool.Tool {
 		),
 		UseWhen: prompt.Block(
 			prompt.Text(
-				"They ask about mail from somebody, about something, or from some time.",
+				"They ask about mail from somebody, to somebody, about something, or from some time.",
 				"Almost always a sender: \"anything from Amazon\" means from=\"amazon\", and that is the whole call.",
+			),
+			prompt.Text(
+				"This reads sent mail as well as received.",
+				"\"When did I last email Alekhya\" is to=\"alekhya\" with sent set; \"when did I last send anything\" is sent alone with most=1.",
+				"Do not say you cannot see what they sent -- that was answered wrongly once, and it is one field.",
 			),
 			prompt.Text(
 				"Fill it in from what they said and search.",
@@ -147,6 +154,16 @@ func search(box Mailbox) tool.Tool {
 					Description: "Who it is from: a name or part of an address, as they said it. " +
 						"\"amazon\" rather than \"amazon.in\" when unsure, since less of it matches more.",
 				},
+				"to": {
+					Type: "string",
+					Description: "Who it was sent to, for mail they sent rather than received. " +
+						"A name or part of an address, as they said it.",
+				},
+				"sent": {
+					Type: "boolean",
+					Description: "Only mail they sent themselves. Set for anything about what they sent, " +
+						"replied to, or last wrote to somebody.",
+				},
 				"about": {
 					Type:        "string",
 					Description: "Words to look for in the subject or the message, when they described what it was about.",
@@ -164,7 +181,8 @@ func search(box Mailbox) tool.Tool {
 				"query": {
 					Type: "string",
 					Description: "Raw Gmail search, for anything the fields above cannot say -- " +
-						"has:attachment, label:receipts, larger:5M. Combined with them when both are given.",
+						"has:attachment, label:receipts, is:starred, larger:5M. " +
+						"Combined with them when both are given.",
 				},
 				"most": {
 					Type:        "integer",
@@ -182,10 +200,16 @@ func search(box Mailbox) tool.Tool {
 				Args: `{"from":"alekhya","within_days":7,"saying":"searching your mail"}`},
 			{Ask: "any unread mail about the invoice",
 				Args: `{"about":"invoice","unread":true,"saying":"looking for that invoice"}`},
+			{Ask: "when did I last send a mail to someone",
+				Args: `{"sent":true,"most":1,"saying":"looking at what you have sent"}`},
+			{Ask: "did I ever reply to Praveen",
+				Args: `{"to":"praveen","sent":true,"saying":"checking what you sent Praveen"}`},
 		},
 		Run: func(ctx context.Context, in tool.Invocation) tool.Result {
 			var args struct {
 				From       string `json:"from"`
+				To         string `json:"to"`
+				Sent       bool   `json:"sent"`
 				About      string `json:"about"`
 				Unread     bool   `json:"unread"`
 				WithinDays int    `json:"within_days"`
@@ -196,11 +220,15 @@ func search(box Mailbox) tool.Tool {
 				return tool.Failed("the search could not be read: " + err.Error())
 			}
 
-			query := gmailQuery(args.From, args.About, args.Query, args.Unread, args.WithinDays)
+			query := gmailQuery(criteria{
+				From: args.From, To: args.To, Sent: args.Sent, About: args.About,
+				Raw: args.Query, Unread: args.Unread, WithinDays: args.WithinDays,
+			})
 			if query == "" {
 				return tool.Failed(prompt.Text(
 					"Nothing was given to search on.",
-					"Put the sender in from, or what it was about in about.",
+					"Put the sender in from, who it went to in to, what it was about in about,",
+					"or set sent for anything they sent themselves.",
 					"Do not ask them to supply a search: whatever they said about the message is the search.",
 				))
 			}
@@ -212,6 +240,17 @@ func search(box Mailbox) tool.Tool {
 	}
 }
 
+// criteria : What the person described, before it becomes a query.
+type criteria struct {
+	From       string
+	To         string
+	Sent       bool
+	About      string
+	Raw        string
+	Unread     bool
+	WithinDays int
+}
+
 // gmailQuery : Gmail's search syntax, built from what was described.
 //
 // Built here rather than asked for, because the fields are what the
@@ -219,30 +258,41 @@ func search(box Mailbox) tool.Tool {
 // either invents one or -- measured on 30 September 2026 -- tells the
 // person the query it would have used and asks them to supply it.
 //
-// No in: qualifier is added, and that is the right default rather
-// than an omission. Gmail's own default searches all mail except spam
-// and trash -- archive included -- which is what "did I get mail from
-// Amazon" means. in:inbox would miss anything filed away, and
-// in:anywhere would return spam.
-func gmailQuery(from, about, raw string, unread bool, withinDays int) string {
+// Sent mail is a field rather than something to know about. Asked
+// when they last sent a message, the assistant answered that it had
+// no tool for it and that the sent folder was not covered. Both were
+// untrue: the scope reads it and one qualifier finds it. It said so
+// after being sent back to look, which is the point -- being told to
+// check does not help when the description does not mention the
+// thing.
+//
+// No in: qualifier is added otherwise, and that is the right default
+// rather than an omission. Gmail's own default searches all mail
+// except spam and trash -- archive included -- which is what "did I
+// get mail from Amazon" means. in:inbox would miss anything filed
+// away, and in:anywhere would return spam.
+func gmailQuery(c criteria) string {
 	var parts []string
-	if from = strings.TrimSpace(from); from != "" {
+	if from := strings.TrimSpace(c.From); from != "" {
 		parts = append(parts, "from:"+quoted(from))
 	}
-	if about = strings.TrimSpace(about); about != "" {
+	if to := strings.TrimSpace(c.To); to != "" {
+		parts = append(parts, "to:"+quoted(to))
+	}
+	if c.Sent {
+		parts = append(parts, "in:sent")
+	}
+	if about := strings.TrimSpace(c.About); about != "" {
 		parts = append(parts, quoted(about))
 	}
-	if unread {
+	if c.Unread {
 		parts = append(parts, "is:unread")
 	}
-	if withinDays > 0 {
-		parts = append(parts, fmt.Sprintf("newer_than:%dd", withinDays))
+	if c.WithinDays > 0 {
+		parts = append(parts, fmt.Sprintf("newer_than:%dd", c.WithinDays))
 	}
-	if raw = strings.TrimSpace(raw); raw != "" {
+	if raw := strings.TrimSpace(c.Raw); raw != "" {
 		parts = append(parts, raw)
-	}
-	if len(parts) == 0 {
-		return ""
 	}
 	return strings.Join(parts, " ")
 }
@@ -257,6 +307,161 @@ func quoted(term string) string {
 		return term
 	}
 	return strconv.Quote(term)
+}
+
+// thread : A whole exchange, and whether it was answered.
+func thread(box Mailbox) tool.Tool {
+	return tool.Tool{
+		Name:   "mail_thread",
+		Domain: "mail",
+		Lists:  true,
+		Purpose: prompt.Text(
+			"Read exchanges rather than single messages: who wrote, who answered, and when it stopped.",
+			"Says whether they replied, which one message on its own cannot.",
+		),
+		UseWhen: prompt.Block(
+			prompt.Text(
+				"Anything about a conversation rather than a message.",
+				"\"What did Alekhya say about the flat\" is one exchange, not four unconnected emails.",
+			),
+			prompt.Text(
+				"Above all for what has gone unanswered.",
+				"An exchange where the last message is not theirs and answered is false is somebody still waiting -- that is the thing worth telling them, and nothing else here can see it.",
+				"\"Anything I have not replied to\" is unanswered set, with nothing else.",
+			),
+		),
+		Avoid: prompt.Text(
+			"Do not use it to read the text of one message -- mail_read gives the whole of one.",
+			"Do not use it for a simple count or a glance at what arrived: mail_inbox and mail_unread are cheaper.",
+		),
+		Channels: []chat.Channel{chat.ChannelVoice, chat.ChannelDirect},
+		Params: tool.Schema{
+			Properties: map[string]tool.Property{
+				"from": {
+					Type:        "string",
+					Description: "Exchanges involving this sender. A name or part of an address, as they said it.",
+				},
+				"about": {
+					Type:        "string",
+					Description: "Words to look for, when they described what the conversation was about.",
+				},
+				"unanswered": {
+					Type: "boolean",
+					Description: "Only exchanges they have not replied to. " +
+						"Set for anything about what is waiting on them, what they owe a reply to, or what they have forgotten.",
+				},
+				"within_days": {
+					Type:        "integer",
+					Description: "Only exchanges touched in the last this many days.",
+					Minimum:     ptr(1),
+					Maximum:     ptr(3650),
+				},
+				"most": {
+					Type:        "integer",
+					Description: "How many exchanges to read, newest first. Ten at most, and fewer when read aloud.",
+					Minimum:     ptr(1),
+					Maximum:     ptr(mail.Most),
+					Default:     5,
+				},
+			},
+		},
+		Examples: []tool.Example{
+			{Ask: "what did Alekhya say about the flat",
+				Args: `{"from":"alekhya","about":"flat","saying":"reading that conversation"}`},
+			{Ask: "is there anything I have not replied to",
+				Args: `{"unanswered":true,"within_days":14,"saying":"looking for what is waiting on you"}`},
+		},
+		Run: func(ctx context.Context, in tool.Invocation) tool.Result {
+			var args struct {
+				From       string `json:"from"`
+				About      string `json:"about"`
+				Unanswered bool   `json:"unanswered"`
+				WithinDays int    `json:"within_days"`
+				Most       int    `json:"most"`
+			}
+			if err := json.Unmarshal(in.Args, &args); err != nil {
+				return tool.Failed("the search could not be read: " + err.Error())
+			}
+
+			// Unanswered is asked of Gmail as best it can: received
+			// mail only. Whether they replied is then decided from the
+			// thread itself, because "in:inbox -in:sent" excludes an
+			// exchange they replied to rather than one they did not.
+			query := gmailQuery(criteria{
+				From: args.From, About: args.About, WithinDays: args.WithinDays,
+			})
+			if args.Unanswered {
+				query = strings.TrimSpace(query + " in:inbox")
+			}
+			if strings.TrimSpace(query) == "" {
+				query = "in:inbox"
+			}
+
+			if box == nil {
+				return tool.Failed("There is no mailbox on this server.")
+			}
+			if in.Caller.UserID == "" {
+				return tool.Failed("This request did not come from a known person.")
+			}
+
+			found, err := box.Threads(ctx, in.Caller.UserID, query, args.Most)
+			if err != nil {
+				return trouble(err)
+			}
+
+			if args.Unanswered {
+				var waiting []mail.Thread
+				for _, t := range found {
+					if !t.Mine {
+						waiting = append(waiting, t)
+					}
+				}
+				found = waiting
+			}
+			if len(found) == 0 {
+				if args.Unanswered {
+					return tool.OK("Nothing is waiting on a reply from them.")
+				}
+				return tool.OK("No exchanges matching " + query + ".")
+			}
+
+			var b strings.Builder
+			what := "exchange"
+			if args.Unanswered {
+				what = "exchange with no reply from them"
+			}
+			fmt.Fprintf(&b, "%d %s, newest first:", len(found), plural(what, len(found)))
+			for _, t := range found {
+				b.WriteString("\n" + exchange(t))
+			}
+			return tool.OK(b.String())
+		},
+	}
+}
+
+// exchange : One thread on a few lines: what it is, who is in it, and
+// where it stopped.
+func exchange(t mail.Thread) string {
+	var b strings.Builder
+	fmt.Fprintf(&b, "- %q", orElse(t.Subject, "no subject"))
+	fmt.Fprintf(&b, ", %d %s", len(t.Messages), plural("message", len(t.Messages)))
+	if !t.Last.IsZero() {
+		fmt.Fprintf(&b, ", last on %s", t.Last.Format("Mon 2 Jan 15:04"))
+	}
+	if t.Mine {
+		b.WriteString(", they have replied")
+	} else {
+		b.WriteString(", they have not replied")
+	}
+	if len(t.Messages) > 0 {
+		last := t.Messages[len(t.Messages)-1]
+		fmt.Fprintf(&b, ". Last from %s", orElse(last.From, "somebody unnamed"))
+		if last.Snippet != "" {
+			fmt.Fprintf(&b, ": %s", last.Snippet)
+		}
+		fmt.Fprintf(&b, " (id %s)", last.ID)
+	}
+	return b.String()
 }
 
 // read : The whole of one message.
