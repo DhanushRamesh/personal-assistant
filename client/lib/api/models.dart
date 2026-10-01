@@ -946,3 +946,228 @@ class Personality {
     mine: (json['mine'] as bool?) ?? false,
   );
 }
+
+/// Remembered : One thing the assistant has remembered about the person.
+class Remembered {
+  const Remembered({
+    required this.id,
+    required this.tier,
+    required this.subject,
+    required this.body,
+    this.searchable = false,
+    this.uses = 0,
+    this.lastUsedAt,
+  });
+
+  final String id;
+
+  /// tier : "always" is in every single prompt; "recall" is found when it
+  /// is relevant. The difference is what each one costs.
+  final String tier;
+
+  final String subject;
+  final String body;
+
+  /// searchable : Whether it can be found by meaning as well as wording.
+  /// An unembedded memory still works, so nothing looks broken — it just
+  /// stops being found by a paraphrase.
+  final bool searchable;
+
+  final int uses;
+  final DateTime? lastUsedAt;
+
+  bool get always => tier == 'always';
+
+  factory Remembered.fromJson(Map<String, dynamic> json) => Remembered(
+    id: (json['id'] as String?) ?? '',
+    tier: (json['tier'] as String?) ?? '',
+    subject: (json['subject'] as String?) ?? '',
+    body: (json['body'] as String?) ?? '',
+    searchable: (json['searchable'] as bool?) ?? false,
+    uses: (json['uses'] as num?)?.toInt() ?? 0,
+    lastUsedAt: DateTime.tryParse(
+      (json['last_used_at'] as String?) ?? '',
+    )?.toLocal(),
+  );
+}
+
+/// Memories : Everything remembered, with the counts worth watching.
+class Memories {
+  const Memories({this.items = const [], this.always = 0, this.unused = 0});
+
+  final List<Remembered> items;
+
+  /// always : How many are in every prompt, paid for on every turn.
+  final int always;
+
+  /// unused : How many have never been given to the model at all.
+  final int unused;
+
+  factory Memories.fromJson(Map<String, dynamic> json) => Memories(
+    items: parseList(json, 'memories', Remembered.fromJson),
+    always: (json['always'] as num?)?.toInt() ?? 0,
+    unused: (json['unused'] as num?)?.toInt() ?? 0,
+  );
+}
+
+/// StoredEvent : One thing a device reported.
+class StoredEvent {
+  const StoredEvent({
+    required this.id,
+    required this.source,
+    required this.kind,
+    required this.occurredAt,
+    required this.receivedAt,
+    this.device = '',
+    this.lateBy = 0,
+    this.payload = const {},
+  });
+
+  final String id;
+  final String source;
+  final String device;
+  final String kind;
+
+  /// occurredAt : When it happened to the person, by the device's clock.
+  final DateTime occurredAt;
+
+  /// receivedAt : When the server learned of it. The two differ by however
+  /// long the device was unable to reach anything.
+  final DateTime receivedAt;
+
+  /// lateBy : Seconds between the two.
+  final int lateBy;
+
+  final Map<String, dynamic> payload;
+
+  factory StoredEvent.fromJson(Map<String, dynamic> json) => StoredEvent(
+    id: (json['id'] as String?) ?? '',
+    source: (json['source'] as String?) ?? '',
+    device: (json['device'] as String?) ?? '',
+    kind: (json['kind'] as String?) ?? '',
+    occurredAt:
+        DateTime.tryParse((json['occurred_at'] as String?) ?? '')?.toLocal() ??
+        DateTime.now(),
+    receivedAt:
+        DateTime.tryParse((json['received_at'] as String?) ?? '')?.toLocal() ??
+        DateTime.now(),
+    lateBy: (json['late_by_seconds'] as num?)?.toInt() ?? 0,
+    payload: (json['payload'] as Map<String, dynamic>?) ?? const {},
+  );
+}
+
+/// DeviceEventKind : One kind of device event, and how much of it
+/// there is.
+///
+/// Named apart from EventKind, which is the kind of a streamed answer
+/// event. Two different senses of the word met here.
+class DeviceEventKind {
+  const DeviceEventKind({required this.kind, this.count = 0, this.last});
+
+  final String kind;
+  final int count;
+  final DateTime? last;
+
+  factory DeviceEventKind.fromJson(Map<String, dynamic> json) => DeviceEventKind(
+    kind: (json['kind'] as String?) ?? '',
+    count: (json['count'] as num?)?.toInt() ?? 0,
+    last: DateTime.tryParse((json['last'] as String?) ?? '')?.toLocal(),
+  );
+}
+
+/// Events : A page of events, and what kinds exist to filter by.
+class Events {
+  const Events({this.items = const [], this.kinds = const []});
+
+  final List<StoredEvent> items;
+
+  /// kinds : Counted across everything, not just this page — a filtered
+  /// view still has to say what else there is.
+  final List<DeviceEventKind> kinds;
+
+  factory Events.fromJson(Map<String, dynamic> json) => Events(
+    items: parseList(json, 'events', StoredEvent.fromJson),
+    kinds: parseList(json, 'kinds', DeviceEventKind.fromJson),
+  );
+}
+
+/// ToolListed : One thing the assistant can do.
+class ToolListed {
+  const ToolListed({
+    required this.name,
+    this.purpose = '',
+    this.always = false,
+    this.writes = false,
+  });
+
+  final String name;
+  final String purpose;
+
+  /// always : Whether every request is told how to call it, or whether the
+  /// model has to ask about it first. That difference is most of what makes
+  /// a long tool list affordable.
+  final bool always;
+
+  /// writes : Whether it changes anything, rather than only reading.
+  final bool writes;
+
+  factory ToolListed.fromJson(Map<String, dynamic> json) => ToolListed(
+    name: (json['name'] as String?) ?? '',
+    purpose: (json['purpose'] as String?) ?? '',
+    always: (json['always'] as bool?) ?? false,
+    writes: (json['writes'] as bool?) ?? false,
+  );
+}
+
+/// ToolModule : The tools of one domain.
+class ToolModule {
+  const ToolModule({required this.domain, this.tools = const []});
+
+  final String domain;
+  final List<ToolListed> tools;
+
+  factory ToolModule.fromJson(Map<String, dynamic> json) => ToolModule(
+    domain: (json['domain'] as String?) ?? '',
+    tools: parseList(json, 'tools', ToolListed.fromJson),
+  );
+}
+
+/// Abilities : Everything the assistant can do, grouped.
+class Abilities {
+  const Abilities({this.modules = const [], this.total = 0, this.always = 0});
+
+  final List<ToolModule> modules;
+  final int total;
+
+  /// always : How many of them every single request carries.
+  final int always;
+
+  factory Abilities.fromJson(Map<String, dynamic> json) => Abilities(
+    modules: parseList(json, 'modules', ToolModule.fromJson),
+    total: (json['total'] as num?)?.toInt() ?? 0,
+    always: (json['always'] as num?)?.toInt() ?? 0,
+  );
+}
+
+/// Vocabulary : The proper nouns speech recognition has been told to
+/// expect.
+class Vocabulary {
+  const Vocabulary({this.terms = const [], this.count = 0, this.writtenAt});
+
+  final List<String> terms;
+  final int count;
+
+  /// writtenAt : When the nightly job last rewrote the collected names.
+  /// A stale date is the thing worth noticing.
+  final DateTime? writtenAt;
+
+  factory Vocabulary.fromJson(Map<String, dynamic> json) => Vocabulary(
+    terms: ((json['terms'] as List?) ?? const [])
+        .map((t) => t.toString())
+        .toList(),
+    count: (json['count'] as num?)?.toInt() ?? 0,
+    writtenAt: DateTime.tryParse(
+      (json['written_at'] as String?) ?? '',
+    )?.toLocal(),
+  );
+}

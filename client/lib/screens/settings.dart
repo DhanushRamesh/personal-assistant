@@ -6,6 +6,7 @@ import 'package:flutter/material.dart';
 import '../api/models.dart';
 import '../design/design.dart';
 import '../state/app_state.dart';
+import 'knows.dart';
 
 /// SettingsModule : One page of settings, named down the side.
 enum SettingsModule {
@@ -13,6 +14,7 @@ enum SettingsModule {
   clients('Clients', Icons.devices_other_outlined),
   reminders('Reminders', Icons.alarm_outlined),
   personality('Personality', Icons.psychology_outlined),
+  knows('What it knows', Icons.travel_explore_outlined),
   server('Server', Icons.dns_outlined);
 
   const SettingsModule(this.title, this.icon);
@@ -182,6 +184,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
                         SettingsModule.personality => _PersonalityModule(
                           state: state,
                         ),
+                        SettingsModule.knows => KnowsModule(state: state),
                         SettingsModule.server => _ServerModule(state: state),
                       },
                     ],

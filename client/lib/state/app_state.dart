@@ -493,6 +493,71 @@ class AppState extends ChangeNotifier {
   Personality? get personality => _personality;
   Personality? _personality;
 
+  /// memories, abilities, events, vocabulary : What the assistant knows
+  /// and can do, for the screen that shows it. Null before each is read.
+  ///
+  /// Four separate reads rather than one, and loaded only when their
+  /// section is opened. They are independent, they are all read-only, and
+  /// one of them -- the events -- will grow for years, so fetching all
+  /// four to show one would get slower every week.
+  Memories? get memories => _memories;
+  Memories? _memories;
+
+  Abilities? get abilities => _abilities;
+  Abilities? _abilities;
+
+  Events? get events => _events;
+  Events? _events;
+
+  Vocabulary? get vocabulary => _vocabulary;
+  Vocabulary? _vocabulary;
+
+  /// loadMemories : Reads what has been remembered.
+  Future<void> loadMemories() async {
+    _set(busy: true, error: null);
+    try {
+      _memories = await api.listMemories();
+    } on Object catch (e) {
+      _error = _explain(e);
+    }
+    _set(busy: false);
+  }
+
+  /// loadAbilities : Reads what the assistant can do.
+  Future<void> loadAbilities() async {
+    _set(busy: true, error: null);
+    try {
+      _abilities = await api.listTools();
+    } on Object catch (e) {
+      _error = _explain(e);
+    }
+    _set(busy: false);
+  }
+
+  /// loadEvents : Reads what the person's devices have reported.
+  ///
+  /// An empty kind means every kind, which is what the screen opens on.
+  Future<void> loadEvents({String kind = ''}) async {
+    _set(busy: true, error: null);
+    try {
+      _events = await api.listEvents(kind: kind, limit: 200);
+    } on Object catch (e) {
+      _error = _explain(e);
+    }
+    _set(busy: false);
+  }
+
+  /// loadVocabulary : Reads the names speech recognition expects.
+  Future<void> loadVocabulary() async {
+    _set(busy: true, error: null);
+    try {
+      _vocabulary = await api.vocabulary();
+    } on Object catch (e) {
+      _error = _explain(e);
+    }
+    _set(busy: false);
+  }
+
   /// loadPersonality : Reads the description.
   Future<void> loadPersonality() async {
     _set(busy: true, error: null);

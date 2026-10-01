@@ -341,6 +341,43 @@ class AssistantApi {
   Future<Chat> chat(String chatId) async =>
       Chat.fromJson(await _send('GET', '/v1/chats/$chatId'));
 
+  /// listMemories : What the assistant has remembered about the person.
+  ///
+  /// Read-only. A memory is written during a conversation, which is the
+  /// only place with the context to judge whether it is worth keeping.
+  /// Seeing them matters for the other reason: a wrong one is believed
+  /// indefinitely and shapes every later answer.
+  Future<Memories> listMemories() async =>
+      Memories.fromJson(await _send('GET', '/v1/memories'));
+
+  /// listEvents : What the person's own devices have reported.
+  ///
+  /// Newest first by when it happened, not when it arrived: a phone that
+  /// was offline all morning delivers the morning at teatime.
+  Future<Events> listEvents({String? kind, int? limit}) async =>
+      Events.fromJson(
+        await _send(
+          'GET',
+          '/v1/events',
+          query: {
+            if (kind != null && kind.isNotEmpty) 'kind': kind,
+            if (limit != null) 'limit': '$limit',
+          },
+        ),
+      );
+
+  /// listTools : Everything the assistant can do, grouped by domain.
+  ///
+  /// For the caller's own channel: a satellite and a typed client are
+  /// offered different sets, and showing one a list of the other's
+  /// abilities would be a fiction.
+  Future<Abilities> listTools() async =>
+      Abilities.fromJson(await _send('GET', '/v1/tools'));
+
+  /// vocabulary : The proper nouns speech recognition expects.
+  Future<Vocabulary> vocabulary() async =>
+      Vocabulary.fromJson(await _send('GET', '/v1/vocabulary'));
+
   /// listReminders : What is waiting to be said, soonest first.
   ///
   /// What is coming, plus anything held back or never said. past adds
