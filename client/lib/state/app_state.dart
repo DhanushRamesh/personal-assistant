@@ -4,6 +4,7 @@ library;
 import 'dart:async';
 
 import 'package:flutter/foundation.dart';
+import 'package:flutter/scheduler.dart';
 
 import '../api/client.dart';
 import '../api/models.dart';
@@ -733,6 +734,7 @@ class AppState extends ChangeNotifier {
 
   @override
   void dispose() {
+    _disposed = true;
     api.close();
     super.dispose();
   }
@@ -856,8 +858,39 @@ class AppState extends ChangeNotifier {
   void _set({bool? busy, String? error}) {
     if (busy != null) _busy = busy;
     if (error != null || busy == true) _error = error;
+    _announce();
+  }
+
+  /// _announce : Tells listeners, without doing it during a build.
+  ///
+  /// A screen starts its reads from initState and from didUpdateWidget --
+  /// which is the right place, because a page should read afresh whatever
+  /// it is about to show. Both of those run inside the build phase, and
+  /// every loader here sets busy before its first await, so the
+  /// notification landed mid-build.
+  ///
+  /// Flutter does not treat that as fatal. It drops the rebuild. The
+  /// symptom is a screen that changes its address and keeps the previous
+  /// page's contents, intermittently, depending on what else happened to
+  /// be rebuilding -- which is exactly how it was reported.
+  ///
+  /// Deferred to the end of the frame instead. Fixed here rather than at
+  /// each call site, because every future loader would have the same bug
+  /// and nothing would catch it.
+  void _announce() {
+    final phase = SchedulerBinding.instance.schedulerPhase;
+    if (phase == SchedulerPhase.persistentCallbacks) {
+      SchedulerBinding.instance.addPostFrameCallback((_) {
+        if (!_disposed) notifyListeners();
+      });
+      return;
+    }
     notifyListeners();
   }
+
+  /// _disposed : Whether this has been thrown away, so a notification
+  /// deferred to the end of a frame does not arrive at a dead object.
+  bool _disposed = false;
 
   /// _explain : Turns a failure into a sentence worth showing.
   ///
