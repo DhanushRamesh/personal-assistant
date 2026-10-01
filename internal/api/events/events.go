@@ -46,7 +46,7 @@ type Store interface {
 	// already known.
 	Record(ctx context.Context, userID string, events []*event.Event) (stored, seen []string, err error)
 	// Recent : What happened, newest first by when it happened.
-	Recent(ctx context.Context, userID string, since time.Time, kind string, limit int) ([]event.Event, error)
+	Recent(ctx context.Context, userID string, q event.Query) ([]event.Event, error)
 	// Kinds : Which kinds exist, and how many of each.
 	Kinds(ctx context.Context, userID string) ([]event.Kind, error)
 }
@@ -268,7 +268,11 @@ func (h *Handler) List(w http.ResponseWriter, r *http.Request) {
 		since = t
 	}
 
-	events, err := h.store.Recent(ctx, user, since, r.URL.Query().Get("kind"), limit)
+	events, err := h.store.Recent(ctx, user, event.Query{
+		Since: since,
+		Kind:  r.URL.Query().Get("kind"),
+		Limit: limit,
+	})
 	if err != nil {
 		h.Fail(ctx, w, "reading events", err)
 		return

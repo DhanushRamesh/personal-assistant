@@ -5,8 +5,8 @@ package inmemory
 import (
 	"context"
 	"sort"
+	"strings"
 	"sync"
-	"time"
 
 	"github.com/DhanushRamesh/personal-assistant/internal/event"
 )
@@ -57,18 +57,23 @@ func (s *Store) All(userID string) []*event.Event {
 }
 
 // Recent : What happened, newest first by when it happened.
-func (s *Store) Recent(_ context.Context, userID string, since time.Time,
-	kind string, limit int) ([]event.Event, error) {
-
+func (s *Store) Recent(_ context.Context, userID string, q event.Query) ([]event.Event, error) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 
 	var out []event.Event
 	for _, e := range s.byUser[userID] {
-		if !since.IsZero() && e.OccurredAt.Before(since) {
+		switch {
+		case !q.Since.IsZero() && e.OccurredAt.Before(q.Since):
 			continue
-		}
-		if kind != "" && e.Kind != kind {
+		case !q.Until.IsZero() && !e.OccurredAt.Before(q.Until):
+			continue
+		case q.Kind != "" && e.Kind != q.Kind:
+			continue
+		case q.Prefix != "" && !strings.HasPrefix(e.Kind, q.Prefix):
+			continue
+		case q.Contains != "" && !strings.Contains(
+			strings.ToLower(string(e.Payload)), strings.ToLower(q.Contains)):
 			continue
 		}
 		out = append(out, *e)
@@ -76,8 +81,8 @@ func (s *Store) Recent(_ context.Context, userID string, since time.Time,
 	sort.Slice(out, func(i, j int) bool {
 		return out[i].OccurredAt.After(out[j].OccurredAt)
 	})
-	if limit > 0 && len(out) > limit {
-		out = out[:limit]
+	if q.Limit > 0 && len(out) > q.Limit {
+		out = out[:q.Limit]
 	}
 	return out, nil
 }

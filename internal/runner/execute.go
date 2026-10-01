@@ -284,8 +284,12 @@ func (r *Runner) failureSentence(sentence string) string {
 // than none.
 const lookFirst = "Before that answer goes out: you did not use any tool this turn. " +
 	"Read the tools you have been given and check whether one of them answers this. " +
+	"Read the list of tools that exist but have not been described to you as well -- " +
+	"those are usable, they are simply waiting to be asked about, and a tool you have " +
+	"not been handed the arguments for is not a tool you do not have. " +
+	"If one of them fits, call tool_describe with its name and then call it. " +
 	"If you were about to say you cannot do something, or that something does not exist, " +
-	"that is a claim to check against the list rather than against what you remember -- " +
+	"that is a claim to check against both lists rather than against what you remember -- " +
 	"the tools change, and what you could not do last week you may be able to do now. " +
 	"If a tool fits, use it. If none does, say the same thing again and it will be sent as it is."
 

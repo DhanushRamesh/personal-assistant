@@ -4,6 +4,7 @@ package mysql
 import (
 	"context"
 	"fmt"
+	"strings"
 	"time"
 
 	"gorm.io/gorm"
@@ -134,24 +135,37 @@ func (s *Store) Record(ctx context.Context, userID string, events []*event.Event
 // Ordered by when it happened rather than when it arrived. A phone that
 // spent the morning without a signal delivers the morning at teatime, and
 // ordering by arrival would put a whole day in the wrong place.
-//
-// An empty kind means every kind. A zero since means no lower bound.
-func (s *Store) Recent(ctx context.Context, userID string, since time.Time,
-	kind string, limit int) ([]event.Event, error) {
-
-	q := s.db.WithContext(ctx).Model(&row{}).Where("user_id = ?", userID)
-	if !since.IsZero() {
-		q = q.Where("occurred_at >= ?", since.UTC())
+func (s *Store) Recent(ctx context.Context, userID string, q event.Query) ([]event.Event, error) {
+	db := s.db.WithContext(ctx).Model(&row{}).Where("user_id = ?", userID)
+	if !q.Since.IsZero() {
+		db = db.Where("occurred_at >= ?", q.Since.UTC())
 	}
-	if kind != "" {
-		q = q.Where("kind = ?", kind)
+	if !q.Until.IsZero() {
+		db = db.Where("occurred_at < ?", q.Until.UTC())
 	}
-	if limit > 0 {
-		q = q.Limit(limit)
+	if q.Kind != "" {
+		db = db.Where("kind = ?", q.Kind)
+	}
+	if q.Prefix != "" {
+		// Escaped, because a kind is a dotted name and the model writes
+		// it: an underscore is a wildcard to LIKE and a legal character
+		// in a kind, so "battery_low." unescaped would match things it
+		// should not.
+		db = db.Where("kind LIKE ?", like(q.Prefix)+"%")
+	}
+	if q.Contains != "" {
+		// The whole payload as text, not one named field. Payloads have
+		// no fixed shape -- any device may invent one -- so searching a
+		// field this code knows about would silently miss everything
+		// written by something newer.
+		db = db.Where("CAST(payload AS CHAR) LIKE ?", "%"+like(q.Contains)+"%")
+	}
+	if q.Limit > 0 {
+		db = db.Limit(q.Limit)
 	}
 
 	var rows []row
-	if err := q.Order("occurred_at desc").Find(&rows).Error; err != nil {
+	if err := db.Order("occurred_at desc").Find(&rows).Error; err != nil {
 		return nil, fmt.Errorf("reading events: %w", err)
 	}
 
@@ -160,6 +174,12 @@ func (s *Store) Recent(ctx context.Context, userID string, since time.Time,
 		out = append(out, rows[i].toEvent())
 	}
 	return out, nil
+}
+
+// like : A string with LIKE's wildcards made literal.
+func like(s string) string {
+	r := strings.NewReplacer("\\", "\\\\", "%", "\\%", "_", "\\_")
+	return r.Replace(s)
 }
 
 // Kinds : Which kinds exist, with how many of each and when each was last

@@ -68,7 +68,7 @@ const (
 // Reader : Where the events are.
 type Reader interface {
 	// Recent : What happened, newest first by when it happened.
-	Recent(ctx context.Context, userID string, since time.Time, kind string, limit int) ([]event.Event, error)
+	Recent(ctx context.Context, userID string, q event.Query) ([]event.Event, error)
 	// Kinds : Which kinds exist, and how many of each.
 	Kinds(ctx context.Context, userID string) ([]event.Kind, error)
 }
@@ -126,9 +126,26 @@ func recent(reader Reader, clock Clock) tool.Tool {
 				},
 				"days": {
 					Type: "integer",
-					Description: "How many days back to look. 1 is today only, 7 is the past week. " +
-						"Use a larger number for when something last happened.",
+					Description: "How many days back to look, ending today. 1 is today only, 7 is the " +
+						"past week. Use a large number when asking when something last happened.",
 					Default: DefaultDays,
+				},
+				"on": {
+					Type: "string",
+					Description: "One particular day, as YYYY-MM-DD, instead of a stretch ending today. " +
+						"Use this for a question about a named day. Ignores days.",
+				},
+				"contains": {
+					Type: "string",
+					Description: "Only events mentioning this somewhere in their details: a network " +
+						"name, a place, a person. Use it when the question is about a particular " +
+						"thing rather than a particular kind.",
+				},
+				"limit": {
+					Type: "integer",
+					Description: "At most this many, newest first. Use 1 when the question is only " +
+						"when something last happened.",
+					Default: DefaultLimit,
 				},
 			},
 		},
@@ -138,8 +155,11 @@ func recent(reader Reader, clock Clock) tool.Tool {
 		},
 		Run: func(ctx context.Context, in tool.Invocation) tool.Result {
 			var args struct {
-				Kind string `json:"kind"`
-				Days int    `json:"days"`
+				Kind     string `json:"kind"`
+				Days     int    `json:"days"`
+				On       string `json:"on"`
+				Contains string `json:"contains"`
+				Limit    int    `json:"limit"`
 			}
 			_ = json.Unmarshal(in.Args, &args)
 
@@ -150,31 +170,62 @@ func recent(reader Reader, clock Clock) tool.Tool {
 				return tool.Failed("This request did not come from a known person.")
 			}
 
+			where := clock.where()
+			q := event.Query{Contains: strings.TrimSpace(args.Contains)}
+
+			// A kind ending in a dot is a family rather than a name.
+			// "network." covers joining and leaving without the caller
+			// having to know which kinds exist, which it cannot, because
+			// any device may invent one.
+			kind := strings.TrimSpace(args.Kind)
+			if strings.HasSuffix(kind, ".") {
+				q.Prefix = kind
+			} else {
+				q.Kind = kind
+			}
+
+			q.Limit = args.Limit
+			if q.Limit <= 0 {
+				q.Limit = DefaultLimit
+			}
+			q.Limit = min(q.Limit, MaxLimit)
+
 			days := args.Days
 			if days <= 0 {
 				days = DefaultDays
 			}
 			days = min(days, MaxDays)
 
-			// From the start of that day in the person's own zone, not
-			// from this moment minus a day. "Today" means since
-			// midnight; measuring back from now would answer a question
-			// about this morning with yesterday evening in it.
-			where := clock.where()
+			// From the start of a day in the person's own zone, not from
+			// this moment minus a day. "Today" means since midnight;
+			// measuring back from now would answer a question about this
+			// morning with yesterday evening in it.
 			local := clock.now().In(where)
-			since := time.Date(local.Year(), local.Month(), local.Day(),
-				0, 0, 0, 0, where).AddDate(0, 0, -(days - 1))
+			midnight := time.Date(local.Year(), local.Month(), local.Day(),
+				0, 0, 0, 0, where)
 
-			found, err := reader.Recent(ctx, in.Caller.UserID, since,
-				strings.TrimSpace(args.Kind), DefaultLimit)
+			over := window(days)
+			if on := strings.TrimSpace(args.On); on != "" {
+				day, err := time.ParseInLocation("2006-01-02", on, where)
+				if err != nil {
+					return tool.Failed("A day has to be written as YYYY-MM-DD; " +
+						on + " could not be read as one.")
+				}
+				q.Since, q.Until = day, day.AddDate(0, 0, 1)
+				over = "on " + day.Format("Monday 2 January")
+			} else {
+				q.Since = midnight.AddDate(0, 0, -(days - 1))
+			}
+
+			found, err := reader.Recent(ctx, in.Caller.UserID, q)
 			if err != nil {
 				return tool.Failed(err.Error())
 			}
 
 			if len(found) == 0 {
-				return tool.OK(nothing(ctx, reader, in.Caller.UserID, args.Kind, days))
+				return tool.OK(nothing(ctx, reader, in.Caller.UserID, q, over))
 			}
-			return tool.OK(describe(found, args.Kind, days, where))
+			return tool.OK(describe(found, q, over, where))
 		},
 	}
 }
@@ -183,23 +234,33 @@ func recent(reader Reader, clock Clock) tool.Tool {
 //
 // Which kinds do exist, when the question found nothing, because the
 // likeliest reason is a kind that was guessed at rather than a quiet day.
-func nothing(ctx context.Context, reader Reader, userID, kind string, days int) string {
-	over := window(days)
-	if kind == "" {
+func nothing(ctx context.Context, reader Reader, userID string, q event.Query, over string) string {
+	asked := q.Kind + q.Prefix
+	if asked == "" && q.Contains == "" {
 		return "Their devices reported nothing " + over + "."
 	}
 
+	var what []string
+	if asked != "" {
+		what = append(what, "of kind "+asked)
+	}
+	if q.Contains != "" {
+		what = append(what, "mentioning "+q.Contains)
+	}
+	none := "Nothing " + strings.Join(what, " ") + " was reported " + over + "."
+
 	kinds, err := reader.Kinds(ctx, userID)
 	if err != nil || len(kinds) == 0 {
-		return "Nothing of kind " + kind + " was reported " + over + "."
+		return none
 	}
 	names := make([]string, 0, len(kinds))
 	for _, k := range kinds {
 		names = append(names, fmt.Sprintf("%s (%d)", k.Kind, k.Count))
 	}
 	return prompt.Text(
-		"Nothing of kind "+kind+" was reported "+over+".",
-		"The kinds that do exist are: "+strings.Join(names, ", ")+".",
+		none,
+		"The kinds that do exist, with how many of each altogether, are: "+
+			strings.Join(names, ", ")+".",
 	)
 }
 
@@ -225,7 +286,7 @@ type run struct {
 }
 
 // describe : The shape of what happened, collapsed.
-func describe(found []event.Event, kind string, days int, where *time.Location) string {
+func describe(found []event.Event, q event.Query, over string, where *time.Location) string {
 	// Oldest first: a day is read forwards. The store answers newest
 	// first because a listing wants that, and a narrative does not.
 	sort.Slice(found, func(i, j int) bool {
@@ -250,9 +311,17 @@ func describe(found []event.Event, kind string, days int, where *time.Location) 
 	}
 
 	var b strings.Builder
-	header := fmt.Sprintf("%d events %s", len(found), window(days))
-	if kind != "" {
-		header = fmt.Sprintf("%d of kind %s %s", len(found), kind, window(days))
+	var narrowed []string
+	if asked := q.Kind + q.Prefix; asked != "" {
+		narrowed = append(narrowed, "of kind "+asked)
+	}
+	if q.Contains != "" {
+		narrowed = append(narrowed, "mentioning "+q.Contains)
+	}
+	header := fmt.Sprintf("%d events %s", len(found), over)
+	if len(narrowed) > 0 {
+		header = fmt.Sprintf("%d events %s %s",
+			len(found), strings.Join(narrowed, " "), over)
 	}
 	if len(runs) < len(found) {
 		header += fmt.Sprintf(", as %d entries once repeats are grouped", len(runs))

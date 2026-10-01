@@ -182,3 +182,91 @@ func TestAnUnknownCallerIsRefused(t *testing.T) {
 		t.Fatal("an anonymous caller should be refused")
 	}
 }
+
+// A kind ending in a dot is a family. The caller cannot know which kinds
+// exist -- any device may invent one -- so asking for "network." must
+// cover joining and leaving without naming either.
+func TestATrailingDotAsksForAFamilyOfKinds(t *testing.T) {
+	got := ask(t, store(t,
+		at(t, 9, 0, "network.joined", "Zoho-Guest"),
+		at(t, 9, 30, "network.left", "Zoho-Guest"),
+		at(t, 10, 0, "battery.low", ""),
+	), `{"kind":"network."}`)
+
+	if !strings.Contains(got.Content, "network.joined") ||
+		!strings.Contains(got.Content, "network.left") {
+		t.Fatalf("both network kinds should appear:\n%s", got.Content)
+	}
+	if strings.Contains(got.Content, "battery.low") {
+		t.Fatalf("an unrelated kind leaked in:\n%s", got.Content)
+	}
+}
+
+// Some questions are about a place rather than a kind.
+func TestEventsCanBeFilteredByWhatTheyMention(t *testing.T) {
+	got := ask(t, store(t,
+		at(t, 9, 0, "network.joined", "Zoho-Guest"),
+		at(t, 10, 0, "network.joined", "Home"),
+	), `{"contains":"Home"}`)
+
+	if !strings.Contains(got.Content, "Home") {
+		t.Fatalf("the match is missing:\n%s", got.Content)
+	}
+	if strings.Contains(got.Content, "Zoho-Guest") {
+		t.Fatalf("a non-match leaked in:\n%s", got.Content)
+	}
+}
+
+func TestAParticularDayCanBeAskedFor(t *testing.T) {
+	yesterday := time.Date(2026, 9, 30, 20, 0, 0, 0, kolkata)
+	e, err := event.New("usr_1", "tasker", "", "network.joined",
+		yesterday, yesterday, json.RawMessage(`{"value":"Home"}`), "y1")
+	if err != nil {
+		t.Fatalf("building: %v", err)
+	}
+	s := store(t, e, at(t, 9, 0, "network.joined", "Zoho-Guest"))
+
+	got := ask(t, s, `{"on":"2026-09-30"}`)
+	if !strings.Contains(got.Content, "Home") {
+		t.Fatalf("the named day is missing:\n%s", got.Content)
+	}
+	if strings.Contains(got.Content, "Zoho-Guest") {
+		t.Fatalf("another day leaked in:\n%s", got.Content)
+	}
+}
+
+func TestABadDayIsRefusedClearly(t *testing.T) {
+	got := ask(t, inmemory.New(), `{"on":"last Tuesday"}`)
+	if got.Outcome != conversation.OutcomeFailed {
+		t.Fatalf("an unreadable day should be refused: %s", got.Content)
+	}
+	if !strings.Contains(got.Content, "YYYY-MM-DD") {
+		t.Fatalf("the refusal should say the shape wanted:\n%s", got.Content)
+	}
+}
+
+// "When did I last..." wants one answer, not a day of them.
+func TestALimitOfOneGivesTheMostRecent(t *testing.T) {
+	got := ask(t, store(t,
+		at(t, 9, 0, "network.joined", "Zoho-Guest"),
+		at(t, 17, 0, "network.joined", "Home"),
+	), `{"limit":1}`)
+
+	if !strings.Contains(got.Content, "Home") {
+		t.Fatalf("the most recent is missing:\n%s", got.Content)
+	}
+	if strings.Contains(got.Content, "Zoho-Guest") {
+		t.Fatalf("more than one was returned:\n%s", got.Content)
+	}
+}
+
+// A filter that finds nothing is most likely a guess, so the answer says
+// what does exist rather than implying a quiet day.
+func TestAnEmptyFilteredAnswerStillNamesTheKinds(t *testing.T) {
+	got := ask(t, store(t, at(t, 9, 0, "network.joined", "Zoho-Guest")),
+		`{"contains":"Paris"}`)
+
+	if !strings.Contains(got.Content, "network.joined") {
+		t.Fatalf("the kinds that exist are missing:\n%s", got.Content)
+	}
+}

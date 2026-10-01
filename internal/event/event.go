@@ -244,3 +244,29 @@ type Kind struct {
 	First time.Time
 	Last  time.Time
 }
+
+// Query : What to look for.
+//
+// One struct rather than a growing argument list, because the useful
+// questions differ in which parts they fill in rather than in kind:
+// "what did I do today", "when was I last on that network", "what
+// happened on Tuesday" are all this with different fields set. A tool
+// for each would be several tools that read one table.
+type Query struct {
+	// Since, Until : The window. Zero means unbounded at that end.
+	Since time.Time
+	Until time.Time
+	// Kind : Exactly this kind. Ignored when empty.
+	Kind string
+	// Prefix : Any kind starting with this, which is how a family of
+	// kinds is asked for -- "network." covers joining and leaving
+	// without naming either, and without the caller having to know
+	// which ones exist.
+	Prefix string
+	// Contains : Text somewhere in the payload, case-insensitive. What
+	// answers a question about a particular place or person rather than
+	// a particular kind.
+	Contains string
+	// Limit : At most this many, newest first. Zero means no limit.
+	Limit int
+}
