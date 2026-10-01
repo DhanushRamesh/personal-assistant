@@ -33,14 +33,39 @@ func TestSameNetworkIsPresent(t *testing.T) {
 	}
 }
 
-func TestDifferentNetworksIsAway(t *testing.T) {
+// A phone on mobile data lying beside the laptop is on a different
+// network and plainly present. So is a phone on the guest network in an
+// office whose laptop is on the corporate one -- which is exactly the
+// case this was first run in.
+func TestADifferentNetworkIsNotAnAbsence(t *testing.T) {
 	got := From([]event.Event{
-		ev(Satellite, Joined, "Home", time.Hour),
+		ev(Satellite, Joined, "Zoho-Corp-TLS", time.Hour),
 		ev(Phone, Joined, "Zoho-Guest", time.Hour),
 	}, now)
 
-	if got.Where != Away {
-		t.Fatalf("where = %s (%s), want away", got.Where, got.Why)
+	if got.Where == Away {
+		t.Fatalf("a different network must never mean away: %s", got.Why)
+	}
+	if got.Where != Unknown {
+		t.Fatalf("where = %s (%s), want unknown", got.Where, got.Why)
+	}
+}
+
+// Nothing may conclude an absence from a network, however the events
+// fall. Away waits on location.
+func TestNothingConcludesAwayFromNetworksAlone(t *testing.T) {
+	cases := [][]event.Event{
+		{ev(Satellite, Joined, "Home", time.Hour), ev(Phone, Joined, "Other", time.Hour)},
+		{ev(Satellite, Joined, "Home", time.Hour), ev(Phone, Left, "Home", time.Minute)},
+		{ev(Satellite, Left, "Home", time.Hour), ev(Phone, Joined, "Home", time.Minute)},
+		{ev(Phone, Joined, "Home", time.Hour)},
+		{ev(Satellite, Joined, "Home", time.Hour)},
+		nil,
+	}
+	for i, events := range cases {
+		if got := From(events, now); got.Where == Away {
+			t.Errorf("case %d concluded away from networks: %s", i, got.Why)
+		}
 	}
 }
 
@@ -95,8 +120,8 @@ func TestTheNewestEventPerSourceWins(t *testing.T) {
 		ev(Phone, Joined, "Zoho-Guest", time.Hour),
 	}, now)
 
-	if got.Where != Away {
-		t.Fatalf("where = %s (%s), want away", got.Where, got.Why)
+	if got.Where == Away {
+		t.Fatalf("a different network must never mean away: %s", got.Why)
 	}
 	if got.On[Phone] != "Zoho-Guest" {
 		t.Fatalf("phone is on %q, want the newest", got.On[Phone])

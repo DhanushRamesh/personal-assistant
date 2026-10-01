@@ -6,11 +6,21 @@
 // is empty, and a person who has left the building and a person who is
 // in the next street are the same to it.
 //
-// So it compares networks. The phone reports which one it joined, the
-// machine running the satellite reports the same about itself, and the
-// person is present when those agree. Nothing has to be told which
-// network is home, which matters: home is not a named network here, and
-// the one place this ever worked was the office.
+// A shared network says they are together. It is good evidence and it
+// is free: the phone already reports which network it joined and the
+// machine running the satellite reports the same about itself.
+//
+// A different network says nothing at all. A phone on mobile data lying
+// beside the laptop is on a different network and plainly present, and
+// an office with a corporate network and a guest network puts two
+// devices in one room on two networks. So this answers present or it
+// answers unable to tell; it never answers away from a network alone.
+//
+// Away has to come from somewhere that can actually see distance, which
+// means location and geofences. Until those arrive this cannot say
+// anybody has left, and so nothing built on it can welcome anybody back.
+// That is the honest state of it rather than a gap to be filled with a
+// guess.
 //
 // Derived from transitions rather than from a reading. A device reports
 // joining and leaving, so the newest of those is the current state and
@@ -39,7 +49,10 @@ type Where string
 const (
 	// Present : Their phone and the assistant are on the same network.
 	Present Where = "present"
-	// Away : Both were seen, and they are not together.
+	// Away : They are elsewhere.
+	//
+	// Nothing produces this yet. A network cannot establish it -- see
+	// the package comment -- and it waits on location.
 	Away Where = "away"
 	// Unknown : It cannot be told. Never an absence.
 	Unknown Where = "unknown"
@@ -138,8 +151,10 @@ func From(events []event.Event, now time.Time) Answer {
 		out.Where = Present
 		out.Why = fmt.Sprintf("both are on %s", phone.network)
 	default:
-		out.Where = Away
-		out.Why = fmt.Sprintf("the phone is on %s and the assistant is on %s",
+		// Not away. Mobile data beside the laptop looks exactly like
+		// this, and so does a guest network in the same building.
+		out.Why = fmt.Sprintf(
+			"the phone is on %s and the assistant is on %s, which says nothing about where they are",
 			phone.network, sat.network)
 	}
 	return out
