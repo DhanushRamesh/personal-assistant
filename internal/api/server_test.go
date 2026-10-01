@@ -68,6 +68,7 @@ func TestRouteTableIsComplete(t *testing.T) {
 		"POST /v1/reminders/{id}/snooze":        true,
 		"POST /v1/presence/arrived":             true,
 		"POST /v1/speech/cut":                   true,
+		"POST /v1/events":                       true,
 		"GET /v1/profile":                       true,
 		"PUT /v1/profile":                       true,
 		"GET /v1/vocabulary":                    true,

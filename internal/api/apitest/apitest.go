@@ -31,12 +31,14 @@ import (
 	"github.com/DhanushRamesh/personal-assistant/internal/announce"
 	"github.com/DhanushRamesh/personal-assistant/internal/api"
 	"github.com/DhanushRamesh/personal-assistant/internal/api/authn"
+	eventsapi "github.com/DhanushRamesh/personal-assistant/internal/api/events"
 	"github.com/DhanushRamesh/personal-assistant/internal/api/presence"
 	"github.com/DhanushRamesh/personal-assistant/internal/api/views"
 	"github.com/DhanushRamesh/personal-assistant/internal/auth"
 	"github.com/DhanushRamesh/personal-assistant/internal/chat"
 	"github.com/DhanushRamesh/personal-assistant/internal/chat/memory"
 	"github.com/DhanushRamesh/personal-assistant/internal/environment"
+	eventmemory "github.com/DhanushRamesh/personal-assistant/internal/event/inmemory"
 	"github.com/DhanushRamesh/personal-assistant/internal/events"
 	"github.com/DhanushRamesh/personal-assistant/internal/logging"
 	"github.com/DhanushRamesh/personal-assistant/internal/remind"
@@ -102,6 +104,10 @@ type Options struct {
 	// Announcer : Where the server speaks of its own accord. Nil says
 	// nowhere, which is what a server with no satellite has.
 	Announcer announce.Announcer
+
+	// DeviceEvents : Where what the person's devices saw is kept. Nil
+	// selects a store that keeps them in memory.
+	DeviceEvents eventsapi.Store
 
 	// Reminders : What is waiting to be said. Nil selects an empty store,
 	// so a test that does not care need not build one.
@@ -185,6 +191,7 @@ func NewWith(t *testing.T, opts Options) *Env {
 			Messages:         repo,
 			Reminders:        opts.Reminders,
 			Announcer:        opts.Announcer,
+			DeviceEvents:     deviceEvents(opts.DeviceEvents),
 			Announcements:    opts.Announcements,
 			Runner:           chatRunner,
 			Events:           bus,
@@ -567,4 +574,12 @@ func (r *RecordingProvider) LastPrompt() string {
 	r.mu.Lock()
 	defer r.mu.Unlock()
 	return r.prompt
+}
+
+// deviceEvents : The given store, or an empty one kept in memory.
+func deviceEvents(store eventsapi.Store) eventsapi.Store {
+	if store != nil {
+		return store
+	}
+	return eventmemory.New()
 }

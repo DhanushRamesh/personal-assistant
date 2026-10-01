@@ -4461,6 +4461,24 @@ needs is complete, end to end.
 
 ## 11. Deploying
 
+**Tasker reports to the server, never through Home Assistant.** Owner,
+1 October 2026: "there should be no connection between android tasker
+and ha companion, it should directly go to ai server only."
+
+The Home Assistant Companion app was the obvious shortcut -- it is
+already installed, already authenticated, and ships about sixty
+sensors covering battery, wifi, steps, screen state, the app in the
+foreground and location. Four of them are switched on today. It was
+offered and declined, and the reason it was declined is the better
+reason: Home Assistant is the voice and the hands, not the memory.
+Routing what the person does through it would make the mind depend on
+the room, and the mind is the thing that is about to move to a cloud
+machine while Home Assistant stays at home on a Pi.
+
+So the phone talks to the server directly, and Home Assistant never
+sees an event. What the Companion would have given free now needs a
+Tasker profile each: that is the price, and it was accepted knowingly.
+
 **Where this is going, decided 1 October 2026.** Three tiers, not two.
 The server, MySQL and `tei-embed` move to a cloud machine; Home
 Assistant, Piper, Whisper and the Deepgram bridge run on a Raspberry

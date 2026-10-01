@@ -28,6 +28,7 @@ import (
 	"github.com/DhanushRamesh/personal-assistant/internal/embed/tei"
 	"github.com/DhanushRamesh/personal-assistant/internal/environment"
 	"github.com/DhanushRamesh/personal-assistant/internal/environment/platformai"
+	eventmysql "github.com/DhanushRamesh/personal-assistant/internal/event/mysql"
 	"github.com/DhanushRamesh/personal-assistant/internal/events"
 	"github.com/DhanushRamesh/personal-assistant/internal/google"
 	googlemysql "github.com/DhanushRamesh/personal-assistant/internal/google/mysql"
@@ -409,6 +410,7 @@ func run() error {
 		DefaultModel:   cfg.PlatformAI.Model,
 		Persona:        manner,
 		Cut:            cutOff,
+		DeviceEvents:   eventmysql.New(db),
 		RequestTimeout: cfg.Server.RequestTimeout,
 		// Development only: `flutter run` serves the UI from its own port so
 		// that hot reload works. In production the server serves it, so every

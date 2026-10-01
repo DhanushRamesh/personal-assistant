@@ -25,6 +25,7 @@ import (
 	"github.com/DhanushRamesh/personal-assistant/internal/api/chats"
 	"github.com/DhanushRamesh/personal-assistant/internal/api/clients"
 	"github.com/DhanushRamesh/personal-assistant/internal/api/conversations"
+	"github.com/DhanushRamesh/personal-assistant/internal/api/events"
 	googleapi "github.com/DhanushRamesh/personal-assistant/internal/api/google"
 	"github.com/DhanushRamesh/personal-assistant/internal/api/health"
 	"github.com/DhanushRamesh/personal-assistant/internal/api/middleware"
@@ -106,6 +107,13 @@ type Options struct {
 	// Announcer : Where the server speaks of its own accord. Optional;
 	// without it a greeting is composed and not said.
 	Announcer announce.Announcer
+	// DeviceEvents : Where the person's own devices report what happened
+	// to them, which is what lets the assistant say something first.
+	//
+	// Named apart from Events, which is the bus carrying a chat's own
+	// messages to clients. Two different senses of the word met here.
+	DeviceEvents events.Store
+
 	// Cut : Where the speech-to-text bridge reports that a recording was
 	// stopped while somebody was still speaking. Home Assistant does not
 	// pass that on, so it arrives by this side door instead.
@@ -165,6 +173,7 @@ type Server struct {
 	google        *googleapi.Handler
 	assist        *assist.Handler
 	speech        *speechapi.Handler
+	events        *events.Handler
 }
 
 // New : Builds a Server from opts and registers its routes.
@@ -192,6 +201,7 @@ func New(opts Options) *Server {
 		google:     googleapi.New(opts.Logger, opts.Google, opts.SettingsURL),
 		assist:     assist.New(opts.Logger, opts.Chats, opts.Runner, opts.Events),
 		speech:     speechapi.New(opts.Logger, opts.Cut),
+		events:     events.New(opts.Logger, opts.DeviceEvents, opts.Now),
 	}
 	s.routes()
 	return s
@@ -242,5 +252,6 @@ func (s *Server) routes() {
 		s.google.Mount(r)
 		s.assist.Mount(r)
 		s.speech.Mount(r)
+		s.events.Mount(r)
 	})
 }
