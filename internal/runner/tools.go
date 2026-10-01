@@ -22,6 +22,21 @@ import (
 // intended.
 const MaxToolHops = 5
 
+// MaxRounds : How many rounds one question may take altogether,
+// correcting rounds included.
+//
+// MaxToolHops bounds the rounds that got something done. This bounds
+// the rest, so a chain that learns nothing from being corrected still
+// ends: without it, a model that answers without looking every single
+// time would be sent back for ever.
+//
+// Comfortably above MaxToolHops, because the corrections are the
+// server's own doing -- being sent back to look, being told how to call
+// a deferred tool, being refused for writing before reading -- and a
+// turn should be able to absorb several of them and still do the work
+// it was asked for.
+const MaxRounds = 9
+
 // offered : The tools this chat may reach, in the shape an environment takes.
 //
 // The first of the two gates. A tool missing from here is never described to

@@ -110,16 +110,49 @@ func (r *Runner) consume(runCtx, ctx context.Context, t *chat.Chat, systemPrompt
 	// mid-chain.
 	revealed := map[string]bool{}
 
+	// worked : Rounds that got something done, as against rounds the
+	// server spent correcting the model.
+	//
+	// Only these are counted against the budget. A turn asking for one
+	// task list was refused for answering without looking, spent a round
+	// being told how to call a deferred tool, was refused again for
+	// writing before reading -- and then, on the round where it finally
+	// had what it needed, the tools were taken away because four rounds
+	// had passed. Every guard was right and the work still did not
+	// happen.
+	//
+	// A correction is the server teaching, not the model wandering, and
+	// charging the model for being taught is how a turn runs out of
+	// rounds without ever having had one.
+	worked := 0
+
 	for hop := 0; ; hop++ {
+		// Rounds are still bounded, in case a chain learns nothing and
+		// goes round for ever: the correcting kind are bounded by this
+		// and the useful kind by MaxToolHops.
+		if hop >= MaxRounds {
+			r.logger.WarnContext(ctx, "the tool chain went round too many times",
+				slog.Int("rounds", hop), slog.Int("worked", worked))
+			worked = MaxToolHops
+		}
+
 		// The last round is offered nothing. A model that has run out of
 		// rounds must answer from what it gathered, and saying what it
 		// managed is better than being cut off mid-chain with nothing to
 		// show for the work that already ran.
 		tools := r.offered(t, revealed)
-		if hop >= MaxToolHops-1 {
+		if worked >= MaxToolHops-1 {
 			if len(tools) > 0 {
 				r.logger.WarnContext(ctx, "the tool chain ran long, so the last round is asked without tools",
-					slog.Int("hops", hop))
+					slog.Int("hops", hop), slog.Int("worked", worked))
+				// And told why, or it has nothing it can say. The round
+				// before this one often ends in a tool result that asks
+				// for another call -- read this, then write again -- and
+				// a model handed that instruction and no tools has been
+				// told to do something and given no way to do it. Asked
+				// like that it has returned nothing at all, and an empty
+				// reply is a failed turn.
+				prompt = lastRound
 			}
 			tools = nil
 		}
@@ -243,7 +276,16 @@ func (r *Runner) consume(runCtx, ctx context.Context, t *chat.Chat, systemPrompt
 			spoke = true
 		}
 
+		// Whether this round got anything done, measured by what
+		// actually ran rather than by what was asked for. runTools adds
+		// a tool to ran only when it did not fail, so a round whose
+		// calls were all refused adds nothing and is not charged.
+		before := len(ran)
+
 		ranTurns, ranOwed, reveal := r.runTools(ctx, t, final.ToolCalls, &ran, revealed)
+		if did(ran[before:]) {
+			worked++
+		}
 		turns = append(turns, ranTurns...)
 		owed = append(owed, ranOwed...)
 		for _, name := range reveal {
@@ -258,6 +300,22 @@ func (r *Runner) consume(runCtx, ctx context.Context, t *chat.Chat, systemPrompt
 			return
 		}
 	}
+}
+
+// did : Whether a round got something done.
+//
+// Anything that ran and was not tool_describe. Describing a tool is the
+// deferring mechanism costing a round, not the turn making progress --
+// the model knows no more about the person afterwards than it did
+// before, and charging the turn for it is charging it for a saving made
+// somewhere else.
+func did(ran []string) bool {
+	for _, name := range ran {
+		if name != tool.DescribeName {
+			return true
+		}
+	}
+	return false
 }
 
 // failureSentence : What a failure says, in the voice of whoever is
@@ -292,6 +350,26 @@ const lookFirst = "Before that answer goes out: you did not use any tool this tu
 	"that is a claim to check against both lists rather than against what you remember -- " +
 	"the tools change, and what you could not do last week you may be able to do now. " +
 	"If a tool fits, use it. If none does, say the same thing again and it will be sent as it is."
+
+// lastRound : What the model is told when its tools are taken away.
+//
+// It is not being asked to try again. It is being asked to report,
+// which is a thing it can do with nothing: say what was found, say
+// what was not done, and leave the person knowing where it got to.
+//
+// Worded to stop the one failure this round actually has. Handed a
+// tool result saying "read this and then call that again" and then
+// offered no tools, it has returned an empty reply -- which the person
+// sees as the assistant breaking rather than as it running out of
+// room.
+const lastRound = "This turn has used all the rounds of tools it is allowed, so there are none for this one. " +
+	"Do not ask for a tool and do not say you are about to do something: nothing further will run. " +
+	"Answer now from what you already found. " +
+	"If part of what they asked was done, say what was done. " +
+	"If something was not done, say plainly that you did not get to it and what is left, " +
+	"in the ordinary way you would tell somebody you ran out of time -- not as an error, and without " +
+	"describing rounds, tools or limits, which are yours and not theirs. " +
+	"Say something: an empty answer reaches them as the assistant having broken."
 
 // asUserTurn : The question as a turn, or nothing when there is none.
 //
