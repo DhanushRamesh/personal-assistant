@@ -330,3 +330,100 @@ func TestToolsTakeRoomFromTheConversation(t *testing.T) {
 		t.Errorf("forty tools left %d bytes for the conversation and none left %d; want less", tight, spare)
 	}
 }
+
+// TestACallNobodyAnsweredIsDropped : A turn stopped between recording
+// the calls and recording what they returned leaves a call nothing
+// answers, and the service refuses every later turn for it.
+//
+// Measured on 30 September 2026: a restart landed mid turn and every
+// question in that conversation afterwards came back "The server
+// would not accept that request" -- "tool_use ids were found without
+// tool_result blocks". It does not heal on its own, because the bad
+// pair is replayed on every request from then on.
+func TestACallNobodyAnsweredIsDropped(t *testing.T) {
+	at := time.Date(2026, 9, 30, 17, 25, 0, 0, time.UTC)
+	messages := []conversation.Message{
+		conversation.Said("c1", "what is on my calendar", at),
+		conversation.CalledTools("c1", []conversation.ToolCall{
+			{ID: "toolu_gone", Name: "calendar_events"},
+		}, at),
+		conversation.Said("c1", "and tomorrow", at),
+	}
+
+	got := conversation.Plan(messages, conversation.Summary{}, conversation.Limits{Bytes: 100000})
+
+	for _, m := range got.Messages {
+		if len(m.ToolCalls) > 0 {
+			t.Errorf("kept a call nothing answered: %v", m.ToolCalls)
+		}
+	}
+}
+
+// A call that was answered survives, with its answer.
+func TestAnAnsweredCallIsKept(t *testing.T) {
+	at := time.Date(2026, 9, 30, 17, 25, 0, 0, time.UTC)
+	messages := []conversation.Message{
+		conversation.Said("c1", "what is on my calendar", at),
+		conversation.CalledTools("c1", []conversation.ToolCall{
+			{ID: "toolu_ok", Name: "calendar_events"},
+		}, at),
+		conversation.ToolsReturned("c1", []conversation.ToolResult{
+			{ID: "toolu_ok", Name: "calendar_events", Content: "nothing tomorrow"},
+		}, at),
+	}
+
+	got := conversation.Plan(messages, conversation.Summary{}, conversation.Limits{Bytes: 100000})
+
+	var calls, results int
+	for _, m := range got.Messages {
+		calls += len(m.ToolCalls)
+		results += len(m.ToolResults)
+	}
+	if calls != 1 || results != 1 {
+		t.Errorf("kept %d calls and %d results, want both halves", calls, results)
+	}
+}
+
+// TestAnInterruptedTurnKeepsItsPairTogether : Speaking again while
+// the tools are still running writes the new question between a call
+// and its result.
+//
+// Measured on 30 September 2026 at sequences 69 to 71: calls, then
+// "Which was the last time that I sent a mail", then the results. The
+// service refuses the whole request -- "tool_use ids were found
+// without tool_result blocks immediately after" -- and keeps refusing,
+// because the order is stored and replayed on every later turn.
+func TestAnInterruptedTurnKeepsItsPairTogether(t *testing.T) {
+	at := time.Date(2026, 9, 30, 17, 25, 0, 0, time.UTC)
+	messages := []conversation.Message{
+		conversation.Said("c1", "what is in my inbox", at),
+		conversation.CalledTools("c1", []conversation.ToolCall{
+			{ID: "toolu_1", Name: "mail_inbox"},
+		}, at),
+		conversation.Said("c1", "when did I last send a mail", at),
+		conversation.ToolsReturned("c1", []conversation.ToolResult{
+			{ID: "toolu_1", Name: "mail_inbox", Content: "ten messages"},
+		}, at),
+	}
+
+	got := conversation.Plan(messages, conversation.Summary{}, conversation.Limits{Bytes: 100000})
+
+	for i, m := range got.Messages {
+		if len(m.ToolCalls) == 0 {
+			continue
+		}
+		if i+1 >= len(got.Messages) || len(got.Messages[i+1].ToolResults) == 0 {
+			t.Fatalf("the call at %d is not followed by its result", i)
+		}
+	}
+	// Nothing is lost: the interrupting question is still there.
+	var asked int
+	for _, m := range got.Messages {
+		if m.Content == "when did I last send a mail" {
+			asked++
+		}
+	}
+	if asked != 1 {
+		t.Errorf("the interrupting question appears %d times, want once", asked)
+	}
+}

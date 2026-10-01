@@ -153,7 +153,11 @@ func Plan(messages []Message, s Summary, l Limits) Window {
 	return Window{Summary: s.Text, Messages: whole(turns)}
 }
 
-// whole : The messages with any orphaned tool results dropped from the front.
+// whole : The messages with both halves of every tool exchange, or
+// neither.
+//
+// Two ways one half goes missing, and a service rejects the remainder
+// either way.
 //
 // Trimming takes from the oldest end, which can cut an assistant's tool calls
 // away and leave the answers behind them. A service rejects a result that
@@ -161,7 +165,86 @@ func Plan(messages []Message, s Summary, l Limits) Window {
 // account of where it came from. The condenser already cuts on turn
 // boundaries for the same reason; this is the case it cannot see, where the
 // window is bounded by size rather than by where a turn began.
+//
+// The other way is a turn that stopped between the two. The calls are
+// written down before they run, so that a chain cut in the middle
+// still reads as what was done -- but if nothing writes the results,
+// the conversation keeps a call that was never answered. Every later
+// turn then fails: "tool_use ids were found without tool_result
+// blocks". Measured on 30 September 2026 after a restart landed mid
+// turn, and it does not heal, because the bad pair is replayed on
+// every request from then on.
 func whole(messages []Message) []Message {
+	return adjacent(answered(fromWholeCalls(messages)))
+}
+
+// adjacent : The messages with every tool result put back immediately
+// after the call it answers.
+//
+// They are not always written that way. A turn records its calls,
+// runs them, and records what they returned -- and the person can
+// speak again while that is happening. Their question is written down
+// when it arrives, which is in the middle, and the conversation then
+// holds calls at one sequence, a question at the next, and the
+// results after that.
+//
+// Measured on 30 September 2026, at sequence 69 to 71 of a
+// conversation: the service refuses the whole request, "tool_use ids
+// were found without tool_result blocks immediately after", and goes
+// on refusing every later turn because the order is stored and
+// replayed each time.
+//
+// Moved rather than dropped. The pair is intact and only out of
+// order, and putting the question after the answer it interrupted is
+// closer to what happened than losing either.
+func adjacent(messages []Message) []Message {
+	// Which message answers each call, by position.
+	answers := map[int]int{}
+	answered := map[int]bool{}
+	for i, m := range messages {
+		if len(m.ToolCalls) == 0 {
+			continue
+		}
+		for j := i + 1; j < len(messages); j++ {
+			if shares(messages[j].answers(), m.asks()) {
+				answers[i], answered[j] = j, true
+				break
+			}
+		}
+	}
+	if len(answers) == 0 {
+		return messages
+	}
+
+	// Every answer is emitted after its call and skipped where it was
+	// written. When the two were already next to each other that is
+	// the same order back again.
+	out := make([]Message, 0, len(messages))
+	for i, m := range messages {
+		if answered[i] {
+			continue
+		}
+		out = append(out, m)
+		if j, ok := answers[i]; ok {
+			out = append(out, messages[j])
+		}
+	}
+	return out
+}
+
+// shares : Whether any identifier appears in both.
+func shares(a, b map[string]bool) bool {
+	for id := range a {
+		if b[id] {
+			return true
+		}
+	}
+	return false
+}
+
+// fromWholeCalls : The messages with any orphaned tool results dropped
+// from the front.
+func fromWholeCalls(messages []Message) []Message {
 	asked := map[string]bool{}
 	first := 0
 
@@ -187,7 +270,44 @@ func whole(messages []Message) []Message {
 	}
 
 	return messages[first:]
+}
 
+// answered : The messages with unanswered tool calls dropped.
+//
+// A turn stopped between recording the calls and recording what they
+// returned leaves calls nothing answers. The pair is useless with half
+// of it missing, and unlike the other direction this one is fatal
+// rather than merely confusing: the request is refused outright.
+//
+// Results are written for every call at once, so a message is either
+// wholly answered or not answered at all; a message with some of its
+// calls answered is left alone rather than guessed at.
+func answered(messages []Message) []Message {
+	replied := map[string]bool{}
+	for _, m := range messages {
+		for id := range m.answers() {
+			replied[id] = true
+		}
+	}
+
+	out := make([]Message, 0, len(messages))
+	for _, m := range messages {
+		if ids := m.asks(); len(ids) > 0 && none(ids, replied) {
+			continue
+		}
+		out = append(out, m)
+	}
+	return out
+}
+
+// none : Whether not one of these identifiers was answered.
+func none(ids map[string]bool, replied map[string]bool) bool {
+	for id := range ids {
+		if replied[id] {
+			return false
+		}
+	}
+	return true
 }
 
 // Due : Whether the earlier part of the conversation should be condensed, and the
