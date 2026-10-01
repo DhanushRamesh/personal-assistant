@@ -41,9 +41,11 @@ import (
 	eventmemory "github.com/DhanushRamesh/personal-assistant/internal/event/inmemory"
 	"github.com/DhanushRamesh/personal-assistant/internal/events"
 	"github.com/DhanushRamesh/personal-assistant/internal/logging"
+	recall "github.com/DhanushRamesh/personal-assistant/internal/memory"
 	"github.com/DhanushRamesh/personal-assistant/internal/remind"
 	remindmemory "github.com/DhanushRamesh/personal-assistant/internal/remind/inmemory"
 	"github.com/DhanushRamesh/personal-assistant/internal/runner"
+	"github.com/DhanushRamesh/personal-assistant/internal/tool"
 )
 
 // Username and Password : The account every environment is given.
@@ -108,6 +110,12 @@ type Options struct {
 	// DeviceEvents : Where what the person's devices saw is kept. Nil
 	// selects a store that keeps them in memory.
 	DeviceEvents eventsapi.Store
+
+	// Memories : What the assistant remembers. Nil selects an empty store.
+	Memories recall.Store
+
+	// Tools : What the assistant can do. Nil offers none.
+	Tools *tool.Registry
 
 	// Reminders : What is waiting to be said. Nil selects an empty store,
 	// so a test that does not care need not build one.
@@ -192,6 +200,8 @@ func NewWith(t *testing.T, opts Options) *Env {
 			Reminders:        opts.Reminders,
 			Announcer:        opts.Announcer,
 			DeviceEvents:     deviceEvents(opts.DeviceEvents),
+			Memories:         opts.Memories,
+			Tools:            opts.Tools,
 			Announcements:    opts.Announcements,
 			Runner:           chatRunner,
 			Events:           bus,

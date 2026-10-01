@@ -4461,6 +4461,29 @@ needs is complete, end to end.
 
 ## 11. Deploying
 
+**The assistant can be looked at, not only talked to.** Owner, 1 October
+2026: they want to see the memories, the events, the tool modules with
+their names, the vocabulary, and the profile it has written about them.
+
+Three of those had no way to be read. `GET /v1/tools` lists everything
+the assistant can do, grouped by domain, marking which tools every
+request carries and which are described only on request -- the
+deferring mechanism is most of what makes a long tool list affordable
+and was invisible everywhere, including to whoever was changing it.
+`GET /v1/memories` lists what it has remembered, with uses and when
+each was last used: a memory is believed indefinitely and corrected
+only by accident, so a wrong one shapes every later answer and this is
+the only way to find that out. `GET /v1/events` lists what the devices
+reported, newest first by when it happened rather than when it
+arrived, with the kinds counted across everything so a filtered view
+still knows what else exists.
+
+All three are read-only. A tool is not configuration: turning one off
+from a screen would make the assistant's abilities differ from its
+code with nothing to say why. Memories are written during a
+conversation because that is the only place with the context to judge
+what is worth keeping.
+
 **Tasker reports to the server, never through Home Assistant.** Owner,
 1 October 2026: "there should be no connection between android tasker
 and ha companion, it should directly go to ai server only."

@@ -46,6 +46,21 @@ func toRow(e *event.Event) row {
 	}
 }
 
+// toEvent : Converts a stored row back into an event.
+func (r *row) toEvent() event.Event {
+	return event.Event{
+		ID:         r.ID,
+		UserID:     r.UserID,
+		Source:     r.Source,
+		Device:     r.Device,
+		Kind:       r.Kind,
+		OccurredAt: r.OccurredAt.UTC(),
+		ReceivedAt: r.ReceivedAt.UTC(),
+		Payload:    []byte(r.Payload),
+		DedupeKey:  r.DedupeKey,
+	}
+}
+
 // Store : Events, in MySQL.
 type Store struct{ db *gorm.DB }
 
@@ -112,4 +127,69 @@ func (s *Store) Record(ctx context.Context, userID string, events []*event.Event
 		return nil, nil, fmt.Errorf("storing events: %w", err)
 	}
 	return stored, seen, nil
+}
+
+// Recent : What happened, newest first.
+//
+// Ordered by when it happened rather than when it arrived. A phone that
+// spent the morning without a signal delivers the morning at teatime, and
+// ordering by arrival would put a whole day in the wrong place.
+//
+// An empty kind means every kind. A zero since means no lower bound.
+func (s *Store) Recent(ctx context.Context, userID string, since time.Time,
+	kind string, limit int) ([]event.Event, error) {
+
+	q := s.db.WithContext(ctx).Model(&row{}).Where("user_id = ?", userID)
+	if !since.IsZero() {
+		q = q.Where("occurred_at >= ?", since.UTC())
+	}
+	if kind != "" {
+		q = q.Where("kind = ?", kind)
+	}
+	if limit > 0 {
+		q = q.Limit(limit)
+	}
+
+	var rows []row
+	if err := q.Order("occurred_at desc").Find(&rows).Error; err != nil {
+		return nil, fmt.Errorf("reading events: %w", err)
+	}
+
+	out := make([]event.Event, 0, len(rows))
+	for i := range rows {
+		out = append(out, rows[i].toEvent())
+	}
+	return out, nil
+}
+
+// Kinds : Which kinds exist, with how many of each and when each was last
+// seen.
+//
+// Counted in the database rather than by reading every row: the point of
+// this is to describe a table that will grow for years, and a count that
+// has to load it to work itself out stops being answerable long before the
+// table stops being useful.
+func (s *Store) Kinds(ctx context.Context, userID string) ([]event.Kind, error) {
+	var rows []struct {
+		Kind  string
+		N     int64
+		First time.Time
+		Last  time.Time
+	}
+	err := s.db.WithContext(ctx).Model(&row{}).
+		Select("kind, count(*) as n, min(occurred_at) as first, max(occurred_at) as last").
+		Where("user_id = ?", userID).
+		Group("kind").Order("n desc").Scan(&rows).Error
+	if err != nil {
+		return nil, fmt.Errorf("counting event kinds: %w", err)
+	}
+
+	out := make([]event.Kind, 0, len(rows))
+	for _, r := range rows {
+		out = append(out, event.Kind{
+			Kind: r.Kind, Count: r.N,
+			First: r.First.UTC(), Last: r.Last.UTC(),
+		})
+	}
+	return out, nil
 }

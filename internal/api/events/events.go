@@ -22,6 +22,7 @@ import (
 	"io"
 	"log/slog"
 	"net/http"
+	"strconv"
 	"time"
 
 	"github.com/go-chi/chi/v5"
@@ -44,6 +45,54 @@ type Store interface {
 	// Record : Stores what is not stored already, and says which keys were
 	// already known.
 	Record(ctx context.Context, userID string, events []*event.Event) (stored, seen []string, err error)
+	// Recent : What happened, newest first by when it happened.
+	Recent(ctx context.Context, userID string, since time.Time, kind string, limit int) ([]event.Event, error)
+	// Kinds : Which kinds exist, and how many of each.
+	Kinds(ctx context.Context, userID string) ([]event.Kind, error)
+}
+
+const (
+	// DefaultLimit : How many events a listing returns when none is asked
+	// for.
+	DefaultLimit = 100
+	// MaxLimit : The most it will return at once.
+	//
+	// This is for a person looking at a screen. Anything that wants the
+	// whole table wants a different endpoint, and building that before
+	// anybody needs it would be guessing at its shape.
+	MaxLimit = 500
+)
+
+// Stored : One event, as a listing shows it.
+type Stored struct {
+	ID         string    `json:"id"`
+	Source     string    `json:"source"`
+	Device     string    `json:"device,omitempty"`
+	Kind       string    `json:"kind"`
+	OccurredAt time.Time `json:"occurred_at"`
+	ReceivedAt time.Time `json:"received_at"`
+	// LateBy : Seconds between the two, so a screen does not have to work
+	// out the one number that says the phone had been offline.
+	LateBy  int64           `json:"late_by_seconds"`
+	Payload json.RawMessage `json:"payload"`
+}
+
+// KindCount : One kind, and how much of it there is.
+type KindCount struct {
+	Kind  string    `json:"kind"`
+	Count int64     `json:"count"`
+	First time.Time `json:"first"`
+	Last  time.Time `json:"last"`
+}
+
+// ListResponse : A page of events, and what kinds exist.
+//
+// The kinds come with the list because nothing else can say what may be
+// filtered on: any device may invent a kind, so the only honest answer is
+// what has actually arrived.
+type ListResponse struct {
+	Events []Stored    `json:"events"`
+	Kinds  []KindCount `json:"kinds"`
 }
 
 // Incoming : One event as a device sends it.
@@ -109,6 +158,7 @@ func New(logger *slog.Logger, store Store, now func() time.Time) *Handler {
 // authentication.
 func (h *Handler) Mount(r chi.Router) {
 	r.Post("/v1/events", h.Record)
+	r.Get("/v1/events", h.List)
 }
 
 // Record : Takes a batch of events from one of the person's devices.
@@ -187,4 +237,66 @@ func (h *Handler) Record(w http.ResponseWriter, r *http.Request) {
 
 	httpx.WriteJSON(ctx, w, http.StatusOK, BatchResponse{
 		Stored: stored, Seen: seen, Rejected: rejected})
+}
+
+// List : What the person's devices have reported.
+//
+// Newest first by when it happened, not by when it arrived. A phone that
+// spent the morning without a signal delivers the morning at teatime, and
+// ordering by arrival would scatter a day through the list.
+func (h *Handler) List(w http.ResponseWriter, r *http.Request) {
+	ctx := r.Context()
+	user := authn.Of(ctx).User.ID
+
+	limit := DefaultLimit
+	if v := r.URL.Query().Get("limit"); v != "" {
+		n, err := strconv.Atoi(v)
+		if err != nil || n < 1 {
+			httpx.WriteError(ctx, w, http.StatusBadRequest, "That limit could not be read.")
+			return
+		}
+		limit = min(n, MaxLimit)
+	}
+
+	var since time.Time
+	if v := r.URL.Query().Get("since"); v != "" {
+		t, err := time.Parse(time.RFC3339, v)
+		if err != nil {
+			httpx.WriteError(ctx, w, http.StatusBadRequest, "That time could not be read.")
+			return
+		}
+		since = t
+	}
+
+	events, err := h.store.Recent(ctx, user, since, r.URL.Query().Get("kind"), limit)
+	if err != nil {
+		h.Fail(ctx, w, "reading events", err)
+		return
+	}
+
+	// Counted across everything, not across the page. A filtered listing
+	// still has to say which other kinds there are, or the filter has no
+	// way back.
+	kinds, err := h.store.Kinds(ctx, user)
+	if err != nil {
+		h.Fail(ctx, w, "counting event kinds", err)
+		return
+	}
+
+	out := ListResponse{Events: make([]Stored, 0, len(events)),
+		Kinds: make([]KindCount, 0, len(kinds))}
+	for _, e := range events {
+		out.Events = append(out.Events, Stored{
+			ID: e.ID, Source: e.Source, Device: e.Device, Kind: e.Kind,
+			OccurredAt: e.OccurredAt, ReceivedAt: e.ReceivedAt,
+			LateBy:  int64(e.ReceivedAt.Sub(e.OccurredAt).Seconds()),
+			Payload: e.Payload,
+		})
+	}
+	for _, k := range kinds {
+		out.Kinds = append(out.Kinds, KindCount{
+			Kind: k.Kind, Count: k.Count, First: k.First, Last: k.Last})
+	}
+
+	httpx.WriteJSON(ctx, w, http.StatusOK, out)
 }

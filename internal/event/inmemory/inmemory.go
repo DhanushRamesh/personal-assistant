@@ -4,7 +4,9 @@ package inmemory
 
 import (
 	"context"
+	"sort"
 	"sync"
+	"time"
 
 	"github.com/DhanushRamesh/personal-assistant/internal/event"
 )
@@ -52,4 +54,62 @@ func (s *Store) All(userID string) []*event.Event {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	return append([]*event.Event(nil), s.byUser[userID]...)
+}
+
+// Recent : What happened, newest first by when it happened.
+func (s *Store) Recent(_ context.Context, userID string, since time.Time,
+	kind string, limit int) ([]event.Event, error) {
+
+	s.mu.Lock()
+	defer s.mu.Unlock()
+
+	var out []event.Event
+	for _, e := range s.byUser[userID] {
+		if !since.IsZero() && e.OccurredAt.Before(since) {
+			continue
+		}
+		if kind != "" && e.Kind != kind {
+			continue
+		}
+		out = append(out, *e)
+	}
+	sort.Slice(out, func(i, j int) bool {
+		return out[i].OccurredAt.After(out[j].OccurredAt)
+	})
+	if limit > 0 && len(out) > limit {
+		out = out[:limit]
+	}
+	return out, nil
+}
+
+// Kinds : Which kinds exist, with how many of each.
+func (s *Store) Kinds(_ context.Context, userID string) ([]event.Kind, error) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+
+	by := map[string]*event.Kind{}
+	for _, e := range s.byUser[userID] {
+		k, ok := by[e.Kind]
+		if !ok {
+			by[e.Kind] = &event.Kind{
+				Kind: e.Kind, Count: 1,
+				First: e.OccurredAt, Last: e.OccurredAt,
+			}
+			continue
+		}
+		k.Count++
+		if e.OccurredAt.Before(k.First) {
+			k.First = e.OccurredAt
+		}
+		if e.OccurredAt.After(k.Last) {
+			k.Last = e.OccurredAt
+		}
+	}
+
+	out := make([]event.Kind, 0, len(by))
+	for _, k := range by {
+		out = append(out, *k)
+	}
+	sort.Slice(out, func(i, j int) bool { return out[i].Count > out[j].Count })
+	return out, nil
 }

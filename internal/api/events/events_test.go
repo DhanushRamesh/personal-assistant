@@ -117,3 +117,92 @@ func TestEventsNeedAToken(t *testing.T) {
 		t.Fatalf("status %d, want 401", rec.Code)
 	}
 }
+
+func listing(t *testing.T, e *apitest.Env, query string) events.ListResponse {
+	t.Helper()
+	rec := e.Do(t, http.MethodGet, "/v1/events"+query, "")
+	if rec.Code != http.StatusOK {
+		t.Fatalf("status %d: %s", rec.Code, rec.Body.String())
+	}
+	var out events.ListResponse
+	if err := json.Unmarshal(rec.Body.Bytes(), &out); err != nil {
+		t.Fatalf("reply unreadable: %v", err)
+	}
+	return out
+}
+
+func three(t *testing.T, e *apitest.Env) {
+	t.Helper()
+	post(t, e, `{"source":"tasker","device":"pixel-7","events":[
+		{"kind":"network.joined","occurred_at":"2026-09-30T08:00:00Z","dedupe_key":"a"},
+		{"kind":"network.left","occurred_at":"2026-09-30T09:00:00Z","dedupe_key":"b"},
+		{"kind":"network.joined","occurred_at":"2026-09-30T10:00:00Z","dedupe_key":"c"}]}`)
+}
+
+// Newest first by when it HAPPENED, not when it arrived. A phone that was
+// offline all morning delivers the morning at teatime, and ordering by
+// arrival would scatter a day through the list.
+func TestEventsAreListedNewestFirstByWhenTheyHappened(t *testing.T) {
+	e := apitest.NewWith(t, apitest.Options{DeviceEvents: inmemory.New()})
+	three(t, e)
+
+	got := listing(t, e, "")
+	if len(got.Events) != 3 {
+		t.Fatalf("got %d events, want 3", len(got.Events))
+	}
+	for i := 1; i < len(got.Events); i++ {
+		if got.Events[i-1].OccurredAt.Before(got.Events[i].OccurredAt) {
+			t.Fatalf("out of order at %d", i)
+		}
+	}
+}
+
+func TestAListingCanBeFilteredByKind(t *testing.T) {
+	e := apitest.NewWith(t, apitest.Options{DeviceEvents: inmemory.New()})
+	three(t, e)
+
+	got := listing(t, e, "?kind=network.left")
+	if len(got.Events) != 1 || got.Events[0].Kind != "network.left" {
+		t.Fatalf("filtering gave %d events: %+v", len(got.Events), got.Events)
+	}
+}
+
+// The kinds are counted across everything, not across the page: a filtered
+// listing still has to say what else there is, or the filter has no way
+// back.
+func TestKindsAreCountedAcrossEverythingNotThePage(t *testing.T) {
+	e := apitest.NewWith(t, apitest.Options{DeviceEvents: inmemory.New()})
+	three(t, e)
+
+	got := listing(t, e, "?kind=network.left")
+	counts := map[string]int64{}
+	for _, k := range got.Kinds {
+		counts[k.Kind] = k.Count
+	}
+	if counts["network.joined"] != 2 || counts["network.left"] != 1 {
+		t.Fatalf("counts = %v, want joined 2 and left 1", counts)
+	}
+}
+
+// The one number that says the phone had been offline, worked out here so
+// a screen does not have to.
+func TestHowLateAnEventWasIsReported(t *testing.T) {
+	e := apitest.NewWith(t, apitest.Options{DeviceEvents: inmemory.New()})
+	post(t, e, `{"source":"tasker","events":[
+		{"kind":"a.b","occurred_at":"2026-09-30T08:00:00Z","dedupe_key":"late"}]}`)
+
+	got := listing(t, e, "")
+	if len(got.Events) != 1 {
+		t.Fatalf("got %d events", len(got.Events))
+	}
+	if got.Events[0].LateBy <= 0 {
+		t.Fatalf("late_by = %d, want the gap to arrival", got.Events[0].LateBy)
+	}
+}
+
+func TestABadLimitIsRefused(t *testing.T) {
+	e := apitest.NewWith(t, apitest.Options{DeviceEvents: inmemory.New()})
+	if rec := e.Do(t, http.MethodGet, "/v1/events?limit=nonsense", ""); rec.Code != http.StatusBadRequest {
+		t.Fatalf("status %d, want 400", rec.Code)
+	}
+}

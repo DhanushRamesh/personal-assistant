@@ -229,3 +229,18 @@ func object(payload json.RawMessage) error {
 func ValidID(s string) bool {
 	return len(s) == idLen && strings.HasPrefix(s, IDPrefix)
 }
+
+// Kind : One kind of event, and how much of it there is.
+//
+// What a listing needs before it can ask for anything: nothing knows which
+// kinds exist, because any device may invent one, so the only way to offer
+// a filter is to ask what has actually arrived.
+type Kind struct {
+	// Kind : The dotted name.
+	Kind string
+	// Count : How many have been stored.
+	Count int64
+	// First, Last : When the earliest and latest of them happened.
+	First time.Time
+	Last  time.Time
+}

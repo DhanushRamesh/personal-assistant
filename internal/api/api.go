@@ -28,11 +28,13 @@ import (
 	"github.com/DhanushRamesh/personal-assistant/internal/api/events"
 	googleapi "github.com/DhanushRamesh/personal-assistant/internal/api/google"
 	"github.com/DhanushRamesh/personal-assistant/internal/api/health"
+	"github.com/DhanushRamesh/personal-assistant/internal/api/memories"
 	"github.com/DhanushRamesh/personal-assistant/internal/api/middleware"
 	"github.com/DhanushRamesh/personal-assistant/internal/api/presence"
 	profileapi "github.com/DhanushRamesh/personal-assistant/internal/api/profile"
 	"github.com/DhanushRamesh/personal-assistant/internal/api/reminders"
 	speechapi "github.com/DhanushRamesh/personal-assistant/internal/api/speech"
+	toolsapi "github.com/DhanushRamesh/personal-assistant/internal/api/tools"
 	vocabularyapi "github.com/DhanushRamesh/personal-assistant/internal/api/vocabulary"
 	"github.com/DhanushRamesh/personal-assistant/internal/chat"
 	"github.com/DhanushRamesh/personal-assistant/internal/conversation"
@@ -42,6 +44,7 @@ import (
 	"github.com/DhanushRamesh/personal-assistant/internal/persona"
 	"github.com/DhanushRamesh/personal-assistant/internal/remind"
 	"github.com/DhanushRamesh/personal-assistant/internal/speech"
+	"github.com/DhanushRamesh/personal-assistant/internal/tool"
 	"github.com/DhanushRamesh/personal-assistant/internal/vocabulary"
 )
 
@@ -107,6 +110,10 @@ type Options struct {
 	// Announcer : Where the server speaks of its own accord. Optional;
 	// without it a greeting is composed and not said.
 	Announcer announce.Announcer
+	// Tools : Everything the assistant can do, for the screen that shows
+	// it. Nil lists nothing.
+	Tools *tool.Registry
+
 	// DeviceEvents : Where the person's own devices report what happened
 	// to them, which is what lets the assistant say something first.
 	//
@@ -174,6 +181,8 @@ type Server struct {
 	assist        *assist.Handler
 	speech        *speechapi.Handler
 	events        *events.Handler
+	memories      *memories.Handler
+	tools         *toolsapi.Handler
 }
 
 // New : Builds a Server from opts and registers its routes.
@@ -202,6 +211,8 @@ func New(opts Options) *Server {
 		assist:     assist.New(opts.Logger, opts.Chats, opts.Runner, opts.Events),
 		speech:     speechapi.New(opts.Logger, opts.Cut),
 		events:     events.New(opts.Logger, opts.DeviceEvents, opts.Now),
+		memories:   memories.New(opts.Logger, opts.Memories),
+		tools:      toolsapi.New(opts.Logger, opts.Tools),
 	}
 	s.routes()
 	return s
@@ -253,5 +264,7 @@ func (s *Server) routes() {
 		s.assist.Mount(r)
 		s.speech.Mount(r)
 		s.events.Mount(r)
+		s.memories.Mount(r)
+		s.tools.Mount(r)
 	})
 }

@@ -411,6 +411,7 @@ func run() error {
 		Persona:        manner,
 		Cut:            cutOff,
 		DeviceEvents:   eventmysql.New(db),
+		Tools:          tools,
 		RequestTimeout: cfg.Server.RequestTimeout,
 		// Development only: `flutter run` serves the UI from its own port so
 		// that hot reload works. In production the server serves it, so every
