@@ -425,9 +425,22 @@ class _Conversation extends StatelessWidget {
                       children: [
                         AppTurn(speaker: AppSpeaker.you, text: turn.prompt),
                         const SizedBox(height: AppSpacing.sm),
-                        if (turn.isRunning && turn.answer.isEmpty)
-                          AppThinkingTurn(onStop: state.cancel)
-                        else
+                        if (turn.isRunning && turn.answer.isEmpty) ...[
+                          AppThinkingTurn(onStop: state.cancel),
+                          // What it is doing, while it does it. Until the
+                          // first reading arrives there is nothing to show
+                          // and the spinner stands alone, which is the old
+                          // behaviour and only lasts a moment.
+                          if (turn.steps != null &&
+                              turn.steps!.steps.isNotEmpty) ...[
+                            const SizedBox(height: AppSpacing.sm),
+                            AppTimelinePanel(
+                              loading: false,
+                              failed: '',
+                              timeline: turn.steps,
+                            ),
+                          ],
+                        ] else
                           AppTurn(
                             speaker: AppSpeaker.assistant,
                             text: failed ? turn.error : turn.answer,

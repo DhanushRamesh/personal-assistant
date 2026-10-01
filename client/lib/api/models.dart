@@ -462,6 +462,7 @@ class AnswerChunk {
     this.doneReason = '',
     this.errorCode = '',
     this.errorDetail = '',
+    this.chatId = '',
   });
 
   /// text : What to add to the answer so far. Empty on the last line.
@@ -478,6 +479,12 @@ class AnswerChunk {
   final String errorCode;
   final String errorDetail;
 
+  /// chatId : Which chat this stream is, sent once at the start.
+  ///
+  /// What lets a screen ask what the turn is doing while it does it.
+  /// Empty on every line but the first.
+  final String chatId;
+
   bool get failed => doneReason == 'error';
 
   factory AnswerChunk.fromJson(Map<String, dynamic> json) {
@@ -488,6 +495,7 @@ class AnswerChunk {
       doneReason: json['done_reason'] as String? ?? '',
       errorCode: json['error_code'] as String? ?? '',
       errorDetail: json['error_detail'] as String? ?? '',
+      chatId: json['chat_id'] as String? ?? '',
     );
   }
 

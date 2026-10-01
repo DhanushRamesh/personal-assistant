@@ -135,8 +135,15 @@ type ChatChunk struct {
 	// aloud stays in Message.Content; these are for a screen.
 	ErrorCode   string `json:"error_code,omitempty"`
 	ErrorDetail string `json:"error_detail,omitempty"`
-	Done        bool   `json:"done"`
-	DoneReason  string `json:"done_reason,omitempty"`
+	// ChatID : Which chat this stream is, sent once at the start.
+	//
+	// Also beyond Ollama's shape and also omitted when empty. A screen
+	// cannot show what a turn is doing while it does it without knowing
+	// which turn to ask about, and this stream is the only thing that
+	// knows. Home Assistant ignores it, and nothing spoken changes.
+	ChatID     string `json:"chat_id,omitempty"`
+	Done       bool   `json:"done"`
+	DoneReason string `json:"done_reason,omitempty"`
 }
 
 // ModelsResponse : The body of a model listing.
@@ -322,6 +329,13 @@ func (h *Handler) Chat(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("X-Accel-Buffering", "no")
 	w.WriteHeader(http.StatusOK)
 	flusher.Flush()
+
+	// Which chat this is, before anything else on the stream. A screen
+	// showing what a turn is doing has to be able to ask, and until this
+	// arrives it has nothing to ask about.
+	opening := chunk("", false, "")
+	opening.ChatID = t.ID
+	writeChunk(w, flusher, opening)
 
 	h.follow(ctx, w, flusher, live, t.ID)
 }

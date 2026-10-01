@@ -25,6 +25,7 @@ class Turn {
     this.error = '',
     this.detail = '',
     this.announcement,
+    this.steps,
   });
 
   /// Turn.announced : Something the assistant said without being asked.
@@ -35,6 +36,7 @@ class Turn {
   Turn.announced(Announcement said)
     : chatId = '',
       prompt = '',
+      steps = null,
       answer = said.text,
       status = ChatStatus.completed,
       error = '',
@@ -44,6 +46,14 @@ class Turn {
   /// announcement : What made the assistant speak, when nothing was asked.
   /// Null for an ordinary question and answer.
   final Announcement? announcement;
+
+  /// steps : What this turn has done so far, while it is still doing it.
+  ///
+  /// Null until the first reading arrives. A turn that is thinking shows
+  /// a spinner and nothing else, and a spinner is the same picture
+  /// whether a tool is running, a model is slow, or nothing is happening
+  /// at all.
+  final AnswerTimeline? steps;
 
   final String chatId;
   final String prompt;
@@ -65,18 +75,21 @@ class Turn {
   bool get isRunning => !status.isTerminal;
 
   Turn copyWith({
+    String? chatId,
     String? answer,
     ChatStatus? status,
     String? error,
     String? detail,
+    AnswerTimeline? steps,
   }) => Turn(
-    chatId: chatId,
+    chatId: chatId ?? this.chatId,
     prompt: prompt,
     announcement: announcement,
     answer: answer ?? this.answer,
     status: status ?? this.status,
     error: error ?? this.error,
     detail: detail ?? this.detail,
+    steps: steps ?? this.steps,
   );
 }
 
@@ -745,7 +758,16 @@ class AppState extends ChangeNotifier {
   /// the piece that is new, not the answer so far.
   Future<void> _follow(String prompt, String? conversationId) async {
     var answer = '';
-    await for (final piece in api.ask(prompt)) {
+    Timer? watching;
+    try {
+      await for (final piece in api.ask(prompt)) {
+        // The identifier arrives once, before anything else. From here
+        // the turn can be asked what it is doing rather than only waited
+        // on.
+        if (piece.chatId.isNotEmpty) {
+          _replaceLast((t) => t.copyWith(chatId: piece.chatId));
+          watching ??= _watchSteps(piece.chatId);
+        }
       if (piece.text.isNotEmpty) {
         answer += piece.text;
         _replaceLast(
@@ -770,6 +792,44 @@ class AppState extends ChangeNotifier {
         default:
           _replaceLast((t) => t.copyWith(status: ChatStatus.completed));
       }
+      }
+    } finally {
+      watching?.cancel();
+      // One last reading, so what is left on screen is the finished
+      // thing rather than wherever the polling happened to stop.
+      final id = _turns.isEmpty ? '' : _turns.last.chatId;
+      if (id.isNotEmpty) await _readSteps(id);
+    }
+  }
+
+  /// _watchSteps : Asks a running turn what it has done, until it stops.
+  ///
+  /// Polled rather than streamed. The answer already has a stream and it
+  /// carries the words; this is the shape of the work behind them, which
+  /// is a different thing arriving at a different rate, and a second
+  /// stream for it would be a second thing to keep alive and reconnect.
+  ///
+  /// A second apart: the rounds of a turn are seconds each, so anything
+  /// faster asks repeatedly for the same answer.
+  Timer _watchSteps(String chatId) => Timer.periodic(
+    const Duration(seconds: 1),
+    (_) => _readSteps(chatId),
+  );
+
+  /// _readSteps : One reading of what a turn has done.
+  ///
+  /// Failures are swallowed. This is a decoration on an answer that is
+  /// arriving perfectly well without it, and an error banner about it
+  /// would be worse than the spinner it replaced.
+  Future<void> _readSteps(String chatId) async {
+    try {
+      final steps = await api.steps(chatId);
+      if (_disposed) return;
+      _replaceLast(
+        (t) => t.chatId == chatId ? t.copyWith(steps: steps) : t,
+      );
+    } on Object {
+      // Deliberately ignored; see above.
     }
   }
 

@@ -87,7 +87,7 @@ class _AppTimelineButtonState extends State<AppTimelineButton> {
         if (_open)
           Padding(
             padding: const EdgeInsets.only(top: AppSpacing.xs),
-            child: _Panel(
+            child: AppTimelinePanel(
               loading: _loading,
               failed: _failed,
               timeline: _timeline,
@@ -98,9 +98,15 @@ class _AppTimelineButtonState extends State<AppTimelineButton> {
   }
 }
 
-/// _Panel : The timeline itself.
-class _Panel extends StatelessWidget {
-  const _Panel({
+/// AppTimelinePanel : The timeline itself.
+///
+/// Public because a turn still being made shows one too. A spinner is
+/// the same picture whether a tool is running, the model is slow or
+/// nothing is happening at all, and the difference is the thing worth
+/// seeing.
+class AppTimelinePanel extends StatelessWidget {
+  const AppTimelinePanel({
+    super.key,
     required this.loading,
     required this.failed,
     required this.timeline,
