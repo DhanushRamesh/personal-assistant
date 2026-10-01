@@ -65,7 +65,7 @@ func theLists(lists Lists) tool.Tool {
 			for _, l := range held {
 				b.WriteString("\n- " + l.Title)
 			}
-			return tool.OK(b.String())
+			return tool.Reference(b.String())
 		},
 	}
 }
@@ -336,7 +336,7 @@ func onAList(lists Lists, clock Clock) tool.Tool {
 			if !heard.Exactly(which.Title, args.List) && strings.TrimSpace(args.List) != "" {
 				b.WriteString("\n\n" + tool.BySound("list", args.List, which.Title))
 			}
-			return tool.OK(b.String())
+			return tool.Reference(b.String())
 		},
 	}
 }

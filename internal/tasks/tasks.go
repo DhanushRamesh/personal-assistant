@@ -28,6 +28,7 @@ import (
 	"net/http"
 	"sort"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/DhanushRamesh/personal-assistant/internal/heard"
@@ -296,6 +297,61 @@ func (l *Lists) Tick(ctx context.Context, userID string, which List, id string, 
 	}
 	out := fromGoogle(changed, which.Title)
 	return &out, nil
+}
+
+// Everywhere : Every task on every list, with the list each sits on.
+//
+// Reading one list cannot answer "where is that task" and the
+// assistant said so out loud: asked about a task on a list that did
+// not exist, it answered that it had no tool to search across them
+// and read out the lists instead. It was right, which is why this
+// exists.
+//
+// All of them at once, like the calendar's. Lists are read one call
+// each and a person has a handful, so in order this would be a
+// second of waiting for every list they keep.
+func (l *Lists) Everywhere(ctx context.Context, userID string) ([]Task, []string, error) {
+	held, err := l.All(ctx, userID)
+	if err != nil {
+		return nil, nil, err
+	}
+	if len(held) == 0 {
+		return nil, nil, nil
+	}
+
+	var (
+		mu     sync.Mutex
+		all    []Task
+		missed []string
+		wg     sync.WaitGroup
+	)
+	for _, which := range held {
+		wg.Add(1)
+		go func(which List) {
+			defer wg.Done()
+			got, err := l.On(ctx, userID, which)
+
+			mu.Lock()
+			defer mu.Unlock()
+			if err != nil {
+				// Named rather than swallowed. A search that
+				// silently skipped a list would answer "it is
+				// nowhere" about a list it never read.
+				missed = append(missed, which.Title)
+				return
+			}
+			all = append(all, got...)
+		}(which)
+	}
+	wg.Wait()
+
+	sort.SliceStable(all, func(i, j int) bool {
+		if all[i].Done != all[j].Done {
+			return !all[i].Done
+		}
+		return all[i].Title < all[j].Title
+	})
+	return all, missed, nil
 }
 
 // One : A single task, or nil when there is no such thing.

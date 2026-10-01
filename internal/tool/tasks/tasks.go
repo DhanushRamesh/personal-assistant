@@ -60,12 +60,14 @@ type Lists interface {
 	Move(ctx context.Context, userID string, from tasks.List, id string, to tasks.List) (*tasks.Task, error)
 	One(ctx context.Context, userID string, which tasks.List, id string) (*tasks.Task, error)
 	Change(ctx context.Context, userID string, which tasks.List, id string, a tasks.Amend) (*tasks.Task, error)
+	Everywhere(ctx context.Context, userID string) ([]tasks.Task, []string, error)
 }
 
 // All : Every task tool, in the order they are offered.
 func All(lists Lists, clock Clock) []tool.Tool {
 	return []tool.Tool{
 		theLists(lists),
+		findATask(lists, clock),
 		startAList(lists),
 		renameAList(lists),
 		onAList(lists, clock),

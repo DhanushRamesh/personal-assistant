@@ -234,3 +234,35 @@ func (t Tool) Description() string {
 	}
 	return strings.Join(parts, " ")
 }
+
+// ForReference : What to append to a result that carries a list.
+//
+// The instruction goes next to the data, not in the system prompt,
+// and that is a measured difference rather than a preference. The
+// memories tool found it first: a general warning at the top of the
+// prompt let a bare listing be read out in two conversations of
+// three, and the same warning written against the listing let it
+// happen in none.
+//
+// The same shape of mistake, in the tasks domain: asked whether one
+// task existed on a list, the assistant read out all five and then
+// answered; asked about a list that did not exist, it recited the
+// five that did. Both answers were complete and both were the wrong
+// shape for something spoken, because the person has to hold a list
+// in their head to find the one fact they wanted.
+//
+// A tool cannot know whether the list itself was what they asked
+// for, so this does not forbid naming them -- it says which part is
+// the answer and which part is working material.
+const ForReference = "The items above are for you to read, not to read out. " +
+	"Answer what was asked and say how many there are; name only the one the question was about, " +
+	"or the nearest to it. Name them all only if the list itself is what they asked for."
+
+// Reference : A result whose content carries a list the model should
+// read rather than recite.
+func Reference(content string) Result {
+	return Result{
+		Outcome: conversation.OutcomeOK,
+		Content: content + "\n\n" + ForReference,
+	}
+}

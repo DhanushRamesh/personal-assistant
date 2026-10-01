@@ -20,10 +20,25 @@ type lists struct {
 	held   []tasks.List
 	on     map[string][]tasks.Task
 	refuse error
+	// missed : lists Everywhere could not read, for the test that
+	// checks a partial search admits it.
+	missed []string
 }
 
 func (l *lists) All(context.Context, string) ([]tasks.List, error) {
 	return append([]tasks.List(nil), l.held...), l.refuse
+}
+
+// Everywhere : Every task on every list, as the real client does it.
+func (l *lists) Everywhere(_ context.Context, _ string) ([]tasks.Task, []string, error) {
+	if l.refuse != nil {
+		return nil, nil, l.refuse
+	}
+	var all []tasks.Task
+	for _, which := range l.held {
+		all = append(all, l.on[which.ID]...)
+	}
+	return all, l.missed, nil
 }
 
 func (l *lists) On(_ context.Context, _ string, which tasks.List) ([]tasks.Task, error) {
