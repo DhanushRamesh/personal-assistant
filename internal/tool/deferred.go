@@ -68,6 +68,23 @@ var hot = []string{
 	"mail_inbox",
 	"mail_search",
 	"mail_thread",
+
+	// By evidence, 1 October 2026. Named in the catalogue with its own
+	// one-line purpose, and asked "what have I been up to today" the
+	// model twice answered that it had no tool for it -- once after
+	// being sent back to look, with the catalogue in front of it both
+	// times.
+	//
+	// A tool named but not described is evidently a tool the model does
+	// not believe it has, at least for a question it has never been
+	// able to answer before. The others in the catalogue are variations
+	// on things it can already do; this one is a kind of knowing it has
+	// never had, and it reasons from what it has always been rather
+	// than from the list.
+	//
+	// Costing every turn its description is worth not denying, twice,
+	// something the person can see is there.
+	"event_recent",
 }
 
 // hotSet : hot, for looking up.
