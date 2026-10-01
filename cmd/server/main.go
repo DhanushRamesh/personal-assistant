@@ -48,6 +48,7 @@ import (
 	"github.com/DhanushRamesh/personal-assistant/internal/tool"
 	calendartool "github.com/DhanushRamesh/personal-assistant/internal/tool/calendar"
 	"github.com/DhanushRamesh/personal-assistant/internal/tool/conversations"
+	eventstool "github.com/DhanushRamesh/personal-assistant/internal/tool/events"
 	mailtool "github.com/DhanushRamesh/personal-assistant/internal/tool/mail"
 	"github.com/DhanushRamesh/personal-assistant/internal/tool/memories"
 	"github.com/DhanushRamesh/personal-assistant/internal/tool/reminders"
@@ -214,6 +215,10 @@ func run() error {
 	}
 	catchUpEmbeddings(context.Background(), remembering, logger.Logger)
 
+	// One store for what the person's devices saw, shared by the endpoint
+	// they report to and the tool that reads it back.
+	deviceEvents := eventmysql.New(db)
+
 	// One store, shared by the tools that make reminders and the loop that
 	// says them.
 	reminderStore := remindmysql.New(db)
@@ -238,6 +243,9 @@ func run() error {
 			Now: cfg.Assistant.Now, Location: cfg.Assistant.Location,
 		}),
 		mailtool.All(mailboxOf(googleLink), mailtool.Clock{
+			Now: cfg.Assistant.Now, Location: cfg.Assistant.Location,
+		}),
+		eventstool.Tools(deviceEvents, eventstool.Clock{
 			Now: cfg.Assistant.Now, Location: cfg.Assistant.Location,
 		}),
 	)...)
@@ -410,7 +418,7 @@ func run() error {
 		DefaultModel:   cfg.PlatformAI.Model,
 		Persona:        manner,
 		Cut:            cutOff,
-		DeviceEvents:   eventmysql.New(db),
+		DeviceEvents:   deviceEvents,
 		Tools:          tools,
 		RequestTimeout: cfg.Server.RequestTimeout,
 		// Development only: `flutter run` serves the UI from its own port so
