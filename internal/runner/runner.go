@@ -24,6 +24,9 @@ import (
 	"github.com/DhanushRamesh/personal-assistant/internal/memory"
 	"github.com/DhanushRamesh/personal-assistant/internal/persona"
 	"github.com/DhanushRamesh/personal-assistant/internal/remind"
+	// Aliased: aside.go already has a speech of its own, which is the one
+	// being spoken rather than the one that was heard.
+	utterance "github.com/DhanushRamesh/personal-assistant/internal/speech"
 	"github.com/DhanushRamesh/personal-assistant/internal/tool"
 )
 
@@ -97,6 +100,10 @@ type Options struct {
 	// Announcer : Where something is said that nobody asked for, such as the
 	// name a conversation has just been given. Nil says nothing.
 	Announcer announce.Announcer
+	// Cut : Which utterances were still being spoken when the recording
+	// stopped. Nil treats every question as complete, which is what a
+	// server reached only by typing has.
+	Cut *utterance.Cut
 	// Tools : What the assistant can do as well as say. Nil offers none, and
 	// a model offered none answers from what it knows.
 	Tools *tool.Registry
@@ -144,6 +151,7 @@ type Runner struct {
 	assistantName   string
 	persona         *persona.Setting
 	announcer       announce.Announcer
+	cut             *utterance.Cut
 	tools           *tool.Registry
 	memory          *memory.Recall
 	now             func() time.Time
@@ -220,6 +228,7 @@ func New(opts Options) (*Runner, error) {
 		condenseTimeout: opts.CondenseTimeout,
 		assistantName:   opts.AssistantName,
 		persona:         opts.Persona,
+		cut:             opts.Cut,
 		announcer:       opts.Announcer,
 		tools:           opts.Tools,
 		memory:          opts.Memory,
@@ -358,7 +367,7 @@ func (r *Runner) personaID() string {
 // doing, and remembering having switched somewhere is not the same as being
 // there.
 func (r *Runner) promptFor(ctx context.Context, t *chat.Chat) (string, []remind.Reminder) {
-	standing := r.prompt() + " " + conversation.Now(r.now()) + heard(t)
+	standing := r.prompt() + " " + conversation.Now(r.now()) + r.heard(t)
 
 	// The conversation is read once: it carries both where the assistant is
 	// and whose memories these are.
@@ -556,11 +565,22 @@ func (r *Runner) recordRecalled(ctx context.Context, t *chat.Chat, note chat.Rec
 //
 // Not added to a typed turn. Typing means what it says, and reinterpreting a
 // word somebody chose deliberately is worse than taking it literally.
-func heard(t *chat.Chat) string {
+func (r *Runner) heard(t *chat.Chat) string {
 	if t.Channel != chat.ChannelVoice {
 		return ""
 	}
-	return " " + conversation.Heard()
+	said := " " + conversation.Heard()
+
+	// Whether the recording was still running when it was stopped. Home
+	// Assistant decides that internally and does not pass it on, so it
+	// arrives from the speech-to-text bridge instead and is matched here
+	// against the words it reported.
+	if r.cut != nil {
+		if seconds, was := r.cut.Was(t.Prompt); was {
+			said += " " + conversation.CutOff(seconds)
+		}
+	}
+	return said
 }
 
 // limitsFor : The ceilings a chat's history is held under.

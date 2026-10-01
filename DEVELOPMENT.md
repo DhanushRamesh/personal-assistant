@@ -4042,6 +4042,54 @@ answer is sent. It belongs in `assist` rather than in the provider because it
 is a property of Home Assistant's protocol, not of the assistant's answers, and no
 other client cares.
 
+### Home Assistant stops listening after fifteen seconds
+
+**The limit is real, hardcoded, and never reported.**
+`assist_pipeline/vad.py` gives `VoiceCommandSegmenter.timeout_seconds` a
+default of 15.0, and `assist_pipeline/pipeline.py` builds the segmenter
+passing `silence_seconds` and nothing else, so the default always
+stands. `AudioSettings` has no timeout field, so no pipeline setting,
+no satellite control and nothing in the interface reaches it. Measured
+1 October 2026 over 39 utterances: 10% ended at exactly 15.0s, with
+nothing at all between 9s and 15s -- a gap and then a spike, which is
+what truncation looks like and what a natural distribution does not.
+
+Worse than the cut is the silence about it. The segmenter sets
+`timed_out`, `_speech_to_text` consumes it, and `STT_END` carries only
+`stt_output.text`. So a fragment and a finished sentence arrive
+identical, and an assistant given the first half of a shopping list
+answers it as though it were the whole.
+
+Nothing downstream can recover the fact. Home Assistant will not carry
+it, and it reaches the server as Ollama's wire format, which has
+nowhere to put it. The one component that knows is the speech-to-text
+bridge, because it is the thing that sends the audio and therefore
+measures it. It reports to `POST /v1/speech/cut` **before** handing the
+transcript back, so the report is already waiting when the same words
+arrive moments later as a question -- there is no race to lose.
+
+`internal/speech` matches on the transcript text rather than on a
+timestamp or an identifier. The same string travels bridge -> Home
+Assistant -> server, so it matches exactly, and it needs no clock
+agreement between two processes. Reports expire after two minutes and
+the store is bounded, so a bridge gone wrong cannot grow the process.
+An empty transcript is never recorded: a recording can run its full
+length and catch no words, and matching that would mark every future
+empty question as a fragment.
+
+No text heuristic. Guessing from missing punctuation would be
+English-only, and the duration is the better signal anyway.
+
+This is not the same fault as `finished_speaking_detection =
+aggressive`, which ends a turn on a pause. One cuts on silence, the
+other at a fixed ceiling, and fixing either leaves the other.
+
+A patch making `timeout_seconds` configurable is prepared for
+upstream. Until it lands there is no local fix: bind-mounting a
+patched `vad.py` would shadow the file after a Home Assistant upgrade
+and run an old detector against new pipeline code, which fails quietly
+and at the worst moment.
+
 ### Platform AI
 
 `internal/provider/platformai` answers using Zoho Platform AI, selected with
@@ -4376,6 +4424,45 @@ needs is complete, end to end.
 ---
 
 ## 11. Deploying
+
+**Where this is going, decided 1 October 2026.** Three tiers, not two.
+The server, MySQL and `tei-embed` move to a cloud machine; Home
+Assistant, Piper, Whisper and the Deepgram bridge run on a Raspberry
+Pi at home; the wake word stays at the microphone.
+
+`tei-embed` goes with the server and not with Home Assistant. The Go
+server is its only caller, so leaving it home would put an internet
+round trip inside every memory search -- and it is published for
+`linux/amd64` only, with no ARM tag, so it could not run on the Pi in
+any case.
+
+The wake word cannot move to the server. It has to hear every second
+of audio to catch one phrase, so running it centrally means streaming
+the room continuously, all day, and losing the wake word whenever the
+network hiccups. Running it at the microphone means only the seconds
+after it fires ever leave the device.
+
+Whisper has to come down from `medium-int8` on the Pi: `small` is
+already reported as too slow there for real-time voice. That is a real
+loss and worth naming -- at `medium` Whisper transcribed "Hey Jarvis"
+correctly once in 22 recordings, and `base` will be worse. It is
+survivable only because Deepgram is the primary and Whisper is the
+outage fallback.
+
+The consequence to design for is that losing the internet currently
+costs accuracy -- Deepgram fails, the bridge falls back, Jarvis still
+answers -- and after the move it costs everything, because the mind is
+on the other side of it. Home Assistant's local intents already cover
+time, timers, lights and lists without the server, so the degraded
+mode can be "the house still works, Jarvis is away" rather than
+silence. That is cheaper to decide before the move than after.
+
+Both directions cross the network: Home Assistant calls the server for
+conversation, and the server calls Home Assistant to announce. The
+Google OAuth redirect, `ASSISTANT_URL` baked into the web client, and
+`[server] allow_public_bind` all change with it, and the Home
+Assistant token should be rotated and supplied through the
+environment as part of the move.
 
 **The deployed machine is deliberately behind, and is not being touched.**
 The owner has parked it: nothing is being deployed there for a while.

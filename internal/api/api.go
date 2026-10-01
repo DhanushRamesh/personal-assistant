@@ -31,6 +31,7 @@ import (
 	"github.com/DhanushRamesh/personal-assistant/internal/api/presence"
 	profileapi "github.com/DhanushRamesh/personal-assistant/internal/api/profile"
 	"github.com/DhanushRamesh/personal-assistant/internal/api/reminders"
+	speechapi "github.com/DhanushRamesh/personal-assistant/internal/api/speech"
 	vocabularyapi "github.com/DhanushRamesh/personal-assistant/internal/api/vocabulary"
 	"github.com/DhanushRamesh/personal-assistant/internal/chat"
 	"github.com/DhanushRamesh/personal-assistant/internal/conversation"
@@ -39,6 +40,7 @@ import (
 	"github.com/DhanushRamesh/personal-assistant/internal/memory"
 	"github.com/DhanushRamesh/personal-assistant/internal/persona"
 	"github.com/DhanushRamesh/personal-assistant/internal/remind"
+	"github.com/DhanushRamesh/personal-assistant/internal/speech"
 	"github.com/DhanushRamesh/personal-assistant/internal/vocabulary"
 )
 
@@ -104,6 +106,11 @@ type Options struct {
 	// Announcer : Where the server speaks of its own accord. Optional;
 	// without it a greeting is composed and not said.
 	Announcer announce.Announcer
+	// Cut : Where the speech-to-text bridge reports that a recording was
+	// stopped while somebody was still speaking. Home Assistant does not
+	// pass that on, so it arrives by this side door instead.
+	Cut *speech.Cut
+
 	// Location : The person's zone, for deciding what hour it is to them.
 	// Nil is UTC.
 	Location *time.Location
@@ -157,6 +164,7 @@ type Server struct {
 	vocabulary    *vocabularyapi.Handler
 	google        *googleapi.Handler
 	assist        *assist.Handler
+	speech        *speechapi.Handler
 }
 
 // New : Builds a Server from opts and registers its routes.
@@ -183,6 +191,7 @@ func New(opts Options) *Server {
 		vocabulary: vocabularyapi.New(opts.Vocabulary, opts.Logger),
 		google:     googleapi.New(opts.Logger, opts.Google, opts.SettingsURL),
 		assist:     assist.New(opts.Logger, opts.Chats, opts.Runner, opts.Events),
+		speech:     speechapi.New(opts.Logger, opts.Cut),
 	}
 	s.routes()
 	return s
@@ -232,5 +241,6 @@ func (s *Server) routes() {
 		s.vocabulary.Mount(r)
 		s.google.Mount(r)
 		s.assist.Mount(r)
+		s.speech.Mount(r)
 	})
 }

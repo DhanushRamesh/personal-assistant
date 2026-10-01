@@ -41,6 +41,7 @@ import (
 	"github.com/DhanushRamesh/personal-assistant/internal/remind"
 	remindmysql "github.com/DhanushRamesh/personal-assistant/internal/remind/mysql"
 	"github.com/DhanushRamesh/personal-assistant/internal/runner"
+	"github.com/DhanushRamesh/personal-assistant/internal/speech"
 	"github.com/DhanushRamesh/personal-assistant/internal/storage"
 	"github.com/DhanushRamesh/personal-assistant/internal/tasks"
 	"github.com/DhanushRamesh/personal-assistant/internal/tool"
@@ -254,6 +255,11 @@ func run() error {
 	logger.Info("tools registered", slog.Any("tools", tools.Names()),
 		slog.Int("described_always", tool.HotCount()))
 
+	// Shared between the endpoint the speech-to-text bridge reports to and
+	// the runner that reads the report. One store, because a report written
+	// by one request has to be found by the next.
+	cutOff := speech.New()
+
 	chatRunner, err := runner.New(runner.Options{
 		Repository:    chats,
 		Messages:      chats,
@@ -264,6 +270,7 @@ func run() error {
 		AssistantName: cfg.Assistant.Name,
 		Persona:       manner,
 		Announcer:     speaker,
+		Cut:           cutOff,
 		Tools:         tools,
 		Memory:        remembering,
 		Now:           cfg.Assistant.Now,
@@ -401,6 +408,7 @@ func run() error {
 		Models:         reachableModels(cfg),
 		DefaultModel:   cfg.PlatformAI.Model,
 		Persona:        manner,
+		Cut:            cutOff,
 		RequestTimeout: cfg.Server.RequestTimeout,
 		// Development only: `flutter run` serves the UI from its own port so
 		// that hot reload works. In production the server serves it, so every
