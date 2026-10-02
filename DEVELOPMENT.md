@@ -1927,6 +1927,55 @@ so you find out the variable names."* `%bt_name`, `%bt_address` and
 `%bt_battery_level` exist too and are not sent, because neither is
 something to notice.
 
+## A tool is only as wide as its description
+
+Owner, with a screenshot: *"I think event tool has no proper
+description."* They had asked *"with whom did I talk today?"* and been
+told
+
+> I have no tool that reads your conversations or call logs, sir.
+
+The calls were in the table. `event_recent` would have returned them.
+Its description listed where they had been, when they got in and
+whether they had moved -- places and networks, which is what existed
+when it was written -- and never people, so a question about people
+did not match it and the assistant reported an absence instead of
+looking.
+
+**The description has to be about the record, not about today's
+kinds.** Every event added from now on is a kind this text does not
+name. So it names the phone, the watch and the laptop as the things
+that report, says the kinds grow without the description changing, and
+says plainly: when you are unsure whether something about their own
+day was reported, call this once without a kind and read what it
+lists, rather than telling them there is no record of it.
+
+**Which is a licence to over-reach, so it is paired.** Measured: the
+first wording took the eval from 38 of 38 to 40 of 43 -- "I am a bit
+tired this evening" and "that took longer than I expected" both went
+looking. The `Avoid` now draws the line at what the sentence is rather
+than what it is about: nothing here is for something they are telling
+you rather than asking about, and a remark about how they feel or how
+long something took is to be answered, not looked up. That is 42 of
+43.
+
+**The last one is the harness, and it found something.** "My sister's
+flight lands on the 3rd of March" stopped being remembered and started
+calling nothing. The eval registers conversations, memories and
+reminders, so when a description says *not for what is coming, which
+is the calendar*, it points at a tool that is not there. Registering
+the calendar proved it -- the flight goes to `calendar_events` -- and
+also showed that three plain remarks go there too: *"it is raining
+here today"*, *"I am a bit tired this evening"*, *"that took longer
+than I expected"*. The calendar tools have the over-reach the events
+tool just had. Not fixed here, and the calendar is not registered in
+the eval, which is why the figure is 42 of 43 rather than 43.
+
+**The events tool is in the eval now.** Five cases, the first of them
+the question that failed. A description is the part of this server
+most easily wrong and least visibly so, and the only way to notice is
+to ask a real model.
+
 ## The profile is taught a method, not a list of patterns
 
 Owner, 2 October 2026, on what the counted half is for: *"when I leave

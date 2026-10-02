@@ -32,12 +32,14 @@ import (
 	"github.com/DhanushRamesh/personal-assistant/internal/embed"
 	"github.com/DhanushRamesh/personal-assistant/internal/environment"
 	"github.com/DhanushRamesh/personal-assistant/internal/environment/platformai"
+	eventmemory "github.com/DhanushRamesh/personal-assistant/internal/event/inmemory"
 	"github.com/DhanushRamesh/personal-assistant/internal/memory"
 	"github.com/DhanushRamesh/personal-assistant/internal/memory/inmemory"
 	"github.com/DhanushRamesh/personal-assistant/internal/persona"
 	remindmemory "github.com/DhanushRamesh/personal-assistant/internal/remind/inmemory"
 	"github.com/DhanushRamesh/personal-assistant/internal/tool"
 	"github.com/DhanushRamesh/personal-assistant/internal/tool/conversations"
+	"github.com/DhanushRamesh/personal-assistant/internal/tool/events"
 	"github.com/DhanushRamesh/personal-assistant/internal/tool/memories"
 	"github.com/DhanushRamesh/personal-assistant/internal/tool/reminders"
 )
@@ -122,6 +124,16 @@ var cases = []eval{
 	// confuse and only one of them speaks at you.
 	{Say: "note down that the roofer wants paying by Friday", Tool: []string{"memory_remember"}},
 
+	// What the devices reported. The first of these is the one that
+	// failed: asked who they had spoken to, the assistant said it had no
+	// tool that reads call logs, because the description listed places
+	// and networks and never people. The tool had the calls.
+	{Say: "with whom did I talk today", Tool: []string{"event_recent"}},
+	{Say: "who called me this morning", Tool: []string{"event_recent"}},
+	{Say: "what have I been up to today", Tool: []string{"event_recent"}},
+	{Say: "when did I last leave the office", Tool: []string{"event_recent"}},
+	{Say: "have I been out at all today", Tool: []string{"event_recent"}},
+
 	// Reaching for none. A model that calls a tool at every question is as
 	// wrong as one that never does.
 	{Say: "what is the capital of Australia"},
@@ -149,6 +161,7 @@ func TestTheModelReachesForTheRightTool(t *testing.T) {
 		conversations.All(nil),
 		memories.All(recall),
 		reminders.All(remindmemory.New(), clock),
+		events.Tools(eventmemory.New(), events.Clock{Location: time.UTC}),
 	)...)
 	if err != nil {
 		t.Fatalf("NewRegistry: %v", err)

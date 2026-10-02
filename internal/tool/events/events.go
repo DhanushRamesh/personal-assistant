@@ -104,17 +104,24 @@ func Tools(reader Reader, clock Clock) []tool.Tool {
 // recent : What the person's devices have reported.
 func recent(reader Reader, clock Clock) tool.Tool {
 	return tool.Tool{
-		Name:    "event_recent",
-		Domain:  "event",
-		Lists:   true,
-		Purpose: "Read what the person's own devices reported happening to them.",
-		UseWhen: "Any question about what the person has actually been doing rather than what they have " +
-			"told you: where they have been, when they got in or went out, whether they have moved, " +
-			"what their day looked like, when something last happened. Also when you are about to " +
-			"remark on their day unprompted and need to know what it was.",
+		Name:   "event_recent",
+		Domain: "event",
+		Lists:  true,
+		Purpose: "Read what the person's own devices reported about them: who called, where they " +
+			"were, what they connected to.",
+		UseWhen: "A question about what the person has actually been doing rather than what they have " +
+			"told you: who they spoke to or missed a call from, where they have been, when they got " +
+			"in or went out, whether they have moved, what their day looked like, when something " +
+			"last happened. Their phone, their watch and their laptop report here and more kinds " +
+			"arrive without this description changing, so when you are unsure whether something " +
+			"about their own day was reported, call this once without a kind and read what it lists " +
+			"rather than telling them there is no record of it. Also when you are about to remark " +
+			"on their day unprompted and need to know what it was.",
 		Avoid: "Not for things they asked you to remember, which are memories, and not for what is " +
 			"coming, which is the calendar and the reminders. Do not answer from the conversation: " +
-			"what you said earlier about their day was true when you said it.",
+			"what you said earlier about their day was true when you said it. And nothing here is " +
+			"for something they are telling you rather than asking about: a remark about how they " +
+			"feel, or how long something took, is to be answered, not looked up.",
 		Channels: []chat.Channel{chat.ChannelVoice, chat.ChannelDirect},
 		Params: tool.Schema{
 			Properties: map[string]tool.Property{
@@ -151,6 +158,7 @@ func recent(reader Reader, clock Clock) tool.Tool {
 		},
 		Examples: []tool.Example{
 			{Ask: "what have I been up to today", Args: `{"saying":"looking at your day"}`},
+			{Ask: "who did I talk to today", Args: `{"kind":"call.","saying":"checking your calls"}`},
 			{Ask: "when did I last leave the office", Args: `{"kind":"wifi.left","days":30}`},
 		},
 		Run: func(ctx context.Context, in tool.Invocation) tool.Result {
