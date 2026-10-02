@@ -8,6 +8,8 @@ import (
 	"time"
 
 	"github.com/DhanushRamesh/personal-assistant/internal/announce"
+	"github.com/DhanushRamesh/personal-assistant/internal/announcement"
+	"github.com/DhanushRamesh/personal-assistant/internal/conversation"
 )
 
 // LateBy : How far behind its time a reminder must be before it is said to
@@ -71,11 +73,12 @@ func (a Aloud) Say(ctx context.Context, r Reminder) error {
 		loc = time.UTC
 	}
 	said := Spoken(r, at, loc)
-	// Reach rather than Say: a reminder is the one announcement whose
-	// point is to arrive when the person is somewhere else, so it goes
-	// to the phone as well as the room. The greeting and the
-	// conversation name stay where they are said.
-	if err := a.Announcer.Reach(ctx, said); err != nil {
+	// The audience decides the transport, and a reminder's is
+	// Everywhere: it is the one announcement whose point is to arrive
+	// when the person is somewhere else, so it goes to the phone as well
+	// as the room. That used to be a choice made here; it is now read
+	// from the kind, so this cannot disagree with what gets written down.
+	if err := announcement.Speak(ctx, a.Announcer, conversation.ReminderAnnouncement, said); err != nil {
 		return err
 	}
 

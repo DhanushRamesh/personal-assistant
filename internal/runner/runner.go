@@ -71,6 +71,11 @@ type Options struct {
 	Environment environment.Environment
 	// Logger : Receives execution records. Required.
 	Logger *slog.Logger
+	// Announcements : Where what the assistant said unasked is written
+	// down. Optional; without it a rename is still done and still said,
+	// and only the note in the conversation is lost.
+	Announcements Announcements
+
 	// Publisher : Receives a chat's messages as they happen, for clients
 	// listening to it. Optional; without one a chat still runs and is still
 	// recorded, but nothing hears it until it is read back.
@@ -142,6 +147,7 @@ type Aside interface {
 type Runner struct {
 	repo            chat.Repository
 	messages        conversation.Repository
+	announcements   Announcements
 	environment     environment.Environment
 	publisher       Publisher
 	logger          *slog.Logger
@@ -220,6 +226,7 @@ func New(opts Options) (*Runner, error) {
 	return &Runner{
 		repo:            opts.Repository,
 		messages:        opts.Messages,
+		announcements:   opts.Announcements,
 		environment:     opts.Environment,
 		publisher:       opts.Publisher,
 		logger:          opts.Logger,

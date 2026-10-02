@@ -4,6 +4,7 @@ import (
 	"context"
 	"log/slog"
 
+	"github.com/DhanushRamesh/personal-assistant/internal/announcement"
 	"github.com/DhanushRamesh/personal-assistant/internal/chat"
 	"github.com/DhanushRamesh/personal-assistant/internal/conversation"
 	"github.com/DhanushRamesh/personal-assistant/internal/environment"
@@ -89,25 +90,31 @@ func (r *Runner) title(ctx context.Context, t *chat.Chat) {
 // The conversation is known here, so there is no guessing which one was
 // listening the way an announcement has to.
 func (r *Runner) noteTitle(ctx context.Context, t *chat.Chat, name string) {
-	if r.messages == nil || t.ConversationID == "" {
+	if r.announcements == nil || t.ConversationID == "" {
 		return
 	}
 
-	// r.now already carries the person's zone, which is what a written
-	// hour has to be in: the model reads the words and never the
-	// timestamp.
-	at := r.now()
-	m := conversation.Announced(t.ConversationID, conversation.Renaming,
-		conversation.TitleAnnouncement(name),
-		at.Format("3:04 pm"), at)
+	// Through the same writer the other two announcements use, and told
+	// which conversation rather than letting it look: this one is Asked
+	// and the asker is known. Writing it here by hand was the second
+	// place the audience rule lived, and the one that disagreed.
+	//
+	// Logged and dropped inside the writer, like everything else in
+	// here. The conversation has its name; failing to write the note
+	// down costs the next turn its context and is not worth failing the
+	// turn over.
+	r.announcements.Renamed(ctx, t.ConversationID,
+		conversation.TitleAnnouncement(name))
+}
 
-	// Logged and dropped, like everything else in here. The conversation
-	// has its name; failing to write the note down costs the next turn
-	// its context and is not worth failing the turn over.
-	if _, err := r.messages.Append(ctx, m); err != nil {
-		r.logger.WarnContext(ctx, "cannot record that the conversation was named",
-			slog.String("conversation_id", t.ConversationID), slog.Any("error", err))
-	}
+// Announcements : Somewhere to note what the assistant said unasked.
+//
+// An interface rather than the writer itself, so the runner keeps
+// knowing nothing about clients or conversations beyond the one it is
+// running in.
+type Announcements interface {
+	// Renamed : Notes that this conversation was given a name.
+	Renamed(ctx context.Context, conversationID, text string)
 }
 
 // announceTitle : Says the new name aloud, when the person had no way to see
@@ -129,7 +136,8 @@ func (r *Runner) announceTitle(ctx context.Context, t *chat.Chat, name string) {
 		}
 	}
 
-	if err := r.announcer.Say(ctx, conversation.TitleAnnouncement(name)); err != nil {
+	if err := announcement.Speak(ctx, r.announcer,
+		conversation.Renaming, conversation.TitleAnnouncement(name)); err != nil {
 		r.logger.WarnContext(ctx, "cannot announce the conversation's name",
 			slog.Any("error", err))
 	}

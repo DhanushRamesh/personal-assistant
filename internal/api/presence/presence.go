@@ -25,8 +25,10 @@ import (
 	"github.com/go-chi/chi/v5"
 
 	"github.com/DhanushRamesh/personal-assistant/internal/announce"
+	"github.com/DhanushRamesh/personal-assistant/internal/announcement"
 	"github.com/DhanushRamesh/personal-assistant/internal/api/authn"
 	"github.com/DhanushRamesh/personal-assistant/internal/api/httpx"
+	"github.com/DhanushRamesh/personal-assistant/internal/conversation"
 	"github.com/DhanushRamesh/personal-assistant/internal/remind"
 )
 
@@ -179,7 +181,7 @@ func (h *Handler) Welcome(ctx context.Context, user string) ArrivedResponse {
 	speak, done := context.WithTimeout(context.WithoutCancel(ctx), SpeakingFor)
 	defer done()
 
-	if err := h.announcer.Say(speak, said); err != nil {
+	if err := announcement.Speak(speak, h.announcer, conversation.PresenceAnnouncement, said); err != nil {
 		// Not the caller's fault and not worth a failure: it asked for a
 		// greeting and the speaker was busy or unreachable. Said so
 		// plainly rather than reported as success.

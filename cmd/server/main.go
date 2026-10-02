@@ -275,9 +275,23 @@ func run() error {
 	// by one request has to be found by the next.
 	cutOff := speech.New()
 
+	// What the assistant says without being asked is written into the
+	// conversation the voice client is talking in, so that answering it
+	// is possible at all. Without this a greeting and the reminders
+	// behind it are spoken into a conversation that shows no trace of
+	// them, and "how late was I" has nothing to refer to.
+	announcements := &announcement.Writer{
+		Conversations: chats,
+		Clients:       chats,
+		Location:      cfg.Assistant.Location,
+		Now:           cfg.Assistant.Now,
+		Logger:        logger.Logger,
+	}
+
 	chatRunner, err := runner.New(runner.Options{
 		Repository:    chats,
 		Messages:      chats,
+		Announcements: announcements,
 		Environment:   answerer,
 		Logger:        logger.Logger,
 		Publisher:     bus,
@@ -308,19 +322,6 @@ func run() error {
 	// Chats the previous process was running are no longer being worked on.
 	if err := chatRunner.Recover(context.Background()); err != nil {
 		return err
-	}
-
-	// What the assistant says without being asked is written into the
-	// conversation the voice client is talking in, so that answering it
-	// is possible at all. Without this a greeting and the reminders
-	// behind it are spoken into a conversation that shows no trace of
-	// them, and "how late was I" has nothing to refer to.
-	announcements := &announcement.Writer{
-		Conversations: chats,
-		Clients:       chats,
-		Location:      cfg.Assistant.Location,
-		Now:           cfg.Assistant.Now,
-		Logger:        logger.Logger,
 	}
 
 	// The first work here that happens because of the clock rather than

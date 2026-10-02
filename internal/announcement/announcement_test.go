@@ -140,3 +140,63 @@ func TestNothingIsWrittenWhenNobodyIsListening(t *testing.T) {
 		t.Error("a typed client was given a conversation it never asked for")
 	}
 }
+
+// spoke : An Announcer that records which door was used.
+type spoke struct {
+	said, reached []string
+	off           bool
+}
+
+func (s *spoke) Say(_ context.Context, m string) error { s.said = append(s.said, m); return nil }
+func (s *spoke) Reach(_ context.Context, m string) error {
+	s.reached = append(s.reached, m)
+	return nil
+}
+func (s *spoke) Available() bool { return !s.off }
+
+// TestSpeakSendsAReminderEverywhereAndTheRestToTheRoom : The audience
+// decides the transport, so a caller cannot disagree with what is
+// written down.
+func TestSpeakSendsAReminderEverywhereAndTheRestToTheRoom(t *testing.T) {
+	to := &spoke{}
+	for _, k := range []conversation.Kind{
+		conversation.ReminderAnnouncement,
+		conversation.PresenceAnnouncement,
+		conversation.Renaming,
+	} {
+		if err := announcement.Speak(context.Background(), to, k, string(k)); err != nil {
+			t.Fatalf("%s: %v", k, err)
+		}
+	}
+	if len(to.reached) != 1 || to.reached[0] != string(conversation.ReminderAnnouncement) {
+		t.Errorf("only a reminder should leave the room, got %v", to.reached)
+	}
+	if len(to.said) != 2 {
+		t.Errorf("the other two belong in the room, got %v", to.said)
+	}
+}
+
+// TestSpeakRefusesAReply : Broadcasting an answer to the house is a
+// worse failure than not saying it.
+func TestSpeakRefusesAReply(t *testing.T) {
+	to := &spoke{}
+	err := announcement.Speak(context.Background(), to, conversation.Chat, "an answer")
+	if err == nil {
+		t.Fatal("expected a reply to be refused")
+	}
+	if len(to.said)+len(to.reached) != 0 {
+		t.Errorf("nothing should have been spoken, got %v %v", to.said, to.reached)
+	}
+}
+
+// TestSpeakWithNowhereToSay : Reported rather than silently dropped.
+func TestSpeakWithNowhereToSay(t *testing.T) {
+	if err := announcement.Speak(context.Background(), &spoke{off: true},
+		conversation.ReminderAnnouncement, "x"); err == nil {
+		t.Fatal("expected an error when nothing can speak")
+	}
+	if err := announcement.Speak(context.Background(), nil,
+		conversation.ReminderAnnouncement, "x"); err == nil {
+		t.Fatal("expected an error with no announcer at all")
+	}
+}

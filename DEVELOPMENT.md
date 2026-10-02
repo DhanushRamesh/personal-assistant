@@ -1387,6 +1387,59 @@ from stepping out, which is why the forty-five second line was drawn
 where it was. The remaining piece is the wifi SSID, for leaving with
 the laptop.
 
+## An announcement is for the client that caused it, or for everywhere
+
+Owner's question, 2 October 2026: announcements have a classification
+beyond predefined and model-written -- *"to the asked client or all
+clients"*. They were right, and the distinction was already in the code
+three times, under three names, agreeing by luck.
+
+**The rule, now written down once.** `conversation.Audience` is `Asked`
+or `Everywhere`, and `announcements` is the table saying which each kind
+is. `Kind.Announcement()` reads the same table, so adding a kind is one
+edit -- the lesson `known()` had already learned in this same file.
+
+- `Asked` -- the client that caused it, and nowhere else. The cause need
+  not be a question: arriving is a cause, and the asker is the room that
+  noticed. A conversation's new name means nothing in another room.
+- `Everywhere` -- nothing asked for it, a clock fired, and the person
+  could be anywhere. `reminder` is the whole of this category.
+
+**Where it was before.** In three places and named in none:
+
+- `runner/title.go` wrote the renaming to the conversation that asked,
+  by hand, with its own `conversation.Announced` call.
+- `announcement.Writer.said` wrote the other two to the most recently
+  used voice client, by a different argument.
+- `Announcer.Reach` carried the rule in the transport's vocabulary --
+  its doc comment is the audience rule, written as "does it also go to
+  the phone".
+
+Three callers each chose `Say` or `Reach` for itself, so a fourth
+announcement meant inferring the rule from the two that existed.
+
+**`announcement.Speak` is now the only place the audience becomes a
+call.** `Everywhere` is `Reach`, anything else is `Say`, and a kind that
+is not an announcement at all is **refused** rather than defaulting to
+the room: a reply broadcast to the house is a worse failure than one not
+spoken. No caller touches `Say` or `Reach` directly any more.
+
+**`Writer.said` can be told its conversation** instead of always looking
+for one, and `Renamed` is the shape of being told. The lookup is renamed
+`found` and says what it assumes: with one satellite it is exact, and
+the day there is a second it becomes a guess -- two satellites are two
+rooms, and the one spoken to last is a guess at the one being stood in.
+When that day comes, an `Asked` announcement should be handed its client
+rather than coming through there at all.
+
+**What this does not do.** One satellite, so `hass.Announcer.Satellite`
+stays a single entity and `Asked` and `Everywhere` reach the same
+speaker today. The difference is real only for the phone, through
+`Notify` -- which is empty in this deployment, so nothing leaves the
+room at all at the moment. Typed clients are still pull-only: there is
+no push path for an announcement, and the per-chat event bus carries a
+chat's own answer and nothing else.
+
 ## Each setting has one home
 
 Owner's question, 2 October 2026: *"each configuration and changes are

@@ -94,9 +94,62 @@ const (
 	Renaming Kind = "renamed"
 )
 
+// Audience : Who an announcement is for.
+//
+// The distinction is who caused it. Every announcement either answers
+// something that happened on one client, or answers a clock that belongs
+// to nobody, and that decides both where it is said and where it is
+// written down.
+type Audience string
+
+const (
+	// Asked : The client that caused it, and nowhere else.
+	//
+	// A conversation's new name means nothing in another room, and a
+	// greeting is said because somebody walked up to this machine. Sent
+	// anywhere else they are noise at best: a copy of "welcome back" in
+	// a pocket arrives at the one moment it is certainly not needed.
+	//
+	// The cause need not be a question. Arriving is a cause, and the
+	// client that caused it is the one that noticed.
+	Asked Audience = "asked"
+
+	// Everywhere : Wherever the person can be reached.
+	//
+	// For an announcement nothing asked for. A reminder is the whole of
+	// this category, and the giveaway is that its whole point is to
+	// arrive when the person is somewhere else -- so the room is not
+	// enough, and it goes to the phone as well.
+	Everywhere Audience = "everywhere"
+)
+
+// announcements : Every kind the assistant says unasked, and who it is for.
+//
+// One table rather than a condition in each place that needs to know.
+// The rule was in two files and written down in neither: the renaming
+// chose its conversation in the runner and the other two chose theirs in
+// the announcement writer, by different reasoning, and a fourth kind
+// meant reading both to find out what it should do. This is the same
+// lesson as known() below -- adding a kind should be one edit.
+var announcements = map[Kind]Audience{
+	ReminderAnnouncement: Everywhere,
+	PresenceAnnouncement: Asked,
+	Renaming:             Asked,
+}
+
 // Announcement : Whether this is the assistant having spoken unprompted.
 func (k Kind) Announcement() bool {
-	return k == ReminderAnnouncement || k == PresenceAnnouncement || k == Renaming
+	_, ok := announcements[k]
+	return ok
+}
+
+// Audience : Who this announcement is for, and whether it is one at all.
+//
+// False for anything that is not an announcement, so a caller cannot
+// quietly treat a reply as something to broadcast.
+func (k Kind) Audience() (Audience, bool) {
+	a, ok := announcements[k]
+	return a, ok
 }
 
 // known : Whether this is a kind the store will accept.

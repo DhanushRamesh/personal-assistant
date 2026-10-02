@@ -290,3 +290,55 @@ func TestAnInterruptionSaysWhatStoppedIt(t *testing.T) {
 		}
 	}
 }
+
+// TestEveryAnnouncementHasAnAudience : The table is the rule. A kind that
+// is an announcement without one is a kind nothing knows where to send.
+func TestEveryAnnouncementHasAnAudience(t *testing.T) {
+	for _, k := range []conversation.Kind{
+		conversation.ReminderAnnouncement,
+		conversation.PresenceAnnouncement,
+		conversation.Renaming,
+	} {
+		if !k.Announcement() {
+			t.Errorf("%s should be an announcement", k)
+		}
+		a, ok := k.Audience()
+		if !ok {
+			t.Errorf("%s has no audience", k)
+		}
+		if a != conversation.Asked && a != conversation.Everywhere {
+			t.Errorf("%s has an audience that is neither: %q", k, a)
+		}
+	}
+}
+
+// TestOnlyAReminderGoesEverywhere : The others are caused by one client
+// and belong to it. A greeting following somebody out of the house
+// arrives at the one moment it is not wanted.
+func TestOnlyAReminderGoesEverywhere(t *testing.T) {
+	want := map[conversation.Kind]conversation.Audience{
+		conversation.ReminderAnnouncement: conversation.Everywhere,
+		conversation.PresenceAnnouncement: conversation.Asked,
+		conversation.Renaming:             conversation.Asked,
+	}
+	for k, w := range want {
+		if got, _ := k.Audience(); got != w {
+			t.Errorf("%s: expected %s, got %s", k, w, got)
+		}
+	}
+}
+
+// TestRepliesHaveNoAudience : So a caller cannot broadcast one by
+// treating it like something said unasked.
+func TestRepliesHaveNoAudience(t *testing.T) {
+	for _, k := range []conversation.Kind{
+		conversation.Chat, conversation.Failure, conversation.Interruption,
+	} {
+		if _, ok := k.Audience(); ok {
+			t.Errorf("%s is a reply and should have no audience", k)
+		}
+		if k.Announcement() {
+			t.Errorf("%s is a reply and should not be an announcement", k)
+		}
+	}
+}

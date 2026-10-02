@@ -10,6 +10,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/DhanushRamesh/personal-assistant/internal/announcement"
 	"github.com/DhanushRamesh/personal-assistant/internal/chat"
 	"github.com/DhanushRamesh/personal-assistant/internal/chat/memory"
 	"github.com/DhanushRamesh/personal-assistant/internal/environment"
@@ -80,6 +81,14 @@ func newHarness(t *testing.T, p environment.Environment, opts runner.Options) *h
 	opts.Publisher = bus
 	opts.Environment = p
 	opts.Logger = discard()
+	if opts.Announcements == nil {
+		// The real writer, over the same store. A rename is written
+		// through it now, so a harness without one silently loses every
+		// note and the test that checks for it fails somewhere else.
+		opts.Announcements = &announcement.Writer{
+			Conversations: repo, Clients: repo, Logger: discard(),
+		}
+	}
 
 	r, err := runner.New(opts)
 	if err != nil {
