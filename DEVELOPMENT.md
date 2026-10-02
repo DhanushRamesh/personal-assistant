@@ -1707,6 +1707,33 @@ suburb, district, city. An answer that grows a field cannot change what
 it does, and the rest of somebody's address is never carried around by
 accident.
 
+**A business first, the street second.** Owner, 2 October 2026: *"for
+knowing the location from coords we can use reverse geocoding for
+street name, place api for place name."* The Places API answers with
+what somebody would say they went to -- `Phoenix Marketcity Chennai`,
+55 metres away -- and reverse geocoding answers with the road they got
+there on. One credit when a business is found, two when the street has
+to be asked for instead.
+
+Only the nearest named place within a hundred and fifty metres counts,
+which is the same distance that makes two readings one place, so the
+two agree. Their own neighbourhood has nothing within a kilometre but
+a petrol station and a workshop, so most stays near home will get a
+street and that is all there is.
+
+**Three Geoapify categories silently poison the whole query.**
+`accommodation`, `sport` and `tourism`: including any one of them
+returns an empty answer rather than an error, and takes every other
+category in the call with it. `commercial` alone finds twenty places
+at a shopping mall; `commercial,accommodation` finds none. Found by
+pairing each category against one known to work, after a list that
+looked perfectly reasonable named nothing anywhere.
+
+Worth remembering as a shape of fault rather than a fact about
+categories: a filter that is wrong in this way does not fail. It
+returns nothing, for ever, and the feature goes on looking as though
+it is running.
+
 **Everything about it fails quietly.** No key configured and the namer
 is nil rather than something that always fails, so nothing logs a
 warning every time somebody goes somewhere. No answer, no network, or
@@ -1821,6 +1848,31 @@ existing and a new writing tool cannot accidentally get it.
 This refines rather than replaces the earlier rule that a name is
 matched by likeness and never refused on an exact-match miss. That
 said what to match; this says when matching is enough on its own.
+
+### A maps domain, later
+
+Noted by the owner on 2 October 2026 and not built: the Geoapify key
+buys more than naming. Worth tools of their own when the time comes.
+
+**Routing**, one credit a leg, gives travel time from where they
+actually are to where they have to be. That is what turns "the film is
+at ten past six" into "you need to leave in twenty minutes", and
+nothing else on offer changes what can be said about their day as
+much.
+
+**Map Matching**, one credit per hundred readings, snaps the day's
+positions onto real roads -- three credits for a day of five-minute
+fixes. It would clean up a track for a map, and tells you cheaply
+whether somebody was driving or sitting still.
+
+**Map tiles** at a quarter credit each, roughly three and a half for
+one map view, for the screen they want that draws the day's movement.
+The free plan requires a "Powered by Geoapify" follow-link on any page
+showing it.
+
+Not worth it: geocoding, autocomplete, IP geolocation, postcodes,
+route matrices, route planning, isolines, geometry, elevation. None of
+them answers a question anybody would ask the assistant.
 
 ## The names it expects to hear
 

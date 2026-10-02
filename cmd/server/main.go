@@ -513,6 +513,7 @@ func naming(cfg config.Config, logger *slog.Logger) event.Naming {
 	return place.Geoapify{
 		Key:     cfg.Geoapify.Key.Reveal(),
 		URL:     cfg.Geoapify.URL,
+		Places:  cfg.Geoapify.Places,
 		Timeout: cfg.Geoapify.Timeout,
 	}
 }

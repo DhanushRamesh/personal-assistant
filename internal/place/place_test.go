@@ -99,3 +99,96 @@ func TestItAsksAboutThePositionItWasGiven(t *testing.T) {
 		}
 	}
 }
+
+// two : A stand-in for both endpoints, counting what each was asked.
+func two(t *testing.T, places, reverse string) (p, r string, asked *map[string]int) {
+	t.Helper()
+	count := map[string]int{}
+	serve := func(which, body string) *httptest.Server {
+		s := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+			count[which]++
+			_, _ = w.Write([]byte(body))
+		}))
+		t.Cleanup(s.Close)
+		return s
+	}
+	return serve("places", places).URL, serve("reverse", reverse).URL, &count
+}
+
+// A business is what somebody would say they went to. The street is
+// how they got there.
+func TestABusinessBeatsTheStreet(t *testing.T) {
+	p, r, asked := two(t,
+		`{"features":[{"properties":{"name":"Phoenix Marketcity","distance":55}}]}`,
+		`{"features":[{"properties":{"street":"Velachery Main Road"}}]}`)
+
+	got, err := place.Geoapify{Key: "k", Places: p, URL: r}.Name(context.Background(), 12.99, 80.21)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got != "Phoenix Marketcity" {
+		t.Errorf("called it %q, want the business", got)
+	}
+	// And the street was never asked for, so it cost one credit.
+	if (*asked)["reverse"] != 0 {
+		t.Errorf("the street was asked for anyway: %v", *asked)
+	}
+}
+
+// Most of a residential neighbourhood has no business in it. Theirs
+// has two within a kilometre.
+func TestWithNoBusinessItFallsBackToTheStreet(t *testing.T) {
+	p, r, asked := two(t, `{"features":[]}`,
+		`{"features":[{"properties":{"street":"krishna nagar 9th street"}}]}`)
+
+	got, _ := place.Geoapify{Key: "k", Places: p, URL: r}.Name(context.Background(), 12.91, 80.06)
+	if got != "krishna nagar 9th street" {
+		t.Errorf("called it %q, want the street", got)
+	}
+	if (*asked)["places"] != 1 || (*asked)["reverse"] != 1 {
+		t.Errorf("want one of each, got %v", *asked)
+	}
+}
+
+// A shop six hundred metres away is not where somebody sat, however
+// much it is the nearest named thing.
+func TestSomethingTooFarAwayIsNotWhereTheyWere(t *testing.T) {
+	p, r, _ := two(t,
+		`{"features":[{"properties":{"name":"Bharat Petroleum","distance":707}}]}`,
+		`{"features":[{"properties":{"street":"krishna nagar 9th street"}}]}`)
+
+	got, _ := place.Geoapify{Key: "k", Places: p, URL: r}.Name(context.Background(), 12.91, 80.06)
+	if got != "krishna nagar 9th street" {
+		t.Errorf("called it %q: a place 707 m away was taken as where they were", got)
+	}
+}
+
+// The nearest named one, not the first returned.
+func TestTheNearestNamedPlaceWins(t *testing.T) {
+	p, r, _ := two(t, `{"features":[
+		{"properties":{"name":"Burger King","distance":120}},
+		{"properties":{"distance":5}},
+		{"properties":{"name":"Starbucks","distance":40}}]}`,
+		`{"features":[{"properties":{"street":"somewhere"}}]}`)
+
+	got, _ := place.Geoapify{Key: "k", Places: p, URL: r}.Name(context.Background(), 12.99, 80.21)
+	if got != "Starbucks" {
+		t.Errorf("called it %q, want the nearest named one", got)
+	}
+}
+
+// The places search failing is not the end of it: the street is still
+// worth having, and asking for it is another credit rather than
+// another problem.
+func TestAFailedPlacesSearchStillGetsTheStreet(t *testing.T) {
+	broken := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		w.WriteHeader(500)
+	}))
+	t.Cleanup(broken.Close)
+	_, r, _ := two(t, `{}`, `{"features":[{"properties":{"street":"krishna nagar 9th street"}}]}`)
+
+	got, err := place.Geoapify{Key: "k", Places: broken.URL, URL: r}.Name(context.Background(), 12.91, 80.06)
+	if err != nil || got != "krishna nagar 9th street" {
+		t.Errorf("got %q, %v; want the street and no error", got, err)
+	}
+}

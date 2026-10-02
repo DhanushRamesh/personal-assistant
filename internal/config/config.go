@@ -152,9 +152,13 @@ type Geoapify struct {
 	// Key : The API key. Empty leaves a stay called by its
 	// coordinates, which is what it was called before this existed.
 	Key logging.Secret
-	// URL : Where it answers. Here rather than hardcoded so a test can
-	// point it somewhere that is not the internet.
+	// URL : Where reverse geocoding answers, which gives a street.
+	// Here rather than hardcoded so a test can point it somewhere that
+	// is not the internet.
 	URL string
+	// Places : Where the point-of-interest search answers, which gives
+	// the name of a business. Asked first.
+	Places string
 	// Timeout : How long one lookup may take. Short, because nothing
 	// is improved by a name that arrives late and a stay is perfectly
 	// usable without one.
@@ -489,6 +493,7 @@ func Load(path string, lookup Lookup) (Config, error) {
 		Geoapify: Geoapify{
 			Key:     logging.Secret(l.str("geoapify", "key", "")),
 			URL:     l.str("geoapify", "url", "https://api.geoapify.com/v1/geocode/reverse"),
+			Places:  l.str("geoapify", "places_url", "https://api.geoapify.com/v2/places"),
 			Timeout: l.duration("geoapify", "timeout", 8*time.Second),
 		},
 		Provider: Provider{
