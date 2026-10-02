@@ -824,6 +824,42 @@ taken. The state is what was asked for, which is the only part the
 person cares about, and `Changed` already says "nothing had actually
 moved: it already held those values".
 
+### A write is read first, and the server does the reading
+
+The other half of the same rule. A write is refused until its own
+domain has been read in the same turn, because without it the model
+writes from what it remembers or from an identifier it made up -- four
+events were nearly deleted by calls carrying
+`<id_for_first_single_day_event>`.
+
+**2 October 2026: the refusal now carries the listing.** Asking for it
+cost two rounds of a turn that has thirty seconds -- guess, be
+refused, read, write -- and in one conversation about a cinema booking
+that happened four times. `readFirst` runs the domain's listing itself
+and hands back what is there, and `Result.Read` tells the runner to
+count it as read so the next round is the write.
+
+**The protection is unchanged.** What the guard defends is that a real
+listing was in front of the model when it chose an identifier, not
+which call fetched it. A model that wants a wider range than the
+default still has to ask for one, exactly as before, and the refusal
+says so.
+
+**Only a listing the server can call itself**, meaning one with no
+required arguments. A domain reachable only through a search is asked
+for as it always was: the server has no business guessing what to
+search for.
+
+**Hot listings first** when a domain has more than one -- the diary has
+its events and its calendars. The hot list is the measured record of
+which one people actually call, which is as good an answer as exists
+to which is a domain's main listing.
+
+**A listing that failed is not recorded as read**, or the guard would
+be handing the next call permission on the strength of nothing. Its
+reason is passed on all the same, so the model can say what is wrong
+now rather than meeting the same failure a round later.
+
 ## How prompt text is written
 
 `internal/prompt` joins the pieces: `Text` for sentences of one

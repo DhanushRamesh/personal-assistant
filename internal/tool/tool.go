@@ -174,6 +174,14 @@ type Result struct {
 	// it will.
 	Content string
 
+	// Read : Listings the server ran on the write's behalf while
+	// refusing it, which count as having been read this turn.
+	//
+	// Without this the folded-in listing would be worth nothing: the
+	// model would be handed what is actually there and then refused
+	// again for not having fetched it itself.
+	Read []string
+
 	// Reveal : Tools to describe in full from the next round on.
 	//
 	// Set by tool_describe, and by the runner when the model called a

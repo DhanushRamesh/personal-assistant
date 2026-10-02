@@ -165,8 +165,10 @@ func (r *Registry) Call(ctx context.Context, name string, in Invocation) Result 
 	}
 
 	// Read before write, for every domain that has something to read.
-	if why := r.readFirst(t, in.Ran); why != "" {
-		return Failed(why)
+	// The reading is done here when it can be, so the model is handed
+	// what is there rather than sent to fetch it.
+	if sent := r.readFirst(ctx, t, in); sent != nil {
+		return *sent
 	}
 
 	// Taken off before anything else looks at the arguments: it is added

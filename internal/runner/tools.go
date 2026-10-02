@@ -208,6 +208,11 @@ func (r *Runner) runTools(
 			}
 		}
 
+		// A listing the server ran while refusing a write counts as
+		// read, or the model is handed what is there and then refused
+		// again for not having fetched it itself.
+		*seen = append(*seen, result.Read...)
+
 		r.logger.InfoContext(ctx, "tool ran",
 			slog.String("tool", c.Name),
 			slog.String("outcome", string(result.Outcome)),
