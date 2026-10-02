@@ -167,6 +167,14 @@ type Result struct {
 	// Else : The sentence appended when any of MustSay is missing from
 	// the answer. Written to read as a continuation of it.
 	Else string
+	// Regardless : A sentence the answer gets whether or not it already
+	// says it.
+	//
+	// For what a tool knows and no fact can check: that a write moved
+	// nothing is not a value to look for in a sentence. Deciding it by
+	// reading the answer would mean matching English words, which is
+	// not something this server does anywhere.
+	Regardless string
 	// Content : What it produced, or exactly what went wrong.
 	//
 	// A failure says why, in the words of whatever actually refused. A tool

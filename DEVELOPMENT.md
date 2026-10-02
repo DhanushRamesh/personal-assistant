@@ -824,6 +824,48 @@ taken. The state is what was asked for, which is the only part the
 person cares about, and `Changed` already says "nothing had actually
 moved: it already held those values".
 
+### A write that moved nothing says what it found
+
+**2 October 2026.** `Changed` had a branch for a write that read back
+identical -- "nothing had actually moved: it already held those
+values. Say so rather than reporting a change" -- and it was the one
+place here that asked rather than enforced. Asked, it was ignored.
+Told "it's a three hour movie, so it's from 06:10 to 10:10", the
+assistant set three hours, was handed that sentence, and answered
+"Meesaya Murukku 2 from 6:10 PM to 9:10 PM, sir. That is three hours."
+A settled fact, with nothing to say it was already so. The owner had
+asked for ten and was left believing their film ran until then.
+
+`Result.Regardless` carries a sentence appended whether or not the
+answer already says it, and `Owed.Always` is how `Ensure` applies it.
+It exists because that nothing changed is not a value that can be
+looked for in a sentence, and the alternative -- matching the English
+words a model would use to admit it -- is the thing this server does
+not do anywhere.
+
+**It names the values, not just the fact.** "Nothing changed" invites
+the person to assume what they asked for was already true, and when it
+is not, the number is the only thing that shows them. One sentence,
+because it is heard: "was already" at the front carries across the
+rest of the list.
+
+**The end of an event was never read back at all.** `calendar_update`
+compared the name, the start, the place and the notes. A length given
+in minutes moves the end and none of those, so a real change was
+reported as nothing having moved. It is read back now, as a clock time
+rather than a length, because that is what somebody leaving the house
+for a film has in mind. Whole-day events are left out: Google stores
+their end as the day after, and "ends on Monday" for something on
+Sunday is worse than silence.
+
+**The contradiction itself is prompt work, and that is where it had to
+go.** "Three hours" and "six until ten" are both internally consistent
+arguments; no validator sees anything wrong and only somebody reading
+the sentence does. So `calendar_add` and `calendar_update` carry one
+line saying to work out whether the two agree, and if they do not, to
+say so and say which was used. It is the last resort by the rule above
+and it is used here because the server genuinely cannot see it.
+
 ### A write is read first, and the server does the reading
 
 The other half of the same rule. A write is refused until its own

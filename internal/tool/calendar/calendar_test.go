@@ -812,3 +812,65 @@ func TestAStayOverSeveralDaysSaysBothEnds(t *testing.T) {
 		}
 	}
 }
+
+// Changing the length moves the end, and the end is read back like
+// everything else.
+//
+// It was not reported at all: a length given in minutes moved the end
+// and the read-back said nothing had changed, because nothing it was
+// looking at had.
+func TestChangingTheLengthSaysWhenItNowEnds(t *testing.T) {
+	d := &diary{mine: an("evt001", "Meesaya Murukku 2")}
+	got := run(t, d, "calendar_update", `{"id":"evt001","minutes":180,"saying":"doing that"}`)
+
+	if got.Outcome != "ok" {
+		t.Fatalf("outcome = %q: %s", got.Outcome, got.Content)
+	}
+	// An hour from 12:00 in India, made three.
+	for _, want := range []string{"1:00 pm", "3:00 pm"} {
+		if !strings.Contains(got.Content, want) {
+			t.Errorf("content = %q, want %q in it: the end was not read back", got.Content, want)
+		}
+	}
+}
+
+// A change that changed nothing says what it already was, not just
+// that nothing moved.
+//
+// Told "it's a three hour movie, so from 06:10 to 10:10", the
+// assistant set three hours, was told nothing had moved, and answered
+// "from 6:10 PM to 9:10 PM, sir. That is three hours" -- a settled
+// fact. The person had asked for ten.
+func TestAChangeThatChangedNothingSaysWhatItAlreadyWas(t *testing.T) {
+	d := &diary{mine: an("evt001", "Meesaya Murukku 2")}
+	got := run(t, d, "calendar_update",
+		`{"id":"evt001","title":"Meesaya Murukku 2","saying":"doing that"}`)
+
+	if got.Outcome != "ok" {
+		t.Fatalf("outcome = %q: %s", got.Outcome, got.Content)
+	}
+	if got.Regardless == "" {
+		t.Fatalf("nothing is owed for a change that changed nothing: %s", got.Content)
+	}
+	for _, want := range []string{"already", "Meesaya Murukku 2", "1:00 pm"} {
+		if !strings.Contains(got.Regardless, want) {
+			t.Errorf("owed = %q, want %q in it", got.Regardless, want)
+		}
+	}
+}
+
+// A whole-day event has no finishing time, and Google stores its end
+// as the day after. Saying "ends on Monday" for something that happens
+// on Sunday is worse than saying nothing.
+func TestAWholeDayEventIsNotGivenAnEndingTime(t *testing.T) {
+	d := &diary{mine: []calendar.Event{{
+		ID: "evt001", Title: "Gunalan's Birthday", Mine: true, AllDay: true,
+		Starts: time.Date(2026, 10, 29, 0, 0, 0, 0, time.UTC),
+		Ends:   time.Date(2026, 10, 30, 0, 0, 0, 0, time.UTC),
+	}}}
+	got := run(t, d, "calendar_update", `{"id":"evt001","title":"Gunalan's Birthday","saying":"doing that"}`)
+
+	if strings.Contains(got.Regardless, "the end") {
+		t.Errorf("a whole-day event was given a finishing time: %q", got.Regardless)
+	}
+}

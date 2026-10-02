@@ -282,3 +282,65 @@ func TestADenialStandsAloneWhenThereIsNoAnswer(t *testing.T) {
 		t.Errorf("the denial alone reads as %q", got)
 	}
 }
+
+// An obligation with no fact to check is appended anyway. That nothing
+// changed is not a value that can be looked for in a sentence, and
+// looking for the English words a model would use to admit it is a
+// check that stops working in another language.
+func TestWhatIsOwedRegardlessIsAlwaysSaid(t *testing.T) {
+	owed := tool.Owing([]tool.Result{{
+		Regardless: "Nothing needed changing: the length was already three hours.",
+	}})
+	if len(owed) != 1 || !owed[0].Always {
+		t.Fatalf("not owed unconditionally: %+v", owed)
+	}
+
+	// Said even by an answer that already covered it, since there is
+	// no way to tell that it did.
+	got := tool.Ensure("Nothing needed changing there.", "sir", owed)
+	if !strings.Contains(got, "already three hours") {
+		t.Errorf("the obligation was dropped: %q", got)
+	}
+}
+
+// A write that moved nothing says what it found, not only that it
+// found nothing. "Nothing changed" invites the person to assume what
+// they asked for was already true.
+func TestAChangeThatMovedNothingNamesTheValues(t *testing.T) {
+	got := tool.Changed("Changed the event",
+		tool.Change{What: "the name", From: "Meesaya Murukku 2", To: "Meesaya Murukku 2"},
+		tool.Change{What: "the end", From: "9:10 pm", To: "9:10 pm"},
+		tool.Change{What: "the place", From: "", To: ""},
+	)
+
+	if got.Regardless == "" {
+		t.Fatal("a write that moved nothing owes nothing")
+	}
+	for _, want := range []string{"was already", "Meesaya Murukku 2", "9:10 pm"} {
+		if !strings.Contains(got.Regardless, want) {
+			t.Errorf("owed = %q, want %q in it", got.Regardless, want)
+		}
+	}
+	// One sentence, because it is heard rather than read.
+	if n := strings.Count(got.Regardless, "was already"); n != 1 {
+		t.Errorf("said %d times over, want one sentence: %q", n, got.Regardless)
+	}
+	// An empty value is not a value anybody can check.
+	if strings.Contains(got.Regardless, "the place") {
+		t.Errorf("an empty value was read back: %q", got.Regardless)
+	}
+}
+
+// A write that did move something owes its before, as it always has,
+// and owes no standing-still sentence.
+func TestAChangeThatMovedOwesNothingExtra(t *testing.T) {
+	got := tool.Changed("Changed the event",
+		tool.Change{What: "the end", From: "9:10 pm", To: "10:10 pm"})
+
+	if got.Regardless != "" {
+		t.Errorf("a real change was reported as standing still: %q", got.Regardless)
+	}
+	if len(got.MustSay) != 1 || got.MustSay[0] != "9:10 pm" {
+		t.Errorf("the before was not owed: %v", got.MustSay)
+	}
+}

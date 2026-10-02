@@ -97,6 +97,22 @@ func whenTrouble(err error) tool.Result {
 }
 
 // add : Puts something in the diary.
+// clockDisagrees : What to do when a span is given twice and the two
+// readings differ.
+//
+// The one part of this nothing in the server can catch. Told "it's a
+// three hour movie, so it's from 06:10 to 10:10", the assistant wrote
+// four hours, then three, then said "from 6:10 PM to 9:10 PM, sir.
+// That is three hours" -- it had chosen, correctly, and never
+// mentioned that the person's own two numbers did not agree. They
+// were left believing their film ran until ten.
+//
+// Both halves are internally consistent arguments, so no validator
+// sees anything wrong; only somebody reading the sentence does.
+const clockDisagrees = "If they give both a length and an end -- \"a three hour film, so six until " +
+	"ten\" -- work out whether the two agree. If they do not, say so and say which you used, " +
+	"before anything else: they cannot see the diary and will believe whichever one they said last."
+
 func add(diary Diary, clock Clock) tool.Tool {
 	return tool.Tool{
 		Name:    "calendar_add",
@@ -108,7 +124,7 @@ func add(diary Diary, clock Clock) tool.Tool {
 			"interrupted about.",
 		Avoid: "Not for something they want said aloud at a moment: that is reminder_set. A dentist " +
 			"appointment next Tuesday is a calendar event; being told in ten minutes to take tablets " +
-			"is a reminder. When they want both, set both.",
+			"is a reminder. When they want both, set both. " + clockDisagrees,
 		Channels: []chat.Channel{chat.ChannelVoice, chat.ChannelDirect},
 		Params: tool.Schema{
 			Required: []string{"title", "starts"},
@@ -235,7 +251,7 @@ func amend(diary Diary, clock Clock) tool.Tool {
 			"make it longer, add a place.",
 		Avoid: "Give only what is changing; anything left out keeps what it had. Never cancel an " +
 			"event and add another in its place: that gives it a new identifier, and if the cancel " +
-			"fails you have left them with two. Use this.",
+			"fails you have left them with two. Use this. " + clockDisagrees,
 		Channels: []chat.Channel{chat.ChannelVoice, chat.ChannelDirect},
 		Params: tool.Schema{
 			Required: []string{"id"},
@@ -365,11 +381,36 @@ func amend(diary Diary, clock Clock) tool.Tool {
 				tool.Change{What: "the time",
 					From: was.Starts.In(loc).Format("3:04 pm on Monday 2 January"),
 					To:   after.Starts.In(loc).Format("3:04 pm on Monday 2 January")},
+				// The end, which nothing reported until now. A length
+				// given in minutes moved it and the read-back said
+				// nothing had changed, because nothing it was looking
+				// at had. Told "make it three hours" the assistant then
+				// said "from 6:10 PM to 9:10 PM, sir" with no sign of
+				// whether that was its doing -- and the person had
+				// asked for it to run until ten.
+				//
+				// Said as a time rather than a length, because that is
+				// what somebody checking it has in mind: a film they
+				// are leaving the house for ends at a clock time.
+				tool.Change{What: "the end", From: ends(was, loc), To: ends(*after, loc)},
 				tool.Change{What: "the place", From: was.Where, To: after.Where},
 				tool.Change{What: "the note", From: was.Notes, To: after.Notes},
 			)
 		},
 	}
+}
+
+// ends : When an event finishes, as somebody would say it.
+//
+// Empty for a whole-day event, which has no finishing time: Google
+// stores its end as the day after, and "ends on Monday" for something
+// that happens on Sunday is worse than saying nothing. Empty values
+// are left out of what is read back.
+func ends(e calendar.Event, loc *time.Location) string {
+	if e.AllDay {
+		return ""
+	}
+	return e.Ends.In(loc).Format("3:04 pm on Monday 2 January")
 }
 
 // agenda : What the assistant has written down.

@@ -43,7 +43,18 @@ func Changed(did string, changes ...Change) Result {
 	if len(moved) == 0 {
 		b.WriteString(". Read back afterwards and nothing had actually moved: it already " +
 			"held those values. Say so rather than reporting a change.")
-		return Result{Outcome: conversation.OutcomeOK, Content: b.String()}
+		// Enforced rather than asked for, like everything else here.
+		// Asked, it was ignored: handed exactly that sentence about a
+		// film's length, the assistant answered "Meesaya Murukku 2 from
+		// 6:10 PM to 9:10 PM, sir. That is three hours" -- a settled
+		// fact, with nothing to say it was already so. The person had
+		// asked for it to run to 10:10, and the one thing that would
+		// have shown them it had not is what it already was.
+		return Result{
+			Outcome:    conversation.OutcomeOK,
+			Content:    b.String(),
+			Regardless: stoodAt(changes),
+		}
 	}
 
 	b.WriteString(", and read it back to be sure. ")
@@ -70,6 +81,47 @@ func Changed(did string, changes ...Change) Result {
 	return Result{
 		Outcome: conversation.OutcomeOK, Content: b.String(),
 		MustSay: owed, Else: say.String(),
+	}
+}
+
+// stoodAt : What a write that moved nothing found already there.
+//
+// The values, not just the fact. "Nothing changed" invites the person
+// to assume what they asked for was already true, and when it is not
+// -- three hours when they meant until ten -- that is the moment they
+// need the number. One sentence, because this is heard rather than
+// read: "was already" at the front carries across the rest of the
+// list.
+func stoodAt(changes []Change) string {
+	said := make([]string, 0, len(changes))
+	for _, c := range changes {
+		if strings.TrimSpace(c.To) == "" {
+			continue
+		}
+		if len(said) == 0 {
+			said = append(said, c.What+" was already "+c.To)
+			continue
+		}
+		said = append(said, c.What+" "+c.To)
+	}
+	if len(said) == 0 {
+		return "Nothing needed changing."
+	}
+	return "Nothing needed changing: " + andSomething(said) + "."
+}
+
+// andSomething : "a", "a and b", "a, b and c". The parallel of
+// orSomething, which the read-before-write refusal uses.
+func andSomething(parts []string) string {
+	switch len(parts) {
+	case 0:
+		return ""
+	case 1:
+		return parts[0]
+	case 2:
+		return parts[0] + " and " + parts[1]
+	default:
+		return strings.Join(parts[:len(parts)-1], ", ") + " and " + parts[len(parts)-1]
 	}
 }
 
@@ -192,6 +244,14 @@ type Owed struct {
 	// Tally : Set when the obligation is a count before and after, so
 	// several of them in one turn can be collapsed into the net change.
 	Tally *Tally
+	// Always : Appended whether or not the answer already says it.
+	//
+	// For an obligation with no fact to check against. That nothing
+	// changed is not a value that can be looked for in a sentence, and
+	// the alternative -- looking for the English words a model would
+	// use to admit it -- is a check that stops working the moment
+	// somebody is answered in another language.
+	Always bool
 }
 
 // Tally : How many there were and how many there are, for one kind of
@@ -207,6 +267,9 @@ func Owing(results []Result) []Owed {
 	for _, r := range results {
 		if len(r.MustSay) > 0 && strings.TrimSpace(r.Else) != "" {
 			out = append(out, Owed{Facts: r.MustSay, Else: r.Else, Tally: r.Tally})
+		}
+		if strings.TrimSpace(r.Regardless) != "" {
+			out = append(out, Owed{Else: r.Regardless, Always: true})
 		}
 	}
 	return out
@@ -269,7 +332,7 @@ func Ensure(answer, address string, owed []Owed) string {
 	lower := strings.ToLower(answer)
 
 	for _, o := range owed {
-		missing := false
+		missing := o.Always
 		for _, fact := range o.Facts {
 			if f := strings.TrimSpace(strings.ToLower(fact)); f != "" && !strings.Contains(lower, f) {
 				missing = true
