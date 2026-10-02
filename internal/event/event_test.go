@@ -154,3 +154,35 @@ func TestAnOversizedPayloadIsRefused(t *testing.T) {
 		t.Fatalf("got %v, want ErrTooLong", err)
 	}
 }
+
+// TestATelephoneNumberIsNotReadOut : It is kept as the label so one
+// stranger can be told from another, and never said aloud.
+func TestATelephoneNumberIsNotReadOut(t *testing.T) {
+	for _, number := range []string{
+		"+919876543210", "9876543210", "+91 98765 43210",
+		"044-2345-6789", "(044) 23456789",
+	} {
+		if !Number(number) {
+			t.Errorf("%q should be read as a number", number)
+		}
+		if got := Readable(number); got != UnknownNumber {
+			t.Errorf("%q was left readable as %q", number, got)
+		}
+	}
+}
+
+// TestEverythingElseIsSaidAsItIs : A name, a place, a network, and the
+// small numbers a device reports are not telephone numbers.
+func TestEverythingElseIsSaidAsItIs(t *testing.T) {
+	for _, value := range []string{
+		"Priya", "Amma", "home", "the office", "Zoho-Guest", "Dhanush_EXT",
+		"42", "17", "12.9110236,80.0624303", "",
+	} {
+		if Number(value) {
+			t.Errorf("%q was mistaken for a telephone number", value)
+		}
+		if got := Readable(value); got != value {
+			t.Errorf("%q came back as %q", value, got)
+		}
+	}
+}

@@ -269,6 +269,19 @@ func (m moment) label() string {
 	return m.kind + " " + strconv.Quote(m.value)
 }
 
+// shown : The same, as it should be read.
+//
+// Counting keys on label, which keeps a stranger's number so that one
+// stranger can be told from another. This is what reaches the prompt,
+// and a description that is read before every answer has no business
+// carrying somebody's telephone number about with it.
+func (m moment) shown() string {
+	if m.value == "" {
+		return m.kind
+	}
+	return m.kind + " " + strconv.Quote(event.Readable(m.value))
+}
+
 // collapsed : The events in order, with runs of the same thing reduced
 // to their first occurrence.
 func collapsed(events []event.Event, where *time.Location) []moment {
@@ -294,6 +307,7 @@ func collapsed(events []event.Event, where *time.Location) []moment {
 // howOften : What they do, most often first.
 func howOften(moments []moment, where *time.Location, days int) string {
 	type tally struct {
+		shown string
 		times int
 		days  map[string]bool
 		when  []time.Time
@@ -304,7 +318,7 @@ func howOften(moments []moment, where *time.Location, days int) string {
 		key := m.label()
 		t, seen := by[key]
 		if !seen {
-			t = &tally{days: map[string]bool{}}
+			t = &tally{shown: m.shown(), days: map[string]bool{}}
 			by[key], order = t, append(order, key)
 		}
 		t.times++
@@ -321,7 +335,7 @@ func howOften(moments []moment, where *time.Location, days int) string {
 		}
 		t := by[key]
 		line := fmt.Sprintf("- %s: %d %s, on %d of %d %s",
-			key, t.times, plural("time", t.times), len(t.days), days, plural("day", days))
+			t.shown, t.times, plural("time", t.times), len(t.days), days, plural("day", days))
 		if at := aroundWhen(t.when, where); at != "" {
 			line += ", " + at
 		}
@@ -330,14 +344,16 @@ func howOften(moments []moment, where *time.Location, days int) string {
 	return prompt.Lines(append([]string{"How often, most to least:"}, lines...)...)
 }
 
-// whatFollows : What tends to come straight after what.
+// whatFollows : What tends to come shortly after what.
 //
-// Only what immediately follows, and only within Soon. Counting every
-// pair within the window instead would make a busy hour look like a
-// routine, and what somebody means by "I always do this then that" is
-// the next thing, not any later thing.
+// Everything within Soon of each other, not only what came next. It
+// was adjacency until 2 October 2026, which only found a pairing when
+// nothing else happened in between -- and the useful ones are exactly
+// the opposite, two devices reporting one real act with other traffic
+// between them.
 func whatFollows(moments []moment, where *time.Location) string {
 	type pair struct {
+		shown string
 		times int
 		gaps  []time.Duration
 	}
@@ -358,7 +374,7 @@ func whatFollows(moments []moment, where *time.Location) string {
 			key := before.label() + ", then " + after.label()
 			p, seen := by[key]
 			if !seen {
-				p = &pair{}
+				p = &pair{shown: before.shown() + ", then " + after.shown()}
 				by[key], order = p, append(order, key)
 			}
 			p.times++
@@ -374,7 +390,7 @@ func whatFollows(moments []moment, where *time.Location) string {
 			continue
 		}
 		lines = append(lines, fmt.Sprintf("- %s: %d %s, usually within %s",
-			key, by[key].times, plural("time", by[key].times), spoken(middle(by[key].gaps))))
+			by[key].shown, by[key].times, plural("time", by[key].times), spoken(middle(by[key].gaps))))
 	}
 	if len(lines) == 0 {
 		return ""

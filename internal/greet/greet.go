@@ -225,7 +225,7 @@ func happened(t Told) string {
 			day = d
 			lines = append(lines, d)
 		}
-		line := at.Format("3:04 pm") + "  " + r.label
+		line := at.Format("3:04 pm") + "  " + r.shown
 		if r.more != "" {
 			line += "  (" + r.more + ")"
 		}
@@ -256,6 +256,7 @@ func happened(t Told) string {
 // run : One thing that happened, and how many times.
 type run struct {
 	label       string
+	shown       string
 	more        string
 	first, last time.Time
 	times       int
@@ -289,7 +290,7 @@ func folded(evs []event.Event) []run {
 			continue
 		}
 		at[label] = len(out)
-		out = append(out, run{label: label, more: rest(e),
+		out = append(out, run{label: label, shown: shown(e), more: rest(e),
 			first: e.OccurredAt, last: e.OccurredAt, times: 1})
 	}
 	return out
@@ -305,6 +306,20 @@ func folded(evs []event.Event) []run {
 func Label(e event.Event) string {
 	if v := value(e); v != "" {
 		return e.Kind + " " + v
+	}
+	return e.Kind
+}
+
+// shown : How a line names the thing, which is not always how it is
+// counted.
+//
+// A caller with no name is labelled by their number so that one
+// stranger can be told from another, and read out that is eleven
+// digits nobody asked to hear. The count stays on the number; only
+// the words change.
+func shown(e event.Event) string {
+	if v := value(e); v != "" {
+		return e.Kind + " " + event.Readable(v)
 	}
 	return e.Kind
 }

@@ -289,3 +289,48 @@ type Query struct {
 	// Limit : At most this many, newest first. Zero means no limit.
 	Limit int
 }
+
+// UnknownNumber : What a bare telephone number is called when it is
+// said out loud.
+const UnknownNumber = "an unknown number"
+
+// Readable : A value as it should be shown to something that will
+// speak it.
+//
+// A caller who is not in the contacts is labelled by their number,
+// because a label has to tell one stranger from another and four
+// calls from one is the whole of what is worth noticing. Read out,
+// that is eleven digits nobody can hold in their head and nobody
+// asked to hear.
+//
+// So the number is the key and this is the face. Counting, folding and
+// pairing all go on using the value itself; only what reaches a prompt
+// is changed, and two different strangers come out as the same words
+// with different counts beside them, which is what a person would say
+// anyway.
+func Readable(value string) string {
+	if Number(value) {
+		return UnknownNumber
+	}
+	return value
+}
+
+// Number : Whether a value is a telephone number and nothing else.
+//
+// Long enough not to catch a reading -- a battery level, a count of
+// something -- and loose enough to catch the shapes a phone writes
+// them in, with spaces, brackets, hyphens and a country code.
+func Number(value string) bool {
+	digits := 0
+	for i, r := range strings.TrimSpace(value) {
+		switch {
+		case r >= '0' && r <= '9':
+			digits++
+		case r == '+' && i == 0:
+		case r == ' ' || r == '-' || r == '(' || r == ')':
+		default:
+			return false
+		}
+	}
+	return digits >= 7 && digits <= 15
+}

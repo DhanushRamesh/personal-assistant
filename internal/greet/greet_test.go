@@ -308,3 +308,32 @@ func TestThePayloadCarriesMoreThanItsValue(t *testing.T) {
 		t.Errorf("the label picked up more than the value: %q", greet.Label(call))
 	}
 }
+
+// TestAStrangerIsCountedByNumberAndNeverReadOut : The label keeps the
+// number so one stranger can be told from another; the line says
+// "an unknown number" because nobody asked to hear eleven digits.
+func TestAStrangerIsCountedByNumberAndNeverReadOut(t *testing.T) {
+	var evs []event.Event
+	for i := range 4 {
+		evs = append(evs, happened("call.missed", "+919876543210",
+			evening.Add(-time.Duration(40-i*5)*time.Minute)))
+	}
+	evs = append(evs, happened("call.missed", "Priya", evening.Add(-10*time.Minute)))
+
+	got := greet.Prompt(greet.Told{Now: evening, Since: evening.Add(-2 * time.Hour), Events: evs})
+
+	if strings.Contains(got, "9876543210") {
+		t.Errorf("the number was read out:\n%s", got)
+	}
+	if !strings.Contains(got, "call.missed an unknown number  (4 times") {
+		t.Errorf("four calls from one stranger should be one line with a count:\n%s", got)
+	}
+	if !strings.Contains(got, "call.missed Priya") {
+		t.Error("a known caller should still be named")
+	}
+	// And the count is still keyed on the number, so two strangers stay
+	// two things.
+	if greet.Label(evs[0]) == greet.Label(evs[4]) {
+		t.Error("a stranger and a known caller share a label")
+	}
+}

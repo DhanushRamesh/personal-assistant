@@ -1689,6 +1689,26 @@ Verified live: a name with a number keeps the name; an empty value and
 an unsubstituted value both take the number; neither present is left
 alone rather than invented.
 
+**And the number is never read out.** Owner: *"the AI should not read
+to me like +9166767, it should just say unknown number."* The label
+keeps the number, because that is what tells one stranger from another
+and four calls from one is the whole of what is worth noticing; only
+what reaches a prompt is changed. `event.Readable` turns a bare
+telephone number into "an unknown number", and both the greeting and
+the description count on the value while showing that instead.
+
+The description matters more than it looks: it is read before every
+answer, so a number in it would follow the owner into every
+conversation.
+
+Seven digits is the floor, so a battery level or a count is not
+mistaken for a telephone number; fifteen is the ceiling, which is what
+E.164 allows. Spaces, brackets, hyphens and a country code all pass.
+
+Live, with four calls from one unseen number: *"Good to see you, sir.
+There have been a few calls from an unknown number this evening -- did
+you catch any of those?"*
+
 ## A label is the value, in all three places
 
 The owner, before the first call had arrived: *"does the profiling
