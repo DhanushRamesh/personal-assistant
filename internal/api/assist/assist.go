@@ -174,10 +174,9 @@ type ModelDetails struct {
 // Handler : Serves the endpoints Home Assistant calls.
 type Handler struct {
 	httpx.Responder
-	repo     chat.Repository
-	runner   Runner
-	events   Subscriber
-	locating func(ctx context.Context, userID string)
+	repo   chat.Repository
+	runner Runner
+	events Subscriber
 }
 
 // New : Builds the handler from the store, the runner that executes chats and
@@ -197,13 +196,6 @@ func New(logger *slog.Logger, repo chat.Repository, runner Runner, bus Subscribe
 // The two paths are fixed by the client calling them: it appends them to the
 // address it was configured with, so they cannot be moved under /v1 with the
 // rest of the API.
-// Locates : Sets what to call when a voice turn arrives, so the
-// machine can note where it is. Optional.
-func (h *Handler) Locates(f func(ctx context.Context, userID string)) *Handler {
-	h.locating = f
-	return h
-}
-
 func (h *Handler) Mount(r chi.Router) {
 	r.Get("/api/tags", h.Models)
 	r.Post("/api/chat", h.Chat)
@@ -327,15 +319,6 @@ func (h *Handler) Chat(w http.ResponseWriter, r *http.Request) {
 	}
 
 	h.Logger.InfoContext(ctx, "assist chat accepted", slog.String("chat_id", t.ID))
-
-	// Somebody just spoke to this machine out loud, which is the one
-	// moment it can learn where it is: a voice turn means a person is
-	// standing in front of it, and their phone is where they are.
-	// Nothing waits for it and nothing depends on any one of them
-	// landing -- the next voice turn writes another.
-	if h.locating != nil {
-		go h.locating(context.WithoutCancel(ctx), caller.User.ID)
-	}
 
 	// Every failure after this point is reported inside the stream, because
 	// the status line has already been sent and cannot be taken back.

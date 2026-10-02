@@ -12,7 +12,6 @@
 package api
 
 import (
-	"context"
 	"log/slog"
 	"net/http"
 	"time"
@@ -44,7 +43,6 @@ import (
 	"github.com/DhanushRamesh/personal-assistant/internal/llm"
 	"github.com/DhanushRamesh/personal-assistant/internal/memory"
 	"github.com/DhanushRamesh/personal-assistant/internal/persona"
-	presencepkg "github.com/DhanushRamesh/personal-assistant/internal/presence"
 	"github.com/DhanushRamesh/personal-assistant/internal/remind"
 	"github.com/DhanushRamesh/personal-assistant/internal/speech"
 	"github.com/DhanushRamesh/personal-assistant/internal/tool"
@@ -222,22 +220,6 @@ func New(opts Options) *Server {
 		memories:   memories.New(opts.Logger, opts.Memories),
 		tools:      toolsapi.New(opts.Logger, opts.Tools),
 	}
-	// The arrival comes from the person's own phone now, which reaches
-	// the server as an event. Said here rather than in the literal
-	// above because the thing that greets has to exist before the
-	// thing that notices somebody has walked in.
-	s.events.Welcomes(s.presence)
-
-	// A voice turn is the one moment this machine can learn where it
-	// is: somebody is standing in front of it, and their phone is
-	// where they are. Everything that answers whether they are here
-	// is a distance from what this records.
-	if opts.DeviceEvents != nil {
-		s.assist.Locates(func(ctx context.Context, userID string) {
-			presencepkg.Locate(ctx, opts.DeviceEvents, userID, now(opts.Now), opts.Logger)
-		})
-	}
-
 	s.routes()
 	return s
 }
@@ -291,12 +273,4 @@ func (s *Server) routes() {
 		s.memories.Mount(r)
 		s.tools.Mount(r)
 	})
-}
-
-// now : The clock an option gave, or the real one.
-func now(clock func() time.Time) time.Time {
-	if clock == nil {
-		return time.Now()
-	}
-	return clock()
 }

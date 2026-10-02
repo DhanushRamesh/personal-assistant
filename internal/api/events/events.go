@@ -30,7 +30,6 @@ import (
 	"github.com/DhanushRamesh/personal-assistant/internal/api/authn"
 	"github.com/DhanushRamesh/personal-assistant/internal/api/httpx"
 	"github.com/DhanushRamesh/personal-assistant/internal/event"
-	"github.com/DhanushRamesh/personal-assistant/internal/presence"
 )
 
 // maxRequestBody : The largest batch that will be read.
@@ -141,33 +140,11 @@ type BatchResponse struct {
 }
 
 // Handler : Serves the event endpoints.
-// Greeter : Somewhere to say hello when somebody comes in.
-type Greeter interface {
-	Greet(ctx context.Context, userID string)
-}
-
-// Fresh : How recently an arrival must have happened to be worth
-// greeting.
-//
-// The phone spools what it sees and arrives with a backlog, so a
-// flush after a day underground delivers this morning's arrival at
-// midnight. Welcoming somebody home for the third time that day,
-// hours after they got there, is worse than saying nothing.
-const Fresh = 10 * time.Minute
-
 type Handler struct {
 	httpx.Responder
-	store   Store
-	naming  event.Naming
-	greeter Greeter
-	now     func() time.Time
-}
-
-// Welcomes : Sets who says hello. Without one, an arrival is recorded
-// and nothing is said.
-func (h *Handler) Welcomes(g Greeter) *Handler {
-	h.greeter = g
-	return h
+	store  Store
+	naming event.Naming
+	now    func() time.Time
 }
 
 // Naming : Sets what to ask about a place nobody has named. Without
@@ -264,62 +241,9 @@ func (h *Handler) Record(w http.ResponseWriter, r *http.Request) {
 		slog.Int("rejected", len(rejected)))
 
 	h.settle(ctx, user, keep)
-	h.welcome(ctx, user, keep, stored)
 
 	httpx.WriteJSON(ctx, w, http.StatusOK, BatchResponse{
 		Stored: stored, Seen: seen, Rejected: rejected})
-}
-
-// welcome : Says hello if these readings are the person coming back.
-//
-// Coming back is their phone being near this machine now and not at
-// the reading before. Not a geofence: the owner, 2 October 2026, "the
-// distance between the phone and the home assistant server laptop is
-// the factor". A laptop carried to the office is still a laptop being
-// spoken to, and a geofence drawn round a house cannot say that.
-//
-// It replaced a watch that announced six arrivals in one day to
-// somebody who had not left the room.
-func (h *Handler) welcome(ctx context.Context, userID string, taken []*event.Event, stored []string) {
-	if h.greeter == nil || len(stored) == 0 {
-		return
-	}
-	// Only new readings can be a homecoming. A resend is the same
-	// moment arriving twice and nobody walked in twice.
-	fresh := map[string]bool{}
-	for _, key := range stored {
-		fresh[key] = true
-	}
-	now := h.now()
-	arrived := false
-	for _, e := range taken {
-		if e.Kind != event.Fixed || !fresh[e.DedupeKey] {
-			continue
-		}
-		// The phone spools what it sees, so a flush after a day
-		// underground delivers this morning's walk home at midnight.
-		if now.Sub(e.OccurredAt) <= Fresh {
-			arrived = true
-			break
-		}
-	}
-	if !arrived {
-		return
-	}
-
-	found, err := h.store.Recent(ctx, userID, event.Query{Since: now.Add(-presence.Looking)})
-	if err != nil {
-		h.Logger.WarnContext(ctx, "cannot tell whether they just came back", slog.Any("error", err))
-		return
-	}
-	if !presence.Arriving(found, now) {
-		return
-	}
-
-	// Not waited for. Speaking blocks until the words have finished
-	// playing, and the phone flushing its spool must not hold the
-	// connection open for a greeting and three held reminders.
-	go h.greeter.Greet(context.WithoutCancel(ctx), userID)
 }
 
 // settle : Works out which stays have ended, now that new readings have

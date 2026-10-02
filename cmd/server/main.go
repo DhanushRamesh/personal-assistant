@@ -40,7 +40,6 @@ import (
 	memorymysql "github.com/DhanushRamesh/personal-assistant/internal/memory/mysql"
 	"github.com/DhanushRamesh/personal-assistant/internal/persona"
 	"github.com/DhanushRamesh/personal-assistant/internal/place"
-	"github.com/DhanushRamesh/personal-assistant/internal/presence"
 	"github.com/DhanushRamesh/personal-assistant/internal/profile"
 	"github.com/DhanushRamesh/personal-assistant/internal/remind"
 	remindmysql "github.com/DhanushRamesh/personal-assistant/internal/remind/mysql"
@@ -329,7 +328,7 @@ func run() error {
 	// never half said during a shutdown.
 	reminding := &remind.Loop{
 		Store:    reminderStore,
-		Presence: whereabouts(cfg, deviceEvents, logger.Logger),
+		Presence: whereabouts(cfg, logger.Logger),
 		Speaker: remind.Everywhere{
 			To: []remind.Speaker{remind.Aloud{
 				Announcer:     speaker,
@@ -584,18 +583,7 @@ func linkToGoogle(cfg config.Config, logger *slog.Logger, db *storage.DB) *googl
 //
 // Nil when nothing is configured, which means every reminder is said aloud
 // -- what this did before there was any way to tell, and the safe way round.
-func whereabouts(cfg config.Config, events presence.Reader, logger *slog.Logger) remind.Presence {
-	// How far their phone is from this machine. Not a geofence and not
-	// a shared network: those answer where somebody is, and the
-	// question is whether they are near the thing that listens. A
-	// laptop carried to the office is still a laptop being spoken to.
-	if events != nil {
-		p := presence.OfPhone{Events: events, Now: cfg.Assistant.Now, Logger: logger}
-		logger.Info("the house speaks when their phone is near it",
-			slog.String("asking", p.Describe()))
-		return p
-	}
-
+func whereabouts(cfg config.Config, logger *slog.Logger) remind.Presence {
 	p, err := hass.NewPresence(hass.PresenceConfig{
 		URL:    cfg.HomeAssistant.URL,
 		Token:  cfg.HomeAssistant.Token,
