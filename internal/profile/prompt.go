@@ -14,7 +14,7 @@ import (
 // Exported so an eval builds the same thing the server does. That was a
 // separate copy once elsewhere in this codebase, and the eval went on
 // passing against wording the server had stopped using.
-func Prompt(said []conversation.Message, rhythm, asking string) string {
+func Prompt(said []conversation.Message, rhythm, asking, was string) string {
 	return prompt.Block(
 		prompt.Text(
 			"Below is one person talking to their assistant over the past week, in the order they said it,",
@@ -29,6 +29,25 @@ func Prompt(said []conversation.Message, rhythm, asking string) string {
 			"The people in their life, by name, and who those people are to them.",
 			"How they behave: how they ask for things, what they want more of and less of, what they lose patience with.",
 			"And their weeks: what they do most days, where they go and when, how long they stay, what tends to follow what, and what they keep asking the assistant for.",
+		),
+		prompt.Text(
+			"The counted part is evidence, not a list to repeat back. Work things out from it.",
+			"Two kinds of event that keep happening together are telling you what one of them is:",
+			"a thing that only ever appears alongside another has its meaning given to it by that other,",
+			"and a thing that reliably comes a certain time after another is a duration they live by.",
+			"A gap that repeats is worth saying as a length. A pairing that repeats is worth saying as what it means, not as two event names.",
+			"Say the conclusion in their terms -- what the thing is, what it is for, what it says about their day -- and never in the vocabulary of the events themselves.",
+		),
+		prompt.Text(
+			"Do this for kinds of event you have never seen before, and expect new ones: their devices change and nobody will explain them to you.",
+			"What an unfamiliar kind means is what it coincides with, what it recurs beside, and when it happens.",
+			"That is the whole method, and it does not need to be told again for each new kind.",
+			"An event you cannot make sense of is left out rather than guessed at.",
+		),
+		prompt.Text(
+			"Counts are what make a conclusion safe to draw. Two occurrences are a coincidence,",
+			"and the same pairing a dozen times across a dozen days is a fact about them.",
+			"Where the count is small, say the conclusion is tentative or do not say it.",
 		),
 		prompt.Text(
 			"Where the week shows something regular enough to expect again, say so as an expectation rather than a fact --",
@@ -61,10 +80,40 @@ func Prompt(said []conversation.Message, rhythm, asking string) string {
 			"Hedging is not a way round either of those.",
 			"'Almost certainly' and 'likely' are still claims, and a hedged guess in a description that is read before every answer is acted on exactly as a plain one is.",
 		),
+		previously(was),
 		"Here is what they said:",
 		heard(said),
 		rhythm,
 		asking,
+	)
+}
+
+// previously : The description written last time, to be corrected.
+//
+// Given as a draft and not as a source, and the difference is the whole
+// of it. This was deliberately left out until 2 October 2026 so that a
+// rebuild could not inherit anything it had invented: a description
+// written from the last description drifts, and after enough rounds it
+// is about somebody made up on a Tuesday. The owner's reason for
+// putting it back is the opposite failure -- a profile rebuilt from
+// scratch every time cannot notice that something in it has stopped
+// being true, because it never sees the claim to drop it.
+//
+// So the wording has to do the work the safeguard used to: everything
+// in it is up for deletion, and nothing in it is evidence for itself.
+func previously(was string) string {
+	if strings.TrimSpace(was) == "" {
+		return ""
+	}
+	return prompt.Block(
+		prompt.Text(
+			"Here is the description from last time. It is a draft to correct, not something you were told.",
+			"Keep what the evidence below still supports. Change what it no longer supports.",
+			"Delete anything nothing in front of you supports at all, including things that were true when they were written.",
+			"A claim being already written is not a reason to keep it, and it is not evidence for itself.",
+			"Something that was a routine and has stopped happening is the most useful thing you can remove.",
+		),
+		was,
 	)
 }
 

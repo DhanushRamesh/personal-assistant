@@ -1387,6 +1387,92 @@ from stepping out, which is why the forty-five second line was drawn
 where it was. The remaining piece is the wifi SSID, for leaving with
 the laptop.
 
+## The profile is taught a method, not a list of patterns
+
+Owner, 2 October 2026, on what the counted half is for: *"when I leave
+home, at the same time the Dhanush network is left -- it will happen
+many times and it forms a pattern, this means the model should conclude
+that is the user's home wifi"*, and *"mostly try to keep the instruction
+generic, because I'm going to add many events now and each one cannot be
+instructed -- we must teach the model what we expect and the model
+proves the intelligence by giving the niche insights."*
+
+That is what the counted half was always for, and three things stopped
+it working.
+
+**Raw position readings were in it.** `location.fix` arrives every five
+minutes, so four weeks of it is eight thousand rows against a hundred of
+everything else: it would fill `Doings` on its own and the description
+would be written from coordinates. Measured before fixing: 55% of what
+the profile read. `Omit` was built for the events tool this same day and
+not used here, which is the same mistake twice in one afternoon.
+
+**Pairing was adjacency.** `whatFollows` compared each event with the
+one directly after it, so a relationship was only found when nothing
+else happened in between -- and the useful ones are exactly the
+opposite. A network dropping as somebody leaves a place is two devices
+reporting one departure, and anything landing between them hid it. It is
+a window now, `Reach` events ahead or `Soon` of time, whichever ends
+first. Bounded because a window is quadratic in how densely events
+arrive and a chatty device should cost a constant, not a square.
+
+**The instruction did not say what to do with any of it.** The prompt
+now teaches the method and never an example: two kinds of event that
+keep happening together are telling you what one of them is; a thing
+that only ever appears beside another has its meaning given to it by
+that other; a gap that repeats is a duration they live by. And
+explicitly, that this applies to kinds it has never seen, because the
+devices change and nobody will explain them -- what an unfamiliar kind
+means is what it coincides with. Counts are what make it safe: two
+occurrences are a coincidence, a dozen across a dozen days is a fact.
+
+Measured after, on two days of real data, it finds
+`network.joined "Dhanush", then place.entered "home": 2 times, usually
+within 52 minutes`.
+
+**What is not fixed.** The paired lines are crowded by
+network-to-network churn -- the laptop reconnecting to itself -- which
+fills all twelve slots before a place reaches them. Ranking is by count
+alone, and a pair that crosses two kinds is more informative than one
+within a kind.
+
+## The description is corrected hourly, not rewritten daily
+
+Two reversals, both the owner's, both worth reading next to what they
+replace.
+
+**It is given the description it wrote last time.** *A standing
+description of the person* says the opposite -- rebuilt from raw
+messages never from the previous profile, or it drifts into describing
+somebody invented last Tuesday. The owner's reason for the reversal is
+the failure the safeguard could not see: a description rebuilt from
+scratch never notices that something in it has stopped being true,
+because it never has the claim in front of it to drop. So the wording
+does the work the absence used to -- it is given as *a draft to
+correct*, everything in it is up for deletion, a claim being written is
+not evidence for itself, and a routine that has stopped is named as the
+most useful thing to remove.
+
+**Hourly rather than daily**, because a description is read before every
+answer and the failure that matters is it being a morning out of date.
+
+That is only affordable because most hours do nothing. The builder
+declines to rebuild anybody who has said nothing since it last described
+them, so an idle night costs twenty-four cheap reads and no model call.
+Without it this is twenty-four prompts a day each carrying a week of
+messages and four weeks of events.
+
+The mark is kept in the builder and not read from the stored
+description's timestamp, which was the first attempt and wrong: that
+timestamp comes from the memory store's clock and the messages from the
+builder's, and comparing two clocks that agree only by accident gives a
+rebuild that either never runs or always does. A restart forgets the
+mark and costs one extra rebuild, which is the right way round.
+
+Messages only, deliberately. Events arrive on their own all day, and a
+laptop rejoining a network would keep this rebuilding through a night
+nobody was awake for.
+
 ## An announcement is for the client that caused it, or for everywhere
 
 Owner's question, 2 October 2026: announcements have a classification

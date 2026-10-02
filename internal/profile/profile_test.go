@@ -88,6 +88,14 @@ func TestTheProfileIsWrittenAndThenRewritten(t *testing.T) {
 	}
 	first := got.ID
 
+	// Something said since, or there would be nothing to rebuild from
+	// and the second build would rightly decline to make the same
+	// description twice.
+	h.msgs = append(h.msgs, conversation.Message{
+		Kind: conversation.Chat, Role: conversation.User,
+		Content: "what about the garden", At: at().Add(time.Minute),
+	})
+
 	b2 := &profile.Builder{Said: h, Memories: store, Now: at,
 		Ask: func(context.Context, string) (string, error) {
 			return "He has moved on to the garden.", nil
@@ -175,7 +183,7 @@ func TestItReadsAWeek(t *testing.T) {
 // TestThePromptAsksForWhatWasWanted : the things they talk about, the
 // people they know, and how they behave -- the owner's three.
 func TestThePromptAsksForWhatWasWanted(t *testing.T) {
-	p := profile.Prompt(said(3), "", "")
+	p := profile.Prompt(said(3), "", "", "")
 
 	for _, want := range []string{"talk about", "people in their life", "behave"} {
 		if !strings.Contains(p, want) {
@@ -202,7 +210,7 @@ func TestThePromptAsksForWhatWasWanted(t *testing.T) {
 // said. A hedge is not a defence: a guess in a description read before
 // every answer is acted on exactly as a fact is.
 func TestItIsToldNotToGuessOriginOrRecordHealth(t *testing.T) {
-	p := profile.Prompt(said(3), "", "")
+	p := profile.Prompt(said(3), "", "", "")
 
 	for _, want := range []string{
 		"Where they live, where they are from, their nationality",
@@ -211,6 +219,71 @@ func TestItIsToldNotToGuessOriginOrRecordHealth(t *testing.T) {
 		"Hedging is not a way round",
 	} {
 		if !strings.Contains(p, want) {
+			t.Errorf("the prompt does not say %q", want)
+		}
+	}
+}
+
+// TestNothingSaidSinceIsNotRebuilt : It runs hourly, and most hours
+// nothing has happened. Asking a model to write the same paragraph from
+// the same week, every hour, for ever, is the whole cost of the
+// cadence and none of the benefit.
+func TestNothingSaidSinceIsNotRebuilt(t *testing.T) {
+	h := &heard{msgs: said(40)}
+	asked := 0
+	b, store := build(t, h, "He asks about the roof.", nil)
+	if err := b.Build(context.Background(), "usr_1"); err != nil {
+		t.Fatalf("Build: %v", err)
+	}
+	first := held(t, store).Body
+
+	// The same builder, as the server has: one, ticking hourly.
+	b.Ask = func(context.Context, string) (string, error) {
+		asked++
+		return "something else entirely", nil
+	}
+	for range 5 {
+		if err := b.Build(context.Background(), "usr_1"); err != nil {
+			t.Fatalf("rebuild: %v", err)
+		}
+	}
+	if asked != 0 {
+		t.Errorf("the model was asked %d times with nothing new to say", asked)
+	}
+	if got := held(t, store).Body; got != first {
+		t.Errorf("the description changed without anything happening: %q", got)
+	}
+}
+
+// TestTheDescriptionSoFarIsGivenBackToBeCorrected : It is a draft, not a
+// source, and the prompt has to say so or a rebuild inherits whatever
+// the last one invented.
+func TestTheDescriptionSoFarIsGivenBackToBeCorrected(t *testing.T) {
+	h := &heard{msgs: said(40)}
+	var sent string
+	b, store := build(t, h, "He asks about the roof.", nil)
+	if err := b.Build(context.Background(), "usr_1"); err != nil {
+		t.Fatalf("Build: %v", err)
+	}
+
+	h.msgs = append(h.msgs, conversation.Message{
+		Kind: conversation.Chat, Role: conversation.User,
+		Content: "and the garden", At: at().Add(time.Minute),
+	})
+	b2 := &profile.Builder{Said: h, Memories: store, Now: at,
+		Ask: func(_ context.Context, p string) (string, error) {
+			sent = p
+			return "He asks about the garden.", nil
+		}}
+	if err := b2.Build(context.Background(), "usr_1"); err != nil {
+		t.Fatalf("rebuild: %v", err)
+	}
+
+	if !strings.Contains(sent, "He asks about the roof.") {
+		t.Error("the description so far was not given back")
+	}
+	for _, want := range []string{"draft to correct", "Delete anything"} {
+		if !strings.Contains(sent, want) {
 			t.Errorf("the prompt does not say %q", want)
 		}
 	}

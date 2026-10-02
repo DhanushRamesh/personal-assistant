@@ -38,6 +38,7 @@ import (
 	"fmt"
 	"log/slog"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/DhanushRamesh/personal-assistant/internal/conversation"
@@ -129,6 +130,12 @@ type Builder struct {
 	Now func() time.Time
 	// Logger : Where failures go. Nil is silent.
 	Logger *slog.Logger
+
+	// mu, seen : The newest thing each person had said when they were
+	// last described, so an hourly rebuild with nothing new to read
+	// does not happen. Guarded because one builder serves everybody.
+	mu   sync.Mutex
+	seen map[string]time.Time
 }
 
 // Build : Rewrites the profile for one person from what they have said.
@@ -155,7 +162,18 @@ func (b *Builder) Build(ctx context.Context, userID string) error {
 		return nil
 	}
 
-	answer, err := b.Ask(ctx, Prompt(said, b.rhythm(ctx, userID), b.asking(ctx, userID)))
+	// What is already written, and when. Both come from the same read:
+	// the description is given back to be corrected, and its age is
+	// what says whether there is anything new to correct it with.
+	if !b.somethingNew(userID, said) {
+		// Nothing has been said since the last rebuild. Doing it again
+		// would ask a model to write the same description from the
+		// same evidence, hourly, for ever.
+		return nil
+	}
+	was, _ := b.previously(ctx, userID)
+
+	answer, err := b.Ask(ctx, Prompt(said, b.rhythm(ctx, userID), b.asking(ctx, userID), was))
 	if err != nil {
 		return fmt.Errorf("profile: asking for the description: %w", err)
 	}
@@ -165,6 +183,74 @@ func (b *Builder) Build(ctx context.Context, userID string) error {
 	}
 
 	return b.keep(ctx, userID, body)
+}
+
+// previously : The description as it stands, and when it was written.
+//
+// Empty and zero when there is none, which is the first run and any run
+// after the memory was deleted by hand.
+func (b *Builder) previously(ctx context.Context, userID string) (string, time.Time) {
+	held, err := b.Memories.All(ctx, userID, memory.TierAlways)
+	if err != nil {
+		b.warn(ctx, "cannot read the description that exists", err)
+		return "", time.Time{}
+	}
+	for i := range held {
+		if held[i].Subject == Subject {
+			return held[i].Body, held[i].UpdatedAt
+		}
+	}
+	return "", time.Time{}
+}
+
+// somethingNew : Whether anything has been said since this last
+// rebuilt, and notes the newest it has now seen.
+//
+// The reason the rebuild runs hourly rather than daily is that a
+// description goes out of date between rebuilds; the reason most hours
+// it will not run is that most hours nothing happens. Without this, an
+// idle night is eight calls to a model asking it to write the same
+// paragraph from the same week -- and that prompt is a week of
+// messages and four weeks of events, so it is not a cheap thing to
+// repeat.
+//
+// Kept here rather than read from the stored description's timestamp,
+// which was the first attempt. That timestamp comes from the memory
+// store's clock and the messages come from this one's, and comparing
+// two clocks that are only the same by accident is how a rebuild
+// either never runs or always does. A restart forgets this and costs
+// one extra rebuild, which is the right way round.
+//
+// Messages only, and deliberately. Events arrive on their own all day:
+// a laptop rejoining a network would keep this rebuilding through a
+// night nobody was awake for, and no description turns on one more
+// event. Somebody saying something is the signal that there is
+// anything new to say about them.
+func (b *Builder) somethingNew(userID string, said []conversation.Message) bool {
+	var newest time.Time
+	for _, m := range said {
+		if m.At.After(newest) {
+			newest = m.At
+		}
+	}
+
+	b.mu.Lock()
+	defer b.mu.Unlock()
+	if b.seen == nil {
+		b.seen = map[string]time.Time{}
+	}
+	if was, built := b.seen[userID]; built && !newest.After(was) {
+		return false
+	}
+	b.seen[userID] = newest
+	return true
+}
+
+// warn : A failure worth a line and nothing more.
+func (b *Builder) warn(ctx context.Context, msg string, err error) {
+	if b.Logger != nil {
+		b.Logger.WarnContext(ctx, msg, slog.Any("error", err))
+	}
 }
 
 // rhythm : What their devices reported over the same week, counted.
@@ -177,7 +263,18 @@ func (b *Builder) rhythm(ctx context.Context, userID string) string {
 	if b.Did == nil {
 		return ""
 	}
-	did, err := b.Did.Recent(ctx, userID, event.Query{Since: b.clock().Add(-Habits), Limit: Doings})
+	did, err := b.Did.Recent(ctx, userID, event.Query{
+		Since: b.clock().Add(-Habits),
+		Limit: Doings,
+		// Not the raw position readings. A phone reports one every five
+		// minutes, so over four weeks there are eight thousand of them
+		// against a hundred of everything else: they would fill Doings
+		// on their own and the description would be written from
+		// coordinates and nothing else. They also sit between every
+		// pair of real events, which is what pairing has to see past.
+		// What they are turned into -- place.stayed -- is here.
+		Omit: []string{event.Fixed},
+	})
 	if err != nil {
 		if b.Logger != nil {
 			b.Logger.ErrorContext(ctx, "cannot read what their devices reported",

@@ -251,3 +251,54 @@ func TestNothingRunSaysNothing(t *testing.T) {
 		t.Errorf("an empty month produced %q", got)
 	}
 }
+
+// TestThingsThatHappenTogetherSurviveSomethingInBetween : The pairing
+// that matters is two devices reporting one departure, and before this
+// anything landing between them hid it entirely.
+func TestThingsThatHappenTogetherSurviveSomethingInBetween(t *testing.T) {
+	utc := time.UTC
+	var evs []event.Event
+	day := time.Date(2026, 9, 10, 8, 0, 0, 0, utc)
+	for d := range 6 {
+		at := day.AddDate(0, 0, d)
+		// Leaving home: the geofence, something unrelated, then the
+		// network dropping two minutes later.
+		evs = append(evs,
+			happened("place.exited", "home", at),
+			happened("battery.low", "17", at.Add(30*time.Second)),
+			happened("network.left", "Dhanush", at.Add(2*time.Minute)),
+			// And arriving at the office forty minutes later.
+			happened("place.entered", "office", at.Add(42*time.Minute)),
+			happened("network.joined", "Zoho-Guest", at.Add(44*time.Minute)),
+		)
+	}
+
+	got := profile.Rhythm(evs, utc)
+	for _, want := range []string{
+		`place.exited "home", then network.left "Dhanush"`,
+		`place.entered "office", then network.joined "Zoho-Guest"`,
+		`place.exited "home", then place.entered "office"`,
+	} {
+		if !strings.Contains(got, want) {
+			t.Errorf("the pairing %q was not found in:\n%s", want, got)
+		}
+	}
+	// And the commute is given as a length the model can use.
+	if !strings.Contains(got, "42 minutes") {
+		t.Errorf("the gap between leaving and arriving is missing:\n%s", got)
+	}
+}
+
+// TestAPairingNeedsMoreThanOnce : Two coincidences are not a routine,
+// and one written into a description is acted on like a real one.
+func TestAPairingNeedsMoreThanOnce(t *testing.T) {
+	utc := time.UTC
+	at := time.Date(2026, 9, 10, 8, 0, 0, 0, utc)
+	got := profile.Rhythm([]event.Event{
+		happened("place.exited", "somewhere", at),
+		happened("network.left", "once-only", at.Add(time.Minute)),
+	}, utc)
+	if strings.Contains(got, `place.exited "somewhere", then network.left "once-only"`) {
+		t.Errorf("a single coincidence was reported as a pattern:\n%s", got)
+	}
+}

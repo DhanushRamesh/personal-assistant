@@ -29,6 +29,23 @@ const Together = 2 * time.Hour
 // the other.
 const Soon = 90 * time.Minute
 
+// Reach : How many events ahead to look for something that went with
+// this one.
+//
+// Pairing used to be adjacency -- each event against the one directly
+// after it -- which only finds a relationship when nothing else
+// happens in between. The useful ones are exactly the opposite: a
+// network dropping as somebody leaves a place is two devices reporting
+// the same departure, and anything else landing between them hid it.
+// A window finds it; adjacency found it by luck.
+//
+// Bounded, because a window is quadratic in how densely events arrive
+// and a device that starts reporting every few seconds should cost
+// this a constant rather than a square. Twelve is well past any run of
+// related events seen so far, and Soon ends the window first in all
+// but the densest minute.
+const Reach = 12
+
 // Fewest : Seen fewer times than this, it is something that happened
 // rather than something they do.
 const Fewest = 2
@@ -326,20 +343,27 @@ func whatFollows(moments []moment, where *time.Location) string {
 	}
 	by := map[string]*pair{}
 	order := []string{}
-	for i := 1; i < len(moments); i++ {
-		before, after := moments[i-1], moments[i]
-		gap := after.at.Sub(before.at)
-		if gap > Soon || before.label() == after.label() {
-			continue
+	for i := range moments {
+		for j := i + 1; j < len(moments) && j-i <= Reach; j++ {
+			before, after := moments[i], moments[j]
+			gap := after.at.Sub(before.at)
+			// Ordered by time, so the first one out of reach ends the
+			// window rather than only being skipped.
+			if gap > Soon {
+				break
+			}
+			if before.label() == after.label() {
+				continue
+			}
+			key := before.label() + ", then " + after.label()
+			p, seen := by[key]
+			if !seen {
+				p = &pair{}
+				by[key], order = p, append(order, key)
+			}
+			p.times++
+			p.gaps = append(p.gaps, gap)
 		}
-		key := before.label() + ", then " + after.label()
-		p, seen := by[key]
-		if !seen {
-			p = &pair{}
-			by[key], order = p, append(order, key)
-		}
-		p.times++
-		p.gaps = append(p.gaps, gap)
 	}
 
 	sort.SliceStable(order, func(i, j int) bool { return by[order[i]].times > by[order[j]].times })
@@ -355,7 +379,7 @@ func whatFollows(moments []moment, where *time.Location) string {
 	if len(lines) == 0 {
 		return ""
 	}
-	return prompt.Lines(append([]string{"One thing following another:"}, lines...)...)
+	return prompt.Lines(append([]string{"Things that happen together, in the order they happened:"}, lines...)...)
 }
 
 // aroundWhen : Roughly what time of day, when there is one.

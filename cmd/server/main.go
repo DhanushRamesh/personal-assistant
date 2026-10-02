@@ -383,7 +383,7 @@ func run() error {
 		defer watching.Done()
 		describeDaily(remindCtx, chats, describing, cfg.Assistant.Now, logger.Logger)
 	}()
-	logger.Info("describing the person daily", slog.Duration("every", profileEvery))
+	logger.Info("describing the person", slog.Duration("every", profileEvery))
 
 	// The names they say, for speech recognition to expect. Read from
 	// the same week of messages, because a name is only worth the
@@ -825,10 +825,17 @@ func version() string {
 
 // profileEvery : How often the description is rewritten.
 //
-// Daily. It reads a week each time, so running it more often spends
-// model calls to re-read mostly the same material; running it less
-// often leaves it describing somebody from before whatever changed.
-const profileEvery = 24 * time.Hour
+// Hourly, not daily. A description is read before every answer, and
+// the failure that matters is it saying something that stopped being
+// true this morning -- a routine they have dropped, a person they have
+// stopped mentioning. Daily meant living with that for a day.
+//
+// Hourly is affordable only because most hours do nothing: the builder
+// declines to rebuild anybody who has said nothing since it last
+// described them, so an idle night costs twenty-four cheap reads and
+// no model call at all. Without that this would be twenty-four prompts
+// a day each carrying a week of messages and four weeks of events.
+const profileEvery = time.Hour
 
 // profileFirst : How long after startup the first rebuild runs.
 //
