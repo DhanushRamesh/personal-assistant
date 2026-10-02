@@ -112,8 +112,32 @@ func (h *Handler) Mount(r chi.Router) {
 // fault it was there to prevent, and harder to explain.
 func (h *Handler) Arrived(w http.ResponseWriter, r *http.Request) {
 	ctx := r.Context()
-	user := authn.Of(ctx).User.ID
+	httpx.WriteJSON(ctx, w, http.StatusOK, h.Welcome(ctx, authn.Of(ctx).User.ID))
+}
 
+// Greet : Says hello to somebody who has just come in, for a caller
+// that is not an HTTP request.
+//
+// Blocks until the words have finished playing, which is up to
+// SpeakingFor. Anything serving a request should run it in a
+// goroutine: the phone flushing its spool must not wait for a
+// greeting and three held reminders to be read out.
+func (h *Handler) Greet(ctx context.Context, user string) {
+	said := h.Welcome(ctx, user)
+	h.Logger.InfoContext(ctx, "greeted somebody at the door",
+		slog.Bool("spoke", said.Spoke), slog.String("why", said.Why),
+		slog.Int("delivered", said.Delivered), slog.Int("missed", said.Missed))
+}
+
+// Welcome : The greeting, everything held back behind it, and what
+// became of saying it.
+//
+// Separate from the endpoint because the arrival no longer comes from
+// Home Assistant. It comes from the person's own phone crossing the
+// geofence they drew, which reaches the server as an event; the
+// endpoint stays for anything that still calls it and for saying
+// hello by hand.
+func (h *Handler) Welcome(ctx context.Context, user string) ArrivedResponse {
 	said := h.greeting()
 
 	// Anything kept back while they were out is said now, after the
@@ -134,10 +158,7 @@ func (h *Handler) Arrived(w http.ResponseWriter, r *http.Request) {
 	}
 
 	if h.announcer == nil || !h.announcer.Available() {
-		httpx.WriteJSON(ctx, w, http.StatusOK, ArrivedResponse{
-			Said: said, Why: "nothing is configured to speak",
-		})
-		return
+		return ArrivedResponse{Said: said, Why: "nothing is configured to speak"}
 	}
 
 	// Saying it outlives the request that asked for it. Speaking blocks
@@ -163,10 +184,7 @@ func (h *Handler) Arrived(w http.ResponseWriter, r *http.Request) {
 		// greeting and the speaker was busy or unreachable. Said so
 		// plainly rather than reported as success.
 		h.Logger.WarnContext(speak, "could not speak a greeting", slog.Any("error", err))
-		httpx.WriteJSON(ctx, w, http.StatusOK, ArrivedResponse{
-			Said: said, Why: "could not be spoken: " + err.Error(),
-		})
-		return
+		return ArrivedResponse{Said: said, Why: "could not be spoken: " + err.Error()}
 	}
 
 	// The greeting and everything behind it, noted in the conversation
@@ -195,9 +213,7 @@ func (h *Handler) Arrived(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 
-	httpx.WriteJSON(ctx, w, http.StatusOK, ArrivedResponse{
-		Said: said, Spoke: true, Delivered: len(held), Missed: len(unsaid),
-	})
+	return ArrivedResponse{Said: said, Spoke: true, Delivered: len(held), Missed: len(unsaid)}
 }
 
 // waiting : What was kept back while they were out.

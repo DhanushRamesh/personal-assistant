@@ -127,6 +127,11 @@ type Options struct {
 	// written down as its coordinates.
 	Naming event.Naming
 
+	// Here : What the person calls the place this assistant is in, as
+	// that geofence is named on their phone. With it, their arriving
+	// is what greets them; without it, nothing does.
+	Here string
+
 	// Cut : Where the speech-to-text bridge reports that a recording was
 	// stopped while somebody was still speaking. Home Assistant does not
 	// pass that on, so it arrives by this side door instead.
@@ -220,6 +225,12 @@ func New(opts Options) *Server {
 		memories:   memories.New(opts.Logger, opts.Memories),
 		tools:      toolsapi.New(opts.Logger, opts.Tools),
 	}
+	// The arrival comes from the person's own phone now, which reaches
+	// the server as an event. Said here rather than in the literal
+	// above because the thing that greets has to exist before the
+	// thing that notices somebody has walked in.
+	s.events.Welcomes(s.presence, opts.Here)
+
 	s.routes()
 	return s
 }

@@ -23,6 +23,7 @@ import (
 	"log/slog"
 	"net/http"
 	"strconv"
+	"strings"
 	"time"
 
 	"github.com/go-chi/chi/v5"
@@ -140,11 +141,35 @@ type BatchResponse struct {
 }
 
 // Handler : Serves the event endpoints.
+// Greeter : Somewhere to say hello when somebody comes in.
+type Greeter interface {
+	Greet(ctx context.Context, userID string)
+}
+
+// Fresh : How recently an arrival must have happened to be worth
+// greeting.
+//
+// The phone spools what it sees and arrives with a backlog, so a
+// flush after a day underground delivers this morning's arrival at
+// midnight. Welcoming somebody home for the third time that day,
+// hours after they got there, is worse than saying nothing.
+const Fresh = 10 * time.Minute
+
 type Handler struct {
 	httpx.Responder
-	store  Store
-	naming event.Naming
-	now    func() time.Time
+	store   Store
+	naming  event.Naming
+	greeter Greeter
+	here    string
+	now     func() time.Time
+}
+
+// Welcomes : Sets who says hello, and what the person calls the place
+// the assistant is in. Without both, an arrival is recorded and
+// nothing is said.
+func (h *Handler) Welcomes(g Greeter, here string) *Handler {
+	h.greeter, h.here = g, strings.TrimSpace(here)
+	return h
 }
 
 // Naming : Sets what to ask about a place nobody has named. Without
@@ -241,9 +266,61 @@ func (h *Handler) Record(w http.ResponseWriter, r *http.Request) {
 		slog.Int("rejected", len(rejected)))
 
 	h.settle(ctx, user, keep)
+	h.welcome(ctx, user, keep, stored)
 
 	httpx.WriteJSON(ctx, w, http.StatusOK, BatchResponse{
 		Stored: stored, Seen: seen, Rejected: rejected})
+}
+
+// welcome : Says hello if one of these events is the person walking in.
+//
+// The arrival used to come from Home Assistant watching a watch's
+// Bluetooth signal, which on 2 October 2026 announced six arrivals to
+// somebody who had not moved. It comes from their own phone crossing
+// the geofence they drew now -- one event, reported once, by the thing
+// they actually carry.
+//
+// Only an arrival stored for the first time counts: a resend is the
+// same crossing arriving twice, and the person did not walk in twice.
+func (h *Handler) welcome(ctx context.Context, userID string, taken []*event.Event, stored []string) {
+	if h.greeter == nil || h.here == "" || len(stored) == 0 {
+		return
+	}
+	fresh := map[string]bool{}
+	for _, key := range stored {
+		fresh[key] = true
+	}
+
+	now := h.now()
+	for _, e := range taken {
+		if e.Kind != event.Entered || !fresh[e.DedupeKey] {
+			continue
+		}
+		if !strings.EqualFold(placeIn(e.Payload), h.here) {
+			continue
+		}
+		if now.Sub(e.OccurredAt) > Fresh {
+			h.Logger.InfoContext(ctx, "an arrival was too old to greet",
+				slog.Duration("ago", now.Sub(e.OccurredAt).Round(time.Minute)))
+			continue
+		}
+		// Not waited for. Speaking blocks until the words have
+		// finished playing, and the phone flushing its spool must not
+		// hold the connection open for a greeting and three reminders.
+		go h.greeter.Greet(context.WithoutCancel(ctx), userID)
+		return
+	}
+}
+
+// placeIn : What a crossing says the place is called.
+func placeIn(payload json.RawMessage) string {
+	var into struct {
+		Value string `json:"value"`
+	}
+	if err := json.Unmarshal(payload, &into); err != nil {
+		return ""
+	}
+	return strings.TrimSpace(into.Value)
 }
 
 // settle : Works out which stays have ended, now that new readings have

@@ -1329,14 +1329,37 @@ settles: announcements are spoken in the house only. `notify` is empty
 in the configuration rather than removed, so turning it back on is one
 line.
 
-### Still on the watch, and still wrong
+**What is still on the watch.** Two automations keep
+`input_boolean.in_the_room` up to date and nothing reads it any more
+except a dashboard. They are harmless and were left, because
+`watch.py` publishes the watch's signal *and* the laptop's network
+from one process: stopping the watch half stops the network half,
+which the events still carry. Separating those two is the tidying this
+leaves behind.
 
-The greeting is not part of this yet. It is a Home Assistant
-automation triggered by the watch's signal, and it is what fired six
-times today. Until that is moved, presence for reminders comes from
-the phone while presence for greetings still comes from the watch --
-two sources answering one question, which is the thing this change
-exists to end.
+### The greeting moved too
+
+Finished the same day. The arrival no longer comes from Home
+Assistant: it comes from the phone crossing the home geofence, which
+reaches the server as an event. `Welcome` was lifted out of the HTTP
+handler so both a request and an arriving event can use it, and the
+endpoint stays for anything that still calls it.
+
+**Only an arrival stored for the first time counts.** A resend is the
+same crossing arriving twice and nobody walked in twice.
+
+**And only a recent one.** The phone spools what it sees, so a flush
+after a day underground delivers the morning's arrival at midnight.
+Ten minutes: older than that and it is recorded and nothing is said.
+
+**Said in a goroutine.** Speaking blocks until the words have
+finished, and the phone flushing its spool must not hold the
+connection open for a greeting and three held reminders.
+
+`~/homeassistant` went under version control first, so the automation
+could be commented out with a way back. It is commented rather than
+deleted: the sensors it reads are still published and turning it on
+again is uncommenting it.
 
 ## Present, away, and the third answer
 

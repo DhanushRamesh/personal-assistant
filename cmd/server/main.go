@@ -431,6 +431,7 @@ func run() error {
 		Cut:            cutOff,
 		DeviceEvents:   deviceEvents,
 		Naming:         naming(cfg, logger.Logger),
+		Here:           cfg.Assistant.Here,
 		Tools:          tools,
 		RequestTimeout: cfg.Server.RequestTimeout,
 		// Development only: `flutter run` serves the UI from its own port so
