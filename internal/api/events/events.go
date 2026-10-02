@@ -485,9 +485,29 @@ func (h *Handler) List(w http.ResponseWriter, r *http.Request) {
 		since = t
 	}
 
+	// Position readings are left out unless they are asked for by name.
+	//
+	// A phone reports one every five minutes, so a screen of what
+	// somebody's devices have done is three hundred coordinates a day
+	// and everything that actually happened pushed off the end. They
+	// are working material: settling turns runs of them into one
+	// place.stayed, and that is the line worth reading.
+	//
+	// Asked for by name they are shown, which is the difference
+	// between this and the events tool. A person typing
+	// kind=location.fix wants to look at the readings; the model is
+	// never shown them at all, because a kind listing offering three
+	// thousand of something is an invitation to ask for it.
+	kind := r.URL.Query().Get("kind")
+	var omit []string
+	if kind != event.Fixed {
+		omit = []string{event.Fixed}
+	}
+
 	events, err := h.store.Recent(ctx, user, event.Query{
 		Since: since,
-		Kind:  r.URL.Query().Get("kind"),
+		Kind:  kind,
+		Omit:  omit,
 		Limit: limit,
 	})
 	if err != nil {

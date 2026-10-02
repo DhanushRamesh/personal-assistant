@@ -402,3 +402,49 @@ func TestZeroIsNotACaller(t *testing.T) {
 		}
 	}
 }
+
+// TestTheScreenLeavesOutPositionReadingsUnlessAsked : Three hundred
+// coordinates a day would push everything that happened off the end,
+// but a person who types the kind wants to see them.
+func TestTheScreenLeavesOutPositionReadingsUnlessAsked(t *testing.T) {
+	store := inmemory.New()
+	e := apitest.NewWith(t, apitest.Options{DeviceEvents: store})
+
+	post(t, e, `{"source":"tasker","events":[
+		{"kind":"location.fix","payload":{"value":"12.911,80.062"},"dedupe_key":"f1"},
+		{"kind":"location.fix","payload":{"value":"12.912,80.063"},"dedupe_key":"f2"},
+		{"kind":"place.stayed","payload":{"value":"home"},"dedupe_key":"s1"},
+		{"kind":"call.missed","payload":{"value":"Alekhya"},"dedupe_key":"c1"}]}`)
+
+	out := listing(t, e, "")
+	seen := map[string]bool{}
+	for _, ev := range out.Events {
+		if ev.Kind == event.Fixed {
+			t.Errorf("the feed showed a position reading: %+v", ev)
+		}
+		seen[ev.Kind] = true
+	}
+	for _, want := range []string{"place.stayed", "call.missed"} {
+		if !seen[want] {
+			t.Errorf("%s is missing from the feed", want)
+		}
+	}
+
+	// The kind counts still name them, so a person can see they exist
+	// and ask. That is the summary, not the feed.
+	counted := false
+	for _, k := range out.Kinds {
+		if k.Kind == event.Fixed {
+			counted = true
+		}
+	}
+	if !counted {
+		t.Error("the kind counts should still say the readings are there")
+	}
+
+	// Asked for by name, they are there.
+	asked := listing(t, e, "?kind="+event.Fixed)
+	if len(asked.Events) != 2 {
+		t.Errorf("asked for by name, expected both readings, got %d", len(asked.Events))
+	}
+}

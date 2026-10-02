@@ -1791,6 +1791,21 @@ cleared rather than left holding whichever placeholder arrived, so
 what counts these sees one nameless thing instead of a person called
 %CNAME and another called 0.
 
+**The screen was the one place left showing them.** Owner, looking at
+the events list: *"is it necessary to have location.fix on events
+table, it looks like junk."* In the table, yes -- it is what stays are
+computed from, and Near, Settled and Adrift have changed twice in a
+week, so keeping the readings is what lets every past stay be worked
+out again. Visible, no: three hundred coordinates a day pushed
+everything that happened off the end of the list.
+
+`GET /v1/events` leaves them out unless `kind=location.fix` is asked
+for by name, and the kind counts still say how many there are, so a
+person can see they exist and go and look. That is the difference
+between the screen and the tool: a person typing the kind wants the
+coordinates, and a model offered three thousand of something will
+reach for it.
+
 ## The profile is taught a method, not a list of patterns
 
 Owner, 2 October 2026, on what the counted half is for: *"when I leave
