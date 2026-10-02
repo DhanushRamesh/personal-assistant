@@ -365,7 +365,16 @@ func rest(e event.Event) string {
 	for _, name := range names {
 		switch v := into[name].(type) {
 		case string:
-			if v = strings.TrimSpace(v); v != "" {
+			// Not a telephone number, in any field.
+			//
+			// The value is kept readable by Readable, which turns a
+			// bare number into "an unknown number". This is the other
+			// half: a call carries the number alongside the name, so
+			// without this the digits reach the prompt anyway through
+			// the field the masking does not look at, and get read
+			// out in a room. Nothing is lost -- when the number is
+			// the only identity there is, it is already the value.
+			if v = strings.TrimSpace(v); v != "" && !event.Number(v) {
 				out = append(out, name+" "+v)
 			}
 		case float64:

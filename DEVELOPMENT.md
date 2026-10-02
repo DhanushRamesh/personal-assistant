@@ -1663,6 +1663,45 @@ event. Until the phone reports calls, app use and the rest, this will
 mostly say good evening, which is what it should say when nothing
 happened.
 
+## Who was called is knowable after all
+
+I told the owner three times that Android would not say who an
+outgoing call was to, having tested three routes and generalised from
+them: the Phone Offhook event gives %CNUM as 0, the State Phone Call
+profile gives 0, and `content query` on the call log from a Run Shell
+action is refused outright --
+
+    %CLOG = Error while accessing provider:call_log
+            java.lang.SecurityException
+
+Tasker holds READ_CALL_LOG, but a shell command it spawns runs in a
+sandbox that does not inherit the app's permissions.
+
+The owner found the fourth route. Tasker has **outgoing-specific
+variables** -- `%CONUM`, `%CONAME`, `%CODUR` -- which it fills from
+the call log *inside its own process*, where the permission does
+apply. They describe the last outgoing call rather than the live one,
+and are documented as reliable right after it finishes, which is
+exactly when the Phone Idle task runs.
+
+    before   {"value": "",                 "number": "0",   "seconds": 29}
+    after    {"value": "Alekhya Chintada", "number": "+91…", "seconds": 21}
+
+And the duration got more accurate with it: twenty-one seconds against
+the twenty-nine that dial-to-hangup gave, because `%CODUR` is the
+connected time from the log and does not count the ringing.
+
+**The lesson is about the reasoning, not the API.** Three failures of
+three mechanisms were treated as a property of the platform. They were
+a property of the three mechanisms.
+
+**One thing this broke.** A call carries the number beside the name,
+and `Readable` only masks the *value*: the digits reached the prompt
+through `rest`, the field renderer that prints everything else. Any
+field that is a telephone number is now dropped there too. Nothing is
+lost, because when the number is the only identity there is, it is
+already the value.
+
 ## A caller with no name still has to be somebody
 
 Owner: *"what about unknown numbers?"* They would all have shared one

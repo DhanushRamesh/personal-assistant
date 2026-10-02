@@ -337,3 +337,25 @@ func TestAStrangerIsCountedByNumberAndNeverReadOut(t *testing.T) {
 		t.Error("a stranger and a known caller share a label")
 	}
 }
+
+// TestANumberDoesNotLeakThroughAnotherField : Readable masks the
+// value; a call carries the number beside the name, and without this
+// the digits reach the prompt through the field the masking does not
+// look at.
+func TestANumberDoesNotLeakThroughAnotherField(t *testing.T) {
+	call := event.Event{Kind: "call.made", OccurredAt: evening.Add(-time.Hour),
+		Payload: []byte(`{"value":"Alekhya Chintada","number":"+919182053794","seconds":21}`)}
+
+	got := greet.Prompt(greet.Told{Now: evening, Since: evening.Add(-3 * time.Hour),
+		Events: []event.Event{call}})
+
+	if strings.Contains(got, "9182053794") {
+		t.Errorf("the number reached the prompt:\n%s", got)
+	}
+	if !strings.Contains(got, "call.made Alekhya Chintada") {
+		t.Error("the name should still be there")
+	}
+	if !strings.Contains(got, "seconds 21") {
+		t.Error("the duration should still be there")
+	}
+}
