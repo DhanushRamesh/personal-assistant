@@ -354,3 +354,57 @@ func TestAnUnknownTimezoneIsRefused(t *testing.T) {
 		t.Errorf("error = %v, want it to name what was wrong", err)
 	}
 }
+
+// TestTokenFromAFile : A credential kept where something else can read
+// it too, which is why token_file exists.
+func TestTokenFromAFile(t *testing.T) {
+	dir := t.TempDir()
+	path := filepath.Join(dir, "ha-token")
+	// With the trailing newline every editor and shell redirect adds.
+	if err := os.WriteFile(path, []byte("abc.def.ghi\n"), 0o600); err != nil {
+		t.Fatalf("writing the token: %v", err)
+	}
+
+	cfg, err := config.Load(
+		writeINI(t, "[homeassistant]\nurl = http://x:8123\ntoken_file = "+path+"\n"),
+		env(nil))
+	if err != nil {
+		t.Fatalf("loading: %v", err)
+	}
+	if got := string(cfg.HomeAssistant.Token); got != "abc.def.ghi" {
+		t.Errorf("expected the file's contents without the newline, got %q", got)
+	}
+}
+
+// TestTokenInTwoPlacesIsRefused : The thing token_file exists to
+// prevent cannot be reintroduced by setting both.
+func TestTokenInTwoPlacesIsRefused(t *testing.T) {
+	dir := t.TempDir()
+	path := filepath.Join(dir, "ha-token")
+	if err := os.WriteFile(path, []byte("from-the-file"), 0o600); err != nil {
+		t.Fatalf("writing the token: %v", err)
+	}
+
+	_, err := config.Load(
+		writeINI(t, "[homeassistant]\nurl = http://x:8123\n"+
+			"token = inline\ntoken_file = "+path+"\n"),
+		env(nil))
+	if err == nil {
+		t.Fatal("expected setting both to be refused")
+	}
+	if !strings.Contains(err.Error(), "one home") {
+		t.Errorf("the error should say why: %v", err)
+	}
+}
+
+// TestTokenFileMissingIsAnError : Rather than starting with no token and
+// finding out when the first announcement is refused.
+func TestTokenFileMissingIsAnError(t *testing.T) {
+	_, err := config.Load(
+		writeINI(t, "[homeassistant]\nurl = http://x:8123\n"+
+			"token_file = "+filepath.Join(t.TempDir(), "nope")+"\n"),
+		env(nil))
+	if err == nil {
+		t.Fatal("expected a missing token file to be an error")
+	}
+}

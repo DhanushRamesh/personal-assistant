@@ -18,6 +18,7 @@ import (
 	"log/slog"
 	"net"
 	"os"
+	"path/filepath"
 	"strconv"
 	"strings"
 	"time"
@@ -195,6 +196,11 @@ type HomeAssistant struct {
 	URL string
 	// Token : A long-lived access token. It can control the whole house, so
 	// it is a Secret and never reaches a log.
+	//
+	// Written as "token", or as "token_file" pointing at a file holding
+	// nothing else. The file is how this and the presence publisher,
+	// which is a different program in a different repository, share one
+	// token instead of each keeping a copy to be rotated separately.
 	Token logging.Secret
 	// Satellite : The entity to speak through, such as
 	// assist_satellite.laptop_lva_assist_satellite.
@@ -469,7 +475,7 @@ func Load(path string, lookup Lookup) (Config, error) {
 		},
 		HomeAssistant: HomeAssistant{
 			URL:             l.str("homeassistant", "url", ""),
-			Token:           logging.Secret(l.str("homeassistant", "token", "")),
+			Token:           l.secret("homeassistant", "token"),
 			Satellite:       l.str("homeassistant", "satellite", ""),
 			PresenceEntity:  l.str("homeassistant", "presence_entity", ""),
 			Notify:          l.list("homeassistant", "notify"),
@@ -683,6 +689,66 @@ func (l *loader) err() error {
 }
 
 // str : Returns the setting's value, or fallback if it is not set.
+// secret : A credential, given inline or kept in a file of its own.
+//
+// Every secret here accepts "<key>_file" as well as "<key>". Inline is
+// fine for something only this server has. A file is for a credential
+// something else also needs: the Home Assistant token is held by this
+// server and by the presence publisher in another repository, and two
+// copies of one secret is two things to rotate, where rotating one and
+// not the other leaves the stale copy working and the breakage lands
+// later and somewhere else.
+//
+// Read once at startup, so a file costs nothing per request.
+//
+// Setting both is refused rather than resolved by precedence. A
+// credential in two places with a rule about which wins is the problem
+// this exists to remove.
+func (l *loader) secret(section, key string) logging.Secret {
+	inline := l.str(section, key, "")
+	path := l.str(section, key+"_file", "")
+	switch {
+	case path == "":
+		return logging.Secret(inline)
+	case inline != "":
+		l.errorf("%s and %s are both set: a credential has one home",
+			l.where(section, key), l.where(section, key+"_file"))
+		return ""
+	}
+
+	raw, err := os.ReadFile(expand(path))
+	if err != nil {
+		l.errorf("%s: %w", l.where(section, key+"_file"), err)
+		return ""
+	}
+	// Trailing newline trimmed, because the obvious way to write one of
+	// these files is an editor or a shell redirect and both add one.
+	// A token with a newline on the end fails authentication somewhere
+	// far from here, saying only that it was rejected.
+	value := strings.TrimSpace(string(raw))
+	if value == "" {
+		l.errorf("%s: %s is empty", l.where(section, key+"_file"), path)
+		return ""
+	}
+	return logging.Secret(value)
+}
+
+// expand : A path with a leading ~ made absolute.
+//
+// Because the whole point of these files is to be shared with something
+// else, and what two programs in two languages can both be told is a
+// path under the home directory.
+func expand(path string) string {
+	if path != "~" && !strings.HasPrefix(path, "~/") {
+		return path
+	}
+	home, err := os.UserHomeDir()
+	if err != nil {
+		return path
+	}
+	return filepath.Join(home, strings.TrimPrefix(path, "~"))
+}
+
 func (l *loader) str(section, key, fallback string) string {
 	if v, ok := l.value(section, key); ok {
 		return v

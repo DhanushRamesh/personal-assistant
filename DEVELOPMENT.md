@@ -1387,6 +1387,56 @@ from stepping out, which is why the forty-five second line was drawn
 where it was. The remaining piece is the wifi SSID, for leaving with
 the laptop.
 
+## Each setting has one home
+
+Owner's question, 2 October 2026: *"each configuration and changes are
+in their own scope right across components?"* Mostly yes. The split
+holds where it matters -- the publisher measures and holds no policy,
+Home Assistant holds all of it (the threshold, the dwells, fail closed,
+the override), and this server knows nothing about radios at all: there
+is no RSSI, no dBm and no threshold anywhere in it, and `-85` exists in
+exactly one file. Four leaks, all now closed.
+
+**The publisher's beat against Home Assistant's staleness window.**
+`BEAT_EVERY = 5` in Python and a hardcoded `< 20` in Jinja: two halves
+of one decision, in two languages, in two repositories, with neither
+file naming the other. Raising `PRESENCE_BEAT_EVERY` past about fifteen
+would have marked a perfectly healthy publisher dead -- and since
+presence now fails closed, that is the house going permanently silent
+over a setting that looks right. The publisher now puts its interval on
+the heartbeat as an attribute and the template reads it, taking three
+intervals or fifteen seconds, whichever is longer. Proven by changing
+it: a ten-second beat moved the window to thirty by itself.
+
+**Entity names that were configurable on one side only.**
+`WATCH_ENTITY`, `PRESENCE_BEAT_ENTITY`, `BLUETOOTH_ADAPTER_ENTITY` and
+`LAPTOP_NETWORK_ENTITY` let the publisher rename what it wrote, while
+Home Assistant hardcodes the same names in Jinja and cannot be told
+otherwise. Setting one renamed the sensor and left every template
+reading the old one. A knob that works on one side is worse than no
+knob, because it advertises itself; they are plain constants now. A
+name that must match something else is a contract, not a setting.
+
+**Windows counted in samples, named as if they were seconds.**
+`TOKEN_WINDOW` and `TOKEN_GONE` are multiples of `EVERY`, so changing
+the poll rate silently changes both. They say `_SAMPLES` now. The
+comment on them had already claimed one minute when it meant six
+seconds, for exactly this reason.
+
+**One Home Assistant token, in one file.** It was byte-identical in
+`config.ini` and in `voice-setup/presence/.env`, so rotating one left
+the other working and the breakage would land later and somewhere else.
+`[homeassistant] token_file` now reads `~/.config/jarvis/ha-token`,
+which the presence publisher and the wake word recorder read too --
+outside both repositories, because it belongs to neither. Any secret
+here accepts `<key>_file`; setting both it and the inline key is
+**refused** rather than resolved by precedence, since a credential in
+two places with a rule about which wins is the problem being removed.
+Read once at startup, so a file costs nothing per request. The trailing
+newline an editor or a shell redirect leaves is trimmed: a token with
+one on the end fails authentication far from here, saying only that it
+was rejected.
+
 ## Readings are working material; stays are the history
 
 Owner's observation, 2 October 2026: *"5 minute once location is stored
