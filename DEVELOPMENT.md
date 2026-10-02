@@ -1967,14 +1967,51 @@ is the calendar*, it points at a tool that is not there. Registering
 the calendar proved it -- the flight goes to `calendar_events` -- and
 also showed that three plain remarks go there too: *"it is raining
 here today"*, *"I am a bit tired this evening"*, *"that took longer
-than I expected"*. The calendar tools have the over-reach the events
-tool just had. Not fixed here, and the calendar is not registered in
-the eval, which is why the figure is 42 of 43 rather than 43.
+than I expected"*. The calendar tools had the over-reach the events
+tool just lost; that was fixed in the turn after this one, and the
+calendar is registered in the eval now.
 
 **The events tool is in the eval now.** Five cases, the first of them
 the question that failed. A description is the part of this server
 most easily wrong and least visibly so, and the only way to notice is
 to ask a real model.
+
+## A time said is not a time to look up
+
+Owner, immediately: *"fix the calendar tool description too."*
+
+`calendar_events` was reaching for the diary on *"it is raining here
+today"*, *"I am a bit tired this evening"* and *"that took longer than
+I expected"*. That was the standing rule working as written -- **the
+calendar is the date and time hub, so any date or time mentioned means
+read the diary first** -- and the wording was *anything to do with a
+date or a time*, which "today" and "this evening" are.
+
+The rule is right and stays. What was wrong is the test it offered.
+The question is not whether a time was said; it is whether something
+is being **placed** at a time. A birthday, a trip, a deadline, a day
+they are turning over -- all of those have somewhere to be in a diary.
+A word that only says when they are speaking has not arranged
+anything, and three of the four over-reaches were exactly that.
+
+So `UseWhen` reads *anything that puts something at a date or a time*,
+and `Avoid` names the three sentences and says plainly: the test is
+whether something is being placed at a time, not whether a time was
+said.
+
+**Measured both ways, which is the only reason to believe it.**
+Narrowing a description is how a rule gets quietly lost, so the eval
+gained five cases the rule exists for before anything was changed: a
+plan with a date, a question about a named day, an availability
+question, an appointment to write down, and a trip being turned over.
+With the calendar registered and those cases in, 45 of 48 before and
+48 of 48 after, twice.
+
+The flight stopped failing on its own. *"My sister's flight lands on
+the 3rd of March"* now accepts three first moves -- remember it, write
+it down, or read the diary -- because with a calendar registered,
+looking before answering is the rule, and what would be wrong is none
+of the three.
 
 ## The profile is taught a method, not a list of patterns
 

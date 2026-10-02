@@ -426,8 +426,8 @@ func agenda(diary Diary, clock Clock) tool.Tool {
 		),
 		UseWhen: prompt.Block(
 			prompt.Text(
-				"Anything to do with a date or a time, whether it is asked about, mentioned in passing, or only discussed.",
-				"The calendar is where dates and times live: a day, a month, a season, a birthday, an anniversary, a trip, a meeting, a deadline, next week, the weekend, before they leave.",
+				"Anything that puts something at a date or a time, whether it is asked about, mentioned in passing, or only discussed.",
+				"The calendar is where dates and times live: a birthday, an anniversary, a trip, a meeting, a deadline, a day they are turning over, next week, the weekend, before they leave.",
 				"Read it before you answer, every time, even when nobody asked what is in the diary.",
 				"What they said may already be written down, may clash with something, or may be the thing to offer to write down; none of that can be known without looking.",
 			),
@@ -446,6 +446,11 @@ func agenda(diary Diary, clock Clock) tool.Tool {
 			),
 		),
 		Avoid: prompt.Block(
+			prompt.Text(
+				"A word that only says when they are speaking is not a date.",
+				"\"It is raining today\", \"I am tired this evening\", \"that took longer than I expected\" put nothing at a time and ask nothing of the diary: answer them and leave it.",
+				"The test is whether something is being placed at a time, not whether a time was said.",
+			),
 			prompt.Text(
 				"Do not answer from what was said earlier in the conversation, and do not reason that a date must be empty because it is in the past or because nothing was mentioned.",
 				"Both are claims about the diary, and a claim about the diary needs this tool to have just run.",

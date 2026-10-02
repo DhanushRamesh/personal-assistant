@@ -38,6 +38,7 @@ import (
 	"github.com/DhanushRamesh/personal-assistant/internal/persona"
 	remindmemory "github.com/DhanushRamesh/personal-assistant/internal/remind/inmemory"
 	"github.com/DhanushRamesh/personal-assistant/internal/tool"
+	"github.com/DhanushRamesh/personal-assistant/internal/tool/calendar"
 	"github.com/DhanushRamesh/personal-assistant/internal/tool/conversations"
 	"github.com/DhanushRamesh/personal-assistant/internal/tool/events"
 	"github.com/DhanushRamesh/personal-assistant/internal/tool/memories"
@@ -95,7 +96,12 @@ var cases = []eval{
 	{Say: "we settled on MySQL in the end, Postgres would have been another thing to run",
 		Tool: []string{"memory_remember"}},
 	{Say: "the plumber and I agreed twelve thousand for the bathroom", Tool: []string{"memory_remember"}},
-	{Say: "my sister's flight lands on the 3rd of March", Tool: []string{"memory_remember"}},
+	// Three right first moves, now that the calendar is registered. A date
+	// was named, and the standing rule is to read the diary before
+	// answering anything with a date in it, so looking is as right as
+	// writing it down -- what would be wrong is neither.
+	{Say: "my sister's flight lands on the 3rd of March",
+		Tool: []string{"memory_remember", "calendar_add", "calendar_events"}},
 
 	// Looking something up on purpose, when recall has offered nothing.
 	{Say: "what did I tell you about the roof", Tool: []string{"memory_search"}, Args: []string{"roof"}},
@@ -123,6 +129,15 @@ var cases = []eval{
 	// A note for later is remembered, not announced. The two are easy to
 	// confuse and only one of them speaks at you.
 	{Say: "note down that the roofer wants paying by Friday", Tool: []string{"memory_remember"}},
+
+	// The diary, which is where dates and times live. These are the cases
+	// the rule exists for: a plan, an arrangement, a question about a day.
+	{Say: "what is on tomorrow", Tool: []string{"calendar_events"}},
+	{Say: "am I free on Thursday afternoon", Tool: []string{"calendar_free", "calendar_events"}},
+	{Say: "put the dentist in for Tuesday at four",
+		Tool: []string{"calendar_add", "calendar_events", "calendar_free"}},
+	{Say: "I am thinking of going to Chennai next weekend", Tool: []string{"calendar_events"}},
+	{Say: "is anything happening on the 26th", Tool: []string{"calendar_events"}},
 
 	// What the devices reported. The first of these is the one that
 	// failed: asked who they had spoken to, the assistant said it had no
@@ -162,6 +177,7 @@ func TestTheModelReachesForTheRightTool(t *testing.T) {
 		memories.All(recall),
 		reminders.All(remindmemory.New(), clock),
 		events.Tools(eventmemory.New(), events.Clock{Location: time.UTC}),
+		calendar.All(nil, calendar.Clock{Location: time.UTC}),
 	)...)
 	if err != nil {
 		t.Fatalf("NewRegistry: %v", err)
