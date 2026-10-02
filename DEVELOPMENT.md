@@ -1663,6 +1663,36 @@ event. Until the phone reports calls, app use and the rest, this will
 mostly say good evening, which is what it should say when nothing
 happened.
 
+## A label is the value, in all three places
+
+The owner, before the first call had arrived: *"does the profiling
+understand?"* It did not. Put a week of calls in front of
+`profile.Rhythm` and it produced
+
+    call.received "seconds=140 value=Amit": 1 time, on 1 of 10 days
+    call.received "seconds=209 value=Amit": 1 time, on 1 of 10 days
+
+-- a man who rings most mornings, read as six unrelated events.
+`valueOf` rendered the whole payload when it held anything besides a
+value, so the label changed every time: counted once, paired with
+nothing, and described as something that happened rather than
+something he does. With the value alone it is
+
+    call.received "Amit": 6 times, on 6 of 10 days, usually around 9am
+
+which is a routine, and the thing the counted half exists to produce.
+
+It was silently wrong for `place.stayed` too, whose minutes change
+every five of them while the stay is open.
+
+**This is the third place the same mistake was made in a day.** The
+events tool omits `location.fix` because a unique label is noise; the
+greeting keys its folding and its four-week counts on the value alone
+for the same reason; and this did not. The rule, written down once:
+**what an event is counted by is its kind and its value, and nothing
+else in the payload may reach the label.** Everything else is detail
+for whoever reads the line.
+
 ## The profile is taught a method, not a list of patterns
 
 Owner, 2 October 2026, on what the counted half is for: *"when I leave

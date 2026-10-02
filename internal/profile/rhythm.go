@@ -442,26 +442,35 @@ func plural(noun string, n int) string {
 	return noun + "s"
 }
 
-// valueOf : What an event carries, as the phone writes it.
+// valueOf : What an event is about, which is its value and nothing
+// else.
+//
+// Everything here is counted by kind and value together, so the value
+// has to be the part that repeats: the person who rang, the network
+// joined, the place stayed in. A payload rendered whole is a label
+// that is different every time, and a label that is different every
+// time is counted once, paired with nothing, and reported as a thing
+// that happened rather than a thing they do.
+//
+// This did render the whole payload, and the moment an event arrived
+// carrying anything besides a value it broke -- a call with its length
+// in seconds became "seconds=140 value=Amit", a different thing from
+// "seconds=209 value=Amit", and a man who rings most mornings read as
+// six unrelated events. A stay carrying its minutes had the same
+// fault, and its minutes change every five of them as it grows.
+//
+// It is the third place this mistake has been made in a day. The
+// events tool and the greeting both key on the value alone for the
+// same reason, and this did not.
 func valueOf(payload json.RawMessage) string {
 	if len(payload) == 0 {
 		return ""
 	}
-	var into map[string]any
-	if err := json.Unmarshal(payload, &into); err != nil || len(into) == 0 {
+	var into struct {
+		Value any `json:"value"`
+	}
+	if err := json.Unmarshal(payload, &into); err != nil || into.Value == nil {
 		return ""
 	}
-	if v, ok := into["value"]; ok && len(into) == 1 {
-		return strings.TrimSpace(fmt.Sprint(v))
-	}
-	keys := make([]string, 0, len(into))
-	for k := range into {
-		keys = append(keys, k)
-	}
-	sort.Strings(keys)
-	parts := make([]string, 0, len(keys))
-	for _, k := range keys {
-		parts = append(parts, fmt.Sprintf("%s=%v", k, into[k]))
-	}
-	return strings.Join(parts, " ")
+	return strings.TrimSpace(fmt.Sprint(into.Value))
 }

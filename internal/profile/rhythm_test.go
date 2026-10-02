@@ -2,6 +2,7 @@ package profile_test
 
 import (
 	"encoding/json"
+	"strconv"
 	"strings"
 	"testing"
 	"time"
@@ -302,3 +303,47 @@ func TestAPairingNeedsMoreThanOnce(t *testing.T) {
 		t.Errorf("a single coincidence was reported as a pattern:\n%s", got)
 	}
 }
+
+// TestAPayloadWithMoreThanAValueStillCountsAsOneThing : The label is
+// the value alone, or a kind that carries anything else is a different
+// thing every time -- counted once, paired with nothing, and reported
+// as something that happened rather than something they do.
+func TestAPayloadWithMoreThanAValueStillCountsAsOneThing(t *testing.T) {
+	utc := time.UTC
+	var evs []event.Event
+	for i := range 6 {
+		at := time.Date(2026, 9, 10+i, 9, 15, 0, 0, utc)
+		// The same person, a different length every time.
+		evs = append(evs, withPayload("call.received",
+			`{"value":"Amit","seconds":`+itoa(120+i*37)+`}`, at))
+	}
+	got := profile.Rhythm(evs, utc)
+
+	if !strings.Contains(got, `call.received "Amit": 6 times`) {
+		t.Errorf("six calls from one person should be one line:\n%s", got)
+	}
+	if strings.Contains(got, "seconds=") {
+		t.Errorf("the whole payload leaked into the label:\n%s", got)
+	}
+}
+
+// TestAStayCountsDespiteItsMinutesChanging : An open stay is rewritten
+// as it grows, so its minutes differ on every reading.
+func TestAStayCountsDespiteItsMinutesChanging(t *testing.T) {
+	utc := time.UTC
+	var evs []event.Event
+	for i := range 4 {
+		at := time.Date(2026, 9, 10+i, 9, 0, 0, 0, utc)
+		evs = append(evs, withPayload("place.stayed",
+			`{"value":"the office","minutes":`+itoa(400+i*61)+`,"still":true}`, at))
+	}
+	if got := profile.Rhythm(evs, utc); !strings.Contains(got, `the office`) {
+		t.Errorf("the office should be one place:\n%s", got)
+	}
+}
+
+func withPayload(kind, payload string, at time.Time) event.Event {
+	return event.Event{Kind: kind, Payload: []byte(payload), OccurredAt: at}
+}
+
+func itoa(n int) string { return strconv.Itoa(n) }
