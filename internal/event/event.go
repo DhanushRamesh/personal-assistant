@@ -259,7 +259,7 @@ type Query struct {
 	// Kind : Exactly this kind. Ignored when empty.
 	Kind string
 	// Prefix : Any kind starting with this, which is how a family of
-	// kinds is asked for -- "network." covers joining and leaving
+	// kinds is asked for -- "wifi." covers joining and leaving
 	// without naming either, and without the caller having to know
 	// which ones exist.
 	Prefix string

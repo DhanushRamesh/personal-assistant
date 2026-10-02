@@ -1881,6 +1881,52 @@ between the screen and the tool: a person typing the kind wants the
 coordinates, and a model offered three thousand of something will
 reach for it.
 
+## Every field is named for what it holds
+
+Owner, reading the events table: *"in all the events it is generically
+said as value, instead we can give the correct name, useful for AI --
+not just it, all the event params must be easy for AI to understand."*
+
+The value itself has to stay called `value`, because the rule above
+depends on it: what an event is counted by is its kind and its value.
+It is the one field whose name is structural rather than descriptive.
+Everything around it was named by whoever added the event, and a model
+reads all of it.
+
+So, audited across the phone, the laptop and the server:
+
+| was | is | why |
+| --- | --- | --- |
+| `network.joined` / `network.left` | `wifi.joined` / `wifi.left` | the value is the name of a wireless network, and `network.joined "Dhanush"` reads as a person having arrived |
+| `place.stayed` `at` | *(dropped)* | a pair of decimals that the counting cannot use and the model would read out; still recoverable from the readings |
+| bluetooth `value` | the device, as it describes itself | below |
+
+**The kind carries the context the value does not have.** A value is
+one word with nothing around it, so whatever tells the reader what
+kind of thing that word is has to be in the kind. `wifi.joined` says
+the word is a network; `network.joined` left it open.
+
+**A device says what it is, on the device.** A bluetooth name like
+`btsb-007nb` means nothing to a model, and the obvious fix -- a lookup
+in the server -- was refused: *"not in Jarvis, I want to add in Tasker
+so Jarvis stays generic. The event should describe itself."* The
+profile sets a variable to the bluetooth name, overwrites it with
+"bike helmet" when the name matches, and sends that. The server learns
+nothing about helmets, and the next device is one `If` on the phone
+rather than a deploy.
+
+The payload is `{"value": "...", "connected": "true"}`. Connected
+rather than two kinds, because Tasker's BT Connection event fires on
+both and hands the task `%bt_connected` to tell them apart; splitting
+it on the phone would mean two profiles that can drift.
+
+**And the variable names were looked up, not guessed.** Owner, after
+the third wrong guess at a Tasker variable: *"always do a web search,
+so you find out the variable names."* `%bt_name`, `%bt_address` and
+`%bt_connected` are documented; `%bt_signal_strength` and
+`%bt_battery_level` exist too and are not sent, because neither is
+something to notice.
+
 ## The profile is taught a method, not a list of patterns
 
 Owner, 2 October 2026, on what the counted half is for: *"when I leave

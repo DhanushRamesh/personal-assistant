@@ -120,7 +120,7 @@ func recent(reader Reader, clock Clock) tool.Tool {
 			Properties: map[string]tool.Property{
 				"kind": {
 					Type: "string",
-					Description: "Only this kind of event, as a dotted name such as network.joined. " +
+					Description: "Only this kind of event, as a dotted name such as wifi.joined. " +
 						"Leave it out for everything. Call once without it first if you do not " +
 						"know which kinds exist: the answer lists them.",
 				},
@@ -151,7 +151,7 @@ func recent(reader Reader, clock Clock) tool.Tool {
 		},
 		Examples: []tool.Example{
 			{Ask: "what have I been up to today", Args: `{"saying":"looking at your day"}`},
-			{Ask: "when did I last leave the office", Args: `{"kind":"network.left","days":30}`},
+			{Ask: "when did I last leave the office", Args: `{"kind":"wifi.left","days":30}`},
 		},
 		Run: func(ctx context.Context, in tool.Invocation) tool.Result {
 			var args struct {
@@ -174,7 +174,7 @@ func recent(reader Reader, clock Clock) tool.Tool {
 			q := event.Query{Contains: strings.TrimSpace(args.Contains)}
 
 			// A kind ending in a dot is a family rather than a name.
-			// "network." covers joining and leaving without the caller
+			// "wifi." covers joining and leaving without the caller
 			// having to know which kinds exist, which it cannot, because
 			// any device may invent one.
 			kind := strings.TrimSpace(args.Kind)

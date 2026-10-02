@@ -196,13 +196,18 @@ func (s Stay) Key() string {
 // and because what the description of somebody should group on is the
 // place rather than the particular readings.
 func (s Stay) Payload(called string) json.RawMessage {
+	// No coordinates. The place already has a name, and a pair of
+	// decimals is the one thing in here nothing downstream can use:
+	// not the counting, which keys on the name, and not the model,
+	// which would read it out. Where it actually happened is still
+	// recoverable from the readings this was worked out from, for as
+	// long as they are kept.
 	body, err := json.Marshal(struct {
 		Value   string `json:"value"`
 		Minutes int    `json:"minutes"`
-		At      string `json:"at"`
 		Still   bool   `json:"still,omitempty"`
 	}{Value: called, Minutes: int(s.Long().Round(time.Minute).Minutes()),
-		At: s.Where(), Still: s.Open})
+		Still: s.Open})
 	if err != nil {
 		// Unreachable: three strings and an integer.
 		return json.RawMessage(`{"value":""}`)
