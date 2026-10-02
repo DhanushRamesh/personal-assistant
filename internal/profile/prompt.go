@@ -14,18 +14,26 @@ import (
 // Exported so an eval builds the same thing the server does. That was a
 // separate copy once elsewhere in this codebase, and the eval went on
 // passing against wording the server had stopped using.
-func Prompt(said []conversation.Message) string {
+func Prompt(said []conversation.Message, rhythm string) string {
 	return prompt.Block(
 		prompt.Text(
-			"Below is one person talking to their assistant over the past week, in the order they said it.",
+			"Below is one person talking to their assistant over the past week, in the order they said it,",
+			"and what their own devices reported them doing over the same week.",
 			"Everything is theirs; none of it is the assistant's.",
 			"Write a short description of them, for the assistant to read before it answers them.",
 		),
 		prompt.Text(
-			"Cover three things.",
+			"Cover four things.",
 			"What they talk about, and which of it keeps coming back rather than having come up once.",
 			"The people in their life, by name, and who those people are to them.",
 			"How they behave: how they ask for things, what they want more of and less of, what they lose patience with.",
+			"And their week: what they do most days, where they go, at what sort of hour, and what tends to follow what.",
+		),
+		prompt.Text(
+			"Where the week shows something regular enough to expect again, say so as an expectation rather than a fact --",
+			"\"usually\", \"tends to\", \"most weekday mornings\".",
+			"That is what lets the assistant have the thing ready before it is asked for.",
+			"Where it is not regular, say nothing: a routine invented from two coincidences is acted on exactly as a real one is.",
 		),
 		prompt.Text(
 			"Write it as plain sentences in the third person, under two hundred words, with no headings and no lists.",
@@ -43,11 +51,18 @@ func Prompt(said []conversation.Message) string {
 			"Their health: leave out symptoms, conditions and medicines entirely unless they asked for something to be remembered, which is a different thing from having mentioned it in passing.",
 		),
 		prompt.Text(
+			"The places below are different, and may be used.",
+			"They are named by the person themselves, on their own devices, and a place they called home or the office is something they have told you rather than something you worked out.",
+			"Write about where they go, how often and at what hour, by the names they gave those places.",
+			"That is not the same as saying where they live: a name they chose for a geofence is not an address, a city or a country, and none of those follow from it.",
+		),
+		prompt.Text(
 			"Hedging is not a way round either of those.",
 			"'Almost certainly' and 'likely' are still claims, and a hedged guess in a description that is read before every answer is acted on exactly as a plain one is.",
 		),
 		"Here is what they said:",
 		heard(said),
+		rhythm,
 	)
 }
 

@@ -360,6 +360,8 @@ func run() error {
 	// the rest.
 	describing := &profile.Builder{
 		Said:     chats,
+		Did:      deviceEvents,
+		Where:    cfg.Assistant.Location,
 		Memories: remembering.Store,
 		Now:      cfg.Assistant.Now,
 		Logger:   logger.Logger,

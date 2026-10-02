@@ -41,6 +41,7 @@ import (
 	"time"
 
 	"github.com/DhanushRamesh/personal-assistant/internal/conversation"
+	"github.com/DhanushRamesh/personal-assistant/internal/event"
 	"github.com/DhanushRamesh/personal-assistant/internal/memory"
 )
 
@@ -78,6 +79,11 @@ type Said interface {
 	SaidSince(ctx context.Context, userID string, since time.Time, limit int) ([]conversation.Message, error)
 }
 
+// Did : Where what their devices reported is read from.
+type Did interface {
+	Recent(ctx context.Context, userID string, q event.Query) ([]event.Event, error)
+}
+
 // Ask : How the model is asked. Returns what it answered.
 type Ask func(ctx context.Context, prompt string) (string, error)
 
@@ -85,6 +91,13 @@ type Ask func(ctx context.Context, prompt string) (string, error)
 type Builder struct {
 	// Said : Where the person's own messages come from. Required.
 	Said Said
+	// Did : Where what their devices reported comes from. Optional: with
+	// none, they are described from their words alone, which is how
+	// this worked before anything was watching.
+	Did Did
+	// Where : The timezone their days are counted in. Nil is UTC, which
+	// puts their evenings on the wrong date.
+	Where *time.Location
 	// Memories : Where the profile is kept. Required.
 	Memories memory.Store
 	// Ask : How the model is asked to write it. Required.
@@ -119,7 +132,7 @@ func (b *Builder) Build(ctx context.Context, userID string) error {
 		return nil
 	}
 
-	answer, err := b.Ask(ctx, Prompt(said))
+	answer, err := b.Ask(ctx, Prompt(said, b.rhythm(ctx, userID)))
 	if err != nil {
 		return fmt.Errorf("profile: asking for the description: %w", err)
 	}
@@ -129,6 +142,27 @@ func (b *Builder) Build(ctx context.Context, userID string) error {
 	}
 
 	return b.keep(ctx, userID, body)
+}
+
+// rhythm : What their devices reported over the same week, counted.
+//
+// A failure here costs the description its half about their days and
+// not the description itself. What somebody says is the half that has
+// always been there, and losing a week of prose because a query failed
+// would be the wrong trade.
+func (b *Builder) rhythm(ctx context.Context, userID string) string {
+	if b.Did == nil {
+		return ""
+	}
+	did, err := b.Did.Recent(ctx, userID, event.Query{Since: b.clock().Add(-Window)})
+	if err != nil {
+		if b.Logger != nil {
+			b.Logger.ErrorContext(ctx, "cannot read what their devices reported",
+				slog.String("user_id", userID), slog.Any("error", err))
+		}
+		return ""
+	}
+	return Rhythm(did, b.Where)
 }
 
 // keep : Stores the description, replacing the one already there.

@@ -175,7 +175,7 @@ func TestItReadsAWeek(t *testing.T) {
 // TestThePromptAsksForWhatWasWanted : the things they talk about, the
 // people they know, and how they behave -- the owner's three.
 func TestThePromptAsksForWhatWasWanted(t *testing.T) {
-	p := profile.Prompt(said(3))
+	p := profile.Prompt(said(3), "")
 
 	for _, want := range []string{"talk about", "people in their life", "behave"} {
 		if !strings.Contains(p, want) {
@@ -202,7 +202,7 @@ func TestThePromptAsksForWhatWasWanted(t *testing.T) {
 // said. A hedge is not a defence: a guess in a description read before
 // every answer is acted on exactly as a fact is.
 func TestItIsToldNotToGuessOriginOrRecordHealth(t *testing.T) {
-	p := profile.Prompt(said(3))
+	p := profile.Prompt(said(3), "")
 
 	for _, want := range []string{
 		"Where they live, where they are from, their nationality",

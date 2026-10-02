@@ -1516,6 +1516,62 @@ conversations: reading somebody over a week is a different question
 from reading a conversation, and no number of per-conversation calls
 answers it.
 
+### The description is written from what they did, not only what they said
+
+**Owner, 2 October 2026:** *"the personality should be based on my
+conversation, events too -- what i do, where i go, what i ask often,
+what i do often, where i go often, what activity i do sequentially
+usually... the goal is jarvis has to know me completely more than
+myself and should be able to predict my thinking."*
+
+So the profile reads two things over the same week: their messages, as
+it always did, and what their devices reported. `profile.Rhythm` turns
+the second into counts -- how many times, on how many of the days, at
+roughly what hour, and what tends to follow what -- and the prompt
+asks for a fourth thing alongside the other three: their week.
+
+**Counted, not described, and deliberately the opposite of the profile
+itself.** The description is prose, which reads like somebody who
+knows them and cannot be checked. The evidence under it should be the
+kind of thing a person can argue with. A model handed "entered the
+office 3 times on 3 of 3 days, usually around 10am" writes about a
+habit; handed a list of raw rows it invents one.
+
+**Repeats close together count once, and the collapsing is generic.** A
+laptop that rejoined the same network twenty-five times in a day
+otherwise reads as the most significant thing in the week. The rule is
+two hours between occurrences of the same thing, with no list of which
+kinds are the boring ones: the server has no business holding that
+list, and it would be wrong the moment a new device started reporting.
+
+**A routine is only stated where it recurs.** Two things next to each
+other once are a coincidence; the sequence lines need at least two
+occurrences and a gap under ninety minutes, and an hour of day is
+given only when the occurrences actually cluster. "Usually around 2pm"
+for something that happens at any hour is the kind of detail that gets
+written into a description and then believed.
+
+**Prediction is asked for as expectation, never as fact.** The prompt
+says to write "usually" and "tends to" where the week supports it, and
+to say nothing where it does not -- a routine invented from two
+coincidences is acted on exactly as a real one is.
+
+**The places are theirs, and that is why they are allowed.** The
+profile has never been permitted to say where somebody lives or comes
+from, after a rebuild wrote "almost certainly Indian, likely based in
+or around Hyderabad" from a girlfriend's address. A geofence the owner
+named themselves is a different thing: it is something they said, not
+something inferred. So the places may be written about by the names
+they gave them, and the ban on residence, origin, age and health
+stands unchanged.
+
+**What this is worth today, honestly.** Two days of events exist, most
+of them a laptop's wifi flapping, and the first real run surfaced
+leftover `test.spool` rows and one `network.left "%ssid2"` from an
+unsubstituted Tasker variable. The mechanism is in place; it has
+almost nothing to say about habits until there are a few weeks behind
+it.
+
 ## The names it expects to hear
 
 Owner's ask, 30 September 2026: *"the vocabulary should be shared by
