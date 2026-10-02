@@ -110,6 +110,11 @@ class _ClientAppState extends State<ClientApp> {
             state: widget.state,
             module: module,
             onModule: (m) => _router.go(AppRoute.settings(m)),
+            // What the page is looking at travels in the address, so a
+            // refresh lands where the person was rather than at the top
+            // of an unfiltered list.
+            where: route.where,
+            onWhere: (w) => _router.go(route.looking(w)),
           ),
         ),
     ];

@@ -34,19 +34,55 @@ enum KnowsSection {
 
 /// KnowsModule : The settings page that shows all of it.
 class KnowsModule extends StatefulWidget {
-  const KnowsModule({super.key, required this.state});
+  const KnowsModule({
+    super.key,
+    required this.state,
+    this.where = const {},
+    this.onWhere,
+  });
 
   final AppState state;
+
+  /// where : Which section is open and what it is filtered to, from the
+  /// address. This page is read by narrowing it down and then going
+  /// away to check something, so coming back to the top of an
+  /// unfiltered list is coming back to the wrong place.
+  final Map<String, String> where;
+
+  /// onWhere : Told when either changes, so the address follows.
+  final ValueChanged<Map<String, String>>? onWhere;
 
   @override
   State<KnowsModule> createState() => _KnowsModuleState();
 }
 
 class _KnowsModuleState extends State<KnowsModule> {
-  KnowsSection _section = KnowsSection.memories;
-  String _kind = '';
-  String _search = '';
-  final _searchField = TextEditingController();
+  late KnowsSection _section = _sectionFrom(widget.where['section']);
+  late String _kind = widget.where['kind'] ?? '';
+  late String _search = widget.where['find'] ?? '';
+  late final _searchField = TextEditingController(text: _search);
+
+  /// _sectionFrom : The section a name stands for.
+  ///
+  /// An unknown name is the first section rather than an error. A
+  /// shared or hand-edited address should land somewhere usable.
+  static KnowsSection _sectionFrom(String? name) {
+    for (final s in KnowsSection.values) {
+      if (s.name == name) return s;
+    }
+    return KnowsSection.memories;
+  }
+
+  /// _went : Puts where the page is looking into the address.
+  ///
+  /// The section is always named, so a shared address opens the same
+  /// page. The other two are only there when they are set, so a plain
+  /// look at the events is a plain address.
+  void _went() => widget.onWhere?.call({
+    'section': _section.name,
+    'kind': _kind,
+    'find': _search,
+  });
 
   @override
   void dispose() {
@@ -57,6 +93,25 @@ class _KnowsModuleState extends State<KnowsModule> {
   @override
   void initState() {
     super.initState();
+    _load(_section);
+  }
+
+  /// didUpdateWidget : Follows the address when it moves without us --
+  /// the back button, or a pasted link.
+  @override
+  void didUpdateWidget(KnowsModule old) {
+    super.didUpdateWidget(old);
+    final section = _sectionFrom(widget.where['section']);
+    final kind = widget.where['kind'] ?? '';
+    final find = widget.where['find'] ?? '';
+    if (section == _section && kind == _kind && find == _search) return;
+
+    setState(() {
+      _section = section;
+      _kind = kind;
+      _search = find;
+    });
+    if (_searchField.text != find) _searchField.text = find;
     _load(_section);
   }
 
@@ -83,6 +138,7 @@ class _KnowsModuleState extends State<KnowsModule> {
       _section = section;
       _search = '';
     });
+    _went();
     _load(section);
   }
 
@@ -108,7 +164,10 @@ class _KnowsModuleState extends State<KnowsModule> {
           controller: _searchField,
           label: 'Search',
           hint: 'filter these rows',
-          onChanged: (v) => setState(() => _search = v.trim().toLowerCase()),
+          onChanged: (v) {
+            setState(() => _search = v.trim().toLowerCase());
+            _went();
+          },
         ),
         const SizedBox(height: AppSpacing.lg),
         AnimatedBuilder(
@@ -131,6 +190,7 @@ class _KnowsModuleState extends State<KnowsModule> {
                 kind: _kind,
                 onKind: (k) {
                   setState(() => _kind = k);
+                  _went();
                   widget.state.loadEvents(kind: k);
                 },
               ),

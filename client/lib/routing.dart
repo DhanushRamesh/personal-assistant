@@ -9,47 +9,104 @@ import 'package:flutter/material.dart';
 
 import 'screens/settings.dart';
 
-/// AppRoute : A place in the app, and the path that names it.
+/// AppRoute : A place in the app, and the address that names it.
 class AppRoute {
-  const AppRoute._(this.module);
+  const AppRoute._(this.module, [this.where = const {}]);
 
   /// module : Which settings page, or null for the conversation.
   final SettingsModule? module;
 
+  /// where : Where a page is looking, as query parameters.
+  ///
+  /// Which part of a page is open and what it is filtered to. It lives
+  /// in the address so a refresh lands where the person was: the events
+  /// list is read by filtering it down and then going away to check
+  /// something, and coming back to the top of an unfiltered list each
+  /// time makes it unusable for the one thing it is for.
+  ///
+  /// A plain map rather than a field per page. The settings screens are
+  /// the only things with state worth keeping, each wants something
+  /// different, and a closed type here would have to grow every time
+  /// one of them learns a new filter.
+  final Map<String, String> where;
+
   /// home : The conversation.
   static const home = AppRoute._(null);
 
-  /// settings : One settings page.
-  factory AppRoute.settings(SettingsModule module) => AppRoute._(module);
+  /// settings : One settings page, looking at whatever it was looking at.
+  ///
+  /// Empty values are dropped, so a cleared filter leaves the address
+  /// rather than sitting in it as "kind=".
+  factory AppRoute.settings(
+    SettingsModule module, {
+    Map<String, String> where = const {},
+  }) => AppRoute._(module, {
+    for (final e in where.entries)
+      if (e.value.isNotEmpty) e.key: e.value,
+  });
 
   /// inSettings : Whether the settings screen is showing.
   bool get inSettings => module != null;
 
-  /// path : The address this shows in the bar.
-  String get path =>
-      module == null ? '/' : '/settings/${module!.name.toLowerCase()}';
+  /// at : What the page was looking at under one name, or empty.
+  String at(String name) => where[name] ?? '';
 
-  /// parse : The route a path names.
+  /// looking : The same route, looking somewhere else.
+  AppRoute looking(Map<String, String> next) =>
+      module == null ? this : AppRoute.settings(module!, where: next);
+
+  /// uri : The address this shows in the bar.
+  Uri get uri => module == null
+      ? Uri(path: '/')
+      : Uri(
+          path: '/settings/${module!.name.toLowerCase()}',
+          queryParameters: where.isEmpty ? null : where,
+        );
+
+  /// path : The address as written.
+  String get path => uri.toString();
+
+  /// parse : The route an address names.
   ///
   /// Anything unrecognised is the conversation. A mistyped address should
   /// land somewhere usable rather than on a blank page, and the address
   /// bar is corrected to match.
   static AppRoute parse(String? location) {
-    final parts = Uri.parse(location ?? '/').pathSegments;
+    final uri = Uri.parse(location ?? '/');
+    final parts = uri.pathSegments;
     if (parts.isEmpty || parts.first != 'settings') return home;
-    if (parts.length == 1) return AppRoute.settings(SettingsModule.account);
 
-    for (final m in SettingsModule.values) {
-      if (m.name.toLowerCase() == parts[1]) return AppRoute.settings(m);
+    final where = uri.queryParameters;
+    if (parts.length == 1) {
+      return AppRoute.settings(SettingsModule.account, where: where);
     }
-    return AppRoute.settings(SettingsModule.account);
+    for (final m in SettingsModule.values) {
+      if (m.name.toLowerCase() == parts[1]) {
+        return AppRoute.settings(m, where: where);
+      }
+    }
+    return AppRoute.settings(SettingsModule.account, where: where);
   }
 
   @override
-  bool operator ==(Object other) => other is AppRoute && other.module == module;
+  bool operator ==(Object other) =>
+      other is AppRoute &&
+      other.module == module &&
+      _sameWhere(other.where, where);
 
   @override
-  int get hashCode => module.hashCode;
+  int get hashCode => Object.hash(
+    module,
+    Object.hashAllUnordered(where.entries.map((e) => Object.hash(e.key, e.value))),
+  );
+
+  static bool _sameWhere(Map<String, String> a, Map<String, String> b) {
+    if (a.length != b.length) return false;
+    for (final e in a.entries) {
+      if (b[e.key] != e.value) return false;
+    }
+    return true;
+  }
 }
 
 /// AppRouteParser : Turns the address into a route and back.
@@ -59,11 +116,11 @@ class AppRouteParser extends RouteInformationParser<AppRoute> {
   @override
   Future<AppRoute> parseRouteInformation(
     RouteInformation routeInformation,
-  ) async => AppRoute.parse(routeInformation.uri.path);
+  ) async => AppRoute.parse(routeInformation.uri.toString());
 
   @override
   RouteInformation restoreRouteInformation(AppRoute configuration) =>
-      RouteInformation(uri: Uri.parse(configuration.path));
+      RouteInformation(uri: configuration.uri);
 }
 
 /// AppRouter : Holds where the app is, and rebuilds when it moves.

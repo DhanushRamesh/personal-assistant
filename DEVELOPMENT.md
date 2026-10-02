@@ -1748,6 +1748,42 @@ Live, with four calls from one unseen number: *"Good to see you, sir.
 There have been a few calls from an unknown number this evening -- did
 you catch any of those?"*
 
+## Where a page is looking belongs in the address
+
+Owner, after the events list stopped showing position readings:
+*"have UI url bar query param filter too, so I can just refresh and
+state is there."*
+
+`AppRoute` carried only which settings page was open. Which section of
+"What it knows" was showing, what the events were filtered to and what
+was typed in the search box were all local state, so every refresh
+came back to the top of an unfiltered list of memories. That is the
+wrong place to come back to for a page whose whole use is narrowing
+something down and then going away to check it.
+
+The route now carries a map of query parameters, and the knows page
+reads its section, kind and search out of it and writes them back:
+
+    /settings/knows?section=events&kind=call.missed
+
+**A map rather than a field per page.** The settings screens are the
+only things with state worth keeping, each wants something different,
+and a closed type would have to grow every time one of them learned a
+new filter.
+
+**Empty values are dropped**, so a cleared filter leaves the address
+instead of sitting in it as `kind=`, and a plain look at the events is
+a plain address worth sharing.
+
+**And it reads as well as writes.** `didUpdateWidget` follows the
+address when it moves without the page -- the back button, or a pasted
+link -- rather than only pushing to it, which would make the back
+button change the address and nothing else.
+
+An unknown section name opens the first one rather than failing, for
+the same reason an unknown path opens the conversation: a hand-edited
+or shared address should land somewhere usable.
+
 ## A label is the value, in all three places
 
 The owner, before the first call had arrived: *"does the profiling

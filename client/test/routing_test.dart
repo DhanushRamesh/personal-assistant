@@ -80,4 +80,67 @@ void main() {
 
     expect(router.route, AppRoute.settings(SettingsModule.server));
   });
+
+  group('where', () {
+    test('a plain settings address has no query', () {
+      expect(AppRoute.settings(SettingsModule.knows).path, '/settings/knows');
+    });
+
+    test('what a page is looking at travels in the address', () {
+      final route = AppRoute.settings(
+        SettingsModule.knows,
+        where: {'section': 'events', 'kind': 'call.missed'},
+      );
+      expect(route.path, contains('/settings/knows'));
+      expect(route.path, contains('section=events'));
+      expect(route.path, contains('kind=call.missed'));
+    });
+
+    test('and comes back off it', () {
+      final route = AppRoute.parse('/settings/knows?section=events&kind=call.made');
+      expect(route.module, SettingsModule.knows);
+      expect(route.at('section'), 'events');
+      expect(route.at('kind'), 'call.made');
+      expect(route.at('nothing'), '');
+    });
+
+    test('a cleared filter leaves the address rather than sitting in it', () {
+      final route = AppRoute.settings(
+        SettingsModule.knows,
+        where: {'section': 'events', 'kind': ''},
+      );
+      expect(route.path, contains('section=events'));
+      expect(route.path, isNot(contains('kind')));
+    });
+
+    test('a dotted kind survives the round trip', () {
+      final there = AppRoute.settings(
+        SettingsModule.knows,
+        where: {'kind': 'place.stayed'},
+      );
+      expect(AppRoute.parse(there.path).at('kind'), 'place.stayed');
+    });
+
+    test('two routes differing only in where are different places', () {
+      final a = AppRoute.settings(SettingsModule.knows, where: {'kind': 'x'});
+      final b = AppRoute.settings(SettingsModule.knows, where: {'kind': 'y'});
+      final c = AppRoute.settings(SettingsModule.knows, where: {'kind': 'x'});
+      expect(a, isNot(b));
+      expect(a, c);
+      expect(a.hashCode, c.hashCode);
+    });
+
+    test('looking somewhere else keeps the page', () {
+      final route = AppRoute.settings(SettingsModule.knows, where: {'kind': 'x'});
+      final next = route.looking({'kind': 'y', 'section': 'events'});
+      expect(next.module, SettingsModule.knows);
+      expect(next.at('kind'), 'y');
+    });
+
+    test('a query on an unknown page still lands somewhere usable', () {
+      final route = AppRoute.parse('/settings/nonsense?section=events');
+      expect(route.module, SettingsModule.account);
+      expect(route.at('section'), 'events');
+    });
+  });
 }

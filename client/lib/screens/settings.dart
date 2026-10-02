@@ -36,6 +36,8 @@ class SettingsScreen extends StatefulWidget {
     required this.state,
     this.module = SettingsModule.account,
     this.onModule,
+    this.where = const {},
+    this.onWhere,
   });
 
   /// module : Which page to show, which comes from the address.
@@ -43,6 +45,14 @@ class SettingsScreen extends StatefulWidget {
 
   /// onModule : Told when another page is picked, so the address follows.
   final ValueChanged<SettingsModule>? onModule;
+
+  /// where : What the open page was looking at, from the address, and
+  /// how it says it is looking somewhere else. A page with nothing
+  /// worth keeping in the address ignores both.
+  final Map<String, String> where;
+
+  /// onWhere : Told when the open page changes what it is looking at.
+  final ValueChanged<Map<String, String>>? onWhere;
 
   final AppState state;
 
@@ -184,7 +194,11 @@ class _SettingsScreenState extends State<SettingsScreen> {
                         SettingsModule.personality => _PersonalityModule(
                           state: state,
                         ),
-                        SettingsModule.knows => KnowsModule(state: state),
+                        SettingsModule.knows => KnowsModule(
+                          state: state,
+                          where: widget.where,
+                          onWhere: widget.onWhere,
+                        ),
                         SettingsModule.server => _ServerModule(state: state),
                       },
                     ],
