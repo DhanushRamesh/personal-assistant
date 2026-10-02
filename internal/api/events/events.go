@@ -104,7 +104,12 @@ type Incoming struct {
 	// Kind : What happened, as a dotted name.
 	Kind string `json:"kind"`
 	// OccurredAt : When it happened, by the device's clock.
-	OccurredAt time.Time `json:"occurred_at"`
+	//
+	// Optional. Absent means the moment it arrived, which is right for
+	// anything reported as it happens and wrong for anything spooled:
+	// a device that holds events while offline must send this or a
+	// whole morning is filed under the minute the signal returned.
+	OccurredAt time.Time `json:"occurred_at,omitempty"`
 	// Payload : Whatever this kind carries. May be absent.
 	Payload json.RawMessage `json:"payload,omitempty"`
 	// DedupeKey : What makes a resend harmless.
@@ -221,8 +226,28 @@ func (h *Handler) Record(w http.ResponseWriter, r *http.Request) {
 	keep := make([]*event.Event, 0, len(batch.Events))
 	var rejected []Rejected
 	for i, in := range batch.Events {
+		// No occurred_at means now.
+		//
+		// A device reporting something the moment it happens has
+		// nothing to say about when that was that this does not
+		// already know, and making it say so anyway is the single
+		// most awkward thing to produce on a phone: an RFC 3339
+		// timestamp in UTC, from a tool whose clock variable is epoch
+		// seconds. Every fault during the phone's setup was a
+		// variable that had not been substituted, and this is the
+		// field most likely to be one.
+		//
+		// A device that spools must still send it. Events held while
+		// offline and flushed at teatime all arrive at once, and
+		// stamping them with now would file a whole morning under the
+		// moment the signal came back -- which is why this is a
+		// default and not a replacement.
+		at := in.OccurredAt
+		if at.IsZero() {
+			at = received
+		}
 		e, err := event.New(user, batch.Source, batch.Device, in.Kind,
-			in.OccurredAt, received, in.Payload, in.DedupeKey)
+			at, received, in.Payload, in.DedupeKey)
 		if err != nil {
 			rejected = append(rejected, Rejected{
 				DedupeKey: in.DedupeKey, At: i, Why: err.Error()})

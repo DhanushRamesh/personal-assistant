@@ -280,3 +280,31 @@ func TestLabelMatchesTheLine(t *testing.T) {
 		t.Errorf("the count did not land on its line:\n%s", got)
 	}
 }
+
+// TestThePayloadCarriesMoreThanItsValue : A stay is a place and a
+// number of minutes, and a call is a person and a length. Keying the
+// count on value alone was right; throwing the rest away with it was
+// not.
+func TestThePayloadCarriesMoreThanItsValue(t *testing.T) {
+	stay := event.Event{Kind: "place.stayed", OccurredAt: evening.Add(-9 * time.Hour),
+		Payload: []byte(`{"value":"the office","minutes":501,"still":true}`)}
+	call := event.Event{Kind: "call.ended", OccurredAt: evening.Add(-time.Hour),
+		Payload: []byte(`{"value":"Priya","minutes":42}`)}
+
+	got := greet.Prompt(greet.Told{Now: evening, Since: evening.Add(-10 * time.Hour),
+		Events: []event.Event{stay, call}})
+
+	for _, want := range []string{
+		"place.stayed the office  (minutes 501, still)",
+		"call.ended Priya  (minutes 42)",
+	} {
+		if !strings.Contains(got, want) {
+			t.Errorf("missing %q from:\n%s", want, got)
+		}
+	}
+	// And the count is still keyed on the value alone, or a call of a
+	// different length would be a different thing every time.
+	if greet.Label(call) != "call.ended Priya" {
+		t.Errorf("the label picked up more than the value: %q", greet.Label(call))
+	}
+}

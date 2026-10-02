@@ -1387,6 +1387,57 @@ from stepping out, which is why the forty-five second line was drawn
 where it was. The remaining piece is the wifi SSID, for leaving with
 the laptop.
 
+## The two figures came back
+
+Owner, on being told six minutes to notice a departure was by design:
+*"what window drain? Yesterday until we switched to the phone it was
+1:45."* They were right and I was defending a number that had replaced
+a better one.
+
+The watch had been judged on two figures: a median of three samples for
+arriving, and a median of a hundred and fifty -- thirty seconds -- for
+leaving, with away meaning the settled figure under **-73 for a minute
+and three quarters**. That threshold was measured, and the comment on
+it recorded the measurement: *-70 for ninety seconds marked somebody
+away twelve times in three hours while they sat at the desk... at -73
+there are fifteen dips rather than thirty-two, and nine of the ten long
+ones survive.*
+
+The detour through the phone replaced both with one figure, the
+strongest reading of nine hundred samples. That is right for a sparse
+beacon in a pocket with a body between it and the laptop -- a maximum
+carries the verdict through the blocked stretches. It is wrong for a
+watch heard continuously five times a second, and it is slow by
+construction: a maximum holds the best reading for the whole window
+however far away somebody walks. **When the watch came back this
+afternoon, the phone's machinery and the phone's constants came with
+it, and three hours of measurement specific to the watch were thrown
+away without anything saying so.** The comments written today assert
+"three minutes" as though it had been chosen for the watch.
+
+**Re-measured before restoring it**, because -73 was tuned against a
+figure the server had stopped computing. Twenty-five minutes at the
+desk, 7,407 readings, no gaps:
+
+    settled: median -59, strongest -50, weakest -69
+
+    line   below   dips   dips >= 1:45
+    -65      1%       7              0
+    -68      0%       1              0
+    -70      0%       0              0
+    -73      0%       0              0
+
+Zero false absences at -73 with four decibels of headroom, and the
+doorway settles around -75 and outside around -82, so both fall below
+it. Underpowered against the original three hours -- at the old rate of
+roughly three long dips an hour, twenty-five minutes would expect one
+-- so this confirms -73 is not too tight rather than proving it is
+exactly right.
+
+`binary_sensor.watch_is_near` is on as soon as the fast figure says so,
+and off only after the settled figure has been under -73 for 1:45.
+Departure is about two minutes again.
+
 ## Presence and arriving are two questions, not one
 
 Owner, after seventeen minutes out: *"I went out and came back after

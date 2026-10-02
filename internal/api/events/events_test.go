@@ -1,6 +1,7 @@
 package events_test
 
 import (
+	"context"
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
@@ -9,6 +10,7 @@ import (
 
 	"github.com/DhanushRamesh/personal-assistant/internal/api/apitest"
 	"github.com/DhanushRamesh/personal-assistant/internal/api/events"
+	"github.com/DhanushRamesh/personal-assistant/internal/event"
 	"github.com/DhanushRamesh/personal-assistant/internal/event/inmemory"
 )
 
@@ -204,5 +206,38 @@ func TestABadLimitIsRefused(t *testing.T) {
 	e := apitest.NewWith(t, apitest.Options{DeviceEvents: inmemory.New()})
 	if rec := e.Do(t, http.MethodGet, "/v1/events?limit=nonsense", ""); rec.Code != http.StatusBadRequest {
 		t.Fatalf("status %d, want 400", rec.Code)
+	}
+}
+
+// TestNoOccurredAtMeansNow : An RFC 3339 timestamp in UTC is the most
+// awkward thing to produce on a phone and the field most likely to
+// arrive as an unsubstituted variable. A device reporting something as
+// it happens has nothing to add to the clock here.
+func TestNoOccurredAtMeansNow(t *testing.T) {
+	store := inmemory.New()
+	e := apitest.NewWith(t, apitest.Options{DeviceEvents: store})
+
+	code, out := post(t, e, `{"source":"tasker","device":"pixel-7","events":[
+		{"kind":"call.missed","payload":{"value":"Priya"},"dedupe_key":"k1"}]}`)
+	if code != http.StatusOK {
+		t.Fatalf("expected 200, got %d", code)
+	}
+	if len(out.Stored) != 1 {
+		t.Fatalf("expected it stored, got %+v", out)
+	}
+
+	got, err := store.Recent(context.Background(), e.User.ID, event.Query{})
+	if err != nil {
+		t.Fatalf("reading back: %v", err)
+	}
+	if len(got) != 1 {
+		t.Fatalf("expected one event, got %d", len(got))
+	}
+	if got[0].OccurredAt.IsZero() {
+		t.Error("it was stored with no time at all")
+	}
+	if !got[0].OccurredAt.Equal(got[0].ReceivedAt) {
+		t.Errorf("expected it to happen when it arrived, got %v and %v",
+			got[0].OccurredAt, got[0].ReceivedAt)
 	}
 }

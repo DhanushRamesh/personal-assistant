@@ -22,6 +22,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"sort"
 	"strings"
 	"time"
 
@@ -225,6 +226,9 @@ func happened(t Told) string {
 			lines = append(lines, d)
 		}
 		line := at.Format("3:04 pm") + "  " + r.label
+		if r.more != "" {
+			line += "  (" + r.more + ")"
+		}
 		if r.times > 1 {
 			line += fmt.Sprintf("  (%d times, the last at %s)",
 				r.times, r.last.In(t.Now.Location()).Format("3:04 pm"))
@@ -252,6 +256,7 @@ func happened(t Told) string {
 // run : One thing that happened, and how many times.
 type run struct {
 	label       string
+	more        string
 	first, last time.Time
 	times       int
 }
@@ -284,7 +289,8 @@ func folded(evs []event.Event) []run {
 			continue
 		}
 		at[label] = len(out)
-		out = append(out, run{label: label, first: e.OccurredAt, last: e.OccurredAt, times: 1})
+		out = append(out, run{label: label, more: rest(e),
+			first: e.OccurredAt, last: e.OccurredAt, times: 1})
 	}
 	return out
 }
@@ -312,6 +318,53 @@ func value(e event.Event) string {
 		return ""
 	}
 	return strings.TrimSpace(into.Value)
+}
+
+// rest : Everything else the payload carries, as "name value" pairs.
+//
+// The label is "value" alone, because that is what a count has to be
+// keyed on: a thing whose label changed every time could never be
+// counted, which is what made the raw position readings invisible. But
+// everything else in the payload was being thrown away with it, and
+// for some kinds that is the whole of the meaning -- a stay is a place
+// and a number of minutes, and the model was handed the place and left
+// to guess the rest from a timestamp.
+//
+// Sorted, so a line reads the same way twice. Objects and arrays are
+// left out: they do not belong in a sentence said out loud, and
+// anything that needs them is better off sending a second event.
+func rest(e event.Event) string {
+	var into map[string]any
+	if err := json.Unmarshal(e.Payload, &into); err != nil {
+		return ""
+	}
+	names := make([]string, 0, len(into))
+	for name := range into {
+		if name != "value" {
+			names = append(names, name)
+		}
+	}
+	sort.Strings(names)
+
+	out := make([]string, 0, len(names))
+	for _, name := range names {
+		switch v := into[name].(type) {
+		case string:
+			if v = strings.TrimSpace(v); v != "" {
+				out = append(out, name+" "+v)
+			}
+		case float64:
+			out = append(out, fmt.Sprintf("%s %g", name, v))
+		case bool:
+			if v {
+				out = append(out, name)
+			}
+		}
+	}
+	if len(out) == 0 {
+		return ""
+	}
+	return strings.Join(out, ", ")
 }
 
 // spoken : A duration as somebody would say it.
