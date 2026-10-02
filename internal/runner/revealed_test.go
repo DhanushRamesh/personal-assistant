@@ -10,17 +10,21 @@ import (
 	"github.com/DhanushRamesh/personal-assistant/internal/tool"
 )
 
-// deferring : A registry that holds calendar_update back until it is
+// deferring : A registry that holds calendar_free back until it is
 // asked about, which is what it does in the running server: it is not
 // in the hot list.
+//
+// A reading tool, because this is about the deferring and nothing
+// else. A write that never landed is sent back for another go, which
+// is right and would here look like the deferring having failed.
 func deferring(t *testing.T, run func() tool.Result) *tool.Registry {
 	t.Helper()
 	r, err := tool.NewRegistry(tool.Tool{
-		Name:     "calendar_update",
+		Name:     "calendar_free",
 		Domain:   "calendar",
-		Writes:   true,
-		Purpose:  "Change an event.",
-		UseWhen:  "They ask for an event to be moved or renamed.",
+		Lists:    true,
+		Purpose:  "Find a free hour.",
+		UseWhen:  "They ask when they are free.",
 		Channels: []chat.Channel{chat.ChannelVoice, chat.ChannelDirect},
 		Params:   tool.Schema{Properties: map[string]tool.Property{}},
 		Run:      func(context.Context, tool.Invocation) tool.Result { return run() },
@@ -41,7 +45,7 @@ func deferring(t *testing.T, run func() tool.Result) *tool.Registry {
 //
 // revealed used to start empty on every chat, and a chat is one thing
 // the person said. Asked four times about the same cinema booking, the
-// model called tool_describe for calendar_update four separate times,
+// model called tool_describe for the same tool four separate times,
 // each one after a guessed call that had to be refused, each one a
 // round somebody waited through -- while the result it was handed each
 // time said "callable from here on".
@@ -50,9 +54,9 @@ func TestADescribedToolStaysDescribedForTheConversation(t *testing.T) {
 	tools := deferring(t, func() tool.Result { runs++; return tool.OK("Moved it.") })
 
 	h := newHarness(t, &scripted{rounds: []environment.Message{
-		calling("calendar_update"),
+		calling("calendar_free"),
 		environment.Final("Moved it."),
-		calling("calendar_update"),
+		calling("calendar_free"),
 		environment.Final("Moved it again."),
 	}}, runner.Options{Tools: tools})
 
@@ -78,7 +82,7 @@ func TestAnUndescribedToolIsStillHeldBack(t *testing.T) {
 	tools := deferring(t, func() tool.Result { runs++; return tool.OK("Moved it.") })
 
 	h := newHarness(t, &scripted{rounds: []environment.Message{
-		calling("calendar_update"),
+		calling("calendar_free"),
 		environment.Final("Moved it."),
 	}}, runner.Options{Tools: tools})
 

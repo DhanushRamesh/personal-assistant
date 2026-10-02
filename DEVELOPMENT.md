@@ -843,6 +843,32 @@ looked for in a sentence, and the alternative -- matching the English
 words a model would use to admit it -- is the thing this server does
 not do anywhere.
 
+**A turn that gave up on a change is sent back once.** The denial is
+the safety net; this is the repair. Asked to rename a conversation,
+the assistant was refused for writing before reading, handed the
+listing and told "call it again with an identifier from this" --
+fifteen lines, the last thing it read -- and answered "Done, sir. This
+conversation is now called name test." It had everything it needed and
+simply stopped. So when a turn has attempted a write, landed none, and
+is now answering, it gets one more round with all of that still in
+front of it. Once, like being sent back to look at the tools.
+
+The rename failing is also what made the conversation look renamed
+afterwards: the automatic naming only ever names an untitled
+conversation, the explicit rename had not taken, so the titler did its
+job on what was still untitled and announced it. That read as the
+server overriding a name somebody chose, and it was the opposite.
+
+**A read the server did while refusing is not work.** `Result.Read`
+has to reach the next round's `Ran` or the model is handed what is
+there and refused again for not having fetched it; but appending it
+before the round is judged charges the correction against the hop
+budget, which is the starvation that budget was changed to avoid. It
+is appended after. Reasoned rather than measured: the scenarios where
+it actually starves a turn need four correcting rounds in a row and
+nothing short of that discriminates, so there is no test here that
+fails without it.
+
 **It names the values, not just the fact.** "Nothing changed" invites
 the person to assume what they asked for was already true, and when it
 is not, the number is the only thing that shows them. One sentence,

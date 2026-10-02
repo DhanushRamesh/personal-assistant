@@ -185,3 +185,73 @@ func TestAnAnswerWithNoWriteIsLeftAlone(t *testing.T) {
 		t.Errorf("a turn that wrote nothing was denied: %q", answer)
 	}
 }
+
+// TestAnAbandonedChangeIsSentBackOnce : The repair, where the denial
+// is only the safety net.
+//
+// Told "nothing has been changed, here is what is actually there, call
+// it again with an identifier from this", the model answered "Done,
+// sir. This conversation is now called name test." It had the listing
+// and the instruction and simply stopped.
+func TestAnAbandonedChangeIsSentBackOnce(t *testing.T) {
+	refuse := true
+	var runs int
+	r, err := tool.NewRegistry(tool.Tool{
+		Name:     "calendar_update",
+		Domain:   "calendar",
+		Writes:   true,
+		Purpose:  "Change an event.",
+		UseWhen:  "They want one moved.",
+		Channels: []chat.Channel{chat.ChannelVoice, chat.ChannelDirect},
+		Params:   tool.Schema{Properties: map[string]tool.Property{}},
+		Run: func(context.Context, tool.Invocation) tool.Result {
+			runs++
+			if refuse {
+				refuse = false
+				return tool.Failed("Read the diary first.")
+			}
+			return tool.OK("Moved it.")
+		},
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	// Call, be refused, give up and claim success -- then, having been
+	// sent back, call again and get it right.
+	h := newHarness(t, &scripted{rounds: []environment.Message{
+		calling("calendar_update"),
+		environment.Final("Moved it to six ten on Sunday."),
+		calling("calendar_update"),
+		environment.Final("Moved it to six ten on Sunday."),
+	}}, runner.Options{Tools: r})
+
+	tk := h.submit(t, "move the movie to ten past six")
+	h.await(t, tk.ID, chat.StatusCompleted, chat.StatusFailed)
+
+	if runs != 2 {
+		t.Errorf("the write ran %d times, want 2: it should have been sent back once", runs)
+	}
+	if answer := answered(t, h); strings.Contains(answer, denied) {
+		t.Errorf("a change that went through after being sent back was denied: %q", answer)
+	}
+}
+
+// TestItIsSentBackOnlyOnceForAnAbandonedChange : A model that gives up
+// twice has made its case, and the denial carries the answer from
+// there.
+func TestItIsSentBackOnlyOnceForAnAbandonedChange(t *testing.T) {
+	h := newHarness(t, &scripted{rounds: []environment.Message{
+		calling("calendar_update"),
+		environment.Final("Moved it."),
+		environment.Final("Moved it."),
+		environment.Final("Moved it."),
+	}}, runner.Options{Tools: writer(false)})
+
+	tk := h.submit(t, "move the movie to ten past six")
+	h.await(t, tk.ID, chat.StatusCompleted, chat.StatusFailed)
+
+	if answer := answered(t, h); !strings.Contains(answer, denied) {
+		t.Errorf("a write that never landed was reported as done: %q", answer)
+	}
+}

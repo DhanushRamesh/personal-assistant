@@ -147,7 +147,7 @@ func (r *Runner) runTools(
 	seen *[]string,
 	revealed map[string]bool,
 	wrote *writing,
-) ([]environment.Turn, []tool.Owed, []string) {
+) (turns []environment.Turn, owed []tool.Owed, reveal, read []string) {
 	asked := make([]conversation.ToolCall, 0, len(calls))
 	for _, c := range calls {
 		asked = append(asked, conversation.ToolCall{ID: c.ID, Name: c.Name, Arguments: c.Arguments})
@@ -208,11 +208,6 @@ func (r *Runner) runTools(
 			}
 		}
 
-		// A listing the server ran while refusing a write counts as
-		// read, or the model is handed what is there and then refused
-		// again for not having fetched it itself.
-		*seen = append(*seen, result.Read...)
-
 		r.logger.InfoContext(ctx, "tool ran",
 			slog.String("tool", c.Name),
 			slog.String("outcome", string(result.Outcome)),
@@ -233,12 +228,20 @@ func (r *Runner) runTools(
 
 	// What tool_describe handed over the arguments for. It has to be
 	// described on the next request or the model cannot call it.
-	var reveal []string
+	//
+	// And what the server read on a refused write's behalf, which has
+	// to count as read before the next round or the model is handed
+	// what is there and then refused again for not having fetched it
+	// itself. Returned rather than appended to seen here, because the
+	// caller counts the round's work from what seen gained and a read
+	// the server did while refusing is a correction, not work done.
+	// (named in the signature)
 	for _, x := range ran {
 		reveal = append(reveal, x.Reveal...)
+		read = append(read, x.Read...)
 	}
 
-	return toProviderTurns([]conversation.Message{call, results}), tool.Owing(ran), reveal
+	return toProviderTurns([]conversation.Message{call, results}), tool.Owing(ran), reveal, read
 }
 
 // callerFor : Who a tool is acting for.

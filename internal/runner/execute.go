@@ -96,6 +96,10 @@ func (r *Runner) consume(runCtx, ctx context.Context, t *chat.Chat, systemPrompt
 	// shown them before it was asked anything.
 	ran := r.alreadyRead(t)
 
+	// Whether the model has already been sent back once for giving up
+	// on a change it was asked to make.
+	var nudged bool
+
 	// Whether the model has asked for any tool this turn, and whether
 	// it has already been sent back once to look at what it has.
 	//
@@ -254,6 +258,27 @@ func (r *Runner) consume(runCtx, ctx context.Context, t *chat.Chat, systemPrompt
 				prompt = lookFirst
 				continue
 			}
+			// Asked to change something, changed nothing, and now
+			// answering. Sent back once, with the refusal and
+			// whatever it was handed still in front of it.
+			//
+			// The denial below is the safety net; this is the repair.
+			// Told "nothing has been changed, here is what is
+			// actually there, call it again with an identifier from
+			// this", the model answered "Done, sir. This conversation
+			// is now called name test." The instruction was fifteen
+			// lines long and the last thing it read; it simply
+			// stopped. One more round costs a second and usually
+			// finishes the job the person asked for.
+			if !wrote.claimable() && !nudged && len(tools) > 0 {
+				r.logger.InfoContext(ctx, "an abandoned change was sent back",
+					slog.Int("writes_tried", wrote.tried))
+				nudged = true
+				turns = append(turns, asUserTurn(prompt)...)
+				prompt = finishIt
+				continue
+			}
+
 			address := persona.AddressFor(r.personaID())
 			answer := tool.Ensure(final.Text, address, tool.Merged(owed))
 			// A turn that reached for a write and never landed one
@@ -302,10 +327,15 @@ func (r *Runner) consume(runCtx, ctx context.Context, t *chat.Chat, systemPrompt
 		// calls were all refused adds nothing and is not charged.
 		before := len(ran)
 
-		ranTurns, ranOwed, reveal := r.runTools(ctx, t, final.ToolCalls, &ran, revealed, &wrote)
+		ranTurns, ranOwed, reveal, read := r.runTools(ctx, t, final.ToolCalls, &ran, revealed, &wrote)
 		if did(ran[before:]) {
 			worked++
 		}
+		// Counted as read only after the round has been judged. A
+		// listing the server fetched while refusing a write is the
+		// server correcting the model, and charging the turn for it
+		// is the starvation the budget was changed to avoid.
+		ran = append(ran, read...)
 		turns = append(turns, ranTurns...)
 		owed = append(owed, ranOwed...)
 		for _, name := range reveal {
@@ -370,6 +400,17 @@ const lookFirst = "Before that answer goes out: you did not use any tool this tu
 	"that is a claim to check against both lists rather than against what you remember -- " +
 	"the tools change, and what you could not do last week you may be able to do now. " +
 	"If a tool fits, use it. If none does, say the same thing again and it will be sent as it is."
+
+// finishIt : What the model is told when it gave up on a change.
+//
+// Not an accusation and not a new instruction: the instruction was in
+// the tool result it already has. This only says that the thing it was
+// asked to do has not happened, and that saying it has is the one
+// answer it may not give.
+const finishIt = "Before that answer goes out: you asked for something to be changed and " +
+	"nothing was changed. The tool result above says what to do about it -- read it again and " +
+	"do that now. If you genuinely cannot, say plainly that it did not happen and why. " +
+	"What you must not do is describe the change as though it were made."
 
 // lastRound : What the model is told when its tools are taken away.
 //
