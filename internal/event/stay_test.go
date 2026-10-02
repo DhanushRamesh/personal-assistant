@@ -249,3 +249,48 @@ func TestAStayOutsideEveryGeofenceIsUnnamed(t *testing.T) {
 		t.Errorf("a stay nowhere near a geofence was called %q", got)
 	}
 }
+
+// Arriving somewhere else ends wherever they were. Android drops
+// geofence departures, and without this a missed one leaves somebody
+// at the office from last night until the end of time.
+func TestArrivingSomewhereElseEndsWhereTheyWere(t *testing.T) {
+	fences := event.Fences([]event.Event{
+		crossed(event.Entered, "office", 0),
+		// no departure from the office was ever reported
+		crossed(event.Entered, "home", 120),
+	}, when(600))
+
+	if len(fences) != 2 {
+		t.Fatalf("found %d stretches, want 2: %+v", len(fences), fences)
+	}
+	if fences[0].Name != "office" || !fences[0].To.Equal(when(120)) {
+		t.Errorf("the office did not end when they got home: %+v", fences[0])
+	}
+	if fences[1].Name != "home" || !fences[1].To.Equal(when(600)) {
+		t.Errorf("home should still be open: %+v", fences[1])
+	}
+}
+
+// Somewhere entered, left, and entered again is two stretches, not one
+// listed twice. The second arrival reported itself as still open once
+// per time the name had ever been opened.
+func TestLeavingAndComingBackIsTwoStretchesNotADuplicate(t *testing.T) {
+	fences := event.Fences([]event.Event{
+		crossed(event.Entered, "home", 0),
+		crossed(event.Exited, "home", 100),
+		crossed(event.Entered, "home", 200),
+	}, when(600))
+
+	if len(fences) != 2 {
+		t.Fatalf("found %d stretches, want 2: %+v", len(fences), fences)
+	}
+	open := 0
+	for _, f := range fences {
+		if f.To.Equal(when(600)) {
+			open++
+		}
+	}
+	if open != 1 {
+		t.Errorf("%d stretches are still open, want 1: %+v", open, fences)
+	}
+}

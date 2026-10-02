@@ -85,6 +85,15 @@ var hot = []string{
 	// Costing every turn its description is worth not denying, twice,
 	// something the person can see is there.
 	"event_recent",
+
+	// By the same evidence, 2 October 2026. Asked "do you know where I
+	// went today" with place_visits named but not described, the model
+	// reached for event_recent instead, was handed forty-two entries of
+	// which forty were a laptop's wifi reconnecting, and answered that
+	// the person had spent the afternoon "moving between the Dhanush and
+	// Dhanush_EXT networks". A tool it has only been told the name of is
+	// a tool it will work around.
+	"place_visits",
 }
 
 // hotSet : hot, for looking up.

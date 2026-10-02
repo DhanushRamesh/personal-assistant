@@ -1714,6 +1714,57 @@ reading in sixteen hours, and nothing in the log said why: Tasker's run
 log marked the action `IfFail`, which means the condition was not met,
 not that anything failed.
 
+## Asking where somebody went, without reading out wifi names
+
+**2 October 2026.** Asked *"do you know where I went today?"*, the
+assistant called `event_recent`, was handed forty-two entries of which
+forty were a laptop's wifi reconnecting, and answered: *"You left home
+at ten twenty-two this morning and came back at ten fifty, sir. Since
+then you have been at home, moving between the Dhanush and Dhanush_EXT
+networks."*
+
+The first half was right and the second half was a network adapter.
+The owner: *"moving between networks is not relevant to the
+question."*
+
+It was not the model's fault. There was no tool that answered the
+question asked, so it assembled an answer from what it could reach.
+`place_visits` is that question asked properly: one list of places and
+times, with nothing in it that is not somewhere they were.
+
+**It merges the two records.** Geofence crossings are the places they
+drew; stays are everywhere else. A stay inside a geofence carries that
+geofence's name and the same hours, so the crossing wins where they
+overlap -- it is the boundary actually being crossed, where a stay is
+an inference from scattered readings.
+
+**Hot from the first day, with no measurement behind it.** The
+measured rule is that a tool is described on every request only if the
+numbers say so. This one is there for the reason `mail_thread` is: a
+tool named but not described is a tool the model works around, and
+working around this one is the bug it exists to fix.
+
+### Two faults the real data found that the tests had not
+
+**A departure nobody reported left somebody at the office for ever.**
+The first real run said *"office, from 19:14 and still there"* at
+eleven the next morning, with two arrivals home in between. Android
+drops geofence departures. Arriving somewhere else now ends wherever
+they were: they cannot be in both, and the arrival that was reported
+is better evidence than the departure that was not. An arrival still
+open after sixteen hours is said to have no departure recorded, rather
+than being given an invented leaving time.
+
+**Somewhere left and returned to was listed twice.** `Fences` kept the
+order places were opened in and emitted every still-open one by walking
+that list, so a name opened twice produced two open stretches from the
+one arrival. Closing writes to the map now, and what is left in the map
+at the end is what is open -- at most one of them, since arriving
+anywhere closes the rest.
+
+Both were invisible to the tests and obvious in one run against a real
+day. Worth remembering when the next piece of this is built.
+
 ## The names it expects to hear
 
 Owner's ask, 30 September 2026: *"the vocabulary should be shared by

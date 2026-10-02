@@ -53,6 +53,7 @@ import (
 	eventstool "github.com/DhanushRamesh/personal-assistant/internal/tool/events"
 	mailtool "github.com/DhanushRamesh/personal-assistant/internal/tool/mail"
 	"github.com/DhanushRamesh/personal-assistant/internal/tool/memories"
+	placestool "github.com/DhanushRamesh/personal-assistant/internal/tool/places"
 	"github.com/DhanushRamesh/personal-assistant/internal/tool/reminders"
 	taskstool "github.com/DhanushRamesh/personal-assistant/internal/tool/tasks"
 	"github.com/DhanushRamesh/personal-assistant/internal/vocabulary"
@@ -248,6 +249,9 @@ func run() error {
 			Now: cfg.Assistant.Now, Location: cfg.Assistant.Location,
 		}),
 		eventstool.Tools(deviceEvents, eventstool.Clock{
+			Now: cfg.Assistant.Now, Location: cfg.Assistant.Location,
+		}),
+		placestool.Tools(deviceEvents, placestool.Clock{
 			Now: cfg.Assistant.Now, Location: cfg.Assistant.Location,
 		}),
 	)...)

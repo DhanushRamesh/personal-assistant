@@ -288,6 +288,14 @@ func sortByTime(fixes []Fix) {
 	}
 }
 
+// Lingering : An arrival with no departure after this long is a
+// departure that was missed, not one that has not happened yet.
+//
+// A phone that went flat at the office does not mean somebody slept
+// there, and the geofences drop departures often enough that the
+// difference has to be said rather than guessed at.
+const Lingering = 16 * time.Hour
+
 // Fence : A named place the person drew, and a stretch of time they
 // were inside it.
 type Fence struct {
@@ -313,13 +321,30 @@ func (f Fence) Long() time.Duration { return f.To.Sub(f.From) }
 // nothing says they entered is ignored, which is the safe direction --
 // the alternative is an unbounded stretch swallowing every stay before
 // it.
+//
+// Arriving somewhere else ends wherever they were. Android drops
+// geofence departures, and without this a missed one leaves somebody
+// at the office from last night until the end of time: the real
+// reading said "office, from 19:14 and still there" at eleven the next
+// morning, with two crossings into home in between. They cannot be in
+// both, and the arrival that was reported is better evidence than the
+// departure that was not.
 func Fences(crossings []Event, now time.Time) []Fence {
 	in := append([]Event(nil), crossings...)
 	sort.SliceStable(in, func(i, j int) bool { return in[i].OccurredAt.Before(in[j].OccurredAt) })
 
 	open := map[string]time.Time{}
-	var order []string
 	var out []Fence
+
+	shut := func(name string, at time.Time) {
+		from, waiting := open[name]
+		if !waiting {
+			return
+		}
+		delete(open, name)
+		out = append(out, Fence{Name: name, From: from, To: at})
+	}
+
 	for _, e := range in {
 		name := placeName(e)
 		if name == "" {
@@ -327,24 +352,24 @@ func Fences(crossings []Event, now time.Time) []Fence {
 		}
 		switch e.Kind {
 		case Entered:
-			if _, already := open[name]; !already {
-				open[name] = e.OccurredAt
-				order = append(order, name)
-			}
-		case Exited:
-			from, waiting := open[name]
-			if !waiting {
+			if _, already := open[name]; already {
 				continue
 			}
-			delete(open, name)
-			out = append(out, Fence{Name: name, From: from, To: e.OccurredAt})
+			for other := range open {
+				shut(other, e.OccurredAt)
+			}
+			open[name] = e.OccurredAt
+		case Exited:
+			shut(name, e.OccurredAt)
 		}
 	}
-	for _, name := range order {
-		if from, still := open[name]; still {
-			out = append(out, Fence{Name: name, From: from, To: now})
-		}
+
+	// Whatever is left is somewhere they have not reported leaving.
+	// At most one, now that arriving anywhere closes the rest.
+	for name, from := range open {
+		out = append(out, Fence{Name: name, From: from, To: now})
 	}
+	sort.SliceStable(out, func(i, j int) bool { return out[i].From.Before(out[j].From) })
 	return out
 }
 
