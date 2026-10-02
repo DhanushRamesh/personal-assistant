@@ -1663,6 +1663,32 @@ event. Until the phone reports calls, app use and the rest, this will
 mostly say good evening, which is what it should say when nothing
 happened.
 
+## A caller with no name still has to be somebody
+
+Owner: *"what about unknown numbers?"* They would all have shared one
+label. `%CNAME` is empty for a caller who is not in the contacts, so
+every stranger became the same unlabelled `call.missed` -- and four
+calls from one stranger looked exactly like four calls from four,
+which is the opposite of the one thing worth noticing about an unknown
+number.
+
+The device sends both now, and the server prefers the name. Tasker
+cannot express "this one or that one" inside a parameter, so the
+choice belongs where it can be tested -- the same reasoning as the
+payload unfolding above.
+
+**An unsubstituted variable counts as no name.** Tasker leaves the
+reference in place when a variable has no value, so a missing name
+arrives looking like `%CNAME`. Until now that landed as a real reading
+of somebody called that. Every fault during the phone's setup was one
+of these, which is why the handler already logs the reason a batch was
+refused -- this is the same failure getting past the door rather than
+being turned away at it.
+
+Verified live: a name with a number keeps the name; an empty value and
+an unsubstituted value both take the number; neither present is left
+alone rather than invented.
+
 ## A label is the value, in all three places
 
 The owner, before the first call had arrived: *"does the profiling

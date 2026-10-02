@@ -304,3 +304,65 @@ func TestAnOrdinaryValueIsLeftAlone(t *testing.T) {
 
 func quoted(s string) string { b, _ := json.Marshal(s); return string(b) }
 func itoa(i int) string      { return string(rune('0' + i)) }
+
+// TestAnUnknownNumberIsLabelledByItsNumber : A caller with no name
+// would otherwise share a label with every other caller who has none,
+// and four calls from one stranger would look like four strangers.
+func TestAnUnknownNumberIsLabelledByItsNumber(t *testing.T) {
+	for _, c := range []struct {
+		what, payload, want string
+	}{
+		{"a name and a number keep the name",
+			`{"value":"Priya","number":"+919876543210"}`, "Priya"},
+		{"no name falls back to the number",
+			`{"value":"","number":"+919876543210"}`, "+919876543210"},
+		{"an unsubstituted variable counts as no name",
+			`{"value":"%CNAME","number":"+919876543210"}`, "+919876543210"},
+		{"neither is left alone rather than invented",
+			`{"value":"","number":""}`, ""},
+	} {
+		store := inmemory.New()
+		e := apitest.NewWith(t, apitest.Options{DeviceEvents: store})
+		code, _ := post(t, e, `{"source":"tasker","events":[
+			{"kind":"call.missed","payload":`+c.payload+`,"dedupe_key":"k"}]}`)
+		if code != http.StatusOK {
+			t.Fatalf("%s: expected 200, got %d", c.what, code)
+		}
+		got, _ := store.Recent(context.Background(), e.User.ID, event.Query{})
+		if len(got) != 1 {
+			t.Fatalf("%s: expected one event", c.what)
+		}
+		var into struct {
+			Value  string `json:"value"`
+			Number string `json:"number"`
+		}
+		_ = json.Unmarshal(got[0].Payload, &into)
+		if into.Value != c.want {
+			t.Errorf("%s: value = %q, want %q", c.what, into.Value, c.want)
+		}
+		if c.want != "" && into.Value == into.Number {
+			t.Errorf("%s: the number was left behind as well as promoted", c.what)
+		}
+	}
+}
+
+// TestAPlaceCalledPercentCNAMEIsNotAPlace : An unsubstituted variable
+// used to land as a real reading. Every fault during the phone's setup
+// was one of these.
+func TestAPlaceCalledPercentCNAMEIsNotAPlace(t *testing.T) {
+	store := inmemory.New()
+	e := apitest.NewWith(t, apitest.Options{DeviceEvents: store})
+	// With nothing to fall back to it is still stored -- losing the
+	// event entirely would be worse -- but a payload that does have a
+	// fallback must use it.
+	code, _ := post(t, e, `{"source":"tasker","events":[
+		{"kind":"call.missed","payload":{"value":"%CNAME","number":"%CNUM"},
+		 "dedupe_key":"k"}]}`)
+	if code != http.StatusOK {
+		t.Fatalf("expected 200, got %d", code)
+	}
+	got, _ := store.Recent(context.Background(), e.User.ID, event.Query{})
+	if len(got) != 1 {
+		t.Fatal("the event should still be stored")
+	}
+}

@@ -25,6 +25,7 @@ import (
 	"strconv"
 	"strings"
 	"time"
+	"unicode"
 
 	"github.com/go-chi/chi/v5"
 
@@ -248,7 +249,7 @@ func (h *Handler) Record(w http.ResponseWriter, r *http.Request) {
 			at = received
 		}
 		e, err := event.New(user, batch.Source, batch.Device, in.Kind,
-			at, received, unpacked(in.Payload), in.DedupeKey)
+			at, received, labelled(unpacked(in.Payload)), in.DedupeKey)
 		if err != nil {
 			rejected = append(rejected, Rejected{
 				DedupeKey: in.DedupeKey, At: i, Why: err.Error()})
@@ -363,6 +364,74 @@ func unpacked(payload json.RawMessage) json.RawMessage {
 		return payload
 	}
 	return json.RawMessage(text)
+}
+
+// labelled : A payload whose value can actually identify something.
+//
+// Everything that counts, folds or pairs events keys on the kind and
+// the value together, so a value that is missing is a label that every
+// occurrence shares. Four calls from one stranger and four calls from
+// four strangers then look the same, which is the opposite of the one
+// thing worth noticing about an unknown number.
+//
+// Two ways a value arrives useless, and both are the phone's doing.
+//
+// It can be empty: a caller who is not in the contacts has no name,
+// and Tasker has no way to say "this one or that one" inside a
+// parameter. So the device sends both and this prefers the name --
+// "Priya" where there is one, the number where there is not.
+//
+// Or it can be a variable that was never substituted, which arrives
+// looking like "%CNAME". Every fault during the phone's setup was one
+// of these, and until now each landed as a real reading of a place
+// called %CNAME. Treated as absent, so the fallback applies and the
+// event is still worth something.
+func labelled(payload json.RawMessage) json.RawMessage {
+	if len(payload) == 0 {
+		return payload
+	}
+	var into map[string]any
+	if err := json.Unmarshal(payload, &into); err != nil {
+		return payload
+	}
+
+	value, _ := into["value"].(string)
+	if !unset(value) {
+		return payload
+	}
+	number, _ := into["number"].(string)
+	if unset(number) {
+		return payload
+	}
+
+	into["value"] = strings.TrimSpace(number)
+	delete(into, "number")
+	out, err := json.Marshal(into)
+	if err != nil {
+		return payload
+	}
+	return out
+}
+
+// unset : Whether a field says nothing.
+//
+// Empty, or a variable the device never filled in. Tasker leaves the
+// reference in place when a variable has no value, so "%CNAME" means
+// there was no caller name, not that somebody is called that.
+func unset(s string) bool {
+	s = strings.TrimSpace(s)
+	if s == "" {
+		return true
+	}
+	if !strings.HasPrefix(s, "%") {
+		return false
+	}
+	for _, r := range s[1:] {
+		if !unicode.IsLetter(r) && !unicode.IsDigit(r) && r != '_' {
+			return false
+		}
+	}
+	return len(s) > 1
 }
 
 // List : What the person's devices have reported.
