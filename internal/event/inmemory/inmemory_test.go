@@ -3,6 +3,7 @@ package inmemory_test
 import (
 	"context"
 	"encoding/json"
+	"strings"
 	"testing"
 	"time"
 
@@ -85,5 +86,54 @@ func TestOmitLeavesAKindOut(t *testing.T) {
 	}
 	if len(got) != 1 || got[0].Kind != event.Stayed {
 		t.Fatalf("expected the stay alone, got %v", got)
+	}
+}
+
+// TestAmendRewritesWhatIsAlreadyThere : A stay keeps the key its start
+// gives it and grows, so it comes back as a duplicate every time a
+// reading extends it. Without this it would be frozen at the length it
+// had when it was first noticed.
+func TestAmendRewritesWhatIsAlreadyThere(t *testing.T) {
+	ctx := context.Background()
+	now := time.Date(2026, 10, 2, 12, 0, 0, 0, time.UTC)
+	s := inmemory.New()
+
+	first, err := event.New("usr_1", "server", "", event.Stayed, now, now,
+		json.RawMessage(`{"value":"the desk","minutes":20,"still":true}`), "place.stayed:1")
+	if err != nil {
+		t.Fatalf("building: %v", err)
+	}
+	if _, _, err := s.Record(ctx, "usr_1", []*event.Event{first}); err != nil {
+		t.Fatalf("storing: %v", err)
+	}
+
+	// The same stay, an hour longer. Recording is refused as a duplicate.
+	grown, _ := event.New("usr_1", "server", "", event.Stayed, now, now.Add(time.Hour),
+		json.RawMessage(`{"value":"the desk","minutes":80,"still":true}`), "place.stayed:1")
+	stored, seen, err := s.Record(ctx, "usr_1", []*event.Event{grown})
+	if err != nil {
+		t.Fatalf("re-storing: %v", err)
+	}
+	if len(stored) != 0 || len(seen) != 1 {
+		t.Fatalf("expected it to be seen already, stored=%v seen=%v", stored, seen)
+	}
+
+	changed, err := s.Amend(ctx, "usr_1", []*event.Event{grown})
+	if err != nil {
+		t.Fatalf("amending: %v", err)
+	}
+	if changed != 1 {
+		t.Fatalf("expected one row amended, got %d", changed)
+	}
+
+	back, err := s.Recent(ctx, "usr_1", event.Query{Kind: event.Stayed})
+	if err != nil {
+		t.Fatalf("reading back: %v", err)
+	}
+	if len(back) != 1 {
+		t.Fatalf("expected one stay, got %d", len(back))
+	}
+	if !strings.Contains(string(back[0].Payload), `"minutes":80`) {
+		t.Errorf("the stay was not brought up to date: %s", back[0].Payload)
 	}
 }

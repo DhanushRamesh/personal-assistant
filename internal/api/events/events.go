@@ -49,6 +49,10 @@ type Store interface {
 	Recent(ctx context.Context, userID string, q event.Query) ([]event.Event, error)
 	// Kinds : Which kinds exist, and how many of each.
 	Kinds(ctx context.Context, userID string) ([]event.Kind, error)
+	// Amend : Rewrites one already recorded, matched on its dedupe key.
+	// Settling needs it: a stay that has not ended yet keeps the key
+	// its start gives it and grows.
+	Amend(ctx context.Context, userID string, events []*event.Event) (int64, error)
 }
 
 const (

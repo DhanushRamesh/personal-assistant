@@ -130,6 +130,38 @@ func (s *Store) Record(ctx context.Context, userID string, events []*event.Event
 	return stored, seen, nil
 }
 
+// Amend : Rewrites what an event already recorded says, matched on its
+// dedupe key.
+//
+// For the one kind that changes after it is written: a stay still going
+// on. It keeps the key its start gives it and grows, so recording it
+// again is skipped as a duplicate -- correctly, since a duplicate is
+// what it is -- and without this an open stay would be frozen at the
+// length it had when it was first noticed.
+//
+// Only the payload and when it arrived. What happened and when it
+// started are what identify it; if those changed it would be a
+// different stay with a different key.
+func (s *Store) Amend(ctx context.Context, userID string, events []*event.Event) (int64, error) {
+	var changed int64
+	for _, e := range events {
+		if e == nil || e.DedupeKey == "" {
+			continue
+		}
+		res := s.db.WithContext(ctx).Model(&row{}).
+			Where("user_id = ? AND dedupe_key = ?", userID, e.DedupeKey).
+			Updates(map[string]any{
+				"payload":     string(e.Payload),
+				"received_at": e.ReceivedAt,
+			})
+		if res.Error != nil {
+			return changed, fmt.Errorf("amending %s: %w", e.Kind, res.Error)
+		}
+		changed += res.RowsAffected
+	}
+	return changed, nil
+}
+
 // Recent : What happened, newest first.
 //
 // Ordered by when it happened rather than when it arrived. A phone that

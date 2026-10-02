@@ -1387,6 +1387,61 @@ from stepping out, which is why the forty-five second line was drawn
 where it was. The remaining piece is the wifi SSID, for leaving with
 the laptop.
 
+## A stay is written while it is still happening
+
+Owner, 2 October 2026: *"sending location.fix has no meaning here, it's
+just timed data -- can we send place.stayed."* It already was: the
+greeting omits only `location.fix`, and `place.stayed` goes to the
+model like everything else. What the question turned up is that there
+were none, and why.
+
+Measured: 102 readings over two days, and **the furthest any of them
+got from the first was 58 metres**. One cluster, eight hours and
+eleven minutes, still open. Nothing was broken; there was nothing to
+record, because `Stays` returns only what has ended -- *whatever is
+still open is somebody who has not left yet*.
+
+That is right for history and wrong for now. The most describable thing
+about a day is usually the part of it that has not finished, and
+somebody at their desk since ten was invisible until they got up.
+
+**`SoFar` returns the open one too**, carrying `Open`, which reaches the
+payload as `still`. It has to have lasted `Settled` like any other, or
+every arrival anywhere would start a stay that is mostly thrown away.
+
+**Which needed `Amend`.** A stay's dedupe key is its start, so it keeps
+that key as it grows and comes back as a duplicate on every reading --
+correctly, since a duplicate is what it is. `Record` skips it, so
+without an amend an open stay would freeze at the length it had when it
+was first noticed, and close at that length. `Settle` now records what
+is new and amends what `Record` reports as already seen. One row per
+stay, rewritten as it grows, rather than a row every five minutes.
+
+First one ever written, minutes after this shipped:
+
+    place.stayed  {"at":"12.91100,80.06241","still":true,
+                   "value":"home","minutes":501}
+    occurred_at 06:28   received_at 14:49
+
+Named "home" from the geofence, which still outranks everything.
+
+**And the greeting works stays out itself rather than reading them.**
+A stay is written when the reading that ended it arrives, up to five
+minutes after somebody walked out of a place -- and they walk in here
+within a minute or two of that. So the stay most worth asking about is
+usually the one not yet in the table. The greeting reads the fixes and
+calls `SoFar` directly, which costs one more query and removes the
+timing entirely; `place.stayed` is omitted from its event list so the
+written one and the computed one cannot both appear. It reads back
+further than its own window, because a stay that began before the two
+of them last spoke still ended inside it -- somebody who left for work
+before breakfast did not start their day in the window.
+
+Stays are not named at the door: naming is a call to a mapping service
+and there is no room for one while somebody is standing there. The
+coordinates stand in, and the one written in the background has a name
+on it by the time anything else reads it.
+
 ## The greeting is written, not chosen
 
 Owner, 2 October 2026, on what it is for: *"treat Jarvis like a person

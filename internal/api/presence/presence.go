@@ -19,6 +19,7 @@ import (
 	"math/rand/v2"
 	"net/http"
 	"slices"
+	"sort"
 	"strings"
 	"sync"
 	"time"
@@ -234,16 +235,24 @@ func (h *Handler) lastSpoke(ctx context.Context, user string) time.Time {
 
 // happened : What their devices reported in between.
 //
-// Without the raw position readings. One arrives every five minutes, so
-// an afternoon out is fifty of them and nothing else would fit; what
-// they are turned into, place.stayed, is here and says the same thing
-// in one line.
+// Without the raw position readings -- one arrives every five minutes,
+// so an afternoon out is fifty of them and nothing else would fit --
+// and without the stays already written, which are replaced by stays
+// worked out here and now.
+//
+// Worked out rather than read because of a race this cannot afford.
+// A stay is written when the reading that ended it arrives, which is
+// up to five minutes after somebody has walked out of a place. They
+// walk in here within a minute or two of that, so the stay most worth
+// asking about is usually the one not yet in the table. Reading the
+// fixes costs one more query and removes the timing entirely.
 func (h *Handler) happened(ctx context.Context, user string, from time.Time) []event.Event {
 	if h.reported == nil {
 		return nil
 	}
 	evs, err := h.reported.Recent(ctx, user, event.Query{
-		Since: from, Limit: greet.Most, Omit: []string{event.Fixed},
+		Since: from, Limit: greet.Most,
+		Omit: []string{event.Fixed, event.Stayed},
 	})
 	if err != nil {
 		h.Logger.WarnContext(ctx, "cannot read what happened while they were out",
@@ -252,7 +261,61 @@ func (h *Handler) happened(ctx context.Context, user string, from time.Time) []e
 	}
 	// Newest first from the store, oldest first for reading.
 	slices.Reverse(evs)
-	return evs
+
+	return h.merge(evs, h.stayed(ctx, user, from))
+}
+
+// stayed : Where they have been, worked out from the readings now.
+//
+// Named by nothing: naming is a network call to a mapping service and
+// there is no room for one at a door. A stay keeps its coordinates
+// here, and the one written in the background will have a name on it
+// by the time anything else reads it.
+func (h *Handler) stayed(ctx context.Context, user string, from time.Time) []event.Event {
+	// From further back than the greeting's window. A stay that began
+	// before the two of them last spoke still ended during it, and that
+	// ending is the thing worth asking about -- somebody who went to
+	// work before breakfast and came home at six did not start their
+	// day inside the window.
+	since := from.Add(-event.Looking)
+	seen, err := h.reported.Recent(ctx, user, event.Query{Kind: event.Fixed, Since: since})
+	if err != nil {
+		h.Logger.WarnContext(ctx, "cannot read where they have been",
+			slog.Any("error", err))
+		return nil
+	}
+
+	fixes := make([]event.Fix, 0, len(seen))
+	for _, e := range seen {
+		if f, ok := event.ReadFix(e); ok {
+			fixes = append(fixes, f)
+		}
+	}
+
+	out := make([]event.Event, 0, 4)
+	for _, stay := range event.SoFar(fixes) {
+		// Only the ones that touch the window. Everything before it has
+		// already been talked about.
+		if stay.To.Before(from) {
+			continue
+		}
+		e, err := event.New(user, "server", "", event.Stayed,
+			stay.From, h.clock(), stay.Payload(stay.Where()), stay.Key())
+		if err != nil {
+			continue
+		}
+		out = append(out, *e)
+	}
+	return out
+}
+
+// merge : Two lists of events as one, in the order they happened.
+func (h *Handler) merge(a, b []event.Event) []event.Event {
+	out := append(append(make([]event.Event, 0, len(a)+len(b)), a...), b...)
+	sort.SliceStable(out, func(i, j int) bool {
+		return out[i].OccurredAt.Before(out[j].OccurredAt)
+	})
+	return out
 }
 
 // profile : The standing description, for judging what is unusual.

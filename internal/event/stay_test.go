@@ -2,6 +2,7 @@ package event_test
 
 import (
 	"encoding/json"
+	"strings"
 	"testing"
 	"time"
 
@@ -380,5 +381,98 @@ func TestMergedHandlesNothing(t *testing.T) {
 	one := []event.Named{named("home", time.Now(), time.Now(), 1, 2)}
 	if got := event.Merged(one); len(got) != 1 {
 		t.Errorf("expected the one, got %d", len(got))
+	}
+}
+
+// fix : A reading at a place and a time.
+func fix(lat, lon float64, at time.Time) event.Fix {
+	return event.Fix{Lat: lat, Lon: lon, At: at}
+}
+
+// TestSoFarSeesTheOneStillGoingOn : The most describable thing about
+// today is usually the part of it that has not finished.
+func TestSoFarSeesTheOneStillGoingOn(t *testing.T) {
+	start := time.Date(2026, 10, 2, 10, 0, 0, 0, time.UTC)
+	var fixes []event.Fix
+	for i := range 40 {
+		fixes = append(fixes, fix(12.9110, 80.0624, start.Add(time.Duration(i)*5*time.Minute)))
+	}
+
+	if closed := event.Stays(fixes); len(closed) != 0 {
+		t.Fatalf("nothing has ended, got %d stays", len(closed))
+	}
+	got := event.SoFar(fixes)
+	if len(got) != 1 {
+		t.Fatalf("expected the open one, got %d", len(got))
+	}
+	if !got[0].Open {
+		t.Error("the open stay is not marked open")
+	}
+	if got[0].Long() < 3*time.Hour {
+		t.Errorf("expected the whole run so far, got %v", got[0].Long())
+	}
+	if !strings.Contains(string(got[0].Payload("the desk")), `"still":true`) {
+		t.Errorf("the payload does not say it is still going: %s", got[0].Payload("the desk"))
+	}
+}
+
+// TestSoFarKeepsTheClosedOnesToo : And in order, with only the last
+// one open.
+func TestSoFarKeepsTheClosedOnesToo(t *testing.T) {
+	start := time.Date(2026, 10, 2, 9, 0, 0, 0, time.UTC)
+	var fixes []event.Fix
+	for i := range 12 { // two hours at one place
+		fixes = append(fixes, fix(12.9110, 80.0624, start.Add(time.Duration(i)*10*time.Minute)))
+	}
+	later := start.Add(3 * time.Hour)
+	for i := range 12 { // then two hours somewhere else
+		fixes = append(fixes, fix(12.9910, 80.2180, later.Add(time.Duration(i)*10*time.Minute)))
+	}
+
+	got := event.SoFar(fixes)
+	if len(got) != 2 {
+		t.Fatalf("expected two, got %d", len(got))
+	}
+	if got[0].Open {
+		t.Error("the first one has ended and should not be open")
+	}
+	if !got[1].Open {
+		t.Error("the last one should be open")
+	}
+}
+
+// TestAnOpenStayTooShortIsNotOne : Or every arrival anywhere starts a
+// stay that is mostly thrown away again.
+func TestAnOpenStayTooShortIsNotOne(t *testing.T) {
+	start := time.Date(2026, 10, 2, 10, 0, 0, 0, time.UTC)
+	got := event.SoFar([]event.Fix{
+		fix(12.9110, 80.0624, start),
+		fix(12.9110, 80.0624, start.Add(2*time.Minute)),
+	})
+	if len(got) != 0 {
+		t.Errorf("two minutes is not a stay, got %d", len(got))
+	}
+}
+
+// TestTheOpenStayKeepsItsKeyAsItGrows : Which is what lets it be
+// amended in place rather than written again every five minutes.
+func TestTheOpenStayKeepsItsKeyAsItGrows(t *testing.T) {
+	start := time.Date(2026, 10, 2, 10, 0, 0, 0, time.UTC)
+	var fixes []event.Fix
+	for i := range 4 {
+		fixes = append(fixes, fix(12.9110, 80.0624, start.Add(time.Duration(i)*5*time.Minute)))
+	}
+	first := event.SoFar(fixes)[0]
+
+	for i := 4; i < 10; i++ {
+		fixes = append(fixes, fix(12.9110, 80.0624, start.Add(time.Duration(i)*5*time.Minute)))
+	}
+	later := event.SoFar(fixes)[0]
+
+	if first.Key() != later.Key() {
+		t.Errorf("the key changed as it grew: %s then %s", first.Key(), later.Key())
+	}
+	if later.Long() <= first.Long() {
+		t.Errorf("it did not grow: %v then %v", first.Long(), later.Long())
 	}
 }

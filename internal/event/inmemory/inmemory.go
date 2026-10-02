@@ -91,6 +91,29 @@ func (s *Store) Recent(_ context.Context, userID string, q event.Query) ([]event
 	return out, nil
 }
 
+// Amend : Rewrites what an event already recorded says, matched on its
+// dedupe key.
+func (s *Store) Amend(_ context.Context, userID string, events []*event.Event) (int64, error) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+
+	by := make(map[string]*event.Event, len(events))
+	for _, e := range events {
+		if e != nil && e.DedupeKey != "" {
+			by[e.DedupeKey] = e
+		}
+	}
+	var changed int64
+	for _, held := range s.byUser[userID] {
+		if e, ok := by[held.DedupeKey]; ok {
+			held.Payload = e.Payload
+			held.ReceivedAt = e.ReceivedAt
+			changed++
+		}
+	}
+	return changed, nil
+}
+
 // Forget : Drops every reading of one kind older than a moment, for
 // everybody.
 func (s *Store) Forget(_ context.Context, kind string, before time.Time) (int64, error) {

@@ -80,6 +80,14 @@ type Stay struct {
 	// that ended it: that one was taken somewhere else, and counting it
 	// would stretch every stay out to the next.
 	From, To time.Time
+	// Open : Still being added to -- they have not left yet.
+	//
+	// An open stay is the most informative thing there is about today
+	// and used to be invisible: stays were worked out only when they
+	// ended, so "he has been at the office since ten" could not be said
+	// until he was not. It is written down like any other and amended
+	// as it grows, and closed when a reading somewhere else ends it.
+	Open bool
 }
 
 // Long : How long they were there.
@@ -192,7 +200,9 @@ func (s Stay) Payload(called string) json.RawMessage {
 		Value   string `json:"value"`
 		Minutes int    `json:"minutes"`
 		At      string `json:"at"`
-	}{Value: called, Minutes: int(s.Long().Round(time.Minute).Minutes()), At: s.Where()})
+		Still   bool   `json:"still,omitempty"`
+	}{Value: called, Minutes: int(s.Long().Round(time.Minute).Minutes()),
+		At: s.Where(), Still: s.Open})
 	if err != nil {
 		// Unreachable: three strings and an integer.
 		return json.RawMessage(`{"value":""}`)
@@ -480,6 +490,45 @@ func join(a, b Named) Named {
 	return a
 }
 
+// SoFar : Every stay in these readings, the last one possibly still
+// going on.
+//
+// Stays returns only what has ended, which is right for history and
+// wrong for now. The useful thing about a day is usually the part of it
+// that has not finished: somebody who has been at their desk since ten
+// is describable, and until this existed they were not, because nothing
+// was written until they got up.
+//
+// The open one has to have lasted Settled like any other, or every
+// arrival anywhere would start a stay that mostly gets thrown away. It
+// carries Open so that whatever reads it can tell the difference
+// between having been somewhere for two hours and still being there.
+func SoFar(fixes []Fix) []Stay {
+	out := Stays(fixes)
+
+	in := append([]Fix(nil), fixes...)
+	sortByTime(in)
+	if len(in) == 0 {
+		return out
+	}
+
+	// The last cluster, by the same rules Stays uses. Whatever Stays
+	// closed is already in out; what is left over is the open one.
+	start := 0
+	for i := 1; i < len(in); i++ {
+		if in[i].At.Sub(in[i-1].At) > Adrift || apart(in[start], in[i]) > Near {
+			start = i
+		}
+	}
+
+	open, ok := settled(in[start:])
+	if !ok {
+		return out
+	}
+	open.Open = true
+	return append(out, open)
+}
+
 // Looking : How far back settling reads for readings.
 //
 // Long enough to hold a whole stay, including an afternoon somewhere
@@ -513,6 +562,10 @@ const Places = 500
 type Watching interface {
 	Recent(ctx context.Context, userID string, q Query) ([]Event, error)
 	Record(ctx context.Context, userID string, events []*Event) (stored, seen []string, err error)
+	// Amend : Rewrites one already recorded, matched on its dedupe key.
+	// A stay still going on keeps the key its start gives it and grows,
+	// so recording it again is skipped as the duplicate it is.
+	Amend(ctx context.Context, userID string, events []*Event) (int64, error)
 }
 
 // Naming : Somewhere to ask what is at a position, for a stay that no
@@ -554,7 +607,10 @@ func (st Settler) Settle(ctx context.Context, userID string, now time.Time) ([]N
 			fixes = append(fixes, f)
 		}
 	}
-	stays := Stays(fixes)
+	// Including the one still going on. Somebody who has been at their
+	// desk since ten is the most describable thing about today, and
+	// until this they were invisible until they got up.
+	stays := SoFar(fixes)
 	if len(stays) == 0 {
 		return nil, nil
 	}
@@ -598,8 +654,36 @@ func (st Settler) Settle(ctx context.Context, userID string, now time.Time) ([]N
 		}
 		out = append(out, e)
 	}
-	if _, _, err := st.Store.Record(ctx, userID, out); err != nil {
+	// Written, and the ones already written rewritten. A stay keeps the
+	// key its start gives it for as long as it lasts, so the open one
+	// comes back as a duplicate every time a reading extends it --
+	// correctly, since a duplicate is what it is. Without the amend it
+	// would be frozen at the length it had when it was first noticed,
+	// and close at that length too.
+	_, already, err := st.Store.Record(ctx, userID, out)
+	if err != nil {
 		return nil, fmt.Errorf("event: writing down where they stayed: %w", err)
+	}
+	if len(already) > 0 {
+		again := make([]*Event, 0, len(already))
+		known := make(map[string]bool, len(already))
+		for _, k := range already {
+			known[k] = true
+		}
+		for _, e := range out {
+			if known[e.DedupeKey] {
+				again = append(again, e)
+			}
+		}
+		if _, err := st.Store.Amend(ctx, userID, again); err != nil {
+			// The stays are worked out again on the next reading, so a
+			// failed amend costs this one its new length and nothing
+			// more.
+			if st.Logger != nil {
+				st.Logger.WarnContext(ctx, "could not bring a stay up to date",
+					slog.Any("error", err), slog.Int("stays", len(again)))
+			}
+		}
 	}
 	return named, nil
 }
