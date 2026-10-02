@@ -1387,6 +1387,48 @@ from stepping out, which is why the forty-five second line was drawn
 where it was. The remaining piece is the wifi SSID, for leaving with
 the laptop.
 
+## Presence and arriving are two questions, not one
+
+Owner, after seventeen minutes out: *"I went out and came back after
+20 mins, I didn't get greeting msg."* It had fired. The automation
+triggered, the server answered in 6.9 seconds, the satellite went
+`responding` at 21:09:20 and `idle` at 21:09:23, and it said *"Good to
+see you, sir. Did you manage to get some rest today?"* to an empty
+room. They were still walking in.
+
+**Measured, standing still in each place.** The first attempt read
+`sensor.watch_signal` and got fourteen identical values, because that
+sensor is the strongest reading of the last three minutes and cannot
+say where somebody is now. Read from the adapter instead:
+
+    at the desk   -54 to -62, median -56
+    at the door   -71 to -81, median -75
+
+Nine decibels of clear air between them.
+
+**So there are two lines, because there are two questions.** `-85` is
+whether the house may speak to them at all, and wants to be generous:
+anywhere indoors counts, and holding a reminder back from somebody in
+the next room is the expensive mistake. Arriving wants to be close, and
+`-65` sits with margin at both ends of that gap.
+
+`welcome_when_they_come_back` now waits for the signal to pass `-65`
+before it calls the server, and greets anyway after two minutes --
+somebody who comes in and sits across the room never crosses it, and a
+greeting two minutes late beats a house that decided they had not
+really arrived. The signal sensor being a three-minute maximum is
+exactly right here: it rises the instant they come close.
+
+**The model call made an old problem visible.** The fixed greeting was
+instant, so the four seconds between crossing a threshold and speaking
+did not exist. Three to seven seconds of composing, and the words can
+be finished before anybody is in earshot.
+
+**Still not walked outdoors.** Both measurements are indoors, which is
+the point of them, and says nothing about where the signal sits in the
+street. Under fail closed, too generous greets an empty room and too
+mean silences an occupied one.
+
 ## Four reasons the greeting said absurd things
 
 Run against real readings it said *"you have been moving around quite a
