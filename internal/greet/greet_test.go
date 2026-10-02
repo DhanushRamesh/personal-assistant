@@ -359,3 +359,63 @@ func TestANumberDoesNotLeakThroughAnotherField(t *testing.T) {
 		t.Error("the duration should still be there")
 	}
 }
+
+// TestWhatIsComingIsOfferedButNotRecited : Sixteen open tasks is a
+// normal number to have and a terrible thing to be told at a door.
+func TestWhatIsComingIsOfferedButNotRecited(t *testing.T) {
+	tomorrow := evening.Add(13 * time.Hour)
+	got := greet.Prompt(greet.Told{
+		Now: evening,
+		Diary: []greet.Appointment{
+			{What: "Standup", When: tomorrow, Where: "the office"},
+		},
+		Chores: greet.Chores{
+			Due: []greet.Chore{
+				{What: "renew the insurance", By: evening.Add(-48 * time.Hour), Overdue: true},
+			},
+			Others: 15,
+		},
+	})
+
+	if !strings.Contains(got, "tomorrow 7:30 am: Standup, at the office") {
+		t.Errorf("the appointment is missing or misread:\n%s", got)
+	}
+	if !strings.Contains(got, "renew the insurance") || !strings.Contains(got, "not done") {
+		t.Errorf("the overdue task is missing:\n%s", got)
+	}
+	// The count is given to judge by and told not to be said.
+	if !strings.Contains(got, "15 other things") {
+		t.Error("the count of the rest is missing")
+	}
+	for _, want := range []string{"Say at most one of these", "never say how many there are"} {
+		if !strings.Contains(got, want) {
+			t.Errorf("the prompt does not say %q", want)
+		}
+	}
+}
+
+// TestNothingComingSaysNothingAtAll : An empty heading invites the
+// model to mention a diary it was not given.
+func TestNothingComingSaysNothingAtAll(t *testing.T) {
+	got := greet.Prompt(greet.Told{Now: evening})
+	if strings.Contains(got, "What is coming") {
+		t.Errorf("an empty diary was discussed:\n%s", got)
+	}
+}
+
+// TestAnAllDayThingIsNotGivenAnHour : "Meganadham's birthday today at
+// midnight" is a sentence about a bug.
+func TestAnAllDayThingIsNotGivenAnHour(t *testing.T) {
+	got := greet.Prompt(greet.Told{
+		Now: evening,
+		Diary: []greet.Appointment{
+			{What: "Deepavali", When: evening.Add(20 * time.Hour), AllDay: true},
+		},
+	})
+	if !strings.Contains(got, "tomorrow all day: Deepavali") {
+		t.Errorf("an all-day event should not carry an hour:\n%s", got)
+	}
+	if strings.Contains(got, "12:00 am") {
+		t.Error("midnight was read out")
+	}
+}

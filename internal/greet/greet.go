@@ -82,6 +82,14 @@ type Told struct {
 	// that was never said at all, in the words they would be said in.
 	// The model is told to say these and not to summarise them away.
 	Reminders []string
+	// Diary : What is in the diary between now and the end of
+	// tomorrow, soonest first. Empty when there is nothing, or when
+	// it could not be read in time.
+	Diary []Appointment
+	// Chores : What is still to be done and is due by the end of
+	// tomorrow or was due already, and how many others are open.
+	Chores Chores
+
 	// Usual : How many times each thing in Events has happened over
 	// the past few weeks, keyed the same way the lines are labelled.
 	//
@@ -94,6 +102,43 @@ type Told struct {
 	// told it otherwise -- what was missing was that this happens
 	// every day.
 	Usual map[string]int
+}
+
+// Appointment : One thing in the diary, as much of it as is worth
+// saying out loud.
+type Appointment struct {
+	// What : Its title.
+	What string
+	// When : When it starts. Midnight for one that takes the day.
+	When time.Time
+	// AllDay : Whether it takes the whole day rather than a slot.
+	AllDay bool
+	// Where : The place, if one was given.
+	Where string
+}
+
+// Chores : What is still to be done.
+//
+// Split into the ones that are due and a count of the rest, because
+// the rest are the ones that must not be read out. Sixteen open tasks
+// is a normal number to have and a terrible thing to be told at a
+// door.
+type Chores struct {
+	// Due : Open tasks due by the end of tomorrow, or overdue,
+	// soonest first.
+	Due []Chore
+	// Others : How many more are open and not yet due.
+	Others int
+}
+
+// Chore : One task.
+type Chore struct {
+	// What : Its title.
+	What string
+	// By : The day it is due. Zero when none was set.
+	By time.Time
+	// Overdue : Whether that day has passed.
+	Overdue bool
 }
 
 // Prompt : What the model is asked.
@@ -136,8 +181,74 @@ func Prompt(t Told) string {
 			"Do not say you are an assistant and do not offer to help: they know, and they will ask.",
 		),
 		profile(t),
+		coming(t),
 		happened(t),
 	)
+}
+
+// coming : What is in the diary and what is still to be done.
+//
+// Given last among the facts because it is the least likely to be
+// worth saying. The description of this greeting used to leave out
+// everything still to come, on the grounds that a reminder waiting
+// for four o'clock is not news at half past one and counting things
+// at the door turns a greeting into a status report. That is still
+// true of counting them; it was too strong about saying any of them.
+// Somebody walking in at eleven at night with a meeting at nine is
+// better off hearing it now than at nine.
+//
+// So: what is due before they would otherwise find out, and nothing
+// else. The tasks that are merely open are a number, never a list.
+func coming(t Told) string {
+	lines := make([]string, 0, 8)
+	for _, a := range t.Diary {
+		when := a.When.In(t.Now.Location())
+		day := "today"
+		if when.YearDay() != t.Now.YearDay() || when.Year() != t.Now.Year() {
+			day = "tomorrow"
+		}
+		line := "- " + day + " "
+		if a.AllDay {
+			line += "all day: " + a.What
+		} else {
+			line += when.Format("3:04 pm") + ": " + a.What
+		}
+		if a.Where != "" {
+			line += ", at " + a.Where
+		}
+		lines = append(lines, line)
+	}
+	for _, c := range t.Chores.Due {
+		line := "- to do: " + c.What
+		switch {
+		case c.Overdue:
+			line += " (was due " + c.By.In(t.Now.Location()).Format("Monday 2 January") + ", not done)"
+		case !c.By.IsZero():
+			line += " (due " + c.By.In(t.Now.Location()).Format("Monday 2 January") + ")"
+		}
+		lines = append(lines, line)
+	}
+	if len(lines) == 0 && t.Chores.Others == 0 {
+		return ""
+	}
+
+	said := prompt.Text(
+		"What is coming, and what is still to be done.",
+		"Say at most one of these, and only when it is soon enough that hearing it now is better than finding it out later --",
+		"something first thing tomorrow, or something that was due and was not done.",
+		"Nothing here is news on its own: they wrote it down, so they know it exists.",
+		"Never read the list, never say how many there are, and never raise a thing that is hours away and obvious.",
+	)
+	if t.Chores.Others > 0 {
+		said = prompt.Block(said, prompt.Text(
+			fmt.Sprintf("There are %d other things on their lists that are not due yet.", t.Chores.Others),
+			"That number is for judging whether one of the above stands out, and is not to be said.",
+		))
+	}
+	if len(lines) == 0 {
+		return said
+	}
+	return prompt.Block(said, prompt.Lines(lines...))
 }
 
 // when : The clock at the door, and how long it has been.

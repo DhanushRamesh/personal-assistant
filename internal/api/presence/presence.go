@@ -30,10 +30,12 @@ import (
 	"github.com/DhanushRamesh/personal-assistant/internal/announcement"
 	"github.com/DhanushRamesh/personal-assistant/internal/api/authn"
 	"github.com/DhanushRamesh/personal-assistant/internal/api/httpx"
+	"github.com/DhanushRamesh/personal-assistant/internal/calendar"
 	"github.com/DhanushRamesh/personal-assistant/internal/conversation"
 	"github.com/DhanushRamesh/personal-assistant/internal/event"
 	"github.com/DhanushRamesh/personal-assistant/internal/greet"
 	"github.com/DhanushRamesh/personal-assistant/internal/remind"
+	"github.com/DhanushRamesh/personal-assistant/internal/tasks"
 )
 
 // SpeakingFor : How long a greeting and everything behind it may take to
@@ -70,6 +72,24 @@ type Announcements interface {
 	Arrived(ctx context.Context, userID, text string)
 }
 
+// Ahead : How far into the diary a greeting looks.
+//
+// To the end of tomorrow. Anything further off is not worth hearing
+// at a door: they will be told about it tomorrow, by this or by the
+// thing they wrote it in.
+const Ahead = 2
+
+// Fetching : How long the diary and the task lists have to answer.
+//
+// Measured against Google on 3 October 2026: the diary took 1.6 to
+// 1.9 seconds and the lists 1.0 to 1.2, so both together in sequence
+// would put three seconds in front of a model call that already takes
+// two to four. They are read at the same time as each other and given
+// this between them, and a greeting goes ahead without whichever did
+// not arrive -- somebody is standing in a doorway, and what is in the
+// diary is the least of what a greeting is for.
+const Fetching = 2500 * time.Millisecond
+
 // Ordinary : How far back to look to tell what is ordinary for
 // somebody.
 //
@@ -102,6 +122,16 @@ type Known interface {
 	Profile(ctx context.Context, userID string) (string, error)
 }
 
+// Diary : What is written down for the days ahead.
+type Diary interface {
+	Everywhere(ctx context.Context, userID string, from, to time.Time) ([]calendar.Event, []string, error)
+}
+
+// Chores : What is still to be done.
+type Chores interface {
+	Everywhere(ctx context.Context, userID string) ([]tasks.Task, []string, error)
+}
+
 // Handler : Serves the presence endpoints.
 type Handler struct {
 	httpx.Responder
@@ -119,6 +149,8 @@ type Handler struct {
 	spoke    Spoke
 	reported Reported
 	known    Known
+	diary    Diary
+	chores   Chores
 	// notFrom : Sources whose events describe a machine rather than
 	// the person. The one the assistant runs on, where it is named.
 	notFrom []string
@@ -157,6 +189,14 @@ func (h *Handler) Writes(w *greet.Writer, spoke Spoke, reported Reported, known 
 	if thisMachine = strings.TrimSpace(thisMachine); thisMachine != "" {
 		h.notFrom = []string{thisMachine}
 	}
+	return h
+}
+
+// Expects : Gives the handler the diary and the task lists, for saying
+// what is coming. Optional, both: without them a greeting is about
+// what has happened and nothing else.
+func (h *Handler) Expects(diary Diary, chores Chores) *Handler {
+	h.diary, h.chores = diary, chores
 	return h
 }
 
@@ -230,7 +270,24 @@ func (h *Handler) compose(ctx context.Context, user string, owed []string) (stri
 	}
 	told.Events, told.Usual = h.happened(ctx, user, from)
 
+	fetched := time.Now()
+	told.Diary, told.Chores = h.coming(ctx, user, now)
+	reading := time.Since(fetched)
+
+	thinking := time.Now()
 	said, written := h.writer.Write(ctx, told)
+
+	// Where the time at the door goes. Three things can be slow and
+	// only one of them is visible from outside: a greeting that takes
+	// twelve seconds is useless and the fix depends entirely on which
+	// of these took them.
+	h.Logger.InfoContext(ctx, "wrote a greeting",
+		slog.Bool("by_model", written),
+		slog.Duration("reading_google", reading.Round(time.Millisecond)),
+		slog.Duration("thinking", time.Since(thinking).Round(time.Millisecond)),
+		slog.Int("events", len(told.Events)),
+		slog.Int("diary", len(told.Diary)),
+		slog.Int("due", len(told.Chores.Due)))
 	return said, written
 }
 
@@ -312,6 +369,96 @@ func (h *Handler) happened(ctx context.Context, user string, from time.Time) ([]
 	}
 
 	return h.merge(evs, h.stayed(ctx, user, from)), usual
+}
+
+// coming : What is in the diary and what is still to be done.
+//
+// Both at once and both bounded. Read in sequence they are three
+// seconds in front of a model call that already takes two to four,
+// and the person is standing in a doorway. Whichever does not answer
+// in time is left out: a greeting without tomorrow's meeting in it is
+// still a greeting.
+func (h *Handler) coming(ctx context.Context, user string, now time.Time) ([]greet.Appointment, greet.Chores) {
+	if h.diary == nil && h.chores == nil {
+		return nil, greet.Chores{}
+	}
+
+	ask, done := context.WithTimeout(ctx, Fetching)
+	defer done()
+
+	var (
+		wg    sync.WaitGroup
+		diary []greet.Appointment
+		list  greet.Chores
+	)
+	// To the end of tomorrow, from midnight today: an event earlier
+	// today has already happened, and the renderer drops it, but
+	// asking from midnight is what makes "today" mean the whole day
+	// rather than from now.
+	day := time.Date(now.Year(), now.Month(), now.Day(), 0, 0, 0, 0, now.Location())
+
+	if h.diary != nil {
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+			found, _, err := h.diary.Everywhere(ask, user, day, day.AddDate(0, 0, Ahead))
+			if err != nil {
+				h.Logger.WarnContext(ctx, "cannot read the diary for a greeting",
+					slog.Any("error", err))
+				return
+			}
+			for _, e := range found {
+				// What has already started is not what is coming.
+				if !e.AllDay && e.Starts.Before(now) {
+					continue
+				}
+				diary = append(diary, greet.Appointment{
+					What: e.Title, When: e.Starts, AllDay: e.AllDay, Where: e.Where,
+				})
+			}
+			sort.SliceStable(diary, func(i, j int) bool {
+				return diary[i].When.Before(diary[j].When)
+			})
+		}()
+	}
+
+	if h.chores != nil {
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+			found, _, err := h.chores.Everywhere(ask, user)
+			if err != nil {
+				h.Logger.WarnContext(ctx, "cannot read the task lists for a greeting",
+					slog.Any("error", err))
+				return
+			}
+			// The end of tomorrow. A task carries a day and never an
+			// hour -- the API drops the time -- so the cut is a date.
+			by := day.AddDate(0, 0, Ahead)
+			for _, t := range found {
+				if t.Done {
+					continue
+				}
+				switch {
+				case t.Due.IsZero():
+					// No day set, so it is not due; it is just open.
+					list.Others++
+				case t.Due.Before(by):
+					list.Due = append(list.Due, greet.Chore{
+						What: t.Title, By: t.Due, Overdue: t.Due.Before(day),
+					})
+				default:
+					list.Others++
+				}
+			}
+			sort.SliceStable(list.Due, func(i, j int) bool {
+				return list.Due[i].By.Before(list.Due[j].By)
+			})
+		}()
+	}
+
+	wg.Wait()
+	return diary, list
 }
 
 // stayed : Where they have been, worked out from the readings now.

@@ -1591,6 +1591,45 @@ and there is no room for one while somebody is standing there. The
 coordinates stand in, and the one written in the background has a name
 on it by the time anything else reads it.
 
+## The greeting says what is coming, within reason
+
+Owner: *"the calendar and tasks also should be sent, so that if I have
+any event tomorrow or today or any task I have to complete will also
+be notified."*
+
+This partly reverses what is written above -- *what is still to come is
+deliberately left out... counting them at the door turns a greeting
+into a status report.* That was too strong. Counting them is still
+wrong; saying one of them is not. Somebody walking in at eleven with a
+meeting at nine is better off hearing it now than at nine.
+
+So the diary to the end of tomorrow, and the tasks that are due by then
+or were due already. **The rest of the tasks are a number, never a
+list** -- sixteen open tasks is a normal number to have and a terrible
+thing to be told at a door -- and the number is given to the model to
+judge by, with the instruction not to say it. At most one thing is
+mentioned, and only when hearing it now beats finding it out later.
+
+**Read in parallel and bounded.** Measured against Google: the diary
+takes 1.6 to 1.9 seconds and the task lists 1.0 to 1.2, so in sequence
+they are three seconds in front of a model call that already takes two
+to four. Together they get `Fetching`, 2.5 seconds, and whichever does
+not answer is left out. A greeting without tomorrow's meeting in it is
+still a greeting.
+
+**Where the time at the door actually goes**, measured after, because
+the first estimate was wrong and the logging now says so on every
+greeting:
+
+    total 14.5s   google 2.07s   model 4.43s   speaking ~8s
+    total  9.3s   google 1.71s   model 1.74s   speaking ~5.8s
+
+**Speaking is the largest part**, and it is not the plumbing -- it is
+the greeting having got longer. Caching the diary would save under two
+seconds of a ten to fourteen second door, so it is not the first thing
+to fix. If this is too slow in use, the cheaper fix is the prompt: one
+clause fewer is seconds fewer to say.
+
 ## The greeting is written, not chosen
 
 Owner, 2 October 2026, on what it is for: *"treat Jarvis like a person

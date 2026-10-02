@@ -20,6 +20,7 @@ import (
 	"github.com/DhanushRamesh/personal-assistant/internal/announce/hass"
 	"github.com/DhanushRamesh/personal-assistant/internal/announcement"
 	"github.com/DhanushRamesh/personal-assistant/internal/api"
+	"github.com/DhanushRamesh/personal-assistant/internal/api/presence"
 	"github.com/DhanushRamesh/personal-assistant/internal/calendar"
 	"github.com/DhanushRamesh/personal-assistant/internal/chat"
 	chatmysql "github.com/DhanushRamesh/personal-assistant/internal/chat/mysql"
@@ -445,18 +446,23 @@ func run() error {
 		slog.Duration("within", greet.Within))
 
 	handler := api.New(api.Options{
-		Logger:         logger.Logger,
-		DB:             db,
-		Chats:          chats,
-		Messages:       chats,
-		Reminders:      reminderStore,
-		Announcer:      speaker,
-		Announcements:  announcements,
-		Greeting:       greeting,
-		Spoke:          chats,
-		Reported:       deviceEvents,
-		Known:          &profile.Reader{Memories: remembering.Store},
-		ThisMachine:    cfg.HomeAssistant.ThisMachine,
+		Logger:        logger.Logger,
+		DB:            db,
+		Chats:         chats,
+		Messages:      chats,
+		Reminders:     reminderStore,
+		Announcer:     speaker,
+		Announcements: announcements,
+		Greeting:      greeting,
+		Spoke:         chats,
+		Reported:      deviceEvents,
+		Known:         &profile.Reader{Memories: remembering.Store},
+		ThisMachine:   cfg.HomeAssistant.ThisMachine,
+		// The same diary and lists the tools use, for a greeting that
+		// can mention what is first thing tomorrow. Nil without
+		// Google, and a greeting is then about what has happened.
+		Diary:          greetingDiary(googleLink, cfg),
+		Chores:         greetingChores(googleLink),
 		Google:         googleLink,
 		SettingsURL:    cfg.Google.SettingsURL,
 		Location:       cfg.Assistant.Location,
@@ -573,6 +579,28 @@ func naming(cfg config.Config, logger *slog.Logger) event.Naming {
 // there is no calendar. That is the honest answer on a server with no
 // Google client, and it is the same answer they give before anybody has
 // connected one.
+// greetingDiary, greetingChores : The diary and the task lists as the
+// greeting wants them, or nothing when Google is not configured.
+//
+// Separate from diaryOf and listsOf, which return the narrower
+// interfaces the tools were written against. A typed nil would satisfy
+// an interface and then fail on every call with a nil pointer, so the
+// nil is returned untyped and the greeting is simply about what has
+// happened instead.
+func greetingDiary(link *google.Link, cfg config.Config) presence.Diary {
+	if link == nil {
+		return nil
+	}
+	return calendar.New(link, cfg.Assistant.Location, cfg.Assistant.Now)
+}
+
+func greetingChores(link *google.Link) presence.Chores {
+	if link == nil {
+		return nil
+	}
+	return tasks.New(link)
+}
+
 // listsOf : The person's to-do lists, or nothing when Google is not
 // configured.
 func listsOf(link *google.Link) taskstool.Lists {
