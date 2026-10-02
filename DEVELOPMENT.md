@@ -1286,129 +1286,53 @@ is right -- the owner is at the laptop, in the new place.
 charger; and moving between two places on the same network name, which
 a phone would catch and this cannot.
 
-## Presence is a distance between two devices
+## The mind does not know the person has a phone
 
-**Owner, 2 October 2026:** *"geofence shouldn't be a factor here, only
-the home assistant server (my laptop currently) and my phone... the
-distance between the phone and the laptop is the factor."*
+**Owner, 2 October 2026, after I had twice put this in the wrong
+place:** *"the jarvis server should not know anything about whether
+the phone is near or not. Let us treat the jarvis server as the mind
+and the home assistant server as the body. The body has the mouth and
+the ear. The ear should say the announcement only when the phone is
+near the body, not the mind. The decision must be decided by the body,
+so the logic must reside in the body."*
 
-The first attempt used the home geofence, which was wrong for a
-concrete reason: carry the laptop to the office and a geofence drawn
-round a house says they are away, so the machine they are sitting in
-front of goes silent.
+Both attempts put proximity in the mind -- first the home geofence,
+then a distance between the phone and the laptop, where the laptop
+learned its own position from a voice turn. Both worked. Both were in
+the wrong place. The mind composes what to say; whether the room can
+hear it is a fact about the room, and the room belongs to the body.
 
-**Two devices and the distance between them.** The phone reports its
-own position every five minutes. The assistant's is harder -- nothing
-tells a laptop where it is -- so it learns from the phone at the one
-moment the two are certainly together: **when somebody speaks to it
-out loud.** A voice turn means a person is standing in front of the
-satellite, and their phone is where they are. `presence.Locate`
-writes that down as an `assistant.here` event; `presence.Near` is the
-distance from it.
+So `internal/presence` is deleted -- 806 lines, including code written
+the same afternoon -- along with the arrival greeting in the events
+handler, the voice turn that taught the server where it was, and the
+`assistant.here` event. The mind keeps one question and asks the body
+for the answer: `remind.Presence` reads a Home Assistant sensor and is
+told yes or no, never why.
 
-**Only voice.** A typed message can come from the office, and a
-position learned from one would move the assistant to wherever
-somebody happened to be sitting.
+**Measured before choosing the beacon.** The laptop's adapter sees the
+watch at -74 dBm and **cannot see the phone at all** -- not
+advertising, not connected, not known to BlueZ. An Android phone does
+not advertise over Bluetooth unless an app makes it: classic Bluetooth
+is discoverable only while the settings screen is open, and BLE
+advertising needs an app to do it.
 
-This answers every case the other approaches got wrong:
+The owner chose the Companion app's BLE Transmitter, which broadcasts
+an iBeacon continuously. It is the body's beacon and nothing else: no
+events pass through it, so the rule that Tasker reports to the server
+and never through Home Assistant stands untouched.
 
-| | |
-|---|---|
-| Phone on mobile data beside the laptop | distance ~0, **present** -- the owner's original objection to networks |
-| Office, laptop on Zoho-Corp-TLS and phone on Zoho-Guest | distance ~0, **present** |
-| Laptop carried to the office | the first voice turn there re-learns its position |
-| Them at the mall, laptop at home | kilometres, **away** |
+**Still to build, all of it in the body.** The laptop's existing BLE
+scanner watches for the phone's beacon instead of the watch and
+publishes its signal. A Home Assistant script owns the gate, so the
+mind asks for something to be said and the body decides whether to
+play it -- returning whether it spoke, because a held reminder the
+body drops in silence is lost. And the arrival automation calls
+`/v1/presence/arrived` again, which is what it did before the decision
+was moved into the mind.
 
-**It fails to unknown, which speaks.** An assistant nobody has spoken
-to out loud yet does not know where it is, and a phone that has gone
-quiet for twenty minutes cannot say where anybody is. Neither is an
-absence.
-
-**Coming back is worked out, not remembered.** `presence.Arriving` is
-present now and away at the reading before, both computed from the
-same events, so a restart cannot greet somebody who never went
-anywhere and a missed batch cannot swallow a homecoming.
-
-**Written at most once an hour and only when it has moved**, keyed by
-the hour, so a morning of talking to it writes one row rather than
-thirty. Refreshed after a day regardless, because a laptop carried
-somewhere while the phone was elsewhere has a position nobody
-corrected.
-
-## What came before: the phone's geofence, and the room given up
-
-**Owner, 2 October 2026:** *"can we eliminate watch as my presence and
-change it to my phone, as phone will be always with me... the home
-assistant should announce only when my phone is near to it."* Said
-after a watch that never left the room announced six arrivals in one
-day.
-
-`presence.Here` answers from the geofence they drew themselves, and
-`presence.OfPhone` is the shape the reminder loop asks for. Nothing
-asks Home Assistant any more.
-
-**What is given up is the room.** The watch could tell one room from
-the next; a geofence cannot tell the desk from the garden. That was
-the trade and it is worth stating plainly: the room was bought with a
-decibel of margin -- the threshold sat at -72 dBm because "the
-strongest thing the next room ever produced was a median of -73" --
-and a decibel of margin is why it was wrong six times in a day. The
-house will now sometimes speak to an empty room. That is the cheap
-mistake; holding a reminder from somebody sitting there is the
-expensive one.
-
-**Liveness comes from the readings, not the crossings.** A geofence
-fires on change and nothing else, so an old crossing is not a stale
-one -- but a phone that has stopped reporting positions cannot be
-trusted about either. The five-minute fixes are the heartbeat, and
-twenty minutes of silence makes the answer unknown rather than
-present. Which is the same lesson as the frozen sensor that read as
-"here".
-
-**An arrival nobody ever left goes unknown**, not present. Android
-drops geofence departures -- of four crossings in two days, three were
-arrivals -- and a missed one must not keep somebody at home for days.
-
-**Said as how long ago, never as a clock time.** The first run printed
-"at home since 05:20" from a server keeping UTC, for a person keeping
-IST. A relative stretch has no timezone to get wrong.
-
-**The phone push is paused**, at the owner's request, while this
-settles: announcements are spoken in the house only. `notify` is empty
-in the configuration rather than removed, so turning it back on is one
-line.
-
-**What is still on the watch.** Two automations keep
-`input_boolean.in_the_room` up to date and nothing reads it any more
-except a dashboard. They are harmless and were left, because
-`watch.py` publishes the watch's signal *and* the laptop's network
-from one process: stopping the watch half stops the network half,
-which the events still carry. Separating those two is the tidying this
-leaves behind.
-
-### The greeting moved too
-
-Finished the same day. The arrival no longer comes from Home
-Assistant: it comes from the phone crossing the home geofence, which
-reaches the server as an event. `Welcome` was lifted out of the HTTP
-handler so both a request and an arriving event can use it, and the
-endpoint stays for anything that still calls it.
-
-**Only an arrival stored for the first time counts.** A resend is the
-same crossing arriving twice and nobody walked in twice.
-
-**And only a recent one.** The phone spools what it sees, so a flush
-after a day underground delivers the morning's arrival at midnight.
-Ten minutes: older than that and it is recorded and nothing is said.
-
-**Said in a goroutine.** Speaking blocks until the words have
-finished, and the phone flushing its spool must not hold the
-connection open for a greeting and three held reminders.
-
-`~/homeassistant` went under version control first, so the automation
-could be commented out with a way back. It is commented rather than
-deleted: the sensors it reads are still published and turning it on
-again is uncommenting it.
+**Nothing greets anybody until that is done.** The watch automation is
+off and the phone's beacon does not exist yet. Silence is the right
+state to be in: what it replaces was wrong six times in a day.
 
 ## Present, away, and the third answer
 
