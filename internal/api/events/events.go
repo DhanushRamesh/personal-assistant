@@ -235,8 +235,43 @@ func (h *Handler) Record(w http.ResponseWriter, r *http.Request) {
 		slog.Int("seen", len(seen)),
 		slog.Int("rejected", len(rejected)))
 
+	h.settle(ctx, user, keep)
+
 	httpx.WriteJSON(ctx, w, http.StatusOK, BatchResponse{
 		Stored: stored, Seen: seen, Rejected: rejected})
+}
+
+// settle : Works out which stays have ended, now that new readings have
+// arrived.
+//
+// Done as readings land rather than on a timer, because a reading is
+// the only thing that can end a stay: the one taken somewhere else is
+// what says the last place was left. Nothing waits on it -- the phone
+// is told its batch was taken either way -- so a failure is logged and
+// the stays are worked out again on the next batch.
+func (h *Handler) settle(ctx context.Context, userID string, taken []*event.Event) {
+	fixes := false
+	for _, e := range taken {
+		if e.Kind == event.Fixed {
+			fixes = true
+			break
+		}
+	}
+	if !fixes {
+		return
+	}
+
+	stays, err := event.Settle(ctx, h.store, userID, h.now())
+	if err != nil {
+		h.Logger.ErrorContext(ctx, "cannot work out where they stayed", slog.Any("error", err))
+		return
+	}
+	for _, s := range stays {
+		h.Logger.InfoContext(ctx, "a stay ended",
+			slog.String("where", s.Where()),
+			slog.Duration("for", s.Long().Round(time.Minute)),
+			slog.Time("from", s.From))
+	}
 }
 
 // List : What the person's devices have reported.

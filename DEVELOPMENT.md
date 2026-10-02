@@ -1602,6 +1602,67 @@ unsubstituted Tasker variable. The mechanism is in place; it has
 almost nothing to say about where they go until there are a few weeks
 behind it.
 
+## Ten minutes somewhere is somewhere they went
+
+**Owner, 2 October 2026:** *"if im there in a location for more than 10
+mins it gets recorded."* Geofences only record the places somebody
+thought to draw a circle around; everywhere else -- a mall, a friend's
+house, the place they eat every Thursday -- produced nothing at all.
+
+So the phone reports `location.fix` every five minutes and the server
+works out `place.stayed` from the run of them. It is written back as an
+ordinary event, so it shows on the events screen and counts towards the
+description of them like anything else they did.
+
+**Five-minute readings for a ten-minute rule.** At a ten-minute
+interval a ten-minute stop falls between two readings and leaves
+nothing behind. Five guarantees at least two readings inside it.
+
+**A hundred and fifty metres, measured rather than chosen.** Three
+readings taken while sitting perfectly still were spread over about
+twenty metres: that is network location's accuracy and it is the floor
+on what any radius has to absorb. A hundred and fifty swallows it
+without putting a café and the shop next door in one place. Distance is
+flat-earth arithmetic, which over that range is wrong by centimetres
+against a reading that is wrong by twenty metres.
+
+**A cluster is measured from its first reading, not its middle.**
+Against the middle, a slow walk drags the centre along with it and a
+mile of pavement reads as one place.
+
+**Only stays that have ended are written.** A run of readings still
+arriving from the same place is somebody who is still there, and its
+length is not known yet. And a stay ends at its last reading, never at
+the one that ended it: that one was taken somewhere else. Thirty
+minutes of silence closes a stay too, so a phone that went flat at the
+office does not record a night there.
+
+**A place names itself the first time somebody stays there**, and every
+later stay within three hundred metres borrows that name, carrying the
+original's coordinates in `at` so the next one can be measured against
+it. Without this, two evenings at the same restaurant are two different
+places -- the readings are twenty metres apart and the coordinates never
+repeat -- and nothing counting where somebody goes would ever count to
+two. Geoapify can replace that name with a real one later without
+changing any of this.
+
+**Worked out again from the readings every time, with no cursor kept.**
+The same readings produce the same stays and the same keys, so a stay
+already written is recognised as a resend. The work is wasted rather
+than wrong, which is the cheaper mistake: a cursor that is ever wrong
+loses a day of somebody's life quietly.
+
+**Six Tasker faults sat in front of this**, and the last one is worth
+recording because it took an hour. `Send Location` had `If %far ~ 1` on
+its Perform Task, with `%far` computed in a JavaScriptlet from
+`local('location')` -- a variable Get Location v2 does not set. So the
+distance came out `NaN`, `NaN > 100` is false, and `far` was 0 for
+ever. It sent exactly once, on the first run, when the stored previous
+location was still empty and the comparison was skipped entirely. One
+reading in sixteen hours, and nothing in the log said why: Tasker's run
+log marked the action `IfFail`, which means the condition was not met,
+not that anything failed.
+
 ## The names it expects to hear
 
 Owner's ask, 30 September 2026: *"the vocabulary should be shared by

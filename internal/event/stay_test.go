@@ -1,0 +1,168 @@
+package event_test
+
+import (
+	"encoding/json"
+	"testing"
+	"time"
+
+	"github.com/DhanushRamesh/personal-assistant/internal/event"
+)
+
+// at : A reading, so many minutes into the day.
+func at(minute int, lat, lon float64) event.Fix {
+	return event.Fix{
+		At:  time.Date(2026, 10, 2, 9, 0, 0, 0, time.UTC).Add(time.Duration(minute) * time.Minute),
+		Lat: lat, Lon: lon,
+	}
+}
+
+// Sitting in one place long enough is somewhere they went.
+func TestSittingStillLongEnoughIsAStay(t *testing.T) {
+	// Twenty minutes in one spot, with the scatter a phone really
+	// produces, then away.
+	fixes := []event.Fix{
+		at(0, 12.91080, 80.06227),
+		at(5, 12.91100, 80.06242),
+		at(10, 12.91090, 80.06235),
+		at(15, 12.91100, 80.06243),
+		at(20, 12.91085, 80.06230),
+		at(25, 12.95000, 80.10000), // somewhere else entirely
+	}
+
+	stays := event.Stays(fixes)
+
+	if len(stays) != 1 {
+		t.Fatalf("found %d stays, want 1: %+v", len(stays), stays)
+	}
+	if got := stays[0].Long(); got != 20*time.Minute {
+		t.Errorf("stayed %v, want 20m: the end is the last reading inside it, "+
+			"not the one that ended it", got)
+	}
+}
+
+// Passing through is not going somewhere. The owner's number: more
+// than ten minutes.
+func TestPassingThroughIsNotAStay(t *testing.T) {
+	fixes := []event.Fix{
+		at(0, 12.91080, 80.06227),
+		at(5, 12.91090, 80.06235),
+		at(10, 12.95000, 80.10000),
+	}
+
+	if stays := event.Stays(fixes); len(stays) != 0 {
+		t.Errorf("five minutes somewhere was recorded as a stay: %+v", stays)
+	}
+}
+
+// Somebody still sitting there has not stayed a known length of time
+// yet. Writing it down now records a ten-minute visit to a restaurant
+// they are still in.
+func TestAStayStillHappeningIsNotWrittenDown(t *testing.T) {
+	fixes := []event.Fix{
+		at(0, 12.91080, 80.06227),
+		at(5, 12.91100, 80.06242),
+		at(10, 12.91090, 80.06235),
+		at(15, 12.91100, 80.06243),
+	}
+
+	if stays := event.Stays(fixes); len(stays) != 0 {
+		t.Errorf("a stay that has not ended was written down: %+v", stays)
+	}
+}
+
+// A phone that stopped reporting did not mean somebody slept at the
+// office. The stay ends at its last reading.
+func TestSilenceEndsAStayAtItsLastReading(t *testing.T) {
+	fixes := []event.Fix{
+		at(0, 12.91080, 80.06227),
+		at(10, 12.91100, 80.06242),
+		at(15, 12.91090, 80.06235),
+		at(600, 12.91095, 80.06240), // ten hours later, same place
+	}
+
+	stays := event.Stays(fixes)
+
+	if len(stays) != 1 {
+		t.Fatalf("found %d stays, want 1: %+v", len(stays), stays)
+	}
+	if got := stays[0].Long(); got != 15*time.Minute {
+		t.Errorf("stayed %v, want 15m: the hours of silence are not time spent there", got)
+	}
+}
+
+// A slow walk is not one place, however gradually it moves.
+func TestAWalkIsNotOnePlace(t *testing.T) {
+	var fixes []event.Fix
+	// Thirty metres every five minutes for two hours: never more than
+	// Near from the last reading, far more than Near from the first.
+	for i := 0; i <= 24; i++ {
+		fixes = append(fixes, at(i*5, 12.91080+float64(i)*0.00027, 80.06227))
+	}
+
+	for _, s := range event.Stays(fixes) {
+		if s.Long() > 30*time.Minute {
+			t.Errorf("a two-hour walk produced a %v stay at one place", s.Long())
+		}
+	}
+}
+
+// The same place twice is the same place, though the coordinates never
+// repeat. Without this nothing counting where somebody goes ever counts
+// to two.
+func TestASecondStayBorrowsTheFirstsName(t *testing.T) {
+	first := event.Stay{Lat: 12.91090, Lon: 80.06235}
+	payload, err := json.Marshal(map[string]any{"value": "the usual café", "at": first.Where()})
+	if err != nil {
+		t.Fatal(err)
+	}
+	known := []event.Event{{Kind: event.Stayed, Payload: payload}}
+
+	// Forty metres away, which is scatter rather than somewhere else.
+	second := event.Stay{Lat: 12.91125, Lon: 80.06255}
+
+	if got := event.Called(second, known); got != "the usual café" {
+		t.Errorf("called it %q, want the name the first stay gave it", got)
+	}
+}
+
+// Somewhere genuinely different is not given the other place's name.
+func TestAnotherPlaceKeepsItsOwnName(t *testing.T) {
+	here := event.Stay{Lat: 12.91090, Lon: 80.06235}
+	payload, _ := json.Marshal(map[string]any{"value": "home", "at": here.Where()})
+	known := []event.Event{{Kind: event.Stayed, Payload: payload}}
+
+	// Four kilometres away.
+	elsewhere := event.Stay{Lat: 12.94690, Lon: 80.06235}
+
+	if got := event.Called(elsewhere, known); got == "home" {
+		t.Errorf("somewhere four kilometres away was called home")
+	}
+}
+
+// The same readings produce the same key, so settling twice writes one
+// row.
+func TestAStayKeyDoesNotMove(t *testing.T) {
+	fixes := []event.Fix{
+		at(0, 12.91080, 80.06227), at(5, 12.91100, 80.06242),
+		at(15, 12.91090, 80.06235), at(25, 12.95000, 80.10000),
+	}
+
+	once, twice := event.Stays(fixes), event.Stays(fixes)
+	if len(once) != 1 || once[0].Key() != twice[0].Key() {
+		t.Errorf("keys %v and %v", once, twice)
+	}
+}
+
+// A reading that will not parse is one of several hundred, and a stay
+// is none the worse for missing it.
+func TestAReadingThatWillNotParseIsSkipped(t *testing.T) {
+	for _, bad := range []string{`{"value":"%gl_coordinates"}`, `{"value":""}`, `{}`, `{"value":"1"}`} {
+		if _, ok := event.ReadFix(event.Event{Kind: event.Fixed, Payload: json.RawMessage(bad)}); ok {
+			t.Errorf("%s was read as a position", bad)
+		}
+	}
+	good := `{"value":"12.9108472,80.0622726"}`
+	if _, ok := event.ReadFix(event.Event{Kind: event.Fixed, Payload: json.RawMessage(good)}); !ok {
+		t.Errorf("%s was not read as a position", good)
+	}
+}
