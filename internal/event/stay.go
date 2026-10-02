@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"log/slog"
 	"math"
 	"sort"
 	"strconv"
@@ -240,7 +241,7 @@ func LatLon(s string) (lat, lon float64, ok bool) {
 }
 
 // Called : What a place is already known as, among the stays already
-// written down.
+// written down, or empty if it is somewhere new.
 //
 // A place names itself the first time somebody stays there, and every
 // later stay within reach of it borrows that name. Without this, two
@@ -275,10 +276,7 @@ func Called(s Stay, known []Event) string {
 			nearest, best = into.Value, d
 		}
 	}
-	if nearest != "" {
-		return nearest
-	}
-	return s.Where()
+	return nearest
 }
 
 // sortByTime : Oldest first.
@@ -401,17 +399,35 @@ type Watching interface {
 	Record(ctx context.Context, userID string, events []*Event) (stored, seen []string, err error)
 }
 
+// Naming : Somewhere to ask what is at a position, for a stay that no
+// geofence of theirs covers and that is nowhere they have been before.
+type Naming interface {
+	Name(ctx context.Context, lat, lon float64) (string, error)
+}
+
+// Settler : Works out where somebody stopped, and writes it down.
+type Settler struct {
+	// Store : Where the readings are and where the stays go. Required.
+	Store Watching
+	// Naming : What to ask about somewhere new. Optional: without it a
+	// place nobody has named keeps its coordinates, which is what it
+	// had before anything could name it.
+	Naming Naming
+	// Logger : Where a failed lookup goes. Nil is silent.
+	Logger *slog.Logger
+}
+
 // Settle : Writes down the stays that have ended among somebody's
 // recent readings.
 //
 // Worked out again from the readings every time rather than kept
 // anywhere. The same readings produce the same stays and the same keys,
 // so a stay already written is recognised as a resend and the work is
-// wasted rather than wrong. That is the cheaper mistake: the alternative
-// is a cursor to keep, and a cursor that is ever wrong loses a day of
-// somebody's life quietly.
-func Settle(ctx context.Context, store Watching, userID string, now time.Time) ([]Stay, error) {
-	seen, err := store.Recent(ctx, userID, Query{Kind: Fixed, Since: now.Add(-Looking)})
+// wasted rather than wrong. That is the cheaper mistake: the
+// alternative is a cursor to keep, and a cursor that is ever wrong
+// loses a day of somebody's life quietly.
+func (st Settler) Settle(ctx context.Context, userID string, now time.Time) ([]Stay, error) {
+	seen, err := st.Store.Recent(ctx, userID, Query{Kind: Fixed, Since: now.Add(-Looking)})
 	if err != nil {
 		return nil, fmt.Errorf("event: reading where they have been: %w", err)
 	}
@@ -429,7 +445,7 @@ func Settle(ctx context.Context, store Watching, userID string, now time.Time) (
 
 	// Every place already named, so a second evening at the same
 	// restaurant is written under the name the first one gave it.
-	known, err := store.Recent(ctx, userID, Query{Kind: Stayed, Limit: Places})
+	known, err := st.Store.Recent(ctx, userID, Query{Kind: Stayed, Limit: Places})
 	if err != nil {
 		return nil, fmt.Errorf("event: reading the places they know: %w", err)
 	}
@@ -438,7 +454,7 @@ func Settle(ctx context.Context, store Watching, userID string, now time.Time) (
 	// else. The owner's rule, 2 October 2026: "my geo fences are the
 	// first priority". A name somebody chose for a place they marked is
 	// not improved on by anything worked out afterwards.
-	crossings, err := store.Recent(ctx, userID, Query{
+	crossings, err := st.Store.Recent(ctx, userID, Query{
 		Prefix: "place.", Since: now.Add(-2 * Looking)})
 	if err != nil {
 		return nil, fmt.Errorf("event: reading the places they drew: %w", err)
@@ -447,12 +463,8 @@ func Settle(ctx context.Context, store Watching, userID string, now time.Time) (
 
 	out := make([]*Event, 0, len(stays))
 	for _, s := range stays {
-		called := In(s, fences)
-		if called == "" {
-			called = Called(s, known)
-		}
 		e, err := New(userID, "server", "", Stayed, s.From, now,
-			s.Payload(called), s.Key())
+			s.Payload(st.called(ctx, s, fences, known)), s.Key())
 		if err != nil {
 			// Unreachable for a stay worked out here, and not worth
 			// losing the others over if it ever is.
@@ -460,8 +472,43 @@ func Settle(ctx context.Context, store Watching, userID string, now time.Time) (
 		}
 		out = append(out, e)
 	}
-	if _, _, err := store.Record(ctx, userID, out); err != nil {
+	if _, _, err := st.Store.Record(ctx, userID, out); err != nil {
 		return nil, fmt.Errorf("event: writing down where they stayed: %w", err)
 	}
 	return stays, nil
+}
+
+// called : What to write this stay down as.
+//
+// In the owner's order. A geofence they drew wins. Failing that, the
+// name an earlier stay at the same spot was given, which keeps two
+// evenings at one restaurant together and costs no lookup. Failing
+// that, whatever the naming service makes of it. And failing all of
+// those, the coordinates, which name nothing but group correctly and
+// can be corrected later.
+func (st Settler) called(ctx context.Context, s Stay, fences []Fence, known []Event) string {
+	if name := In(s, fences); name != "" {
+		return name
+	}
+	if name := Called(s, known); name != "" {
+		return name
+	}
+	if st.Naming == nil {
+		return s.Where()
+	}
+
+	name, err := st.Naming.Name(ctx, s.Lat, s.Lon)
+	if err != nil {
+		// Logged and stepped over. A stay with coordinates for a name
+		// is the whole of what is lost, and it can be named later.
+		if st.Logger != nil {
+			st.Logger.WarnContext(ctx, "could not find out what is at a place",
+				slog.String("where", s.Where()), slog.Any("error", err))
+		}
+		return s.Where()
+	}
+	if name = strings.TrimSpace(name); name != "" {
+		return name
+	}
+	return s.Where()
 }

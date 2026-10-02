@@ -38,6 +38,7 @@ import (
 	vocabularyapi "github.com/DhanushRamesh/personal-assistant/internal/api/vocabulary"
 	"github.com/DhanushRamesh/personal-assistant/internal/chat"
 	"github.com/DhanushRamesh/personal-assistant/internal/conversation"
+	"github.com/DhanushRamesh/personal-assistant/internal/event"
 	"github.com/DhanushRamesh/personal-assistant/internal/google"
 	"github.com/DhanushRamesh/personal-assistant/internal/llm"
 	"github.com/DhanushRamesh/personal-assistant/internal/memory"
@@ -120,6 +121,11 @@ type Options struct {
 	// Named apart from Events, which is the bus carrying a chat's own
 	// messages to clients. Two different senses of the word met here.
 	DeviceEvents events.Store
+
+	// Naming : What to ask about a place the person never drew a
+	// geofence around. Optional: without it a stay somewhere new is
+	// written down as its coordinates.
+	Naming event.Naming
 
 	// Cut : Where the speech-to-text bridge reports that a recording was
 	// stopped while somebody was still speaking. Home Assistant does not
@@ -210,7 +216,7 @@ func New(opts Options) *Server {
 		google:     googleapi.New(opts.Logger, opts.Google, opts.SettingsURL),
 		assist:     assist.New(opts.Logger, opts.Chats, opts.Runner, opts.Events),
 		speech:     speechapi.New(opts.Logger, opts.Cut),
-		events:     events.New(opts.Logger, opts.DeviceEvents, opts.Now),
+		events:     events.New(opts.Logger, opts.DeviceEvents, opts.Now).Naming(opts.Naming),
 		memories:   memories.New(opts.Logger, opts.Memories),
 		tools:      toolsapi.New(opts.Logger, opts.Tools),
 	}

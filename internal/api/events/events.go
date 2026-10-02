@@ -142,9 +142,14 @@ type BatchResponse struct {
 // Handler : Serves the event endpoints.
 type Handler struct {
 	httpx.Responder
-	store Store
-	now   func() time.Time
+	store  Store
+	naming event.Naming
+	now    func() time.Time
 }
+
+// Naming : Sets what to ask about a place nobody has named. Without
+// one, a stay somewhere new keeps its coordinates.
+func (h *Handler) Naming(n event.Naming) *Handler { h.naming = n; return h }
 
 // New : Builds the handler.
 func New(logger *slog.Logger, store Store, now func() time.Time) *Handler {
@@ -261,7 +266,9 @@ func (h *Handler) settle(ctx context.Context, userID string, taken []*event.Even
 		return
 	}
 
-	stays, err := event.Settle(ctx, h.store, userID, h.now())
+	stays, err := event.Settler{
+		Store: h.store, Naming: h.naming, Logger: h.Logger,
+	}.Settle(ctx, userID, h.now())
 	if err != nil {
 		h.Logger.ErrorContext(ctx, "cannot work out where they stayed", slog.Any("error", err))
 		return

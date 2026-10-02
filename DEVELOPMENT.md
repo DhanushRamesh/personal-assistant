@@ -1666,6 +1666,37 @@ later stay at the same place borrows the name even when the crossing
 itself was missed. The geofences are unreliable in exactly that way,
 and this costs nothing.
 
+**Geoapify names what is left.** Owner, 2 October 2026: *"if its not
+in geo fence, then geoapify will name it."* So the order is: a
+geofence they drew, then the name an earlier stay at the same spot was
+given, then Geoapify, then the coordinates. The second step is there
+because it keeps two evenings at one restaurant together and costs no
+lookup; the last is what everything falls back to.
+
+Called once per stay that has ended, not once per reading -- a handful
+of requests a day against a free allowance in the thousands.
+`internal/place` takes six fields out of about forty and picks the most
+particular: a building's name, else a street, else a neighbourhood,
+suburb, district, city. An answer that grows a field cannot change what
+it does, and the rest of somebody's address is never carried around by
+accident.
+
+**Everything about it fails quietly.** No key configured and the namer
+is nil rather than something that always fails, so nothing logs a
+warning every time somebody goes somewhere. No answer, no network, or
+an empty result -- the sea and a motorway both produce one -- and the
+stay keeps its coordinates, which is what it had before any of this
+existed. A refusal is reported, so a key that has run out says so
+rather than every place quietly losing its name.
+
+**Why the geofences winning matters more than it sounds.** Asked about
+the owner's home coordinates, Geoapify answers with their street. That
+is their address, and the description of them is forbidden from saying
+where they live. Their own geofence names that place "home" before
+Geoapify is ever asked, which is the order they chose for other reasons
+and which happens to be the one that keeps an address out of the daily
+profile.
+
 **Worked out again from the readings every time, with no cursor kept.**
 The same readings produce the same stays and the same keys, so a stay
 already written is recognised as a resend. The work is wasted rather

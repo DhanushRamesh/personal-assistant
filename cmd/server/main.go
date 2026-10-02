@@ -28,6 +28,7 @@ import (
 	"github.com/DhanushRamesh/personal-assistant/internal/embed/tei"
 	"github.com/DhanushRamesh/personal-assistant/internal/environment"
 	"github.com/DhanushRamesh/personal-assistant/internal/environment/platformai"
+	"github.com/DhanushRamesh/personal-assistant/internal/event"
 	eventmysql "github.com/DhanushRamesh/personal-assistant/internal/event/mysql"
 	"github.com/DhanushRamesh/personal-assistant/internal/events"
 	"github.com/DhanushRamesh/personal-assistant/internal/google"
@@ -38,6 +39,7 @@ import (
 	"github.com/DhanushRamesh/personal-assistant/internal/memory"
 	memorymysql "github.com/DhanushRamesh/personal-assistant/internal/memory/mysql"
 	"github.com/DhanushRamesh/personal-assistant/internal/persona"
+	"github.com/DhanushRamesh/personal-assistant/internal/place"
 	"github.com/DhanushRamesh/personal-assistant/internal/profile"
 	"github.com/DhanushRamesh/personal-assistant/internal/remind"
 	remindmysql "github.com/DhanushRamesh/personal-assistant/internal/remind/mysql"
@@ -422,6 +424,7 @@ func run() error {
 		Persona:        manner,
 		Cut:            cutOff,
 		DeviceEvents:   deviceEvents,
+		Naming:         naming(cfg, logger.Logger),
 		Tools:          tools,
 		RequestTimeout: cfg.Server.RequestTimeout,
 		// Development only: `flutter run` serves the UI from its own port so
@@ -488,6 +491,26 @@ func reachableModels(cfg config.Config) []llm.Model {
 		}
 	}
 	return out
+}
+
+// naming : What to ask about a place the person never drew a geofence
+// around, or nil when no key is configured.
+//
+// Nil rather than something that always fails, so a stay somewhere new
+// is simply written down as its coordinates -- which is what it was
+// before anything could name it -- and nothing logs a warning every
+// time somebody goes somewhere.
+func naming(cfg config.Config, logger *slog.Logger) event.Naming {
+	if !cfg.Geoapify.Configured() {
+		logger.Info("places are named by their coordinates", slog.String("why", "no geoapify key"))
+		return nil
+	}
+	logger.Info("naming places through Geoapify", slog.String("url", cfg.Geoapify.URL))
+	return place.Geoapify{
+		Key:     cfg.Geoapify.Key.Reveal(),
+		URL:     cfg.Geoapify.URL,
+		Timeout: cfg.Geoapify.Timeout,
+	}
 }
 
 // announcer : Where the assistant says something without being asked.

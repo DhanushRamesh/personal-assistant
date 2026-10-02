@@ -62,6 +62,7 @@ type Config struct {
 	HomeAssistant HomeAssistant
 	Google        Google
 	Embedding     Embedding
+	Geoapify      Geoapify
 	Provider      Provider
 	PlatformAI    PlatformAI
 
@@ -139,6 +140,29 @@ func (a Assistant) Now() time.Time {
 	}
 	return time.Now().In(a.Location)
 }
+
+// Geoapify : How to reach the service that turns a position into the
+// name of a place.
+//
+// Only reached for a stay that has ended and that no geofence of
+// theirs already names, which is a handful of calls a day. The key is
+// the owner's and the free allowance is thousands, so nothing here
+// needs a budget.
+type Geoapify struct {
+	// Key : The API key. Empty leaves a stay called by its
+	// coordinates, which is what it was called before this existed.
+	Key logging.Secret
+	// URL : Where it answers. Here rather than hardcoded so a test can
+	// point it somewhere that is not the internet.
+	URL string
+	// Timeout : How long one lookup may take. Short, because nothing
+	// is improved by a name that arrives late and a stay is perfectly
+	// usable without one.
+	Timeout time.Duration
+}
+
+// Configured : Whether there is a naming service to reach.
+func (g Geoapify) Configured() bool { return strings.TrimSpace(g.Key.Reveal()) != "" }
 
 // Embedding : How to reach the server that turns text into vectors, which
 // is what lets a memory be found by meaning rather than by wording.
@@ -461,6 +485,11 @@ func Load(path string, lookup Lookup) (Config, error) {
 			URL:     l.str("embedding", "url", ""),
 			Model:   l.str("embedding", "model", ""),
 			Timeout: l.duration("embedding", "timeout", 30*time.Second),
+		},
+		Geoapify: Geoapify{
+			Key:     logging.Secret(l.str("geoapify", "key", "")),
+			URL:     l.str("geoapify", "url", "https://api.geoapify.com/v1/geocode/reverse"),
+			Timeout: l.duration("geoapify", "timeout", 8*time.Second),
 		},
 		Provider: Provider{
 			Name: ProviderName(l.str("provider", "name", string(ProviderStub))),
