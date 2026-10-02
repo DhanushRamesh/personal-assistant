@@ -267,6 +267,15 @@ type Query struct {
 	// answers a question about a particular place or person rather than
 	// a particular kind.
 	Contains string
+	// Omit : Kinds to leave out, whatever else matches.
+	//
+	// For the kinds that are working material rather than history. A
+	// phone reports its position every five minutes and the server
+	// turns runs of those into one place.stayed; the readings
+	// underneath are how that is worked out and are no sort of answer
+	// to "where was I on Tuesday". Left in, they bury everything else
+	// in any window long enough to be interesting.
+	Omit []string
 	// Limit : At most this many, newest first. Zero means no limit.
 	Limit int
 }

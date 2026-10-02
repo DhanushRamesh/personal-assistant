@@ -270,3 +270,60 @@ func TestAnEmptyFilteredAnswerStillNamesTheKinds(t *testing.T) {
 		t.Fatalf("the kinds that exist are missing:\n%s", got.Content)
 	}
 }
+
+// TestPositionReadingsAreNeverReturned : The readings a phone sends every
+// few minutes are working material, not an answer.
+//
+// They outnumber everything else by two orders of magnitude, so without
+// this a day's listing is three hundred coordinates and the two things
+// that happened fall off the end of the limit.
+func TestPositionReadingsAreNeverReturned(t *testing.T) {
+	events := []*event.Event{at(t, 9, 0, "network.joined", "home")}
+	for minute := 0; minute < 60; minute += 5 {
+		events = append(events, at(t, 10, minute, event.Fixed, "12.911,80.062"))
+	}
+	events = append(events, at(t, 11, 0, event.Stayed, "the office"))
+	s := store(t, events...)
+
+	// Asked for in general, and as a family. Neither may mention one.
+	for _, args := range []string{`{"days":1}`, `{"days":1,"kind":"location."}`} {
+		got := ask(t, s, args).Content
+		if strings.Contains(got, event.Fixed) || strings.Contains(got, "12.911") {
+			t.Errorf("%s returned position readings:\n%s", args, got)
+		}
+	}
+
+	// Asked for by name, and by a coordinate in the payload. Both say
+	// nothing was found -- which does quote the question back, so what
+	// is checked is that no reading came with it.
+	for _, args := range []string{
+		`{"days":1,"kind":"location.fix"}`,
+		`{"days":1,"contains":"12.911"}`,
+	} {
+		got := ask(t, s, args).Content
+		if !strings.HasPrefix(got, "Nothing ") {
+			t.Errorf("%s should have found nothing, got:\n%s", args, got)
+		}
+		if strings.Contains(got, "10:") {
+			t.Errorf("%s returned a reading:\n%s", args, got)
+		}
+	}
+
+	// And the things worth seeing are still there.
+	got := ask(t, s, `{"days":1}`).Content
+	for _, want := range []string{"network.joined", event.Stayed} {
+		if !strings.Contains(got, want) {
+			t.Errorf("expected %q in:\n%s", want, got)
+		}
+	}
+}
+
+// TestPositionReadingsAreNotOffered : A kind listing that names them is
+// an invitation to ask again for something that always comes back empty.
+func TestPositionReadingsAreNotOffered(t *testing.T) {
+	s := store(t, at(t, 10, 0, event.Fixed, "12.911,80.062"))
+	got := ask(t, s, `{"days":1,"kind":"battery.low"}`).Content
+	if strings.Contains(got, event.Fixed) {
+		t.Errorf("the kind listing offered position readings:\n%s", got)
+	}
+}

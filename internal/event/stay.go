@@ -407,12 +407,103 @@ func placeName(e Event) string {
 	return strings.TrimSpace(into.Value)
 }
 
+// Named : A stay, and what the place it sits in is called.
+type Named struct {
+	Stay
+	// Called : The name the place was given -- a geofence the owner
+	// drew, a place they have been named before, or whatever is there
+	// according to whoever is asked. Coordinates when nothing knows.
+	Called string
+}
+
+// Merged : Consecutive stays in the same place, joined into one.
+//
+// Stays are clustered by distance from where the cluster started, and
+// Near is 150 metres. That is right for a desk and wrong for anywhere
+// larger than itself: walk from one end of a shopping centre to the
+// other and the cluster breaks, and what comes out is two visits and a
+// departure for somewhere nobody left. Indoor readings drift fifty to a
+// hundred metres on their own, which can break it sitting still.
+//
+// Geometry cannot fix this -- a radius wide enough for a mall merges
+// the restaurant next door -- so the name does it instead. Both halves
+// of the mall are named the same thing, and two stays with one name are
+// one stay.
+//
+// Only consecutive ones, and only across a gap no longer than Adrift.
+// Leaving somewhere and coming back in the evening is two visits and
+// must stay two; a gap longer than Adrift means the readings stopped
+// and where they went in between is not known. The short clusters of a
+// journey are dropped before this for being under Settled, so driving
+// home and back tomorrow leaves a gap far wider than Adrift and does
+// not merge.
+//
+// What this does not fix: it needs both halves to come back with the
+// same name. A reverse lookup at opposite ends of a large building can
+// answer with two different ones -- the building at one end, a unit
+// inside it at the other -- and then nothing here can tell they are the
+// same place. A geofence drawn round it always can, which is the
+// argument for drawing one.
+func Merged(in []Named) []Named {
+	if len(in) < 2 {
+		return in
+	}
+	out := make([]Named, 0, len(in))
+	out = append(out, in[0])
+	for _, next := range in[1:] {
+		last := &out[len(out)-1]
+		if next.Called != last.Called || next.From.Sub(last.To) > Adrift {
+			out = append(out, next)
+			continue
+		}
+		*last = join(*last, next)
+	}
+	return out
+}
+
+// join : Two stays in one place, as one stay.
+//
+// The middle is weighted by how long each half lasted rather than taken
+// halfway between them. An hour at a table and two minutes by the door
+// is a visit to the table, and an unweighted midpoint would put it in
+// the corridor -- which matters, because the next visit is matched to
+// this one by how far apart their middles are.
+func join(a, b Named) Named {
+	wa, wb := a.Long().Seconds(), b.Long().Seconds()
+	if total := wa + wb; total > 0 {
+		a.Lat = (a.Lat*wa + b.Lat*wb) / total
+		a.Lon = (a.Lon*wa + b.Lon*wb) / total
+	}
+	if b.To.After(a.To) {
+		a.To = b.To
+	}
+	return a
+}
+
 // Looking : How far back settling reads for readings.
 //
 // Long enough to hold a whole stay, including an afternoon somewhere
 // and a night at home, so a stay is never cut in half by the edge of
 // the window and written down as two.
 const Looking = 36 * time.Hour
+
+// Keep : How long a raw reading is worth storing.
+//
+// Nothing reads location.fix except settling, and settling never looks
+// further back than Looking. Everything older is weight: at one reading
+// every five minutes it is 288 rows a day, about 80MB a year, growing
+// for ever and read by nothing.
+//
+// Seven days rather than two, which would also be correct. The margin
+// is for the days the server is off, for a phone delivering a backlog
+// late, and for being able to look at yesterday's readings by hand when
+// a stay comes out wrong. Dropping it to just over Looking would save
+// 6MB and remove the only copy of the evidence.
+//
+// What this does not touch is place.stayed, place.entered and
+// place.exited. Those are the history, they are small, and they are
+// kept for ever.
+const Keep = 7 * 24 * time.Hour
 
 // Places : The most previously-named places a new stay is matched
 // against.
@@ -451,7 +542,7 @@ type Settler struct {
 // wasted rather than wrong. That is the cheaper mistake: the
 // alternative is a cursor to keep, and a cursor that is ever wrong
 // loses a day of somebody's life quietly.
-func (st Settler) Settle(ctx context.Context, userID string, now time.Time) ([]Stay, error) {
+func (st Settler) Settle(ctx context.Context, userID string, now time.Time) ([]Named, error) {
 	seen, err := st.Store.Recent(ctx, userID, Query{Kind: Fixed, Since: now.Add(-Looking)})
 	if err != nil {
 		return nil, fmt.Errorf("event: reading where they have been: %w", err)
@@ -486,10 +577,20 @@ func (st Settler) Settle(ctx context.Context, userID string, now time.Time) ([]S
 	}
 	fences := Fences(crossings, now)
 
-	out := make([]*Event, 0, len(stays))
+	// Named before they are merged, because the name is what says two
+	// of them are one place. One lookup per cluster, so crossing a
+	// building that breaks into three costs three -- which is the price
+	// of not having to guess a radius that fits every place at once.
+	named := make([]Named, 0, len(stays))
 	for _, s := range stays {
-		e, err := New(userID, "server", "", Stayed, s.From, now,
-			s.Payload(st.called(ctx, s, fences, known)), s.Key())
+		named = append(named, Named{Stay: s, Called: st.called(ctx, s, fences, known)})
+	}
+	named = Merged(named)
+
+	out := make([]*Event, 0, len(named))
+	for _, n := range named {
+		e, err := New(userID, "server", "", Stayed, n.From, now,
+			n.Payload(n.Called), n.Key())
 		if err != nil {
 			// Unreachable for a stay worked out here, and not worth
 			// losing the others over if it ever is.
@@ -500,7 +601,7 @@ func (st Settler) Settle(ctx context.Context, userID string, now time.Time) ([]S
 	if _, _, err := st.Store.Record(ctx, userID, out); err != nil {
 		return nil, fmt.Errorf("event: writing down where they stayed: %w", err)
 	}
-	return stays, nil
+	return named, nil
 }
 
 // called : What to write this stay down as.

@@ -4,9 +4,11 @@ package inmemory
 
 import (
 	"context"
+	"slices"
 	"sort"
 	"strings"
 	"sync"
+	"time"
 
 	"github.com/DhanushRamesh/personal-assistant/internal/event"
 )
@@ -75,6 +77,8 @@ func (s *Store) Recent(_ context.Context, userID string, q event.Query) ([]event
 		case q.Contains != "" && !strings.Contains(
 			strings.ToLower(string(e.Payload)), strings.ToLower(q.Contains)):
 			continue
+		case slices.Contains(q.Omit, e.Kind):
+			continue
 		}
 		out = append(out, *e)
 	}
@@ -85,6 +89,27 @@ func (s *Store) Recent(_ context.Context, userID string, q event.Query) ([]event
 		out = out[:q.Limit]
 	}
 	return out, nil
+}
+
+// Forget : Drops every reading of one kind older than a moment, for
+// everybody.
+func (s *Store) Forget(_ context.Context, kind string, before time.Time) (int64, error) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+
+	var gone int64
+	for userID, events := range s.byUser {
+		kept := events[:0]
+		for _, e := range events {
+			if e.Kind == kind && e.OccurredAt.Before(before) {
+				gone++
+				continue
+			}
+			kept = append(kept, e)
+		}
+		s.byUser[userID] = kept
+	}
+	return gone, nil
 }
 
 // Kinds : Which kinds exist, with how many of each.

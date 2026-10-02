@@ -275,6 +275,7 @@ func (h *Handler) settle(ctx context.Context, userID string, taken []*event.Even
 	}
 	for _, s := range stays {
 		h.Logger.InfoContext(ctx, "a stay ended",
+			slog.String("called", s.Called),
 			slog.String("where", s.Where()),
 			slog.Duration("for", s.Long().Round(time.Minute)),
 			slog.Time("from", s.From))

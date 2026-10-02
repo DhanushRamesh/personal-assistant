@@ -160,6 +160,9 @@ func (s *Store) Recent(ctx context.Context, userID string, q event.Query) ([]eve
 		// written by something newer.
 		db = db.Where("CAST(payload AS CHAR) LIKE ?", "%"+like(q.Contains)+"%")
 	}
+	if len(q.Omit) > 0 {
+		db = db.Where("kind NOT IN ?", q.Omit)
+	}
 	if q.Limit > 0 {
 		db = db.Limit(q.Limit)
 	}
@@ -175,6 +178,45 @@ func (s *Store) Recent(ctx context.Context, userID string, q event.Query) ([]eve
 	}
 	return out, nil
 }
+
+// Forget : Drops every reading of one kind older than a moment, for
+// everybody.
+//
+// For working material rather than history -- the position readings a
+// phone sends every few minutes, which settling turns into stays and
+// nothing reads afterwards. Everybody at once, because how long a kind
+// is worth keeping is a property of the kind and not of the person.
+//
+// Deleted in batches, and the batches are the point. One statement
+// against a year of readings holds a lock long enough to stall every
+// write queued behind it, and the first run after this ships has the
+// whole backlog to get through. A batch that comes back short has
+// reached the end.
+func (s *Store) Forget(ctx context.Context, kind string, before time.Time) (int64, error) {
+	var total int64
+	for {
+		res := s.db.WithContext(ctx).
+			Where("kind = ? AND occurred_at < ?", kind, before.UTC()).
+			Limit(ForgetBatch).Delete(&row{})
+		if res.Error != nil {
+			return total, fmt.Errorf("forgetting %s: %w", kind, res.Error)
+		}
+		total += res.RowsAffected
+		if res.RowsAffected < ForgetBatch {
+			return total, nil
+		}
+		if err := ctx.Err(); err != nil {
+			return total, err
+		}
+	}
+}
+
+// ForgetBatch : How many rows one delete may take.
+//
+// Small enough that the lock is held for milliseconds, large enough
+// that a year of readings is a few hundred statements rather than a
+// hundred thousand.
+const ForgetBatch = 1000
 
 // like : A string with LIKE's wildcards made literal.
 func like(s string) string {

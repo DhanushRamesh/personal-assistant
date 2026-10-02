@@ -184,6 +184,20 @@ func recent(reader Reader, clock Clock) tool.Tool {
 				q.Kind = kind
 			}
 
+			// Never the raw position readings.
+			//
+			// A phone reports where it is every five minutes. They are
+			// what place.stayed is worked out from and they answer no
+			// question anybody asks: "where was I on Tuesday" wants the
+			// three places, not the three hundred readings. Left in,
+			// any window long enough to be interesting is nothing else,
+			// and the kinds worth seeing fall off the end of the limit.
+			//
+			// Omitted even when asked for by name, so that a kind
+			// listing offering them cannot talk the model into it.
+			// Reading them back is a question for the database.
+			q.Omit = []string{event.Fixed}
+
 			q.Limit = args.Limit
 			if q.Limit <= 0 {
 				q.Limit = DefaultLimit
@@ -255,7 +269,16 @@ func nothing(ctx context.Context, reader Reader, userID string, q event.Query, o
 	}
 	names := make([]string, 0, len(kinds))
 	for _, k := range kinds {
+		// The kinds this tool will not return are not kinds it should
+		// offer. Naming one here is an invitation to ask again for
+		// something that comes back empty every time.
+		if k.Kind == event.Fixed {
+			continue
+		}
 		names = append(names, fmt.Sprintf("%s (%d)", k.Kind, k.Count))
+	}
+	if len(names) == 0 {
+		return none
 	}
 	return prompt.Text(
 		none,

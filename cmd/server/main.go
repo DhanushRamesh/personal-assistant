@@ -407,6 +407,16 @@ func run() error {
 	logger.Info("collecting the names they say daily",
 		slog.Duration("every", vocabularyEvery))
 
+	// The readings a phone sends every few minutes, once settling has
+	// had everything it will ever want from them.
+	watching.Add(1)
+	go func() {
+		defer watching.Done()
+		forgetDaily(remindCtx, deviceEvents, cfg.Assistant.Now, logger.Logger)
+	}()
+	logger.Info("forgetting old position readings daily",
+		slog.Duration("every", forgetEvery), slog.Duration("keeping", event.Keep))
+
 	handler := api.New(api.Options{
 		Logger:         logger.Logger,
 		DB:             db,
@@ -890,6 +900,71 @@ func describeDaily(
 				slog.String("user_id", userID))
 		}
 		cancel()
+	}
+}
+
+// forgetEvery, forgetFirst : How often old readings are dropped, and how
+// long after startup the first pass runs.
+//
+// Daily, because what it deletes arrives at 288 rows a day and a day's
+// worth is nothing to carry. Twenty minutes after startup rather than
+// immediately: the first pass after this ships has the whole backlog to
+// get through, and a server's first minutes are better spent answering.
+const (
+	forgetEvery = 24 * time.Hour
+	forgetFirst = 20 * time.Minute
+)
+
+// forgetTimeout : How long one pass may take.
+//
+// Generous for the same reason the pass is batched: nobody is waiting,
+// and the first one has a backlog.
+const forgetTimeout = 10 * time.Minute
+
+// forgetDaily : Drops position readings older than event.Keep, for as
+// long as ctx lives.
+//
+// Only location.fix, and deliberately only that. Settling never reads
+// further back than event.Looking, nothing else reads them at all, and
+// they arrive at 288 rows a day for ever. What they are turned into --
+// place.stayed, and the crossings of a geofence -- is the history and is
+// kept.
+//
+// A failure is logged and the next day tries again. There is nothing to
+// recover: the rows are still there and a day late is a day of rows.
+func forgetDaily(
+	ctx context.Context,
+	forgetting interface {
+		Forget(ctx context.Context, kind string, before time.Time) (int64, error)
+	},
+	now func() time.Time,
+	logger *slog.Logger,
+) {
+	timer := time.NewTimer(forgetFirst)
+	defer timer.Stop()
+
+	for {
+		select {
+		case <-ctx.Done():
+			return
+		case <-timer.C:
+		}
+		timer.Reset(forgetEvery)
+
+		pass, cancel := context.WithTimeout(ctx, forgetTimeout)
+		before := now().Add(-event.Keep)
+		gone, err := forgetting.Forget(pass, event.Fixed, before)
+		cancel()
+		if err != nil {
+			logger.Warn("cannot forget old position readings",
+				slog.Any("error", err), slog.Int64("forgotten_first", gone))
+			continue
+		}
+		if gone == 0 {
+			continue
+		}
+		logger.Info("forgot old position readings",
+			slog.Int64("rows", gone), slog.Time("older_than", before))
 	}
 }
 

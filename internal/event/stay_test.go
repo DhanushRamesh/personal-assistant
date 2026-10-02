@@ -294,3 +294,91 @@ func TestLeavingAndComingBackIsTwoStretchesNotADuplicate(t *testing.T) {
 		t.Errorf("%d stretches are still open, want 1: %+v", open, fences)
 	}
 }
+
+// named : A stay called something, running between two times.
+func named(called string, from, to time.Time, lat, lon float64) event.Named {
+	return event.Named{
+		Stay:   event.Stay{Lat: lat, Lon: lon, From: from, To: to},
+		Called: called,
+	}
+}
+
+// TestMergedJoinsOnePlaceBrokenByDistance : Crossing somewhere larger
+// than Near breaks the cluster; the name puts it back together.
+func TestMergedJoinsOnePlaceBrokenByDistance(t *testing.T) {
+	start := time.Date(2026, 10, 2, 14, 0, 0, 0, time.UTC)
+	in := []event.Named{
+		named("Phoenix Marketcity", start, start.Add(40*time.Minute), 12.9910, 80.2180),
+		// The far end of the same building, five minutes later.
+		named("Phoenix Marketcity", start.Add(45*time.Minute), start.Add(80*time.Minute), 12.9940, 80.2210),
+	}
+	got := event.Merged(in)
+	if len(got) != 1 {
+		t.Fatalf("expected one visit, got %d", len(got))
+	}
+	if !got[0].From.Equal(in[0].From) || !got[0].To.Equal(in[1].To) {
+		t.Errorf("the merged visit should span both: %v to %v", got[0].From, got[0].To)
+	}
+	if got[0].Long() != 80*time.Minute {
+		t.Errorf("expected eighty minutes, got %v", got[0].Long())
+	}
+	// Weighted towards the longer half, and inside the pair either way.
+	if got[0].Lat <= 12.9910 || got[0].Lat >= 12.9940 {
+		t.Errorf("the middle should sit between the two: %v", got[0].Lat)
+	}
+}
+
+// TestMergedKeepsTwoVisitsApart : Leaving and coming back is two visits,
+// however alike the names are.
+func TestMergedKeepsTwoVisitsApart(t *testing.T) {
+	start := time.Date(2026, 10, 2, 9, 0, 0, 0, time.UTC)
+	in := []event.Named{
+		named("the office", start, start.Add(3*time.Hour), 12.99, 80.21),
+		named("the office", start.Add(8*time.Hour), start.Add(11*time.Hour), 12.99, 80.21),
+	}
+	if got := event.Merged(in); len(got) != 2 {
+		t.Fatalf("a five hour gap is two visits, got %d", len(got))
+	}
+}
+
+// TestMergedLeavesDifferentPlacesAlone : Including a place revisited
+// with something else in between.
+func TestMergedLeavesDifferentPlacesAlone(t *testing.T) {
+	start := time.Date(2026, 10, 2, 12, 0, 0, 0, time.UTC)
+	in := []event.Named{
+		named("the mall", start, start.Add(30*time.Minute), 12.99, 80.21),
+		named("the cafe next door", start.Add(32*time.Minute), start.Add(60*time.Minute), 12.991, 80.211),
+		named("the mall", start.Add(62*time.Minute), start.Add(90*time.Minute), 12.99, 80.21),
+	}
+	if got := event.Merged(in); len(got) != 3 {
+		t.Fatalf("three different stays, got %d", len(got))
+	}
+}
+
+// TestMergedIsTransitive : A building broken into three is still one.
+func TestMergedIsTransitive(t *testing.T) {
+	start := time.Date(2026, 10, 2, 14, 0, 0, 0, time.UTC)
+	var in []event.Named
+	for i := range 3 {
+		at := start.Add(time.Duration(i) * 30 * time.Minute)
+		in = append(in, named("the airport", at, at.Add(25*time.Minute), 12.99, 80.21))
+	}
+	got := event.Merged(in)
+	if len(got) != 1 {
+		t.Fatalf("expected one, got %d", len(got))
+	}
+	if got[0].Long() != 85*time.Minute {
+		t.Errorf("expected the whole span, got %v", got[0].Long())
+	}
+}
+
+// TestMergedHandlesNothing : Nought and one stay are returned as they are.
+func TestMergedHandlesNothing(t *testing.T) {
+	if got := event.Merged(nil); got != nil {
+		t.Errorf("expected nil, got %v", got)
+	}
+	one := []event.Named{named("home", time.Now(), time.Now(), 1, 2)}
+	if got := event.Merged(one); len(got) != 1 {
+		t.Errorf("expected the one, got %d", len(got))
+	}
+}

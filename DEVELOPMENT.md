@@ -1387,6 +1387,74 @@ from stepping out, which is why the forty-five second line was drawn
 where it was. The remaining piece is the wifi SSID, for leaving with
 the laptop.
 
+## Readings are working material; stays are the history
+
+Owner's observation, 2 October 2026: *"5 minute once location is stored
+in database right, the database will get full -- place.stayed must be
+noted."* Correct on both counts, and measured before acting: twelve
+`location.fix` rows an hour, every hour, 288 a day. At 785 bytes a row
+that is **80MB a year, growing for ever, read by nothing.** There was no
+retention anywhere in this server, for any table.
+
+Nothing reads `location.fix` except `Settler.Settle`, and that never
+looks further back than `Looking`, 36 hours. So `event.Keep` is seven
+days and `forgetDaily` drops what is older, in batches of a thousand so
+one statement cannot hold a lock across a year of backlog. Seven rather
+than two for the days the server is off, a phone delivering late, and
+being able to look at yesterday by hand when a stay comes out wrong.
+`place.stayed`, `place.entered` and `place.exited` are kept for ever:
+they are small, and they are the history.
+
+**The events tool no longer returns them, or offers them.** Asked for by
+name it answers that nothing was found, and they are struck from the
+kind listing so the model cannot be talked into asking again. Three
+hundred coordinates is not an answer to "where was I on Tuesday", and
+left in they push everything worth seeing off the end of the limit.
+
+**Why the logic stays on the server and not in Tasker.** Doing the
+settling on the phone was considered and rejected. It saves no battery
+-- Tasker must poll at the same rate to decide -- and it costs the
+ability to re-derive: `Near`, `Settled` and `Adrift` are all a week old
+and have changed twice, and the raw readings are what lets every past
+stay be recomputed when they change again. The obvious compromise,
+sending only when the phone has moved, is worse than it looks: a gap
+longer than `Adrift` closes a cluster, so sitting still for six hours
+would deliver one reading, close on the next, and be thrown away for
+being under `Settled`. The long stays would be the ones lost.
+
+## A place can be bigger than Near
+
+`Stays` clusters on distance from where the cluster started, and `Near`
+is 150 metres -- right for a desk, wrong for a building. Walk from one
+end of a shopping centre to the other and the cluster breaks: two
+visits, and a departure from somewhere nobody left. Indoor readings
+drift fifty to a hundred metres unaided, which can break it sitting
+still.
+
+Geometry cannot fix it. A radius wide enough for a mall swallows the
+restaurant next door. So the **name** does it: `Merged` joins
+consecutive stays that came back with the same name, and only across a
+gap no longer than `Adrift`. Leaving and returning in the evening stays
+two visits; the short clusters of a journey are dropped for being under
+`Settled` before this runs, so driving home leaves a gap far wider than
+`Adrift` and nothing merges.
+
+Naming therefore happens before merging, one lookup per cluster -- a
+building that breaks into three costs three. That is the price of not
+guessing a radius that fits every place at once.
+
+The merged middle is weighted by how long each half lasted. An hour at a
+table and two minutes by the door is a visit to the table; an unweighted
+midpoint puts it in the corridor, which matters because the next visit
+is matched to this one by how far apart their middles are.
+
+**What this does not fix.** It needs both halves to come back with the
+same name, and a reverse lookup at opposite ends of a large building can
+answer with two -- the building at one end, a unit inside it at the
+other. Nothing here can then tell they are one place. A geofence drawn
+round it always can, and geofences already outrank everything, which is
+the argument for drawing one.
+
 ## Presence fails closed
 
 Owner's decision, 2 October 2026, reversing *Present, away, and the
