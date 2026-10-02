@@ -28,6 +28,16 @@ const (
 	Exited  = "place.exited"
 )
 
+// Standing : Where the machine running the assistant last knew itself
+// to be.
+//
+// Written by the server, not by a device. Nothing tells a laptop where
+// it is, so it learns from the phone at the one moment the two are
+// certainly together: when somebody speaks to it out loud. A voice
+// turn means a person is standing in front of the satellite, and
+// wherever their phone is at that moment is where the satellite is.
+const Standing = "assistant.here"
+
 // Near : How far apart two readings can be and still be one place, in
 // metres.
 //

@@ -12,6 +12,7 @@
 package api
 
 import (
+	"context"
 	"log/slog"
 	"net/http"
 	"time"
@@ -43,6 +44,7 @@ import (
 	"github.com/DhanushRamesh/personal-assistant/internal/llm"
 	"github.com/DhanushRamesh/personal-assistant/internal/memory"
 	"github.com/DhanushRamesh/personal-assistant/internal/persona"
+	presencepkg "github.com/DhanushRamesh/personal-assistant/internal/presence"
 	"github.com/DhanushRamesh/personal-assistant/internal/remind"
 	"github.com/DhanushRamesh/personal-assistant/internal/speech"
 	"github.com/DhanushRamesh/personal-assistant/internal/tool"
@@ -126,11 +128,6 @@ type Options struct {
 	// geofence around. Optional: without it a stay somewhere new is
 	// written down as its coordinates.
 	Naming event.Naming
-
-	// Here : What the person calls the place this assistant is in, as
-	// that geofence is named on their phone. With it, their arriving
-	// is what greets them; without it, nothing does.
-	Here string
 
 	// Cut : Where the speech-to-text bridge reports that a recording was
 	// stopped while somebody was still speaking. Home Assistant does not
@@ -229,7 +226,17 @@ func New(opts Options) *Server {
 	// the server as an event. Said here rather than in the literal
 	// above because the thing that greets has to exist before the
 	// thing that notices somebody has walked in.
-	s.events.Welcomes(s.presence, opts.Here)
+	s.events.Welcomes(s.presence)
+
+	// A voice turn is the one moment this machine can learn where it
+	// is: somebody is standing in front of it, and their phone is
+	// where they are. Everything that answers whether they are here
+	// is a distance from what this records.
+	if opts.DeviceEvents != nil {
+		s.assist.Locates(func(ctx context.Context, userID string) {
+			presencepkg.Locate(ctx, opts.DeviceEvents, userID, now(opts.Now), opts.Logger)
+		})
+	}
 
 	s.routes()
 	return s
@@ -284,4 +291,12 @@ func (s *Server) routes() {
 		s.memories.Mount(r)
 		s.tools.Mount(r)
 	})
+}
+
+// now : The clock an option gave, or the real one.
+func now(clock func() time.Time) time.Time {
+	if clock == nil {
+		return time.Now()
+	}
+	return clock()
 }

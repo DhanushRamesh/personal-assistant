@@ -207,87 +207,119 @@ func value(payload []byte) string {
 // either.
 const Heard = 20 * time.Minute
 
-// Here : Whether the person is at the place the assistant is in.
+// Within : How close the phone has to be to the machine running the
+// assistant to count as being with it, in metres.
 //
-// From the geofence the person drew themselves, which is the only
-// thing in this system that can see distance. The owner, 2 October
-// 2026, having had six greetings from a watch that never left the
-// room: "can we eliminate watch as my presence and change it to my
-// phone, as phone will be always with me... the home assistant should
-// announce only when my phone is near to it."
-//
-// What this gives up is the room. A watch at the desk could tell one
-// room from the next; a geofence cannot tell the desk from the garden.
-// That was the trade: the room was worth a decibel of margin, and a
-// decibel of margin is why it was wrong six times in a day.
-func Here(events []event.Event, place string, now time.Time) Answer {
-	place = strings.TrimSpace(place)
-	out := Answer{Where: Unknown, On: map[string]string{}}
-	if place == "" {
-		out.Why = "nowhere is configured as where the assistant is"
-		return out
-	}
+// The same distance that makes two readings one place, so nothing in
+// this server disagrees with anything else about what "here" means.
+// Generous for a room and tight enough that the next street is not
+// it; the phone's own scatter is about twenty metres, so a smaller
+// radius would flicker.
+const Within = 150.0
 
-	var crossings []event.Event
-	for _, e := range events {
+// Near : Whether the person's phone is with the machine that listens.
+//
+// The owner, 2 October 2026: "the distance between the phone and the
+// home assistant server laptop is the factor." Not a geofence, not a
+// named place, not a shared network -- those answer where somebody is
+// rather than whether they are here, and a laptop carried to the
+// office is still a laptop being spoken to.
+//
+// Two positions and the distance between them. The phone reports its
+// own; the satellite's is remembered from the last time somebody spoke
+// to it out loud, which is the one moment the two are certainly
+// together.
+func Near(events []event.Event, now time.Time) Answer {
+	out := Answer{Where: Unknown, On: map[string]string{}}
+
+	var phone, satellite *event.Fix
+	for i := range events {
+		e := events[i]
 		switch e.Kind {
-		case event.Entered, event.Exited:
-			crossings = append(crossings, e)
 		case event.Fixed:
-			if e.OccurredAt.After(out.Since) {
-				out.Since = e.OccurredAt
+			if f, ok := event.ReadFix(e); ok && (phone == nil || f.At.After(phone.At)) {
+				copied := f
+				phone = &copied
+			}
+		case event.Standing:
+			lat, lon, ok := event.LatLon(value(e.Payload))
+			if !ok {
+				continue
+			}
+			if satellite == nil || e.OccurredAt.After(satellite.At) {
+				satellite = &event.Fix{At: e.OccurredAt, Lat: lat, Lon: lon}
 			}
 		}
 	}
 
-	// Liveness first. Everything below is a claim about where somebody
-	// is, and a phone that has gone quiet cannot support one.
-	if out.Since.IsZero() {
+	switch {
+	case phone == nil:
 		out.Why = "the phone has not reported where it is"
 		return out
-	}
-	if now.Sub(out.Since) > Heard {
-		out.Stale = true
-		out.Why = fmt.Sprintf("the phone last reported %s ago", ago(now.Sub(out.Since)))
+	case satellite == nil:
+		out.Since = phone.At
+		out.Why = "the assistant does not know where it is; nobody has spoken to it out loud yet"
 		return out
 	}
 
-	// The same pairing the stays use, so the two never disagree about
-	// when somebody was somewhere.
-	var holding *event.Fence
-	for _, f := range event.Fences(crossings, now) {
-		if !strings.EqualFold(f.Name, place) {
+	out.Since = phone.At
+	// A phone that has stopped reporting cannot say where anybody is,
+	// however recently it last did. The five-minute readings are the
+	// only heartbeat there is.
+	if now.Sub(phone.At) > Heard {
+		out.Stale = true
+		out.Why = fmt.Sprintf("the phone last reported %s ago", ago(now.Sub(phone.At)))
+		return out
+	}
+
+	apart := event.Stay{Lat: satellite.Lat, Lon: satellite.Lon}.Apart(phone.Lat, phone.Lon)
+	if apart <= Within {
+		out.Where = Present
+		out.Why = fmt.Sprintf("their phone is %d metres from the assistant", int(apart))
+		return out
+	}
+	out.Where = Away
+	out.Why = fmt.Sprintf("their phone is %s from the assistant", far(apart))
+	return out
+}
+
+// Arriving : Whether this is the moment they came back.
+//
+// Worked out from the readings rather than remembered, so a restart
+// does not greet somebody who never went anywhere and a missed batch
+// does not swallow a homecoming. Present now, and away at the reading
+// before this one.
+func Arriving(events []event.Event, now time.Time) bool {
+	if Near(events, now).Where != Present {
+		return false
+	}
+
+	// Everything except the newest reading, judged at the moment that
+	// reading replaced.
+	var newest, previous time.Time
+	for _, e := range events {
+		if e.Kind != event.Fixed {
 			continue
 		}
-		copied := f
-		if holding == nil || f.From.After(holding.From) {
-			holding = &copied
+		if e.OccurredAt.After(newest) {
+			newest, previous = e.OccurredAt, newest
+		} else if e.OccurredAt.After(previous) {
+			previous = e.OccurredAt
 		}
 	}
-	if holding == nil {
-		out.Why = "nothing has been reported about " + place
-		return out
+	if previous.IsZero() {
+		// One reading ever. Nothing to have arrived from.
+		return false
 	}
 
-	// Said as how long ago rather than at what time. This is read in a
-	// log and on a screen, and a clock time here would be the server's
-	// own, which is not the one the person keeps.
-	switch {
-	case !holding.Holds(now):
-		out.Where = Away
-		out.Why = fmt.Sprintf("they left %s %s ago", place, ago(now.Sub(holding.To)))
-	case now.Sub(holding.From) > event.Lingering:
-		// Open for longer than anybody stays without the departure
-		// being missed. Android drops them, and a missed one must not
-		// keep somebody at home for days.
-		out.Stale = true
-		out.Why = fmt.Sprintf("they entered %s %s ago and no leaving was ever reported",
-			place, ago(now.Sub(holding.From)))
-	default:
-		out.Where = Present
-		out.Why = fmt.Sprintf("they have been at %s for %s", place, ago(now.Sub(holding.From)))
+	before := make([]event.Event, 0, len(events))
+	for _, e := range events {
+		if e.Kind == event.Fixed && e.OccurredAt.Equal(newest) {
+			continue
+		}
+		before = append(before, e)
 	}
-	return out
+	return Near(before, previous).Where == Away
 }
 
 // ago : A stretch of time, roughly, in the words somebody would use.
@@ -306,6 +338,14 @@ func ago(d time.Duration) string {
 	}
 }
 
+// far : A distance, roughly, in the words somebody would use.
+func far(metres float64) string {
+	if metres < 1000 {
+		return fmt.Sprintf("%d metres", int(metres/10)*10)
+	}
+	return fmt.Sprintf("%.1f km", metres/1000)
+}
+
 // Reader : Where the events come from.
 type Reader interface {
 	Recent(ctx context.Context, userID string, q event.Query) ([]event.Event, error)
@@ -322,8 +362,6 @@ type Reader interface {
 type OfPhone struct {
 	// Events : Where to read from. Required.
 	Events Reader
-	// Place : What the person calls the place the assistant is in.
-	Place string
 	// Now : The clock, replaceable in tests.
 	Now func() time.Time
 	// Logger : Where a failed read goes. Nil is silent.
@@ -336,7 +374,7 @@ const Looking = 48 * time.Hour
 
 // Away : Whether the person is known to be elsewhere.
 func (o OfPhone) Away(ctx context.Context, userID string) bool {
-	if o.Events == nil || strings.TrimSpace(o.Place) == "" {
+	if o.Events == nil {
 		return false
 	}
 	now := time.Now()
@@ -351,8 +389,110 @@ func (o OfPhone) Away(ctx context.Context, userID string) bool {
 		}
 		return false
 	}
-	return Here(found, o.Place, now).Where == Away
+	return Near(found, now).Where == Away
 }
 
 // Describe : What it is watching, for the log at startup.
-func (o OfPhone) Describe() string { return "their phone, against the " + o.Place + " geofence" }
+func (o OfPhone) Describe() string {
+	return fmt.Sprintf("how far their phone is from this machine, over %d metres being away", int(Within))
+}
+
+// Moved : How far the assistant has to have moved before it is worth
+// writing down again.
+//
+// The same radius that counts as being with it, so a position good
+// enough to answer presence is not rewritten for a few metres of
+// scatter.
+const Moved = Within
+
+// Stale : How old the assistant's own position may be before it is
+// refreshed, even where nothing has moved.
+//
+// A laptop that was carried somewhere while the phone was elsewhere
+// has a position nobody corrected. A day is long enough that an
+// ordinary week writes seven of these, and short enough that a
+// forgotten move is wrong for one day rather than for ever.
+const Stale = 24 * time.Hour
+
+// Writer : Where the assistant's own position is written.
+type Writer interface {
+	Recent(ctx context.Context, userID string, q event.Query) ([]event.Event, error)
+	Record(ctx context.Context, userID string, events []*event.Event) (stored, seen []string, err error)
+}
+
+// Locate : Notes where the machine running the assistant is, from the
+// phone, because somebody has just spoken to it out loud.
+//
+// This is the whole of how a laptop learns its own position. Nothing
+// tells it; it is told by the one thing that is certainly true when a
+// voice arrives, which is that a person is standing in front of it,
+// and their phone is where they are.
+//
+// Only voice. A typed message can come from the office, and a
+// position learned from one would move the assistant to wherever
+// somebody happened to be sitting.
+//
+// Quiet about everything. Nobody is waiting for this and nothing
+// depends on any one of them landing: the next voice turn writes
+// another.
+func Locate(ctx context.Context, store Writer, userID string, now time.Time, logger *slog.Logger) {
+	if store == nil || userID == "" {
+		return
+	}
+
+	found, err := store.Recent(ctx, userID, event.Query{Since: now.Add(-Looking)})
+	if err != nil {
+		return
+	}
+
+	var phone *event.Fix
+	var known *event.Fix
+	for i := range found {
+		e := found[i]
+		switch e.Kind {
+		case event.Fixed:
+			if f, ok := event.ReadFix(e); ok && (phone == nil || f.At.After(phone.At)) {
+				copied := f
+				phone = &copied
+			}
+		case event.Standing:
+			lat, lon, ok := event.LatLon(value(e.Payload))
+			if ok && (known == nil || e.OccurredAt.After(known.At)) {
+				known = &event.Fix{At: e.OccurredAt, Lat: lat, Lon: lon}
+			}
+		}
+	}
+
+	// A reading nobody has taken recently says nothing about where
+	// anybody is standing.
+	if phone == nil || now.Sub(phone.At) > Heard {
+		return
+	}
+	if known != nil && now.Sub(known.At) < Stale {
+		// A composite literal cannot sit bare in a condition.
+		at := event.Stay{Lat: known.Lat, Lon: known.Lon}
+		if at.Apart(phone.Lat, phone.Lon) < Moved {
+			return
+		}
+	}
+
+	where := event.Coordinates(phone.Lat, phone.Lon)
+	payload, err := json.Marshal(map[string]string{"value": where})
+	if err != nil {
+		return
+	}
+	// Keyed by the hour, so a morning of voice turns writes one row
+	// rather than thirty.
+	key := event.Standing + ":" + now.UTC().Format("2006-01-02T15")
+	e, err := event.New(userID, "server", "", event.Standing, now, now, payload, key)
+	if err != nil {
+		return
+	}
+	if _, _, err := store.Record(ctx, userID, []*event.Event{e}); err != nil {
+		return
+	}
+	if logger != nil {
+		logger.InfoContext(ctx, "the assistant learned where it is",
+			slog.String("from", "a voice turn"), slog.String("at", where))
+	}
+}

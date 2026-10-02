@@ -23,7 +23,6 @@ import (
 	"log/slog"
 	"net/http"
 	"strconv"
-	"strings"
 	"time"
 
 	"github.com/go-chi/chi/v5"
@@ -31,6 +30,7 @@ import (
 	"github.com/DhanushRamesh/personal-assistant/internal/api/authn"
 	"github.com/DhanushRamesh/personal-assistant/internal/api/httpx"
 	"github.com/DhanushRamesh/personal-assistant/internal/event"
+	"github.com/DhanushRamesh/personal-assistant/internal/presence"
 )
 
 // maxRequestBody : The largest batch that will be read.
@@ -160,15 +160,13 @@ type Handler struct {
 	store   Store
 	naming  event.Naming
 	greeter Greeter
-	here    string
 	now     func() time.Time
 }
 
-// Welcomes : Sets who says hello, and what the person calls the place
-// the assistant is in. Without both, an arrival is recorded and
-// nothing is said.
-func (h *Handler) Welcomes(g Greeter, here string) *Handler {
-	h.greeter, h.here = g, strings.TrimSpace(here)
+// Welcomes : Sets who says hello. Without one, an arrival is recorded
+// and nothing is said.
+func (h *Handler) Welcomes(g Greeter) *Handler {
+	h.greeter = g
 	return h
 }
 
@@ -272,55 +270,56 @@ func (h *Handler) Record(w http.ResponseWriter, r *http.Request) {
 		Stored: stored, Seen: seen, Rejected: rejected})
 }
 
-// welcome : Says hello if one of these events is the person walking in.
+// welcome : Says hello if these readings are the person coming back.
 //
-// The arrival used to come from Home Assistant watching a watch's
-// Bluetooth signal, which on 2 October 2026 announced six arrivals to
-// somebody who had not moved. It comes from their own phone crossing
-// the geofence they drew now -- one event, reported once, by the thing
-// they actually carry.
+// Coming back is their phone being near this machine now and not at
+// the reading before. Not a geofence: the owner, 2 October 2026, "the
+// distance between the phone and the home assistant server laptop is
+// the factor". A laptop carried to the office is still a laptop being
+// spoken to, and a geofence drawn round a house cannot say that.
 //
-// Only an arrival stored for the first time counts: a resend is the
-// same crossing arriving twice, and the person did not walk in twice.
+// It replaced a watch that announced six arrivals in one day to
+// somebody who had not left the room.
 func (h *Handler) welcome(ctx context.Context, userID string, taken []*event.Event, stored []string) {
-	if h.greeter == nil || h.here == "" || len(stored) == 0 {
+	if h.greeter == nil || len(stored) == 0 {
 		return
 	}
+	// Only new readings can be a homecoming. A resend is the same
+	// moment arriving twice and nobody walked in twice.
 	fresh := map[string]bool{}
 	for _, key := range stored {
 		fresh[key] = true
 	}
-
 	now := h.now()
+	arrived := false
 	for _, e := range taken {
-		if e.Kind != event.Entered || !fresh[e.DedupeKey] {
+		if e.Kind != event.Fixed || !fresh[e.DedupeKey] {
 			continue
 		}
-		if !strings.EqualFold(placeIn(e.Payload), h.here) {
-			continue
+		// The phone spools what it sees, so a flush after a day
+		// underground delivers this morning's walk home at midnight.
+		if now.Sub(e.OccurredAt) <= Fresh {
+			arrived = true
+			break
 		}
-		if now.Sub(e.OccurredAt) > Fresh {
-			h.Logger.InfoContext(ctx, "an arrival was too old to greet",
-				slog.Duration("ago", now.Sub(e.OccurredAt).Round(time.Minute)))
-			continue
-		}
-		// Not waited for. Speaking blocks until the words have
-		// finished playing, and the phone flushing its spool must not
-		// hold the connection open for a greeting and three reminders.
-		go h.greeter.Greet(context.WithoutCancel(ctx), userID)
+	}
+	if !arrived {
 		return
 	}
-}
 
-// placeIn : What a crossing says the place is called.
-func placeIn(payload json.RawMessage) string {
-	var into struct {
-		Value string `json:"value"`
+	found, err := h.store.Recent(ctx, userID, event.Query{Since: now.Add(-presence.Looking)})
+	if err != nil {
+		h.Logger.WarnContext(ctx, "cannot tell whether they just came back", slog.Any("error", err))
+		return
 	}
-	if err := json.Unmarshal(payload, &into); err != nil {
-		return ""
+	if !presence.Arriving(found, now) {
+		return
 	}
-	return strings.TrimSpace(into.Value)
+
+	// Not waited for. Speaking blocks until the words have finished
+	// playing, and the phone flushing its spool must not hold the
+	// connection open for a greeting and three held reminders.
+	go h.greeter.Greet(context.WithoutCancel(ctx), userID)
 }
 
 // settle : Works out which stays have ended, now that new readings have

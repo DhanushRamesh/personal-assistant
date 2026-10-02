@@ -1286,7 +1286,56 @@ is right -- the owner is at the laptop, in the new place.
 charger; and moving between two places on the same network name, which
 a phone would catch and this cannot.
 
-## The phone is the presence token now, and the room is given up
+## Presence is a distance between two devices
+
+**Owner, 2 October 2026:** *"geofence shouldn't be a factor here, only
+the home assistant server (my laptop currently) and my phone... the
+distance between the phone and the laptop is the factor."*
+
+The first attempt used the home geofence, which was wrong for a
+concrete reason: carry the laptop to the office and a geofence drawn
+round a house says they are away, so the machine they are sitting in
+front of goes silent.
+
+**Two devices and the distance between them.** The phone reports its
+own position every five minutes. The assistant's is harder -- nothing
+tells a laptop where it is -- so it learns from the phone at the one
+moment the two are certainly together: **when somebody speaks to it
+out loud.** A voice turn means a person is standing in front of the
+satellite, and their phone is where they are. `presence.Locate`
+writes that down as an `assistant.here` event; `presence.Near` is the
+distance from it.
+
+**Only voice.** A typed message can come from the office, and a
+position learned from one would move the assistant to wherever
+somebody happened to be sitting.
+
+This answers every case the other approaches got wrong:
+
+| | |
+|---|---|
+| Phone on mobile data beside the laptop | distance ~0, **present** -- the owner's original objection to networks |
+| Office, laptop on Zoho-Corp-TLS and phone on Zoho-Guest | distance ~0, **present** |
+| Laptop carried to the office | the first voice turn there re-learns its position |
+| Them at the mall, laptop at home | kilometres, **away** |
+
+**It fails to unknown, which speaks.** An assistant nobody has spoken
+to out loud yet does not know where it is, and a phone that has gone
+quiet for twenty minutes cannot say where anybody is. Neither is an
+absence.
+
+**Coming back is worked out, not remembered.** `presence.Arriving` is
+present now and away at the reading before, both computed from the
+same events, so a restart cannot greet somebody who never went
+anywhere and a missed batch cannot swallow a homecoming.
+
+**Written at most once an hour and only when it has moved**, keyed by
+the hour, so a morning of talking to it writes one row rather than
+thirty. Refreshed after a day regardless, because a laptop carried
+somewhere while the phone was elsewhere has a position nobody
+corrected.
+
+## What came before: the phone's geofence, and the room given up
 
 **Owner, 2 October 2026:** *"can we eliminate watch as my presence and
 change it to my phone, as phone will be always with me... the home

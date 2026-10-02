@@ -11,7 +11,6 @@ import (
 	"os/signal"
 	"runtime/debug"
 	"slices"
-	"strings"
 	"sync"
 	"syscall"
 	"time"
@@ -431,7 +430,6 @@ func run() error {
 		Cut:            cutOff,
 		DeviceEvents:   deviceEvents,
 		Naming:         naming(cfg, logger.Logger),
-		Here:           cfg.Assistant.Here,
 		Tools:          tools,
 		RequestTimeout: cfg.Server.RequestTimeout,
 		// Development only: `flutter run` serves the UI from its own port so
@@ -587,14 +585,13 @@ func linkToGoogle(cfg config.Config, logger *slog.Logger, db *storage.DB) *googl
 // Nil when nothing is configured, which means every reminder is said aloud
 // -- what this did before there was any way to tell, and the safe way round.
 func whereabouts(cfg config.Config, events presence.Reader, logger *slog.Logger) remind.Presence {
-	// Their own phone, against the geofence they drew. It replaced a
-	// watch whose Bluetooth signal could tell one room from the next
-	// with a decibel to spare, and which on 2 October 2026 announced
-	// six arrivals to somebody who had not moved. The room is the
-	// thing given up: a geofence cannot tell the desk from the garden.
-	if here := strings.TrimSpace(cfg.Assistant.Here); here != "" && events != nil {
-		p := presence.OfPhone{Events: events, Place: here, Now: cfg.Assistant.Now, Logger: logger}
-		logger.Info("the house speaks when their phone is here",
+	// How far their phone is from this machine. Not a geofence and not
+	// a shared network: those answer where somebody is, and the
+	// question is whether they are near the thing that listens. A
+	// laptop carried to the office is still a laptop being spoken to.
+	if events != nil {
+		p := presence.OfPhone{Events: events, Now: cfg.Assistant.Now, Logger: logger}
+		logger.Info("the house speaks when their phone is near it",
 			slog.String("asking", p.Describe()))
 		return p
 	}
