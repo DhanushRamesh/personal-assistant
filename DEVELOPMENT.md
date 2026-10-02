@@ -891,6 +891,38 @@ long `Avoid` text pointing at each other: seven of twenty-two do
 today, which is already a little high and means a boundary is wrong
 somewhere.
 
+### What was built, and how long a description lasts
+
+Built as `tool_describe` rather than `tool_load`, and it hands over
+names rather than schemas: revealing a tool puts its real description
+in the next request's tool list, so returning the schema here would be
+a second copy -- and a tool result is a stored message, so that copy
+would be re-sent with every later turn. `hot` in
+`internal/tool/deferred.go` is the list described on every request,
+with the measurement behind each entry beside it.
+
+**2 October 2026: a description now lasts the conversation, not the
+utterance.** The set of revealed tools was a local in `execute`, which
+runs once per thing the person says. Asked four times about the same
+cinema booking, the model called `tool_describe` for `calendar_update`
+four separate times -- each one after a guessed call that had to be
+refused, each one a round somebody waited through -- while the result
+it was handed each time said "callable from here on".
+
+**Read back out of the history rather than kept anywhere.** Both ways
+a tool gets revealed leave a tool call in the conversation:
+`tool_describe` names them in its arguments, and a tool called before
+it was described is described afterwards. So `alreadyDescribed` scans
+the window for tool calls and there is no state to evict, nothing to
+key by conversation, and nothing lost to a restart.
+
+**Scanned from the window, not the whole conversation**, which bounds
+it for free. A tool last mentioned far enough back to have been
+condensed away is not what this conversation is doing any more, and the
+request stops carrying its description. That also stops a long
+conversation from drifting back towards describing everything, which is
+the cost the mechanism exists to avoid.
+
 ## One mechanism for reading before being asked
 
 **Accuracy before latency, always.** The owner's rule, 27 September

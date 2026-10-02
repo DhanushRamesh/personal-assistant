@@ -280,3 +280,23 @@ func TestNothingIsWithheldWithoutDescribe(t *testing.T) {
 		t.Error("withheld a tool in a registry that cannot defer")
 	}
 }
+
+// A stored tool_describe call says which tools it described, so the
+// next chat of the conversation does not have to describe them again.
+func TestWhatADescribeCallAskedFor(t *testing.T) {
+	got := tool.Described(`{"names":["calendar_update","memory_search"],"saying":"looking it up"}`)
+
+	if len(got) != 2 || got[0] != "calendar_update" || got[1] != "memory_search" {
+		t.Errorf("read %v, want both names", got)
+	}
+}
+
+// A call whose arguments will not read described nothing, so it
+// revealed nothing.
+func TestAMalformedDescribeCallRevealsNothing(t *testing.T) {
+	for _, args := range []string{``, `{`, `{"names":"calendar_update"}`, `{"names":[]}`, `null`} {
+		if got := tool.Described(args); len(got) != 0 {
+			t.Errorf("%s read as %v, want nothing", args, got)
+		}
+	}
+}

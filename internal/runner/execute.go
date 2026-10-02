@@ -108,11 +108,18 @@ func (r *Runner) consume(runCtx, ctx context.Context, t *chat.Chat, systemPrompt
 	// follows the last rather than landing on top of it.
 	aloud := &speech{}
 
-	// revealed : The deferred tools the model has asked about, which are
-	// described from the next round on. Per chat, not per turn: having
-	// been told how to call something once, it is not taken away again
-	// mid-chain.
-	revealed := map[string]bool{}
+	// revealed : The deferred tools this conversation has been told how
+	// to call, which are described in full rather than named.
+	//
+	// Read back out of the history rather than started empty. Started
+	// empty it lasted one chat, and a chat is one thing the person
+	// said: asked four times about the same cinema booking, the model
+	// called tool_describe for calendar_update four separate times,
+	// each one preceded by a guessed call that had to be refused and
+	// each one costing a round somebody was waiting through. The
+	// result it was handed said "callable from here on", and that was
+	// true for about forty seconds.
+	revealed := r.alreadyDescribed(window.Messages)
 
 	// worked : Rounds that got something done, as against rounds the
 	// server spent correcting the model.
@@ -464,6 +471,46 @@ func (r *Runner) history(ctx context.Context, t *chat.Chat, systemPrompt string)
 	}
 
 	return conversation.Plan(said, summary, r.limitsFor(t.Model, r.alongside(t, systemPrompt)))
+}
+
+// alreadyDescribed : The deferred tools this conversation has already
+// been told how to call.
+//
+// Two things reveal a tool, and both leave a tool call in the history:
+// tool_describe names them in its arguments, and a tool called before
+// it was described is described afterwards so the next round can call
+// it properly. So the history is the record, and no state has to be
+// kept anywhere for it.
+//
+// Read from the window rather than the whole conversation, which
+// bounds it for free. A tool last mentioned far enough back to have
+// been condensed away is not what this conversation is doing any more,
+// and the request stops carrying its description.
+func (r *Runner) alreadyDescribed(messages []conversation.Message) map[string]bool {
+	revealed := map[string]bool{}
+	if r.tools == nil {
+		return revealed
+	}
+
+	add := func(name string) {
+		// Through the registry, so a name the model invented does not
+		// become an entry that nothing will ever match.
+		if _, ok := r.tools.Get(name); ok {
+			revealed[name] = true
+		}
+	}
+	for _, m := range messages {
+		for _, c := range m.ToolCalls {
+			if c.Name == tool.DescribeName {
+				for _, name := range tool.Described(c.Arguments) {
+					add(name)
+				}
+				continue
+			}
+			add(c.Name)
+		}
+	}
+	return revealed
 }
 
 // toProviderTurns : Converts a conversation's messages into the form a provider

@@ -140,3 +140,28 @@ func outcomeFor(missing int) conversation.Outcome {
 	}
 	return conversation.OutcomeOK
 }
+
+// Described : The tools a stored tool_describe call asked about.
+//
+// Here rather than in the runner because the argument shape belongs to
+// the tool above, and a reader of one should not have to find the
+// other to know what it parses.
+//
+// A call whose arguments will not read returns nothing. It was a
+// malformed call, so it described nothing, so nothing was revealed by
+// it.
+func Described(arguments string) []string {
+	var args struct {
+		Names []string `json:"names"`
+	}
+	if err := json.Unmarshal([]byte(arguments), &args); err != nil {
+		return nil
+	}
+	out := make([]string, 0, len(args.Names))
+	for _, name := range args.Names {
+		if name = strings.TrimSpace(name); name != "" {
+			out = append(out, name)
+		}
+	}
+	return out
+}
