@@ -241,3 +241,66 @@ func TestNoOccurredAtMeansNow(t *testing.T) {
 			got[0].OccurredAt, got[0].ReceivedAt)
 	}
 }
+
+// TestAValueThatIsAnObjectIsUnfolded : The phone's sender can only
+// write {"value": one string}, so a reading with a length to report
+// puts JSON in the string.
+func TestAValueThatIsAnObjectIsUnfolded(t *testing.T) {
+	store := inmemory.New()
+	e := apitest.NewWith(t, apitest.Options{DeviceEvents: store})
+
+	code, _ := post(t, e, `{"source":"tasker","device":"pixel-7","events":[
+		{"kind":"call.received",
+		 "payload":{"value":"{\"value\":\"Priya\",\"seconds\":1870}"},
+		 "dedupe_key":"k1"}]}`)
+	if code != http.StatusOK {
+		t.Fatalf("expected 200, got %d", code)
+	}
+
+	got, _ := store.Recent(context.Background(), e.User.ID, event.Query{})
+	if len(got) != 1 {
+		t.Fatalf("expected one event, got %d", len(got))
+	}
+	var into map[string]any
+	if err := json.Unmarshal(got[0].Payload, &into); err != nil {
+		t.Fatalf("the payload is not an object: %s", got[0].Payload)
+	}
+	if into["value"] != "Priya" {
+		t.Errorf("value = %v, want Priya", into["value"])
+	}
+	if into["seconds"] != float64(1870) {
+		t.Errorf("seconds = %v, want 1870", into["seconds"])
+	}
+}
+
+// TestAnOrdinaryValueIsLeftAlone : Everything the phone sends today --
+// coordinates, a network name, a place -- must come through unchanged,
+// including anything that happens to look like JSON on its own.
+func TestAnOrdinaryValueIsLeftAlone(t *testing.T) {
+	store := inmemory.New()
+	e := apitest.NewWith(t, apitest.Options{DeviceEvents: store})
+
+	for i, value := range []string{
+		"12.9110236,80.0624303", "Dhanush_EXT", "home", "42", "[1,2]", "", "{not json",
+	} {
+		code, _ := post(t, e, `{"source":"tasker","events":[
+			{"kind":"network.joined","payload":{"value":`+quoted(value)+`},
+			 "dedupe_key":"k`+itoa(i)+`"}]}`)
+		if code != http.StatusOK {
+			t.Fatalf("%q: expected 200, got %d", value, code)
+		}
+	}
+
+	got, _ := store.Recent(context.Background(), e.User.ID, event.Query{})
+	for _, ev := range got {
+		var into struct {
+			Value string `json:"value"`
+		}
+		if err := json.Unmarshal(ev.Payload, &into); err != nil {
+			t.Errorf("payload stopped being a plain value: %s", ev.Payload)
+		}
+	}
+}
+
+func quoted(s string) string { b, _ := json.Marshal(s); return string(b) }
+func itoa(i int) string      { return string(rune('0' + i)) }

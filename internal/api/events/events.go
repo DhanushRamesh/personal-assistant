@@ -23,6 +23,7 @@ import (
 	"log/slog"
 	"net/http"
 	"strconv"
+	"strings"
 	"time"
 
 	"github.com/go-chi/chi/v5"
@@ -247,7 +248,7 @@ func (h *Handler) Record(w http.ResponseWriter, r *http.Request) {
 			at = received
 		}
 		e, err := event.New(user, batch.Source, batch.Device, in.Kind,
-			at, received, in.Payload, in.DedupeKey)
+			at, received, unpacked(in.Payload), in.DedupeKey)
 		if err != nil {
 			rejected = append(rejected, Rejected{
 				DedupeKey: in.DedupeKey, At: i, Why: err.Error()})
@@ -309,6 +310,59 @@ func (h *Handler) settle(ctx context.Context, userID string, taken []*event.Even
 			slog.Duration("for", s.Long().Round(time.Minute)),
 			slog.Time("from", s.From))
 	}
+}
+
+// unpacked : A payload whose value is itself an object, flattened.
+//
+// For a device that can only send one field. The phone builds its
+// payload in a snippet that takes a kind and a string and writes
+// {"value": that string}, and it has no third parameter: Tasker's
+// Perform Task passes two. So a reading with anything besides a name
+// to report -- how long a call lasted, how long a stay was -- cannot
+// be expressed at all.
+//
+// Rather than have the phone's one working sender rewritten to carry
+// arbitrary JSON, which is a code field edited with a thumb and the
+// only thing standing between this server and every event it gets, the
+// device may put JSON in the string and this unfolds it. The result is
+// an ordinary payload, so everything downstream -- the four-week
+// counts, the lines in a greeting, the description -- sees what it
+// would have seen anyway.
+//
+// Only an object, and only when "value" is the sole field. A payload
+// that already carries more was built by something that did not need
+// this, and a value that happens to look like a number or a list is
+// left exactly as it is: "42" is a reading, not a structure.
+func unpacked(payload json.RawMessage) json.RawMessage {
+	if len(payload) == 0 {
+		return payload
+	}
+	var outer map[string]json.RawMessage
+	if err := json.Unmarshal(payload, &outer); err != nil || len(outer) != 1 {
+		return payload
+	}
+	raw, ok := outer["value"]
+	if !ok {
+		return payload
+	}
+	var text string
+	if err := json.Unmarshal(raw, &text); err != nil {
+		return payload
+	}
+	text = strings.TrimSpace(text)
+	if !strings.HasPrefix(text, "{") {
+		return payload
+	}
+	var inner map[string]any
+	if err := json.Unmarshal([]byte(text), &inner); err != nil || len(inner) == 0 {
+		return payload
+	}
+	// It has to still be a payload afterwards: something keyed on a
+	// value is what every reader here expects to find.
+	if _, ok := inner["value"]; !ok {
+		return payload
+	}
+	return json.RawMessage(text)
 }
 
 // List : What the person's devices have reported.
