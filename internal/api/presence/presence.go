@@ -70,6 +70,21 @@ type Announcements interface {
 	Arrived(ctx context.Context, userID, text string)
 }
 
+// Ordinary : How far back to look to tell what is ordinary for
+// somebody.
+//
+// The same four weeks the description is counted over, for the same
+// reason: one Tuesday is an anecdote.
+const Ordinary = 28 * 24 * time.Hour
+
+// OrdinaryMost : The most events read to work that out.
+//
+// A bound, because this runs at a door. Four weeks of a phone that has
+// learned to report a great deal is not something to read while
+// somebody waits, and a count taken from the most recent few thousand
+// is as good a guide to what is ordinary as one taken from all of them.
+const OrdinaryMost = 3000
+
 // Spoke : When the assistant last said anything to somebody, which is
 // the window a greeting catches up on.
 type Spoke interface {
@@ -104,6 +119,9 @@ type Handler struct {
 	spoke    Spoke
 	reported Reported
 	known    Known
+	// notFrom : Sources whose events describe a machine rather than
+	// the person. The one the assistant runs on, where it is named.
+	notFrom []string
 
 	mu sync.Mutex
 	// lastGreeting : So the same words are not used twice running.
@@ -131,9 +149,14 @@ func New(logger *slog.Logger, announcer announce.Announcer, reminders remind.Sto
 // Separate from New because every one of them is optional and New
 // already takes six arguments. Nothing here changes whether somebody is
 // greeted, only what is said.
-func (h *Handler) Writes(w *greet.Writer, spoke Spoke, reported Reported, known Known) *Handler {
+func (h *Handler) Writes(w *greet.Writer, spoke Spoke, reported Reported, known Known,
+	thisMachine string) *Handler {
+
 	h.writer = w
 	h.spoke, h.reported, h.known = spoke, reported, known
+	if thisMachine = strings.TrimSpace(thisMachine); thisMachine != "" {
+		h.notFrom = []string{thisMachine}
+	}
 	return h
 }
 
@@ -205,7 +228,7 @@ func (h *Handler) compose(ctx context.Context, user string, owed []string) (stri
 	if from.IsZero() {
 		from = now.Add(-greet.Recent)
 	}
-	told.Events = h.happened(ctx, user, from)
+	told.Events, told.Usual = h.happened(ctx, user, from)
 
 	said, written := h.writer.Write(ctx, told)
 	return said, written
@@ -246,31 +269,63 @@ func (h *Handler) lastSpoke(ctx context.Context, user string) time.Time {
 // walk in here within a minute or two of that, so the stay most worth
 // asking about is usually the one not yet in the table. Reading the
 // fixes costs one more query and removes the timing entirely.
-func (h *Handler) happened(ctx context.Context, user string, from time.Time) []event.Event {
+func (h *Handler) happened(ctx context.Context, user string, from time.Time) ([]event.Event, map[string]int) {
 	if h.reported == nil {
-		return nil
+		return nil, nil
 	}
-	evs, err := h.reported.Recent(ctx, user, event.Query{
-		Since: from, Limit: greet.Most,
+
+	// Four weeks in one read, not the window. The window says what
+	// happened; the four weeks say which of it is ordinary, and a
+	// greeting needs both. One query rather than two because this runs
+	// with somebody standing in a doorway.
+	since := h.clock().Add(-Ordinary)
+	if from.Before(since) {
+		since = from
+	}
+	all, err := h.reported.Recent(ctx, user, event.Query{
+		Since: since, Limit: OrdinaryMost,
 		Omit: []string{event.Fixed, event.Stayed},
+		// Not what this machine reported about itself. It publishes
+		// its own network so the person's phone can be compared
+		// against it, and a laptop reconnecting to its own wifi is not
+		// something that happened to anybody.
+		NotFrom: h.notFrom,
 	})
 	if err != nil {
 		h.Logger.WarnContext(ctx, "cannot read what happened while they were out",
 			slog.Any("error", err))
-		return nil
+		return nil, nil
+	}
+
+	usual := make(map[string]int, len(all))
+	evs := make([]event.Event, 0, len(all))
+	for _, e := range all {
+		usual[greet.Label(e)]++
+		if !e.OccurredAt.Before(from) {
+			evs = append(evs, e)
+		}
 	}
 	// Newest first from the store, oldest first for reading.
 	slices.Reverse(evs)
+	if len(evs) > greet.Most {
+		evs = evs[len(evs)-greet.Most:]
+	}
 
-	return h.merge(evs, h.stayed(ctx, user, from))
+	return h.merge(evs, h.stayed(ctx, user, from)), usual
 }
 
 // stayed : Where they have been, worked out from the readings now.
 //
-// Named by nothing: naming is a network call to a mapping service and
-// there is no room for one at a door. A stay keeps its coordinates
-// here, and the one written in the background will have a name on it
-// by the time anything else reads it.
+// Named from what is already known and never from the mapping service.
+// Two of the three ways a place gets a name are local reads -- a
+// geofence the owner drew, and a place a previous stay was named --
+// and only the third is a network call, which there is no room for
+// while somebody is standing in a doorway. So the name is free when it
+// is knowable and coordinates when it is not.
+//
+// Skipping naming altogether was the first attempt and it was worse
+// than the fixed greeting it replaced: the model was handed
+// "place.stayed 12.91100,80.06241" and could not say "home".
 func (h *Handler) stayed(ctx context.Context, user string, from time.Time) []event.Event {
 	// From further back than the greeting's window. A stay that began
 	// before the two of them last spoke still ended during it, and that
@@ -292,6 +347,8 @@ func (h *Handler) stayed(ctx context.Context, user string, from time.Time) []eve
 		}
 	}
 
+	fences, known := h.named(ctx, user)
+
 	out := make([]event.Event, 0, 4)
 	for _, stay := range event.SoFar(fixes) {
 		// Only the ones that touch the window. Everything before it has
@@ -300,13 +357,41 @@ func (h *Handler) stayed(ctx context.Context, user string, from time.Time) []eve
 			continue
 		}
 		e, err := event.New(user, "server", "", event.Stayed,
-			stay.From, h.clock(), stay.Payload(stay.Where()), stay.Key())
+			stay.From, h.clock(), stay.Payload(h.call(stay, fences, known)), stay.Key())
 		if err != nil {
 			continue
 		}
 		out = append(out, *e)
 	}
 	return out
+}
+
+// named : The places they drew, and the places they have been before.
+//
+// The same two sources settling uses, and in the same order of
+// precedence. Both are reads of this database.
+func (h *Handler) named(ctx context.Context, user string) ([]event.Fence, []event.Event) {
+	crossings, err := h.reported.Recent(ctx, user, event.Query{
+		Prefix: "place.", Since: h.clock().Add(-2 * event.Looking)})
+	if err != nil {
+		h.Logger.WarnContext(ctx, "cannot read the places they drew", slog.Any("error", err))
+	}
+	known, err := h.reported.Recent(ctx, user, event.Query{Kind: event.Stayed, Limit: event.Places})
+	if err != nil {
+		h.Logger.WarnContext(ctx, "cannot read the places they know", slog.Any("error", err))
+	}
+	return event.Fences(crossings, h.clock()), known
+}
+
+// call : What to call a place, without asking anybody.
+func (h *Handler) call(s event.Stay, fences []event.Fence, known []event.Event) string {
+	if name := event.In(s, fences); name != "" {
+		return name
+	}
+	if name := event.Called(s, known); name != "" {
+		return name
+	}
+	return s.Where()
 }
 
 // merge : Two lists of events as one, in the order they happened.

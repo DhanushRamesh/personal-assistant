@@ -81,6 +81,18 @@ type Told struct {
 	// that was never said at all, in the words they would be said in.
 	// The model is told to say these and not to summarise them away.
 	Reminders []string
+	// Usual : How many times each thing in Events has happened over
+	// the past few weeks, keyed the same way the lines are labelled.
+	//
+	// Without it the window is read as though everything in it were
+	// news. Measured: a phone moving between a router and its extender
+	// inside one house produced "you have been moving about quite a
+	// bit" to somebody who had not left the building, in a window that
+	// also said they had been at home all day. The events were real
+	// and the reading was wrong, and nothing in the window could have
+	// told it otherwise -- what was missing was that this happens
+	// every day.
+	Usual map[string]int
 }
 
 // Prompt : What the model is asked.
@@ -203,24 +215,92 @@ func happened(t Told) string {
 	if len(evs) > Most {
 		evs = evs[len(evs)-Most:]
 	}
+
 	lines := make([]string, 0, len(evs))
 	day := ""
-	for _, e := range evs {
-		at := e.OccurredAt.In(t.Now.Location())
+	for _, r := range folded(evs) {
+		at := r.first.In(t.Now.Location())
 		if d := at.Format("Monday 2 January"); d != day {
 			day = d
 			lines = append(lines, d)
 		}
-		line := at.Format("3:04 pm") + "  " + e.Kind
-		if v := value(e); v != "" {
-			line += " " + v
+		line := at.Format("3:04 pm") + "  " + r.label
+		if r.times > 1 {
+			line += fmt.Sprintf("  (%d times, the last at %s)",
+				r.times, r.last.In(t.Now.Location()).Format("3:04 pm"))
+		}
+		if n := t.Usual[r.label]; n > 0 {
+			line += fmt.Sprintf("  [%d in the past four weeks]", n)
 		}
 		lines = append(lines, line)
 	}
 	return prompt.Block(
-		prompt.Text("What their devices reported in between:"),
+		prompt.Text(
+			"What their devices reported in between.",
+			"The same thing happening more than once is one line saying how many:",
+			"how many times is the thing worth noticing, and reading it out ten times is not.",
+			"The number in brackets is how often that same thing has happened over the past four weeks.",
+			"It is there to tell you what is ordinary for them. Something that happens dozens of times a month",
+			"is the texture of their life and not news, however much of it is in this window;",
+			"what is worth remarking on is what is rare, or far more of something than there usually is.",
+			"A thing with no number beside it has not happened before, which is itself worth a look.",
+		),
 		prompt.Lines(lines...),
 	)
+}
+
+// run : One thing that happened, and how many times.
+type run struct {
+	label       string
+	first, last time.Time
+	times       int
+}
+
+// folded : The same thing happening repeatedly, as one line with a
+// count.
+//
+// Without this the window is whatever repeated most, and what repeats
+// most is never what matters. Measured on real readings: three hours
+// produced thirteen events, almost all of one network going and coming
+// back, and the greeting written from them asked whether everything was
+// all right with the connection -- true, useless, and the one thing in
+// the window nobody wanted raised at a door.
+//
+// Folded rather than dropped, because the count is the signal. Somebody
+// ringing three times in twenty minutes is exactly the thing worth
+// asking about, and a rule that threw away repeats would throw that
+// away first. Ordered by when each thing first happened, so a sequence
+// still reads as a sequence.
+func folded(evs []event.Event) []run {
+	out := make([]run, 0, len(evs))
+	at := map[string]int{}
+	for _, e := range evs {
+		label := Label(e)
+		if i, seen := at[label]; seen {
+			out[i].times++
+			if e.OccurredAt.After(out[i].last) {
+				out[i].last = e.OccurredAt
+			}
+			continue
+		}
+		at[label] = len(out)
+		out = append(out, run{label: label, first: e.OccurredAt, last: e.OccurredAt, times: 1})
+	}
+	return out
+}
+
+// Label : How an event is written on a line, and the key its count is
+// kept under.
+//
+// Exported so that whatever counts what is ordinary labels things the
+// same way this does. Two spellings of one event is a count that never
+// matches a line, which fails silently and reads as everything being
+// unprecedented.
+func Label(e event.Event) string {
+	if v := value(e); v != "" {
+		return e.Kind + " " + v
+	}
+	return e.Kind
 }
 
 // value : The one field every device writes, or nothing.

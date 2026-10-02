@@ -435,7 +435,8 @@ func run() error {
 			if model == "" {
 				model = cfg.PlatformAI.Model
 			}
-			return askOnce(ctx, answerer, cfg.PlatformAI.Vendor, model,
+			return askAs(ctx, answerer, cfg.PlatformAI.Vendor, model,
+				persona.Voice(cfg.Assistant.Persona, cfg.Assistant.Name),
 				environment.PurposeGreeting, ask)
 		},
 	}
@@ -455,6 +456,7 @@ func run() error {
 		Spoke:          chats,
 		Reported:       deviceEvents,
 		Known:          &profile.Reader{Memories: remembering.Store},
+		ThisMachine:    cfg.HomeAssistant.ThisMachine,
 		Google:         googleLink,
 		SettingsURL:    cfg.Google.SettingsURL,
 		Location:       cfg.Assistant.Location,
@@ -1067,8 +1069,28 @@ func askOnce(
 	why environment.Purpose,
 	ask string,
 ) (string, error) {
+	return askAs(ctx, env, vendor, model, "", why, ask)
+}
+
+// askAs : The same, with a system prompt of its own.
+//
+// For the calls that are not the assistant answering somebody. The
+// configured system prompt describes an assistant that acts, and most
+// of it is about tools -- when one must have run, what to do with what
+// one returned. Handed that and asked to greet somebody at a door, it
+// answered "let me check the calendar before saying anything" and
+// wrote out a tool call that does not exist. No tools are passed on
+// any of these; the rules saying to use them should not be either.
+func askAs(
+	ctx context.Context,
+	env environment.Environment,
+	vendor, model, system string,
+	why environment.Purpose,
+	ask string,
+) (string, error) {
 	stream, err := env.Run(ctx, environment.Request{
 		Prompt: ask, Purpose: why, Vendor: vendor, Model: model,
+		SystemPrompt: system,
 	})
 	if err != nil {
 		return "", err

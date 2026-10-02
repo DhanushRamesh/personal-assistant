@@ -205,6 +205,20 @@ type HomeAssistant struct {
 	// Satellite : The entity to speak through, such as
 	// assist_satellite.laptop_lva_assist_satellite.
 	Satellite string
+	// ThisMachine : The source name the machine the assistant runs on
+	// reports its own events under, such as "laptop".
+	//
+	// Those events describe the assistant's own machine and not the
+	// person. It publishes its network so the person's phone can be
+	// compared against it, and asked at a door what they have been up
+	// to, a laptop reconnecting to its own wifi is the loudest thing in
+	// the window and the least true -- measured: it read as "you have
+	// been moving around quite a bit" to somebody who had not moved
+	// fifty-eight metres in two days.
+	//
+	// Empty leaves everything in, which is what this did before.
+	ThisMachine string
+
 	// PresenceEntity : What Home Assistant calls the thing that says
 	// whether the owner is in the room, such as
 	// input_boolean.in_the_room. Empty means never hold a reminder back,
@@ -486,6 +500,7 @@ func Load(path string, lookup Lookup) (Config, error) {
 			Token:           l.secret("homeassistant", "token"),
 			Satellite:       l.str("homeassistant", "satellite", ""),
 			PresenceEntity:  l.str("homeassistant", "presence_entity", ""),
+			ThisMachine:     l.str("homeassistant", "this_machine", ""),
 			Notify:          l.list("homeassistant", "notify"),
 			MediaPlayer:     l.str("homeassistant", "media_player", ""),
 			TTSEngine:       l.str("homeassistant", "tts_engine", "tts.piper"),

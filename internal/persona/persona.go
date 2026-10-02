@@ -19,10 +19,25 @@ import (
 // whether to reopen the microphone from the last character of the reply, and
 // treats a question mark as an invitation to keep listening. A persona that
 // asks permission has to do it without the punctuation.
-var spokenRules = prompt.Text(
+// aloud : How it sounds when the words are spoken rather than read.
+//
+// Split from the rest on 2 October 2026 because it is the only part of
+// this that is true of everything the assistant says. What follows it
+// is about replying to somebody who asked, and a greeting at a door is
+// not that.
+var aloud = prompt.Text(
 	"Your replies are read aloud, so answer in plain spoken sentences.",
 	"Do not use markdown, headings, bullet points or code blocks.",
 	"Be brief and direct: say the answer first, then only the detail that matters.",
+)
+
+// replying : How a reply ends, which is not how everything ends.
+//
+// The rule against finishing with a question is about answering: an
+// answer followed by "is there anything else" is an answer that will
+// not stop. It is wrong for a greeting, where asking after somebody is
+// the entire point, and it is why this is a block of its own.
+var replying = prompt.Text(
 	"Never end a reply with a question or an offer of further help, whatever your manner would otherwise suggest: where you would ask permission, say what you are about to do instead.",
 	"Stop once the answer is given.",
 	"There are three exceptions, and all are answerable with yes or no.",
@@ -32,6 +47,9 @@ var spokenRules = prompt.Text(
 	"The second: when what they named is genuinely not there, offer to make it. \"There is no task called that on the list. Shall I add it?\" -- the obvious next thing, as a question, not an offer of help in general.",
 	"The third is offering to write down something arranged; it is described below.",
 )
+
+// spokenRules : Both, for the assistant answering somebody.
+var spokenRules = prompt.Block(aloud, replying)
 
 // listing : What to do with a list a tool hands back.
 //
@@ -440,4 +458,46 @@ func (s *Setting) Set(id string) bool {
 	s.id = p.ID
 	s.mu.Unlock()
 	return true
+}
+
+// Voice : How the assistant sounds, for a one-shot with no tools.
+//
+// Prompt describes an assistant that acts: most of it is about what a
+// tool returned, when a tool must have run, and never claiming what a
+// day holds without having looked. That is right for answering
+// somebody and wrong for anything handed everything it needs up front.
+//
+// Given the full prompt and asked to greet somebody, it answered "let
+// me check the calendar before saying anything" and wrote out a tool
+// call that does not exist, because the rules it had been given say a
+// claim about a day needs a tool to have just run -- and there were no
+// tools. The rules were not wrong; they were the wrong rules.
+//
+// So: who it is, how it sounds, and how to speak aloud. Whatever is
+// asked for supplies the rest.
+func Voice(id, name string) string {
+	var b strings.Builder
+
+	name = strings.TrimSpace(name)
+	if name == "" {
+		b.WriteString("You are a personal assistant. ")
+	} else {
+		b.WriteString("You are " + name + ", a personal assistant. ")
+	}
+	if p, ok := Find(id); ok && p.Manner != "" {
+		b.WriteString(p.Manner)
+		b.WriteString(" ")
+	}
+	// aloud and not spokenRules. What it leaves out is the rule
+	// against ending on a question, which belongs to replying: a
+	// greeting that asks after somebody is the one place that rule is
+	// exactly backwards. The tool references go with it.
+	b.WriteString(prompt.Block(aloud))
+	b.WriteString(prompt.Block(prompt.Text(
+		"You have no tools here and nothing to look up.",
+		"Everything you are given is below; answer with the words you would say and nothing else,",
+		"and never write out looking something up.",
+		"You may end on a question. Asking after somebody is not an offer of further help.",
+	)))
+	return b.String()
 }

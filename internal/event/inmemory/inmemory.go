@@ -79,6 +79,8 @@ func (s *Store) Recent(_ context.Context, userID string, q event.Query) ([]event
 			continue
 		case slices.Contains(q.Omit, e.Kind):
 			continue
+		case slices.Contains(q.NotFrom, e.Source):
+			continue
 		}
 		out = append(out, *e)
 	}

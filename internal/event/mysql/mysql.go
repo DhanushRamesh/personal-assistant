@@ -195,6 +195,9 @@ func (s *Store) Recent(ctx context.Context, userID string, q event.Query) ([]eve
 	if len(q.Omit) > 0 {
 		db = db.Where("kind NOT IN ?", q.Omit)
 	}
+	if len(q.NotFrom) > 0 {
+		db = db.Where("source NOT IN ?", q.NotFrom)
+	}
 	if q.Limit > 0 {
 		db = db.Limit(q.Limit)
 	}

@@ -102,6 +102,9 @@ type Options struct {
 	Spoke    presence.Spoke
 	Reported presence.Reported
 	Known    presence.Known
+	// ThisMachine : The source the assistant's own machine reports
+	// under, whose events describe it rather than the person.
+	ThisMachine string
 
 	// Announcements : Where what the server said of its own accord is
 	// noted in the conversation, so the person can answer it. Optional;
@@ -222,7 +225,7 @@ func New(opts Options) *Server {
 		reminders:     reminders.New(opts.Logger, opts.Reminders),
 		presence: presence.New(opts.Logger, opts.Announcer, opts.Reminders,
 			opts.Announcements, opts.Location, opts.Now).
-			Writes(opts.Greeting, opts.Spoke, opts.Reported, opts.Known),
+			Writes(opts.Greeting, opts.Spoke, opts.Reported, opts.Known, opts.ThisMachine),
 		profile:    profileapi.New(opts.Memories, opts.Now, opts.Logger),
 		vocabulary: vocabularyapi.New(opts.Vocabulary, opts.Logger),
 		google:     googleapi.New(opts.Logger, opts.Google, opts.SettingsURL),

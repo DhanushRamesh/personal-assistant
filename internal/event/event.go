@@ -267,6 +267,16 @@ type Query struct {
 	// answers a question about a particular place or person rather than
 	// a particular kind.
 	Contains string
+	// NotFrom : Sources to leave out, whatever else matches.
+	//
+	// For the machine the assistant itself runs on. It reports its own
+	// network so that the person's phone can be compared against it,
+	// and those readings are about the assistant rather than about
+	// them: a laptop reconnecting to its own wifi is not something
+	// that happened to anybody. Asked at a door what the person has
+	// been up to, they are the loudest thing in the window and the
+	// least true.
+	NotFrom []string
 	// Omit : Kinds to leave out, whatever else matches.
 	//
 	// For the kinds that are working material rather than history. A

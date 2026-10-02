@@ -169,3 +169,114 @@ func TestNoModelAtAllIsHowItWorkedBefore(t *testing.T) {
 		t.Errorf("got %q written=%v", said, written)
 	}
 }
+
+// TestRepeatsAreFoldedWithTheirCount : The count is the signal, so a
+// run is one line saying how many rather than ten lines or none.
+func TestRepeatsAreFoldedWithTheirCount(t *testing.T) {
+	var evs []event.Event
+	for i := range 3 {
+		evs = append(evs, happened("call.missed", "Priya", evening.Add(-time.Duration(30-i*5)*time.Minute)))
+	}
+	for i := range 6 {
+		evs = append(evs, happened("network.joined", "Dhanush_EXT", evening.Add(-time.Duration(120-i*10)*time.Minute)))
+	}
+	got := greet.Prompt(greet.Told{Now: evening, Since: evening.Add(-3 * time.Hour), Events: evs})
+
+	if n := strings.Count(got, "call.missed Priya"); n != 1 {
+		t.Errorf("three calls should be one line, got %d", n)
+	}
+	if !strings.Contains(got, "(3 times, the last at") {
+		t.Errorf("the count is missing:\n%s", got)
+	}
+	if n := strings.Count(got, "network.joined Dhanush_EXT"); n != 1 {
+		t.Errorf("six reconnections should be one line, got %d", n)
+	}
+	if !strings.Contains(got, "(6 times, the last at") {
+		t.Error("the reconnection count is missing")
+	}
+}
+
+// TestSomethingOnceHasNoCount : "(1 times)" reads as a bug and invites
+// the model to mention a number that means nothing.
+func TestSomethingOnceHasNoCount(t *testing.T) {
+	got := greet.Prompt(greet.Told{
+		Now: evening, Events: []event.Event{happened("place.entered", "home", evening.Add(-time.Minute))},
+	})
+	if strings.Contains(got, "1 times") {
+		t.Errorf("a single event was given a count:\n%s", got)
+	}
+}
+
+// TestAFoldedRunKeepsItsPlaceInTheSequence : Ordered by when each thing
+// first happened, so leaving then arriving still reads that way.
+func TestAFoldedRunKeepsItsPlaceInTheSequence(t *testing.T) {
+	got := greet.Prompt(greet.Told{
+		Now: evening, Since: evening.Add(-3 * time.Hour),
+		Events: []event.Event{
+			happened("place.exited", "office", evening.Add(-60*time.Minute)),
+			happened("network.left", "Zoho-Guest", evening.Add(-58*time.Minute)),
+			happened("network.left", "Zoho-Guest", evening.Add(-50*time.Minute)),
+			happened("place.entered", "home", evening.Add(-5*time.Minute)),
+		},
+	})
+	left := strings.Index(got, "place.exited office")
+	home := strings.Index(got, "place.entered home")
+	if left < 0 || home < 0 || left > home {
+		t.Errorf("leaving should come before arriving:\n%s", got)
+	}
+}
+
+// TestWhatIsOrdinaryIsSaidSo : Without it the window reads as though
+// everything in it were news -- a phone moving between a router and
+// its extender inside one house produced "you have been moving about
+// quite a bit" to somebody who had not left the building.
+func TestWhatIsOrdinaryIsSaidSo(t *testing.T) {
+	roam := happened("network.joined", "Dhanush_EXT", evening.Add(-2*time.Hour))
+	call := happened("call.missed", "Priya", evening.Add(-30*time.Minute))
+
+	got := greet.Prompt(greet.Told{
+		Now: evening, Since: evening.Add(-3 * time.Hour),
+		Events: []event.Event{roam, call},
+		Usual:  map[string]int{greet.Label(roam): 84, greet.Label(call): 1},
+	})
+
+	if !strings.Contains(got, "[84 in the past four weeks]") {
+		t.Errorf("the ordinary thing is not marked ordinary:\n%s", got)
+	}
+	if !strings.Contains(got, "[1 in the past four weeks]") {
+		t.Errorf("the rare thing has no count:\n%s", got)
+	}
+	for _, want := range []string{"to tell you what is ordinary for them", "is the texture of their life and not news"} {
+		if !strings.Contains(got, want) {
+			t.Errorf("the prompt does not explain the number: %q", want)
+		}
+	}
+}
+
+// TestSomethingNeverSeenBeforeHasNoNumber : And is said to be worth a
+// look for exactly that reason.
+func TestSomethingNeverSeenBeforeHasNoNumber(t *testing.T) {
+	got := greet.Prompt(greet.Told{
+		Now:    evening,
+		Events: []event.Event{happened("door.forced", "back", evening.Add(-time.Minute))},
+		Usual:  map[string]int{},
+	})
+	if strings.Contains(got, "in the past four weeks]") {
+		t.Errorf("a thing never seen was given a count:\n%s", got)
+	}
+	if !strings.Contains(got, "has not happened before") {
+		t.Error("the prompt does not say an uncounted thing is worth a look")
+	}
+}
+
+// TestLabelMatchesTheLine : Two spellings of one event is a count that
+// never matches a line, which fails silently and reads as everything
+// being unprecedented.
+func TestLabelMatchesTheLine(t *testing.T) {
+	e := happened("call.missed", "Priya", evening.Add(-time.Hour))
+	got := greet.Prompt(greet.Told{Now: evening, Events: []event.Event{e},
+		Usual: map[string]int{greet.Label(e): 7}})
+	if !strings.Contains(got, greet.Label(e)+"  [7 in the past four weeks]") {
+		t.Errorf("the count did not land on its line:\n%s", got)
+	}
+}

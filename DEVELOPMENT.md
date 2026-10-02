@@ -1387,6 +1387,62 @@ from stepping out, which is why the forty-five second line was drawn
 where it was. The remaining piece is the wifi SSID, for leaving with
 the laptop.
 
+## Four reasons the greeting said absurd things
+
+Run against real readings it said *"you have been moving around quite a
+bit this past hour or two -- everything alright?"* to somebody who had
+not moved fifty-eight metres in two days. The owner: *"I don't want
+useless and absurd ones."* Four causes, all measurable, all fixed.
+
+**It was shown the assistant's own machine.** The presence publisher
+reports the laptop's network so the person's phone can be compared
+against it. Those are facts about the laptop, and at a door they were
+the loudest thing in the window and the least true. `Query.NotFrom`
+leaves a source out, and `[homeassistant] this_machine` names which.
+Not by kind: the same `network.joined` from the phone is about them.
+
+**Nothing folded repeats.** Three hours produced thirteen events,
+almost all one network going and coming back. Folded now -- one line
+per thing with how many times and when it last happened. Folded and
+not dropped, because the count is the signal: somebody ringing three
+times in twenty minutes is exactly the thing worth asking about, and a
+rule that threw repeats away would throw that away first.
+
+**It had no idea what was ordinary.** The remaining noise was the
+phone roaming between a router and its extender inside one house --
+real, about the person, and not news. Nothing in the window could say
+so, so each line now carries how many times that same thing has
+happened in four weeks, and the prompt says what the number is for: a
+thing that happens dozens of times a month is the texture of their
+life; what is worth remarking on is what is rare or far more than
+usual. A thing with no number has never happened before, which is its
+own reason to look. Counted in the same read as the window, because
+this runs with somebody standing in a doorway.
+
+**And it tried to use a tool.** Asked to greet somebody it answered
+*"let me check the calendar before saying anything"* and wrote out a
+tool call that does not exist. The system prompt was the full persona,
+most of which is about tools -- when one must have run, what to do
+with what one returned, never saying what a day holds without having
+looked. The rules were not wrong; they were the wrong rules, and no
+tools are passed on this call at all.
+
+`persona.Voice` is the greeting's own system prompt: who it is, how it
+sounds, how to speak aloud, and nothing about acting. 1514 characters
+against 9423. `spokenRules` split into `aloud` and `replying` to build
+it, and the split earns itself twice -- `replying` holds "never end on
+a question", which is exactly backwards at a door, where asking after
+somebody is the entire point.
+
+**Measured after:** the same nine-hour window gives *"Quiet afternoon,
+by the look of it."* Six live arrivals in a row, all written by the
+model, 3.2 to 7.6 seconds.
+
+**The first greeting after a restart still falls back.** The provider
+pays TLS and a token refresh on its first call, which took 8.2 seconds
+against 1.6 once warm. Everything after it is inside the budget. Worth
+a warm-up call at startup if restarts ever stop being rare.
+
 ## A stay is written while it is still happening
 
 Owner, 2 October 2026: *"sending location.fix has no meaning here, it's
