@@ -11,6 +11,7 @@ import (
 	"os/signal"
 	"runtime/debug"
 	"slices"
+	"strings"
 	"sync"
 	"syscall"
 	"time"
@@ -40,6 +41,7 @@ import (
 	memorymysql "github.com/DhanushRamesh/personal-assistant/internal/memory/mysql"
 	"github.com/DhanushRamesh/personal-assistant/internal/persona"
 	"github.com/DhanushRamesh/personal-assistant/internal/place"
+	"github.com/DhanushRamesh/personal-assistant/internal/presence"
 	"github.com/DhanushRamesh/personal-assistant/internal/profile"
 	"github.com/DhanushRamesh/personal-assistant/internal/remind"
 	remindmysql "github.com/DhanushRamesh/personal-assistant/internal/remind/mysql"
@@ -328,7 +330,7 @@ func run() error {
 	// never half said during a shutdown.
 	reminding := &remind.Loop{
 		Store:    reminderStore,
-		Presence: whereabouts(cfg, logger.Logger),
+		Presence: whereabouts(cfg, deviceEvents, logger.Logger),
 		Speaker: remind.Everywhere{
 			To: []remind.Speaker{remind.Aloud{
 				Announcer:     speaker,
@@ -583,7 +585,19 @@ func linkToGoogle(cfg config.Config, logger *slog.Logger, db *storage.DB) *googl
 //
 // Nil when nothing is configured, which means every reminder is said aloud
 // -- what this did before there was any way to tell, and the safe way round.
-func whereabouts(cfg config.Config, logger *slog.Logger) remind.Presence {
+func whereabouts(cfg config.Config, events presence.Reader, logger *slog.Logger) remind.Presence {
+	// Their own phone, against the geofence they drew. It replaced a
+	// watch whose Bluetooth signal could tell one room from the next
+	// with a decibel to spare, and which on 2 October 2026 announced
+	// six arrivals to somebody who had not moved. The room is the
+	// thing given up: a geofence cannot tell the desk from the garden.
+	if here := strings.TrimSpace(cfg.Assistant.Here); here != "" && events != nil {
+		p := presence.OfPhone{Events: events, Place: here, Now: cfg.Assistant.Now, Logger: logger}
+		logger.Info("the house speaks when their phone is here",
+			slog.String("asking", p.Describe()))
+		return p
+	}
+
 	p, err := hass.NewPresence(hass.PresenceConfig{
 		URL:    cfg.HomeAssistant.URL,
 		Token:  cfg.HomeAssistant.Token,

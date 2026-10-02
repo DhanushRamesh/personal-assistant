@@ -1286,6 +1286,58 @@ is right -- the owner is at the laptop, in the new place.
 charger; and moving between two places on the same network name, which
 a phone would catch and this cannot.
 
+## The phone is the presence token now, and the room is given up
+
+**Owner, 2 October 2026:** *"can we eliminate watch as my presence and
+change it to my phone, as phone will be always with me... the home
+assistant should announce only when my phone is near to it."* Said
+after a watch that never left the room announced six arrivals in one
+day.
+
+`presence.Here` answers from the geofence they drew themselves, and
+`presence.OfPhone` is the shape the reminder loop asks for. Nothing
+asks Home Assistant any more.
+
+**What is given up is the room.** The watch could tell one room from
+the next; a geofence cannot tell the desk from the garden. That was
+the trade and it is worth stating plainly: the room was bought with a
+decibel of margin -- the threshold sat at -72 dBm because "the
+strongest thing the next room ever produced was a median of -73" --
+and a decibel of margin is why it was wrong six times in a day. The
+house will now sometimes speak to an empty room. That is the cheap
+mistake; holding a reminder from somebody sitting there is the
+expensive one.
+
+**Liveness comes from the readings, not the crossings.** A geofence
+fires on change and nothing else, so an old crossing is not a stale
+one -- but a phone that has stopped reporting positions cannot be
+trusted about either. The five-minute fixes are the heartbeat, and
+twenty minutes of silence makes the answer unknown rather than
+present. Which is the same lesson as the frozen sensor that read as
+"here".
+
+**An arrival nobody ever left goes unknown**, not present. Android
+drops geofence departures -- of four crossings in two days, three were
+arrivals -- and a missed one must not keep somebody at home for days.
+
+**Said as how long ago, never as a clock time.** The first run printed
+"at home since 05:20" from a server keeping UTC, for a person keeping
+IST. A relative stretch has no timezone to get wrong.
+
+**The phone push is paused**, at the owner's request, while this
+settles: announcements are spoken in the house only. `notify` is empty
+in the configuration rather than removed, so turning it back on is one
+line.
+
+### Still on the watch, and still wrong
+
+The greeting is not part of this yet. It is a Home Assistant
+automation triggered by the watch's signal, and it is what fired six
+times today. Until that is moved, presence for reminders comes from
+the phone while presence for greetings still comes from the watch --
+two sources answering one question, which is the thing this change
+exists to end.
+
 ## Present, away, and the third answer
 
 The second of the three presence pieces, 29 September 2026.

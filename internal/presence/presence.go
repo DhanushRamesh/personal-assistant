@@ -35,8 +35,10 @@
 package presence
 
 import (
+	"context"
 	"encoding/json"
 	"fmt"
+	"log/slog"
 	"strings"
 	"time"
 
@@ -189,3 +191,168 @@ func value(payload []byte) string {
 	}
 	return into.Value
 }
+
+// Heard : How long the phone may say nothing before it stops being
+// able to say where anybody is.
+//
+// The phone reports a position every five minutes whether anything
+// happened or not, so silence is a fault rather than a quiet
+// afternoon. Four missed readings: enough that one lost signal or one
+// slow flush does not blind the house, short enough that a phone left
+// at the office does not keep claiming somebody is at home.
+//
+// This is the heartbeat the geofences do not have. A crossing fires on
+// change and nothing else, so an old crossing is not a stale one -- but
+// a phone that has stopped reporting positions cannot be trusted about
+// either.
+const Heard = 20 * time.Minute
+
+// Here : Whether the person is at the place the assistant is in.
+//
+// From the geofence the person drew themselves, which is the only
+// thing in this system that can see distance. The owner, 2 October
+// 2026, having had six greetings from a watch that never left the
+// room: "can we eliminate watch as my presence and change it to my
+// phone, as phone will be always with me... the home assistant should
+// announce only when my phone is near to it."
+//
+// What this gives up is the room. A watch at the desk could tell one
+// room from the next; a geofence cannot tell the desk from the garden.
+// That was the trade: the room was worth a decibel of margin, and a
+// decibel of margin is why it was wrong six times in a day.
+func Here(events []event.Event, place string, now time.Time) Answer {
+	place = strings.TrimSpace(place)
+	out := Answer{Where: Unknown, On: map[string]string{}}
+	if place == "" {
+		out.Why = "nowhere is configured as where the assistant is"
+		return out
+	}
+
+	var crossings []event.Event
+	for _, e := range events {
+		switch e.Kind {
+		case event.Entered, event.Exited:
+			crossings = append(crossings, e)
+		case event.Fixed:
+			if e.OccurredAt.After(out.Since) {
+				out.Since = e.OccurredAt
+			}
+		}
+	}
+
+	// Liveness first. Everything below is a claim about where somebody
+	// is, and a phone that has gone quiet cannot support one.
+	if out.Since.IsZero() {
+		out.Why = "the phone has not reported where it is"
+		return out
+	}
+	if now.Sub(out.Since) > Heard {
+		out.Stale = true
+		out.Why = fmt.Sprintf("the phone last reported %s ago", ago(now.Sub(out.Since)))
+		return out
+	}
+
+	// The same pairing the stays use, so the two never disagree about
+	// when somebody was somewhere.
+	var holding *event.Fence
+	for _, f := range event.Fences(crossings, now) {
+		if !strings.EqualFold(f.Name, place) {
+			continue
+		}
+		copied := f
+		if holding == nil || f.From.After(holding.From) {
+			holding = &copied
+		}
+	}
+	if holding == nil {
+		out.Why = "nothing has been reported about " + place
+		return out
+	}
+
+	// Said as how long ago rather than at what time. This is read in a
+	// log and on a screen, and a clock time here would be the server's
+	// own, which is not the one the person keeps.
+	switch {
+	case !holding.Holds(now):
+		out.Where = Away
+		out.Why = fmt.Sprintf("they left %s %s ago", place, ago(now.Sub(holding.To)))
+	case now.Sub(holding.From) > event.Lingering:
+		// Open for longer than anybody stays without the departure
+		// being missed. Android drops them, and a missed one must not
+		// keep somebody at home for days.
+		out.Stale = true
+		out.Why = fmt.Sprintf("they entered %s %s ago and no leaving was ever reported",
+			place, ago(now.Sub(holding.From)))
+	default:
+		out.Where = Present
+		out.Why = fmt.Sprintf("they have been at %s for %s", place, ago(now.Sub(holding.From)))
+	}
+	return out
+}
+
+// ago : A stretch of time, roughly, in the words somebody would use.
+func ago(d time.Duration) string {
+	switch minutes := int(d.Round(time.Minute).Minutes()); {
+	case minutes < 1:
+		return "a moment"
+	case minutes < 60:
+		return fmt.Sprintf("%d minutes", minutes)
+	case minutes < 120:
+		return "an hour"
+	case minutes < 48*60:
+		return fmt.Sprintf("%d hours", minutes/60)
+	default:
+		return fmt.Sprintf("%d days", minutes/(24*60))
+	}
+}
+
+// Reader : Where the events come from.
+type Reader interface {
+	Recent(ctx context.Context, userID string, q event.Query) ([]event.Event, error)
+}
+
+// OfPhone : Answers whether somebody is away, from their phone.
+//
+// Shaped to the one question the reminder loop asks, and answering it
+// the safe way round: only a plain, current, confident absence holds a
+// reminder back. Every doubt -- a failed read, a quiet phone, a
+// geofence nobody has crossed -- says they are here, because speaking
+// to an empty room wastes a sentence and holding a reminder from
+// somebody sitting there loses it until they think to ask.
+type OfPhone struct {
+	// Events : Where to read from. Required.
+	Events Reader
+	// Place : What the person calls the place the assistant is in.
+	Place string
+	// Now : The clock, replaceable in tests.
+	Now func() time.Time
+	// Logger : Where a failed read goes. Nil is silent.
+	Logger *slog.Logger
+}
+
+// Looking : How far back it reads. Long enough to find the crossing
+// that put somebody where they are, which may have been last night.
+const Looking = 48 * time.Hour
+
+// Away : Whether the person is known to be elsewhere.
+func (o OfPhone) Away(ctx context.Context, userID string) bool {
+	if o.Events == nil || strings.TrimSpace(o.Place) == "" {
+		return false
+	}
+	now := time.Now()
+	if o.Now != nil {
+		now = o.Now()
+	}
+
+	found, err := o.Events.Recent(ctx, userID, event.Query{Since: now.Add(-Looking)})
+	if err != nil {
+		if o.Logger != nil {
+			o.Logger.WarnContext(ctx, "cannot tell whether they are here", slog.Any("error", err))
+		}
+		return false
+	}
+	return Here(found, o.Place, now).Where == Away
+}
+
+// Describe : What it is watching, for the log at startup.
+func (o OfPhone) Describe() string { return "their phone, against the " + o.Place + " geofence" }

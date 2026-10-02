@@ -112,6 +112,15 @@ const (
 // assistant is called today without being rebuilt. Nothing else in the
 // server states a name.
 type Assistant struct {
+	// Here : What the person calls the place the assistant is in, as
+	// they named that geofence on their own phone.
+	//
+	// Presence is answered from this: the assistant speaks aloud when
+	// their phone is inside it and holds back when it is not. Empty
+	// leaves everything said aloud, which is what happened before
+	// anything could tell.
+	Here string
+
 	// Name : What the assistant calls itself when it answers. Empty leaves
 	// it nameless, which is a working assistant that simply never says what
 	// it is called.
@@ -465,6 +474,7 @@ func Load(path string, lookup Lookup) (Config, error) {
 			Persona:  l.str("assistant", "persona", ""),
 			Timezone: l.str("assistant", "timezone", ""),
 			Location: l.location("assistant", "timezone"),
+			Here:     l.str("assistant", "here", ""),
 		},
 		HomeAssistant: HomeAssistant{
 			URL:             l.str("homeassistant", "url", ""),
