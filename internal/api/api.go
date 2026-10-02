@@ -40,6 +40,7 @@ import (
 	"github.com/DhanushRamesh/personal-assistant/internal/conversation"
 	"github.com/DhanushRamesh/personal-assistant/internal/event"
 	"github.com/DhanushRamesh/personal-assistant/internal/google"
+	"github.com/DhanushRamesh/personal-assistant/internal/greet"
 	"github.com/DhanushRamesh/personal-assistant/internal/llm"
 	"github.com/DhanushRamesh/personal-assistant/internal/memory"
 	"github.com/DhanushRamesh/personal-assistant/internal/persona"
@@ -91,6 +92,16 @@ type Options struct {
 	// such as http://localhost:8000/settings/google. Empty answers the
 	// callback in place instead of redirecting.
 	SettingsURL string
+
+	// Greeting : What writes the words said at the door, when there is
+	// anything better to say than one of the fixed sentences. Optional.
+	Greeting *greet.Writer
+	// Spoke, Reported, Known : What the greeting is written from -- when
+	// the assistant last spoke to them, what their devices reported
+	// since, and what is known about them. Optional, all three.
+	Spoke    presence.Spoke
+	Reported presence.Reported
+	Known    presence.Known
 
 	// Announcements : Where what the server said of its own accord is
 	// noted in the conversation, so the person can answer it. Optional;
@@ -210,7 +221,8 @@ func New(opts Options) *Server {
 		chats:         chats.New(opts.Logger, opts.Chats, opts.Messages, opts.Runner, opts.Events),
 		reminders:     reminders.New(opts.Logger, opts.Reminders),
 		presence: presence.New(opts.Logger, opts.Announcer, opts.Reminders,
-			opts.Announcements, opts.Location, opts.Now),
+			opts.Announcements, opts.Location, opts.Now).
+			Writes(opts.Greeting, opts.Spoke, opts.Reported, opts.Known),
 		profile:    profileapi.New(opts.Memories, opts.Now, opts.Logger),
 		vocabulary: vocabularyapi.New(opts.Vocabulary, opts.Logger),
 		google:     googleapi.New(opts.Logger, opts.Google, opts.SettingsURL),

@@ -2,6 +2,7 @@
 package main
 
 import (
+	"cmp"
 	"context"
 	"errors"
 	"fmt"
@@ -33,6 +34,7 @@ import (
 	"github.com/DhanushRamesh/personal-assistant/internal/events"
 	"github.com/DhanushRamesh/personal-assistant/internal/google"
 	googlemysql "github.com/DhanushRamesh/personal-assistant/internal/google/mysql"
+	"github.com/DhanushRamesh/personal-assistant/internal/greet"
 	"github.com/DhanushRamesh/personal-assistant/internal/llm"
 	"github.com/DhanushRamesh/personal-assistant/internal/logging"
 	"github.com/DhanushRamesh/personal-assistant/internal/mail"
@@ -418,6 +420,29 @@ func run() error {
 	logger.Info("forgetting old position readings daily",
 		slog.Duration("every", forgetEvery), slog.Duration("keeping", event.Keep))
 
+	// What is said at the door. A model writes it from what has
+	// happened since the two of them last spoke, and falls back to one
+	// of the fixed sentences when it cannot in time.
+	//
+	// The fast model, where one is configured. This runs with somebody
+	// standing in a doorway: the budget is a couple of seconds, and a
+	// better greeting that arrives after the moment has passed is not a
+	// better greeting.
+	greeting := &greet.Writer{
+		Logger: logger.Logger,
+		Ask: func(ctx context.Context, ask string) (string, error) {
+			model := cfg.PlatformAI.FastModel
+			if model == "" {
+				model = cfg.PlatformAI.Model
+			}
+			return askOnce(ctx, answerer, cfg.PlatformAI.Vendor, model,
+				environment.PurposeGreeting, ask)
+		},
+	}
+	logger.Info("writing the greeting at the door",
+		slog.String("model", cmp.Or(cfg.PlatformAI.FastModel, cfg.PlatformAI.Model)),
+		slog.Duration("within", greet.Within))
+
 	handler := api.New(api.Options{
 		Logger:         logger.Logger,
 		DB:             db,
@@ -426,6 +451,10 @@ func run() error {
 		Reminders:      reminderStore,
 		Announcer:      speaker,
 		Announcements:  announcements,
+		Greeting:       greeting,
+		Spoke:          chats,
+		Reported:       deviceEvents,
+		Known:          &profile.Reader{Memories: remembering.Store},
 		Google:         googleLink,
 		SettingsURL:    cfg.Google.SettingsURL,
 		Location:       cfg.Assistant.Location,

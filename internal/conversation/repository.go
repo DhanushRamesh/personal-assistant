@@ -40,6 +40,24 @@ type Repository interface {
 	// answer it however many times it is called.
 	SaidSince(ctx context.Context, userID string, since time.Time, limit int) ([]Message, error)
 
+	// LastSpoke : When the assistant last said anything to one person,
+	// across every conversation and every client. Zero when it never
+	// has.
+	//
+	// The other half of SaidSince, and the one a greeting needs. What
+	// matters at the door is how long it has been since the two of them
+	// last had anything to do with each other -- which is not how long
+	// they were out, and not when they were last greeted. A conversation
+	// at the desk at four o'clock means there is nothing to catch up on
+	// at five, even though nobody went anywhere.
+	//
+	// Announcements count. A greeting is the assistant having spoken,
+	// so a second arrival ten minutes after the first has ten minutes to
+	// talk about and says hello instead of asking about the day. That is
+	// the behaviour wanted, and it comes out of the definition rather
+	// than out of a timer.
+	LastSpoke(ctx context.Context, userID string) (time.Time, error)
+
 	// Summary : Returns the conversation's condensed earlier conversation. A
 	// conversation with none yields the zero Summary and no error.
 	Summary(ctx context.Context, conversationID string) (Summary, error)

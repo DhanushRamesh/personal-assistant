@@ -175,6 +175,12 @@ const (
 	PurposeCondense Purpose = "condense"
 	// PurposeProfile : Describing the person from what they have said.
 	PurposeProfile Purpose = "profile"
+	// PurposeGreeting : Writing what is said when somebody walks in.
+	//
+	// Its own purpose because it is the one call made with somebody
+	// waiting in a doorway, and the model it uses is chosen for speed
+	// rather than for how well it writes.
+	PurposeGreeting Purpose = "greeting"
 	// PurposeVocabulary : Finding the names in what they have said, for
 	// speech recognition to expect.
 	PurposeVocabulary Purpose = "vocabulary"

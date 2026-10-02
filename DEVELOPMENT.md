@@ -1387,6 +1387,78 @@ from stepping out, which is why the forty-five second line was drawn
 where it was. The remaining piece is the wifi SSID, for leaving with
 the laptop.
 
+## The greeting is written, not chosen
+
+Owner, 2 October 2026, on what it is for: *"treat Jarvis like a person
+-- I met him two hours back, he greeted me, after that things happened,
+Jarvis came to know them, and after two hours I see him, he greets
+again and asks me things that he knew after that, like how a human
+would ask."*
+
+It was one of a handful of fixed sentences picked by the hour. That is
+a doorbell: it knows somebody arrived and nothing else, and says the
+same thing whether they have been gone five minutes or since Tuesday.
+Now a model writes it, from what has happened since the two of them
+last had anything to do with each other.
+
+**The window is `LastSpoke`, and the choice of anchor is the design.**
+Not how long they were out, and not when they were last greeted: when
+the assistant last said anything to them, across every conversation and
+every client. A conversation at the desk at four leaves nothing to
+catch up on at five, even though nobody went anywhere. And announcements
+count, so the greeting closes its own window -- a second arrival ten
+minutes after the first has ten minutes to talk about and says hello.
+That behaviour falls out of the definition instead of needing a timer,
+which matters because presence flapped eleven times in a day before it
+failed closed.
+
+**The instruction teaches noticing, not kinds.** Something that happened
+far more often than usual, lasted far longer, involved the same person
+again and again, or is out of keeping with their ordinary day. No event
+kind is named, so `call.missed` works the day Tasker starts sending it
+with no wording change -- the same rule as the description's. One remark
+at most: somebody who comes in and is asked three questions has been
+interrogated. And it is told never to list events, read out a count, or
+use the names events are written under -- it noticed something, it did
+not read a log.
+
+**Reminders are said by the model now**, not appended as fixed text
+behind it. The owner's reason: once a model is writing the sentence
+there is no call for a second voice behind it, and a person says "you
+were going to do X at four" rather than reciting a row. The risk that
+replaces is losing one, so the instruction is to say every one and the
+prompt says that leaving one out is the whole of the harm. The fallback
+path appends them verbatim, because that path exists for when nothing
+is writing anything.
+
+**Everything fails to the fixed sentence.** No model, a failure, an
+empty answer, or taking too long all end in one of the old greetings
+with the reminders behind it. Somebody is standing in a doorway and a
+plain hello beats a silence while a provider is down.
+
+**`Within` was measured, not chosen.** Two and a half seconds was the
+first guess and it cut off nearly every attempt -- the first live
+arrival fell back with "the provider said nothing". Measured on this
+gateway with a real 2600-character prompt, three runs each:
+`claude-sonnet-4-6` 2.0, 2.1, 2.4 seconds; `claude-haiku-4-5` 1.2, 1.8,
+4.0. Five seconds, so a slow one still lands.
+
+**And the fast model is not faster here.** `[platformai] fast_model`
+exists and is deliberately empty: haiku has the better median and the
+worse tail, and at a door the tail is what gets noticed. Worth
+re-measuring rather than reasoning about if the gateway changes.
+
+Live, with a seven-hour gap and a phone reporting three missed calls
+from one person, it wrote: *"Good evening, sir. Priya called three times
+this afternoon -- did you mean to ring her back?"*
+
+**What it has nothing to say yet.** Tasker sends five kinds today --
+`location.fix`, `network.*`, `place.*` -- and none of them is
+interesting at a door. The calls in that example came from a hand-made
+event. Until the phone reports calls, app use and the rest, this will
+mostly say good evening, which is what it should say when nothing
+happened.
+
 ## The profile is taught a method, not a list of patterns
 
 Owner, 2 October 2026, on what the counted half is for: *"when I leave

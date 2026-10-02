@@ -148,6 +148,25 @@ func (m *Repository) SaidSince(_ context.Context, userID string, since time.Time
 
 // CalledSince : Every tool the assistant ran for one person since a
 // time, oldest first. The in-memory twin of the stored query.
+// LastSpoke : When the assistant last said anything to one person.
+func (m *Repository) LastSpoke(_ context.Context, userID string) (time.Time, error) {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+
+	var last time.Time
+	for id, msgs := range m.said {
+		if c, ok := m.conversations[id]; !ok || c.UserID != userID {
+			continue
+		}
+		for _, msg := range msgs {
+			if msg.Role == conversation.Assistant && msg.At.After(last) {
+				last = msg.At
+			}
+		}
+	}
+	return last, nil
+}
+
 func (m *Repository) CalledSince(_ context.Context, userID string, since time.Time, limit int) ([]conversation.Message, error) {
 	if userID == "" {
 		return nil, nil

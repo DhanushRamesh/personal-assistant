@@ -18,6 +18,7 @@ import (
 	"log/slog"
 	"math/rand/v2"
 	"net/http"
+	"slices"
 	"strings"
 	"sync"
 	"time"
@@ -29,6 +30,8 @@ import (
 	"github.com/DhanushRamesh/personal-assistant/internal/api/authn"
 	"github.com/DhanushRamesh/personal-assistant/internal/api/httpx"
 	"github.com/DhanushRamesh/personal-assistant/internal/conversation"
+	"github.com/DhanushRamesh/personal-assistant/internal/event"
+	"github.com/DhanushRamesh/personal-assistant/internal/greet"
 	"github.com/DhanushRamesh/personal-assistant/internal/remind"
 )
 
@@ -46,6 +49,9 @@ type ArrivedResponse struct {
 	Said string `json:"said"`
 	// Spoke : Whether anything was said out loud.
 	Spoke bool `json:"spoke"`
+	// Written : Whether a model wrote the greeting, or it is one of the
+	// fixed ones because there was no time or nothing answered.
+	Written bool `json:"written"`
 	// Why : Why nothing was said, when nothing was.
 	Why string `json:"why,omitempty"`
 	// Delivered : How many held-back reminders were said along with the
@@ -63,6 +69,23 @@ type Announcements interface {
 	Arrived(ctx context.Context, userID, text string)
 }
 
+// Spoke : When the assistant last said anything to somebody, which is
+// the window a greeting catches up on.
+type Spoke interface {
+	LastSpoke(ctx context.Context, userID string) (time.Time, error)
+}
+
+// Reported : What their devices said while nobody was talking.
+type Reported interface {
+	Recent(ctx context.Context, userID string, q event.Query) ([]event.Event, error)
+}
+
+// Known : The standing description of them, for judging what is
+// ordinary and what is not.
+type Known interface {
+	Profile(ctx context.Context, userID string) (string, error)
+}
+
 // Handler : Serves the presence endpoints.
 type Handler struct {
 	httpx.Responder
@@ -71,6 +94,15 @@ type Handler struct {
 	announcements Announcements
 	location      *time.Location
 	now           func() time.Time
+
+	// greeting, spoke, reported, known : What turns the fixed greeting
+	// into one written for the moment. All optional: without them the
+	// door says one of the fixed sentences, which is what it did
+	// before.
+	writer   *greet.Writer
+	spoke    Spoke
+	reported Reported
+	known    Known
 
 	mu sync.Mutex
 	// lastGreeting : So the same words are not used twice running.
@@ -90,6 +122,18 @@ func New(logger *slog.Logger, announcer announce.Announcer, reminders remind.Sto
 		location:      location,
 		now:           now,
 	}
+}
+
+// Writes : Gives the handler what it needs to write the greeting rather
+// than pick one.
+//
+// Separate from New because every one of them is optional and New
+// already takes six arguments. Nothing here changes whether somebody is
+// greeted, only what is said.
+func (h *Handler) Writes(w *greet.Writer, spoke Spoke, reported Reported, known Known) *Handler {
+	h.writer = w
+	h.spoke, h.reported, h.known = spoke, reported, known
+	return h
 }
 
 // Mount : Registers the endpoints on r, which must already require
@@ -128,7 +172,101 @@ func (h *Handler) Greet(ctx context.Context, user string) {
 	said := h.Welcome(ctx, user)
 	h.Logger.InfoContext(ctx, "greeted somebody at the door",
 		slog.Bool("spoke", said.Spoke), slog.String("why", said.Why),
+		slog.Bool("written", said.Written),
 		slog.Int("delivered", said.Delivered), slog.Int("missed", said.Missed))
+}
+
+// compose : The greeting itself, written for the moment if it can be.
+//
+// Falls back to one of the fixed sentences with the reminders behind
+// it, which is exactly what this said before there was a model in it.
+// Everything here is best effort: somebody is standing in the doorway,
+// and a plain hello beats a silence while something is fetched.
+func (h *Handler) compose(ctx context.Context, user string, owed []string) (string, bool) {
+	fixed := h.greeting()
+	if h.writer == nil {
+		return plain(fixed, owed), false
+	}
+
+	now := h.clock().In(h.where())
+	told := greet.Told{
+		Now:       now,
+		Fallback:  fixed,
+		Reminders: owed,
+		Since:     h.lastSpoke(ctx, user),
+		Profile:   h.profile(ctx, user),
+	}
+
+	// From when they were last spoken to, or a window of its own the
+	// first time, when there is no such moment and everything ever
+	// reported would be read as though it had just happened.
+	from := told.Since
+	if from.IsZero() {
+		from = now.Add(-greet.Recent)
+	}
+	told.Events = h.happened(ctx, user, from)
+
+	said, written := h.writer.Write(ctx, told)
+	return said, written
+}
+
+// plain : The fixed greeting with anything owed read out behind it.
+func plain(greeting string, owed []string) string {
+	return strings.TrimSpace(greeting + " " + strings.Join(owed, " "))
+}
+
+// lastSpoke : When the assistant last said anything to them.
+//
+// Zero on a failure, which reads as never having spoken to them and
+// gives a greeting with a short window rather than no greeting.
+func (h *Handler) lastSpoke(ctx context.Context, user string) time.Time {
+	if h.spoke == nil {
+		return time.Time{}
+	}
+	at, err := h.spoke.LastSpoke(ctx, user)
+	if err != nil {
+		h.Logger.WarnContext(ctx, "cannot tell when they were last spoken to",
+			slog.Any("error", err))
+		return time.Time{}
+	}
+	return at
+}
+
+// happened : What their devices reported in between.
+//
+// Without the raw position readings. One arrives every five minutes, so
+// an afternoon out is fifty of them and nothing else would fit; what
+// they are turned into, place.stayed, is here and says the same thing
+// in one line.
+func (h *Handler) happened(ctx context.Context, user string, from time.Time) []event.Event {
+	if h.reported == nil {
+		return nil
+	}
+	evs, err := h.reported.Recent(ctx, user, event.Query{
+		Since: from, Limit: greet.Most, Omit: []string{event.Fixed},
+	})
+	if err != nil {
+		h.Logger.WarnContext(ctx, "cannot read what happened while they were out",
+			slog.Any("error", err))
+		return nil
+	}
+	// Newest first from the store, oldest first for reading.
+	slices.Reverse(evs)
+	return evs
+}
+
+// profile : The standing description, for judging what is unusual.
+func (h *Handler) profile(ctx context.Context, user string) string {
+	if h.known == nil {
+		return ""
+	}
+	body, err := h.known.Profile(ctx, user)
+	if err != nil {
+		h.Logger.WarnContext(ctx, "cannot read what is known about them",
+			slog.Any("error", err))
+		return ""
+	}
+	return body
 }
 
 // Welcome : The greeting, everything held back behind it, and what
@@ -140,27 +278,28 @@ func (h *Handler) Greet(ctx context.Context, user string) {
 // endpoint stays for anything that still calls it and for saying
 // hello by hand.
 func (h *Handler) Welcome(ctx context.Context, user string) ArrivedResponse {
-	said := h.greeting()
-
-	// Anything kept back while they were out is said now, after the
-	// greeting, in the order it was for. Recorded as said only once it
-	// has been: a delivery nobody heard must stay held.
+	// Anything kept back while they were out, and anything that was
+	// never said at all. Read before the greeting is written because
+	// they go into it: a person would not say hello and then read a
+	// list, they would say what the person had missed as part of saying
+	// hello. Recorded as said only once they have been -- a delivery
+	// nobody heard must stay held -- which is why they are read here
+	// and marked below.
 	held := h.waiting(ctx, user)
+	unsaid := h.neverSaid(ctx, user)
+
+	owed := make([]string, 0, 2)
 	if len(held) > 0 {
-		said += " " + remind.Delivered(held, h.clock(), h.where())
+		owed = append(owed, remind.Delivered(held, h.clock(), h.where()))
+	}
+	if len(unsaid) > 0 {
+		owed = append(owed, missedText(unsaid, h.where()))
 	}
 
-	// And anything that was never said at all, which is the one thing
-	// worth stopping somebody at the door for. Read once here and marked
-	// as told below, so the same miss is not raised again in their next
-	// sentence.
-	unsaid := h.neverSaid(ctx, user)
-	if len(unsaid) > 0 {
-		said += " " + missedText(unsaid, h.where())
-	}
+	said, written := h.compose(ctx, user, owed)
 
 	if h.announcer == nil || !h.announcer.Available() {
-		return ArrivedResponse{Said: said, Why: "nothing is configured to speak"}
+		return ArrivedResponse{Said: said, Written: written, Why: "nothing is configured to speak"}
 	}
 
 	// Saying it outlives the request that asked for it. Speaking blocks
@@ -186,7 +325,7 @@ func (h *Handler) Welcome(ctx context.Context, user string) ArrivedResponse {
 		// greeting and the speaker was busy or unreachable. Said so
 		// plainly rather than reported as success.
 		h.Logger.WarnContext(speak, "could not speak a greeting", slog.Any("error", err))
-		return ArrivedResponse{Said: said, Why: "could not be spoken: " + err.Error()}
+		return ArrivedResponse{Said: said, Written: written, Why: "could not be spoken: " + err.Error()}
 	}
 
 	// The greeting and everything behind it, noted in the conversation
@@ -215,7 +354,7 @@ func (h *Handler) Welcome(ctx context.Context, user string) ArrivedResponse {
 		}
 	}
 
-	return ArrivedResponse{Said: said, Spoke: true, Delivered: len(held), Missed: len(unsaid)}
+	return ArrivedResponse{Said: said, Written: written, Spoke: true, Delivered: len(held), Missed: len(unsaid)}
 }
 
 // waiting : What was kept back while they were out.

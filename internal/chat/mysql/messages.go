@@ -345,6 +345,37 @@ func (r *Repository) SaidSince(ctx context.Context, userID string, since time.Ti
 	return out, nil
 }
 
+// LastSpoke : When the assistant last said anything to one person.
+//
+// Any kind, so an announcement counts: the greeting itself is the
+// assistant having spoken, which is what stops a second arrival an hour
+// later asking about a day it already asked about.
+//
+// Ordered and limited rather than MAX(), so the index on created_at
+// does the work and the row count does not matter.
+func (r *Repository) LastSpoke(ctx context.Context, userID string) (time.Time, error) {
+	if userID == "" {
+		return time.Time{}, nil
+	}
+
+	var row conversationMessageRow
+	err := r.db.WithContext(ctx).
+		Joins("JOIN conversations ON conversations.id = messages.conversation_id").
+		Where("conversations.user_id = ?", userID).
+		Where("messages.role = ?", string(conversation.Assistant)).
+		Order("messages.created_at DESC").
+		Limit(1).
+		Take(&row).Error
+	if errors.Is(err, gorm.ErrRecordNotFound) {
+		// Never spoken to them. Not a failure: it is the first greeting.
+		return time.Time{}, nil
+	}
+	if err != nil {
+		return time.Time{}, fmt.Errorf("conversation: reading when the assistant last spoke to %s: %w", userID, err)
+	}
+	return row.toMessage().At, nil
+}
+
 // CalledSince : Every tool the assistant ran for one person since a
 // time, oldest first.
 //

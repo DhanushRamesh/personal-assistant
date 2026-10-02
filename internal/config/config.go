@@ -303,6 +303,14 @@ type PlatformAI struct {
 
 	Vendor string
 	Model  string
+	// FastModel : A smaller, quicker model for the work that happens
+	// while somebody is waiting in a doorway rather than reading.
+	//
+	// Empty means Model, which is what this did before there was a
+	// choice. The greeting is the whole reason it exists: it has about
+	// two seconds before the fixed sentence is said instead, and a
+	// model that writes better greetings slowly writes none at all.
+	FastModel string
 
 	Timeout time.Duration
 	// InsecureSkipVerify : Skips certificate verification. Needed only for the
@@ -517,6 +525,7 @@ func Load(path string, lookup Lookup) (Config, error) {
 			RedirectURI:        l.str("platformai", "redirect_uri", ""),
 			Vendor:             l.str("platformai", "vendor", ""),
 			Model:              l.str("platformai", "model", ""),
+			FastModel:          l.str("platformai", "fast_model", ""),
 			Timeout:            l.duration("platformai", "timeout", 120*time.Second),
 			InsecureSkipVerify: l.boolean("platformai", "insecure_skip_verify", false),
 		},

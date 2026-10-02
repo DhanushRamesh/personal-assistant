@@ -343,3 +343,31 @@ func (b *Builder) clock() time.Time {
 	}
 	return b.Now()
 }
+
+// Reader : Reads the standing description back out.
+//
+// For the things that want what is known about somebody without
+// rebuilding it -- a greeting at the door, which has a couple of
+// seconds and no business asking a model to describe anybody.
+type Reader struct {
+	// Memories : Where the profile is kept. Required.
+	Memories memory.Store
+}
+
+// Profile : The description of one person, or empty when none has been
+// written yet.
+func (r *Reader) Profile(ctx context.Context, userID string) (string, error) {
+	if r == nil || r.Memories == nil || userID == "" {
+		return "", nil
+	}
+	held, err := r.Memories.All(ctx, userID, memory.TierAlways)
+	if err != nil {
+		return "", fmt.Errorf("profile: reading it: %w", err)
+	}
+	for i := range held {
+		if held[i].Subject == Subject {
+			return held[i].Body, nil
+		}
+	}
+	return "", nil
+}
