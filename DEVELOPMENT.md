@@ -1765,6 +1765,37 @@ anywhere closes the rest.
 Both were invisible to the tests and obvious in one run against a real
 day. Worth remembering when the next piece of this is built.
 
+## Guess at a misheard name when reading, ask when changing
+
+**Owner, 2 October 2026:** *"by voice its definitely not accurate, so
+i want jarvis to take relevant context without asking me a question...
+in that case it can assume the default context. remember this is only
+for reading info; while creating, updating, deleting, it should ask
+like how its asking currently."*
+
+The occasion: asked *"do you know when I moved between Das and
+Dasabhift?"*, with `Dhanush` and `Dhanush_EXT` on record and plainly
+what was meant, the assistant answered *"the names you said don't
+match the networks I have on record for you... did you mean when you
+moved between those two?"* It had recognised the likeness and stopped
+anyway, over a question about the past.
+
+**The asymmetry is the whole rule.** A wrong guess on a question costs
+one correction, said out loud in the same breath. A wrong guess on a
+change costs them their data. So a read takes the nearest match and
+says which it took; a write asks, exactly as it already does.
+
+**Generated from the `Writes` flag, not written into each
+description.** `Tool.Description` appends the guessing instruction to
+every tool that does not write. Written per tool it would be left off
+the next one somebody adds and would drift between two that need the
+same words; derived from the flag, a new reading tool gets it by
+existing and a new writing tool cannot accidentally get it.
+
+This refines rather than replaces the earlier rule that a name is
+matched by likeness and never refused on an exact-match miss. That
+said what to match; this says when matching is enough on its own.
+
 ## The names it expects to hear
 
 Owner's ask, 30 September 2026: *"the vocabulary should be shared by

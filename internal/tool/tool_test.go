@@ -262,3 +262,39 @@ func TestGoodArgumentsReachTheTool(t *testing.T) {
 var alreadyListed = []string{"memory_list", "memory_search", "conversation_list",
 	"conversation_find", "calendar_events", "calendar_calendars", "reminder_list",
 	"reminder_recent"}
+
+// A tool that only reads is told to guess at a mangled name rather
+// than stop and ask.
+//
+// Asked "when did I move between Das and Dasabhift", with Dhanush and
+// Dhanush_EXT on record and plainly what was meant, the assistant
+// asked which networks they meant. It was a question about the past:
+// nothing was at stake and nothing could be broken by guessing.
+func TestAReadingToolIsToldToTakeTheNearestName(t *testing.T) {
+	reading := tool.Tool{
+		Name: "place_visits", Purpose: "Read where they have been.",
+		UseWhen: "They ask where they went.", Lists: true,
+	}
+
+	got := reading.Description()
+	for _, want := range []string{"arrive mangled", "take the nearest one", "Do not stop to ask",
+		"which one you took it to mean"} {
+		if !strings.Contains(got, want) {
+			t.Errorf("a reading tool is not told to guess: %q missing from\n%s", want, got)
+		}
+	}
+}
+
+// A tool that changes something keeps asking, which is what it does
+// now. A wrong guess on a question costs one correction; a wrong guess
+// on a change costs them their data.
+func TestAWritingToolIsNotToldToGuess(t *testing.T) {
+	writing := tool.Tool{
+		Name: "calendar_update", Purpose: "Change an event.",
+		UseWhen: "They want one altered.", Writes: true,
+	}
+
+	if strings.Contains(writing.Description(), "take the nearest one") {
+		t.Errorf("a writing tool was told to guess at a name:\n%s", writing.Description())
+	}
+}

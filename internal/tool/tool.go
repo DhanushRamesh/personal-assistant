@@ -245,10 +245,44 @@ func (t Tool) Description() string {
 	if avoid := strings.TrimSpace(t.Avoid); avoid != "" {
 		parts = append(parts, "Do not use: "+avoid)
 	}
+	if heard := t.misheard(); heard != "" {
+		parts = append(parts, heard)
+	}
 	for _, e := range t.Examples {
 		parts = append(parts, `Example — "`+e.Ask+`": `+e.Args)
 	}
 	return strings.Join(parts, " ")
+}
+
+// misheard : What to do about a name that arrived mangled, which
+// depends entirely on whether this tool changes anything.
+//
+// Added from the Writes flag rather than written into each
+// description, so it cannot be left off the next tool somebody adds
+// and cannot drift between two that need the same rule.
+//
+// The owner's rule, 2 October 2026. Asked "do you know when I moved
+// between Das and Dasabhift", with "Dhanush" and "Dhanush_EXT" on
+// record and plainly what was meant, the assistant stopped and asked
+// which networks they meant. Nothing was at stake: it was a question
+// about the past. Their words: "its definitely not accurate by voice,
+// so i want jarvis to take relevant context without asking me a
+// question... in that case it can assume the default context.
+// remember this is only for reading info; while creating, updating,
+// deleting, it should ask like how its asking currently."
+//
+// So a read guesses and says what it guessed, and a write keeps
+// asking. A wrong guess on a question costs one correction; a wrong
+// guess on a change costs them their data.
+func (t Tool) misheard() string {
+	if t.Writes {
+		return ""
+	}
+	return "Names arrive mangled, because most of what reaches you was spoken. " +
+		"If what they said is close to something you can see -- a place, a network, a person, " +
+		"a list -- take the nearest one and answer. Do not stop to ask which they meant: " +
+		"nothing here changes anything, and being wrong costs one correction. " +
+		"Say which one you took it to mean, in passing, so they can put you right."
 }
 
 // ForReference : What to append to a result that carries a list.
