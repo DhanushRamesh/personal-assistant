@@ -1739,6 +1739,19 @@ for the same reason; and this did not. The rule, written down once:
 else in the payload may reach the label.** Everything else is detail
 for whoever reads the line.
 
+**And zero is nothing too.** The first real missed call arrived
+correctly -- a name and a number, both populated -- and forty-three
+seconds later the same profile fired again with both set to the string
+"0". That is set, so the phone-side guard for being set let it
+through, and left alone it would have built four weeks of history for
+somebody called 0 who rings constantly. A name is not a number and a
+telephone number is not one digit, so zero says nothing either way.
+
+When neither the name nor the number says anything the value is
+cleared rather than left holding whichever placeholder arrived, so
+what counts these sees one nameless thing instead of a person called
+%CNAME and another called 0.
+
 ## The profile is taught a method, not a list of patterns
 
 Owner, 2 October 2026, on what the counted half is for: *"when I leave

@@ -401,6 +401,16 @@ func labelled(payload json.RawMessage) json.RawMessage {
 	}
 	number, _ := into["number"].(string)
 	if unset(number) {
+		// Neither says anything. The value is cleared rather than left
+		// holding a placeholder, so whatever counts this has one
+		// nameless thing rather than a person called %CNAME and
+		// another called 0.
+		if value != "" {
+			into["value"] = ""
+			if out, err := json.Marshal(into); err == nil {
+				return out
+			}
+		}
 		return payload
 	}
 
@@ -415,12 +425,24 @@ func labelled(payload json.RawMessage) json.RawMessage {
 
 // unset : Whether a field says nothing.
 //
-// Empty, or a variable the device never filled in. Tasker leaves the
-// reference in place when a variable has no value, so "%CNAME" means
-// there was no caller name, not that somebody is called that.
+// Three ways a phone says nothing, and none of them is an absent key.
+//
+// Empty, which needs no explanation.
+//
+// A variable the device never filled in: Tasker leaves the reference
+// in place when a variable has no value, so "%CNAME" means there was
+// no caller name, not that somebody is called that.
+//
+// And zero. Measured on a real missed call, 2 October 2026: the caller
+// arrived correctly as Alekhya Chintada, and forty-three seconds later
+// the same profile fired again with both the name and the number set
+// to the string "0". That is set, so a test for being set let it
+// through, and left alone it would build four weeks of history for a
+// person called 0 who rings constantly. A name is not a number and a
+// telephone number is not one digit, so zero is nothing either way.
 func unset(s string) bool {
 	s = strings.TrimSpace(s)
-	if s == "" {
+	if s == "" || s == "0" {
 		return true
 	}
 	if !strings.HasPrefix(s, "%") {

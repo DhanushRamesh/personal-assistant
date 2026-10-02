@@ -366,3 +366,39 @@ func TestAPlaceCalledPercentCNAMEIsNotAPlace(t *testing.T) {
 		t.Fatal("the event should still be stored")
 	}
 }
+
+// TestZeroIsNotACaller : Measured on a real missed call -- the caller
+// arrived correctly, and forty-three seconds later the same profile
+// fired again with the name and the number both set to "0". That is
+// set, so a test for being set let it through.
+func TestZeroIsNotACaller(t *testing.T) {
+	store := inmemory.New()
+	e := apitest.NewWith(t, apitest.Options{DeviceEvents: store})
+
+	code, _ := post(t, e, `{"source":"tasker","events":[
+		{"kind":"call.missed","payload":{"value":"0","number":"0"},"dedupe_key":"k1"},
+		{"kind":"call.missed","payload":{"value":"0","number":"+919876543210"},"dedupe_key":"k2"},
+		{"kind":"call.missed","payload":{"value":"Alekhya","number":"+919876543210"},"dedupe_key":"k3"}]}`)
+	if code != http.StatusOK {
+		t.Fatalf("expected 200, got %d", code)
+	}
+
+	got, _ := store.Recent(context.Background(), e.User.ID, event.Query{})
+	byKey := map[string]string{}
+	for _, ev := range got {
+		var into struct {
+			Value string `json:"value"`
+		}
+		_ = json.Unmarshal(ev.Payload, &into)
+		byKey[ev.DedupeKey] = into.Value
+	}
+	for key, want := range map[string]string{
+		"k1": "",              // nothing at all, and not a person called 0
+		"k2": "+919876543210", // zero name, real number
+		"k3": "Alekhya",       // both, the name wins
+	} {
+		if byKey[key] != want {
+			t.Errorf("%s: value = %q, want %q", key, byKey[key], want)
+		}
+	}
+}
