@@ -8,8 +8,10 @@ import (
 	"strings"
 	"time"
 
+	"github.com/DhanushRamesh/personal-assistant/internal/conversation"
 	"github.com/DhanushRamesh/personal-assistant/internal/event"
 	"github.com/DhanushRamesh/personal-assistant/internal/prompt"
+	"github.com/DhanushRamesh/personal-assistant/internal/tool"
 )
 
 // Together : Repeats of the same thing closer than this are one
@@ -34,6 +36,26 @@ const Fewest = 2
 // Mostly : The most lines of any one sort, so a noisy week cannot
 // crowd out everything else.
 const Mostly = 12
+
+// Arrived, Left : The ends of a visit, as the kinds a phone reports
+// them under.
+//
+// Named here because pairing an arrival with the departure that
+// follows it is the only way to say how long somebody stays, and
+// nothing in a bare event says which kinds are two ends of the same
+// thing. This is the server's own naming for its own events, not a
+// guess at what a word means: a device reporting anything else is
+// counted but not paired, which is the safe direction.
+const Arrived, Left = ".entered", ".exited"
+
+// Briefly : A visit shorter than this is passing through rather than
+// going somewhere, and its length says nothing.
+const Briefly = 5 * time.Minute
+
+// Lingering : Longer than this with no departure and the departure was
+// missed rather than late. A phone that went flat at the office does
+// not mean somebody slept there.
+const Lingering = 16 * time.Hour
 
 // Rhythm : What the person's days look like, counted.
 //
@@ -61,21 +83,158 @@ func Rhythm(events []event.Event, where *time.Location) string {
 		days[m.at.In(where).Format("2006-01-02")] = true
 	}
 
-	often := howOften(moments, where, len(days))
-	after := whatFollows(moments, where)
-	if often == "" && after == "" {
+	where_, often, after := visits(moments, where), howOften(moments, where, len(days)), whatFollows(moments, where)
+	if often == "" && after == "" && where_ == "" {
 		return ""
 	}
 
 	return prompt.Block(
 		prompt.Text(
-			fmt.Sprintf("Their devices also reported what they did, over the same week: %d things on %d %s.",
+			fmt.Sprintf("Their devices also reported what they did, over the past four weeks: %d things on %d %s.",
 				len(moments), len(days), plural("day", len(days))),
 			"These are observations, not things they said. A run of the same thing in quick succession has been counted once.",
 		),
+		where_,
 		often,
 		after,
 	)
+}
+
+// Asking : What the assistant ended up doing for them, counted.
+//
+// The other half of what somebody asks for. What they typed says it in
+// their own words, which vary; what was run in answer says it in a
+// fixed vocabulary, so forty diary readings look like forty diary
+// readings however each question was phrased.
+//
+// Named as the thing rather than the tool, because a description
+// saying somebody "frequently triggers calendar_events" is written
+// about a system and this is meant to be about a person.
+func Asking(called []conversation.Message, where *time.Location) string {
+	if where == nil {
+		where = time.UTC
+	}
+
+	times := map[string]int{}
+	days := map[string]map[string]bool{}
+	order := []string{}
+	total := 0
+	for _, m := range called {
+		for _, c := range m.ToolCalls {
+			if c.Name == "" || c.Name == tool.DescribeName {
+				continue
+			}
+			if _, seen := times[c.Name]; !seen {
+				order = append(order, c.Name)
+				days[c.Name] = map[string]bool{}
+			}
+			times[c.Name]++
+			days[c.Name][m.At.In(where).Format("2006-01-02")] = true
+			total++
+		}
+	}
+	if total == 0 {
+		return ""
+	}
+
+	sort.SliceStable(order, func(i, j int) bool { return times[order[i]] > times[order[j]] })
+
+	lines := make([]string, 0, len(order))
+	for _, name := range order {
+		if len(lines) == Mostly {
+			break
+		}
+		lines = append(lines, fmt.Sprintf("- %s: %d %s, on %d %s",
+			name, times[name], plural("time", times[name]),
+			len(days[name]), plural("day", len(days[name]))))
+	}
+
+	return prompt.Block(
+		prompt.Text(
+			fmt.Sprintf("What they asked the assistant to do, over the same four weeks: %d %s in all.",
+				total, plural("thing", total)),
+			"Written as tool names because that is how they are recorded.",
+			"Say what they keep wanting, in their own terms -- their diary, their reminders, their mail -- never by the name of a tool.",
+		),
+		prompt.Lines(lines...),
+	)
+}
+
+// visits : Where they go, and how long they stay.
+//
+// An arrival paired with the departure that follows it at the same
+// place. Counting arrivals alone answers "where do they go" and not
+// "when are they there", and the second is the half that lets anything
+// be ready before it is asked for.
+func visits(moments []moment, where *time.Location) string {
+	type stay struct {
+		arrivals   []time.Time
+		departures []time.Time
+		lengths    []time.Duration
+		days       map[string]bool
+	}
+	by := map[string]*stay{}
+	order := []string{}
+	open := map[string]time.Time{}
+
+	at := func(place string) *stay {
+		s, seen := by[place]
+		if !seen {
+			s = &stay{days: map[string]bool{}}
+			by[place], order = s, append(order, place)
+		}
+		return s
+	}
+
+	for _, m := range moments {
+		place := m.value
+		switch {
+		case strings.HasSuffix(m.kind, Arrived) && place != "":
+			s := at(place)
+			s.arrivals = append(s.arrivals, m.at)
+			s.days[m.at.In(where).Format("2006-01-02")] = true
+			open[place] = m.at
+		case strings.HasSuffix(m.kind, Left) && place != "":
+			s := at(place)
+			s.departures = append(s.departures, m.at)
+			s.days[m.at.In(where).Format("2006-01-02")] = true
+			from, waiting := open[place]
+			if !waiting {
+				continue
+			}
+			delete(open, place)
+			// A visit of seconds is passing the door, and one that ran
+			// all night is a departure nobody reported.
+			if d := m.at.Sub(from); d >= Briefly && d <= Lingering {
+				s.lengths = append(s.lengths, d)
+			}
+		}
+	}
+	if len(order) == 0 {
+		return ""
+	}
+
+	sort.SliceStable(order, func(i, j int) bool { return len(by[order[i]].days) > len(by[order[j]].days) })
+
+	lines := make([]string, 0, len(order))
+	for _, place := range order {
+		if len(lines) == Mostly {
+			break
+		}
+		s := by[place]
+		line := fmt.Sprintf("- %s: there on %d %s", place, len(s.days), plural("day", len(s.days)))
+		if at := aroundWhen(s.arrivals, where); at != "" && len(s.arrivals) >= Fewest {
+			line += ", arriving " + at
+		}
+		if at := aroundWhen(s.departures, where); at != "" && len(s.departures) >= Fewest {
+			line += ", leaving " + at
+		}
+		if len(s.lengths) >= Fewest {
+			line += ", usually staying " + spoken(middle(s.lengths))
+		}
+		lines = append(lines, line)
+	}
+	return prompt.Lines(append([]string{"Where they went:"}, lines...)...)
 }
 
 // moment : One thing happening, once.

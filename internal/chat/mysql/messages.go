@@ -345,6 +345,46 @@ func (r *Repository) SaidSince(ctx context.Context, userID string, since time.Ti
 	return out, nil
 }
 
+// CalledSince : Every tool the assistant ran for one person since a
+// time, oldest first.
+//
+// The other half of what somebody asks for. What they typed says it in
+// their own words, which vary; what was run in answer says it in a
+// fixed vocabulary, so forty diary readings look like forty diary
+// readings however the question was phrased each time.
+//
+// Assistant turns rather than the person's, because a tool call is the
+// assistant's message. It is still a reading of them: nothing is run
+// that they did not ask for.
+func (r *Repository) CalledSince(ctx context.Context, userID string, since time.Time, limit int) ([]conversation.Message, error) {
+	if userID == "" {
+		return nil, nil
+	}
+	if limit <= 0 {
+		limit = 2000
+	}
+
+	var rows []conversationMessageRow
+	err := r.db.WithContext(ctx).
+		Joins("JOIN conversations ON conversations.id = messages.conversation_id").
+		Where("conversations.user_id = ?", userID).
+		Where("messages.role = ?", string(conversation.Assistant)).
+		Where("messages.tool_calls IS NOT NULL").
+		Where("messages.created_at >= ?", since).
+		Order("messages.created_at ASC").
+		Limit(limit).
+		Find(&rows).Error
+	if err != nil {
+		return nil, fmt.Errorf("conversation: reading what was run for %s: %w", userID, err)
+	}
+
+	out := make([]conversation.Message, 0, len(rows))
+	for i := range rows {
+		out = append(out, rows[i].toMessage())
+	}
+	return out, nil
+}
+
 // Talkers : Everyone who has said something since a time.
 //
 // Who is worth describing. Driving the nightly rebuild from this rather

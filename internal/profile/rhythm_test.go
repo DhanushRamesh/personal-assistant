@@ -6,6 +6,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/DhanushRamesh/personal-assistant/internal/conversation"
 	"github.com/DhanushRamesh/personal-assistant/internal/event"
 	"github.com/DhanushRamesh/personal-assistant/internal/profile"
 )
@@ -150,5 +151,103 @@ func TestThingsFarApartAreNotASequence(t *testing.T) {
 func TestNothingReportedSaysNothing(t *testing.T) {
 	if got := profile.Rhythm(nil, india()); got != "" {
 		t.Errorf("an empty week produced %q", got)
+	}
+}
+
+// arrived, left : The two ends of a visit.
+func arrived(place string, at time.Time) event.Event { return happened("place.entered", place, at) }
+func left(place string, at time.Time) event.Event    { return happened("place.exited", place, at) }
+
+// An arrival paired with the departure after it is how long they
+// stayed, which is the half that lets anything be ready before it is
+// asked for.
+func TestWhereTheyGoSaysWhenAndForHowLong(t *testing.T) {
+	var events []event.Event
+	for d := 1; d <= 4; d++ {
+		events = append(events, arrived("office", day(d, 9, 30)), left("office", day(d, 18, 0)))
+	}
+
+	got := profile.Rhythm(events, india())
+
+	for _, want := range []string{
+		"Where they went:", "office", "there on 4 days",
+		"arriving usually around 9am", "leaving usually around 6pm", "usually staying 8 hours",
+	} {
+		if !strings.Contains(got, want) {
+			t.Errorf("want %q in it:\n%s", want, got)
+		}
+	}
+}
+
+// A departure nobody reported is not a night spent at the office.
+func TestAVisitThatNeverEndedIsNotCountedAsALength(t *testing.T) {
+	events := []event.Event{
+		arrived("office", day(1, 9, 0)), left("office", day(1, 17, 0)),
+		arrived("office", day(2, 9, 0)), // the phone went flat
+		arrived("office", day(3, 9, 0)), left("office", day(4, 20, 0)),
+	}
+
+	got := profile.Rhythm(events, india())
+
+	if strings.Contains(got, "staying") {
+		t.Errorf("a stay was reported from one pairing and a two-day gap:\n%s", got)
+	}
+}
+
+// Passing the door is not going somewhere.
+func TestPassingThroughIsNotAStay(t *testing.T) {
+	var events []event.Event
+	for d := 1; d <= 3; d++ {
+		events = append(events, arrived("petrol station", day(d, 8, 0)), left("petrol station", day(d, 8, 1)))
+	}
+
+	got := profile.Rhythm(events, india())
+
+	if !strings.Contains(got, "petrol station") {
+		t.Errorf("the place was dropped entirely:\n%s", got)
+	}
+	if strings.Contains(got, "staying") {
+		t.Errorf("a minute at the door was reported as a stay:\n%s", got)
+	}
+}
+
+// What was run for them says what they keep wanting, in a fixed
+// vocabulary however each question was phrased.
+func TestWhatWasRunForThemIsCounted(t *testing.T) {
+	ran := func(at time.Time, names ...string) conversation.Message {
+		m := conversation.Message{At: at}
+		for _, n := range names {
+			m.ToolCalls = append(m.ToolCalls, conversation.ToolCall{Name: n})
+		}
+		return m
+	}
+	called := []conversation.Message{
+		ran(day(1, 9, 0), "calendar_events", "calendar_events"),
+		ran(day(2, 9, 0), "calendar_events", "reminder_set"),
+		ran(day(3, 9, 0), "tool_describe"),
+	}
+
+	got := profile.Asking(called, india())
+
+	if !strings.Contains(got, "calendar_events: 3 times, on 2 days") {
+		t.Errorf("the diary readings were not counted:\n%s", got)
+	}
+	if !strings.Contains(got, "reminder_set: 1 time, on 1 day") {
+		t.Errorf("the reminder was not counted:\n%s", got)
+	}
+	// Describing a tool is the deferring mechanism costing a round, not
+	// something the person wanted.
+	if strings.Contains(got, "tool_describe") {
+		t.Errorf("the describing mechanism was counted as something they asked for:\n%s", got)
+	}
+	if !strings.Contains(got, "never by the name of a tool") {
+		t.Errorf("nothing stops it writing about tools:\n%s", got)
+	}
+}
+
+// Nothing run is nothing said.
+func TestNothingRunSaysNothing(t *testing.T) {
+	if got := profile.Asking(nil, india()); got != "" {
+		t.Errorf("an empty month produced %q", got)
 	}
 }

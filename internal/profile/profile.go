@@ -61,6 +61,21 @@ const Subject = "What I have noticed about them"
 // happened once.
 const Window = 7 * 24 * time.Hour
 
+// Habits : How far back the counted half reads.
+//
+// Four weeks against the week of conversation, because the two
+// questions need different amounts of time. What somebody is talking
+// about now is this week's business and a month of it would describe
+// a person who has moved on. What somebody does every Tuesday cannot
+// be seen in seven days at all: one Tuesday is an anecdote, and the
+// difference between a routine and a coincidence is how many times it
+// came round.
+const Habits = 28 * 24 * time.Hour
+
+// Doings : The most events and the most tool calls read for one
+// rebuild. A cap rather than a promise, as Most is.
+const Doings = 4000
+
 // Most : The most messages read for one rebuild.
 //
 // A cap rather than a promise: the whole week is read when it fits, and
@@ -84,6 +99,11 @@ type Did interface {
 	Recent(ctx context.Context, userID string, q event.Query) ([]event.Event, error)
 }
 
+// Asked : Where what the assistant ran for them is read from.
+type Asked interface {
+	CalledSince(ctx context.Context, userID string, since time.Time, limit int) ([]conversation.Message, error)
+}
+
 // Ask : How the model is asked. Returns what it answered.
 type Ask func(ctx context.Context, prompt string) (string, error)
 
@@ -95,6 +115,9 @@ type Builder struct {
 	// none, they are described from their words alone, which is how
 	// this worked before anything was watching.
 	Did Did
+	// Asked : Where the tools run for them come from. Optional, like
+	// Did.
+	Asked Asked
 	// Where : The timezone their days are counted in. Nil is UTC, which
 	// puts their evenings on the wrong date.
 	Where *time.Location
@@ -132,7 +155,7 @@ func (b *Builder) Build(ctx context.Context, userID string) error {
 		return nil
 	}
 
-	answer, err := b.Ask(ctx, Prompt(said, b.rhythm(ctx, userID)))
+	answer, err := b.Ask(ctx, Prompt(said, b.rhythm(ctx, userID), b.asking(ctx, userID)))
 	if err != nil {
 		return fmt.Errorf("profile: asking for the description: %w", err)
 	}
@@ -154,7 +177,7 @@ func (b *Builder) rhythm(ctx context.Context, userID string) string {
 	if b.Did == nil {
 		return ""
 	}
-	did, err := b.Did.Recent(ctx, userID, event.Query{Since: b.clock().Add(-Window)})
+	did, err := b.Did.Recent(ctx, userID, event.Query{Since: b.clock().Add(-Habits), Limit: Doings})
 	if err != nil {
 		if b.Logger != nil {
 			b.Logger.ErrorContext(ctx, "cannot read what their devices reported",
@@ -163,6 +186,25 @@ func (b *Builder) rhythm(ctx context.Context, userID string) string {
 		return ""
 	}
 	return Rhythm(did, b.Where)
+}
+
+// asking : What the assistant ran for them over the same four weeks.
+//
+// Costs the description its half about what they keep wanting and not
+// the description itself, for the same reason rhythm does.
+func (b *Builder) asking(ctx context.Context, userID string) string {
+	if b.Asked == nil {
+		return ""
+	}
+	called, err := b.Asked.CalledSince(ctx, userID, b.clock().Add(-Habits), Doings)
+	if err != nil {
+		if b.Logger != nil {
+			b.Logger.ErrorContext(ctx, "cannot read what was run for them",
+				slog.String("user_id", userID), slog.Any("error", err))
+		}
+		return ""
+	}
+	return Asking(called, b.Where)
 }
 
 // keep : Stores the description, replacing the one already there.

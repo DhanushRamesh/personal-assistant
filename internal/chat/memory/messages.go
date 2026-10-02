@@ -145,3 +145,34 @@ func (m *Repository) SaidSince(_ context.Context, userID string, since time.Time
 	}
 	return out, nil
 }
+
+// CalledSince : Every tool the assistant ran for one person since a
+// time, oldest first. The in-memory twin of the stored query.
+func (m *Repository) CalledSince(_ context.Context, userID string, since time.Time, limit int) ([]conversation.Message, error) {
+	if userID == "" {
+		return nil, nil
+	}
+	if limit <= 0 {
+		limit = 2000
+	}
+
+	m.mu.Lock()
+	defer m.mu.Unlock()
+
+	var out []conversation.Message
+	for id, msgs := range m.said {
+		if c, ok := m.conversations[id]; !ok || c.UserID != userID {
+			continue
+		}
+		for _, msg := range msgs {
+			if len(msg.ToolCalls) > 0 && !msg.At.Before(since) {
+				out = append(out, msg)
+			}
+		}
+	}
+	sort.Slice(out, func(i, j int) bool { return out[i].At.Before(out[j].At) })
+	if len(out) > limit {
+		out = out[:limit]
+	}
+	return out, nil
+}

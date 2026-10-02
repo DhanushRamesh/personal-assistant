@@ -1565,12 +1565,42 @@ something inferred. So the places may be written about by the names
 they gave them, and the ban on residence, origin, age and health
 stands unchanged.
 
-**What this is worth today, honestly.** Two days of events exist, most
-of them a laptop's wifi flapping, and the first real run surfaced
+**Two windows, because the two questions need different amounts of
+time.** The words are a week: what somebody is talking about is this
+week's business, and a month of it describes a person who has moved
+on. The counted half is four weeks, because what somebody does every
+Tuesday cannot be seen in seven days -- one Tuesday is an anecdote,
+and the difference between a routine and a coincidence is how many
+times it came round.
+
+**Where they go is an arrival paired with the departure after it.**
+Counting arrivals answers "where do they go" and not "when are they
+there", and the second is the half that lets anything be ready before
+it is asked for. `place.entered` and `place.exited` are paired by
+suffix -- the server's own naming for its own events -- and anything
+else is counted but not paired, which is the safe direction. A visit
+under five minutes is passing the door and its length says nothing; one
+running over sixteen hours is a departure nobody reported, not a night
+at the office.
+
+**What they asked for is counted from the tool calls, not the words.**
+Their own words vary and a model counting them finds nothing; the tools
+run in answer are a fixed vocabulary, so forty diary readings look like
+forty diary readings however each question was phrased.
+`tool_describe` is left out -- that is the deferring mechanism costing a
+round, not something anybody wanted. The prompt says to write what they
+keep wanting in their own terms and never by the name of a tool, because
+a description saying somebody "frequently triggers calendar_events" is
+written about a system.
+
+**What this is worth today, honestly.** The asked half works from the
+first day: 707 tool calls over four weeks, led by reminders and the
+diary. The device half does not -- two days of events exist, most of
+them a laptop's wifi flapping -- and the first real run surfaced
 leftover `test.spool` rows and one `network.left "%ssid2"` from an
 unsubstituted Tasker variable. The mechanism is in place; it has
-almost nothing to say about habits until there are a few weeks behind
-it.
+almost nothing to say about where they go until there are a few weeks
+behind it.
 
 ## The names it expects to hear
 

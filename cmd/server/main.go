@@ -361,6 +361,7 @@ func run() error {
 	describing := &profile.Builder{
 		Said:     chats,
 		Did:      deviceEvents,
+		Asked:    chats,
 		Where:    cfg.Assistant.Location,
 		Memories: remembering.Store,
 		Now:      cfg.Assistant.Now,
