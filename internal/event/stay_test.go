@@ -166,3 +166,86 @@ func TestAReadingThatWillNotParseIsSkipped(t *testing.T) {
 		t.Errorf("%s was not read as a position", good)
 	}
 }
+
+// crossed : A geofence crossing.
+func crossed(kind, place string, minute int) event.Event {
+	payload, _ := json.Marshal(map[string]string{"value": place})
+	return event.Event{
+		Kind:       kind,
+		Payload:    payload,
+		OccurredAt: time.Date(2026, 10, 2, 9, 0, 0, 0, time.UTC).Add(time.Duration(minute) * time.Minute),
+	}
+}
+
+// when : A moment, so many minutes into the same day.
+func when(minute int) time.Time {
+	return time.Date(2026, 10, 2, 9, 0, 0, 0, time.UTC).Add(time.Duration(minute) * time.Minute)
+}
+
+// A place the person drew themselves names the stay. Their rule:
+// geofences first.
+func TestAStayInsideAGeofenceTakesItsName(t *testing.T) {
+	fences := event.Fences([]event.Event{
+		crossed(event.Entered, "office", 0),
+		crossed(event.Exited, "office", 480),
+	}, when(600))
+
+	s := event.Stay{From: when(60), To: when(200), Lat: 12.9109, Lon: 80.0623}
+
+	if got := event.In(s, fences); got != "office" {
+		t.Errorf("called it %q, want office", got)
+	}
+}
+
+// Somebody still at the office has not stopped being there because
+// they have not left yet.
+func TestACrossingThatWasNeverClosedRunsToNow(t *testing.T) {
+	fences := event.Fences([]event.Event{crossed(event.Entered, "office", 0)}, when(600))
+
+	s := event.Stay{From: when(300), To: when(400)}
+
+	if got := event.In(s, fences); got != "office" {
+		t.Errorf("called it %q, want office: an open crossing should still cover it", got)
+	}
+}
+
+// A crossing out of somewhere nothing says they entered is ignored,
+// or it swallows every stay before it.
+func TestALeavingWithNoArrivalIsIgnored(t *testing.T) {
+	fences := event.Fences([]event.Event{crossed(event.Exited, "office", 300)}, when(600))
+
+	if len(fences) != 0 {
+		t.Errorf("an unmatched departure produced %+v", fences)
+	}
+}
+
+// A place drawn inside another is the more particular answer.
+func TestTheSmallerPlaceWins(t *testing.T) {
+	fences := event.Fences([]event.Event{
+		crossed(event.Entered, "home", 0),
+		crossed(event.Entered, "badminton court", 100),
+		crossed(event.Exited, "badminton court", 200),
+		crossed(event.Exited, "home", 480),
+	}, when(600))
+
+	s := event.Stay{From: when(120), To: when(180)}
+
+	if got := event.In(s, fences); got != "badminton court" {
+		t.Errorf("called it %q, want badminton court", got)
+	}
+}
+
+// Somewhere they never drew a circle around has no name from this, and
+// falls through to whatever else can name it.
+func TestAStayOutsideEveryGeofenceIsUnnamed(t *testing.T) {
+	fences := event.Fences([]event.Event{
+		crossed(event.Entered, "office", 0),
+		crossed(event.Exited, "office", 100),
+	}, when(600))
+
+	s := event.Stay{From: when(300), To: when(360)}
+
+	if got := event.In(s, fences); got != "" {
+		t.Errorf("a stay nowhere near a geofence was called %q", got)
+	}
+}

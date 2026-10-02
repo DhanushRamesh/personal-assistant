@@ -1646,6 +1646,26 @@ repeat -- and nothing counting where somebody goes would ever count to
 two. Geoapify can replace that name with a real one later without
 changing any of this.
 
+**A place they drew themselves outranks everything else.** Owner, 2
+October 2026: *"my geo fences are the first priority, if its not in geo
+fence then geoapify will name it."* So a stay whose middle falls inside
+a `place.entered`/`place.exited` stretch takes that stretch's name, and
+only a stay outside every one of them falls through to borrowing a
+neighbour's label, and after that to its own coordinates.
+
+Judged on the middle of the stay rather than either end, since the
+crossing and the first reading inside it are minutes apart. A crossing
+never closed runs to now -- somebody has not stopped being at the
+office because they have not left yet -- and a departure with no
+arrival is ignored, or an unbounded stretch swallows every stay before
+it. Where two overlap the shorter wins: a court drawn inside home is
+the more particular answer, and it is what somebody would say.
+
+A stay named by a geofence still carries its coordinates in `at`, so a
+later stay at the same place borrows the name even when the crossing
+itself was missed. The geofences are unreliable in exactly that way,
+and this costs nothing.
+
 **Worked out again from the readings every time, with no cursor kept.**
 The same readings produce the same stays and the same keys, so a stay
 already written is recognised as a resend. The work is wasted rather

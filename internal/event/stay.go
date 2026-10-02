@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"math"
+	"sort"
 	"strconv"
 	"strings"
 	"time"
@@ -17,6 +18,13 @@ import (
 const (
 	Fixed  = "location.fix"
 	Stayed = "place.stayed"
+)
+
+// Entered, Exited : The kinds a geofence reports when somebody crosses
+// into or out of a place they drew themselves.
+const (
+	Entered = "place.entered"
+	Exited  = "place.exited"
 )
 
 // Near : How far apart two readings can be and still be one place, in
@@ -282,6 +290,100 @@ func sortByTime(fixes []Fix) {
 	}
 }
 
+// Fence : A named place the person drew, and a stretch of time they
+// were inside it.
+type Fence struct {
+	Name     string
+	From, To time.Time
+}
+
+// Holds : Whether a moment falls inside this stretch.
+func (f Fence) Holds(at time.Time) bool {
+	return !at.Before(f.From) && !at.After(f.To)
+}
+
+// Long : How long the stretch is. What decides which of two overlapping
+// places is the more particular.
+func (f Fence) Long() time.Duration { return f.To.Sub(f.From) }
+
+// Fences : The stretches of time spent inside named places, from the
+// crossings a phone reported.
+//
+// A crossing that was never closed runs to now rather than being
+// dropped: somebody who is still at the office has not stopped being
+// there because they have not left yet. A crossing out of somewhere
+// nothing says they entered is ignored, which is the safe direction --
+// the alternative is an unbounded stretch swallowing every stay before
+// it.
+func Fences(crossings []Event, now time.Time) []Fence {
+	in := append([]Event(nil), crossings...)
+	sort.SliceStable(in, func(i, j int) bool { return in[i].OccurredAt.Before(in[j].OccurredAt) })
+
+	open := map[string]time.Time{}
+	var order []string
+	var out []Fence
+	for _, e := range in {
+		name := placeName(e)
+		if name == "" {
+			continue
+		}
+		switch e.Kind {
+		case Entered:
+			if _, already := open[name]; !already {
+				open[name] = e.OccurredAt
+				order = append(order, name)
+			}
+		case Exited:
+			from, waiting := open[name]
+			if !waiting {
+				continue
+			}
+			delete(open, name)
+			out = append(out, Fence{Name: name, From: from, To: e.OccurredAt})
+		}
+	}
+	for _, name := range order {
+		if from, still := open[name]; still {
+			out = append(out, Fence{Name: name, From: from, To: now})
+		}
+	}
+	return out
+}
+
+// In : The named place a stay happened inside, or empty.
+//
+// Judged on the middle of the stay rather than either end, because the
+// crossing and the first reading inside it are minutes apart and the
+// middle is nowhere near either boundary.
+//
+// The shortest stretch wins where two overlap. A place drawn inside
+// another is the more particular answer, and "the badminton court" is
+// what somebody would say rather than "home".
+func In(s Stay, fences []Fence) string {
+	middle := s.From.Add(s.Long() / 2)
+	best, found := "", time.Duration(0)
+	for _, f := range fences {
+		if !f.Holds(middle) {
+			continue
+		}
+		if best == "" || f.Long() < found {
+			best, found = f.Name, f.Long()
+		}
+	}
+	return best
+}
+
+// placeName : What a crossing says the place is called.
+func placeName(e Event) string {
+	var into struct {
+		Value string `json:"value"`
+	}
+	if err := json.Unmarshal(e.Payload, &into); err != nil {
+		return ""
+	}
+	return strings.TrimSpace(into.Value)
+}
+
 // Looking : How far back settling reads for readings.
 //
 // Long enough to hold a whole stay, including an afternoon somewhere
@@ -332,10 +434,25 @@ func Settle(ctx context.Context, store Watching, userID string, now time.Time) (
 		return nil, fmt.Errorf("event: reading the places they know: %w", err)
 	}
 
+	// And the places they drew themselves, which outrank everything
+	// else. The owner's rule, 2 October 2026: "my geo fences are the
+	// first priority". A name somebody chose for a place they marked is
+	// not improved on by anything worked out afterwards.
+	crossings, err := store.Recent(ctx, userID, Query{
+		Prefix: "place.", Since: now.Add(-2 * Looking)})
+	if err != nil {
+		return nil, fmt.Errorf("event: reading the places they drew: %w", err)
+	}
+	fences := Fences(crossings, now)
+
 	out := make([]*Event, 0, len(stays))
 	for _, s := range stays {
+		called := In(s, fences)
+		if called == "" {
+			called = Called(s, known)
+		}
 		e, err := New(userID, "server", "", Stayed, s.From, now,
-			s.Payload(Called(s, known)), s.Key())
+			s.Payload(called), s.Key())
 		if err != nil {
 			// Unreachable for a stay worked out here, and not worth
 			// losing the others over if it ever is.
