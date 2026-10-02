@@ -16,8 +16,26 @@ const corsMaxAge = "600"
 // corsHeaders : The request headers a client is allowed to send.
 const corsHeaders = "Authorization, Content-Type, Accept"
 
-// corsMethods : The methods the API uses.
-const corsMethods = "GET, POST, DELETE, OPTIONS"
+// Methods : The methods the API uses, and so the ones a browser is told
+// it may send.
+//
+// Exported because the only place this can be checked is beside the
+// route table, and it needs checking: PUT was missing from here from
+// the day the list was written until the day somebody tried to save
+// their profile. The preflight answered 204 and refused the method in
+// the same breath, the browser never sent the request, and the screen
+// reported that it could not reach the assistant -- which was true,
+// and said nothing about why.
+var Methods = []string{
+	http.MethodGet,
+	http.MethodPost,
+	http.MethodPut,
+	http.MethodDelete,
+	http.MethodOptions,
+}
+
+// corsMethods : Methods, as the header wants them.
+var corsMethods = strings.Join(Methods, ", ")
 
 // CrossOrigin : Returns middleware that answers a browser's cross-origin
 // checks, or a pass-through when enabled is false.

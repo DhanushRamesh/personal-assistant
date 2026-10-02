@@ -9,6 +9,7 @@ import (
 
 	"github.com/go-chi/chi/v5"
 
+	"github.com/DhanushRamesh/personal-assistant/internal/api/middleware"
 	"github.com/DhanushRamesh/personal-assistant/internal/chat/memory"
 )
 
@@ -102,5 +103,37 @@ func TestRouteTableIsComplete(t *testing.T) {
 
 	for route := range want {
 		t.Errorf("missing route %s", route)
+	}
+}
+
+// A method the router serves and the cross-origin policy does not list
+// is a request the browser refuses to make.
+//
+// PUT was missing from that list from the day it was written until the
+// day somebody tried to save their profile, months later. Nothing
+// caught it: the preflight answered 204 and refused the method in the
+// same breath, so the server logged a successful request and the real
+// one never arrived. It only shows in development, where the UI is
+// served from its own port, which is exactly where it is least likely
+// to be looked for.
+//
+// Checked here because this is the only place that can see both the
+// routes and the policy.
+func TestEveryMethodTheRouterServesIsAllowedCrossOrigin(t *testing.T) {
+	allowed := map[string]bool{}
+	for _, m := range middleware.Methods {
+		allowed[m] = true
+	}
+
+	err := chi.Walk(newServer().router,
+		func(method, route string, _ http.Handler, _ ...func(http.Handler) http.Handler) error {
+			if !allowed[method] {
+				t.Errorf("%s %s is served, but a browser is never told it may send %s",
+					method, route, method)
+			}
+			return nil
+		})
+	if err != nil {
+		t.Fatalf("walking routes: %v", err)
 	}
 }

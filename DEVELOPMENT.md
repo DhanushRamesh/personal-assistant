@@ -4795,6 +4795,21 @@ the mistake is silent, which is why it is refused rather than warned about.
 `[server] allow_public_bind` exists for when something else already terminates
 TLS, and has to be set deliberately.
 
+**A method the router serves and the cross-origin policy does not list
+is a request the browser refuses to make.** `PUT` was missing from
+`middleware.Methods` from the day the list was written until the day
+somebody tried to save their profile, months later.
+
+Nothing caught it and nothing could. The preflight answered 204 and
+refused the method in the same breath, so the server logged a
+successful request; the real one never arrived, and the screen said it
+could not reach the assistant, which was true and said nothing about
+why. It only bites in development, where `flutter run` serves the UI
+from its own port -- which is exactly where nobody looks for it.
+
+The list is exported now, and `TestEveryMethodTheRouterServesIsAllowedCrossOrigin`
+walks the router against it. That is the only place that can see both.
+
 **Caddy owns the certificate.** It obtains one from Let's Encrypt on the first
 request and renews it indefinitely, so there is no certbot and no expiry to
 forget. Its configuration sets `flush_interval -1`, without which server-sent
