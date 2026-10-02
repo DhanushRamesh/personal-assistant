@@ -1337,6 +1337,10 @@ state to be in: what it replaces was wrong six times in a day.
 ## Present, away, and the third answer
 
 The second of the three presence pieces, 29 September 2026.
+**The third answer was removed again on 2 October 2026** -- see
+*Presence fails closed* below. What is still true here is the
+`reason` attribute, `sensor.bluetooth_adapter`, and the argument
+that a fault is not an absence; what changed is what to do about it.
 
 `input_boolean.in_the_room` had two states, so every fault in the
 chain arrived as the same word: away. A dead publisher, a suspended
@@ -1383,6 +1387,69 @@ from stepping out, which is why the forty-five second line was drawn
 where it was. The remaining piece is the wifi SSID, for leaving with
 the laptop.
 
+## Presence fails closed
+
+Owner's decision, 2 October 2026, reversing *Present, away, and the
+third answer*: **"its a kind of security one, so it should be fail
+closed -- any unknown case, it fails closed."**
+
+`sensor.owner_presence` has two states again. Every fault that used to
+read as `unknown` -- a dead publisher, a suspended laptop, a blocked or
+missing radio, a watch that cannot be heard -- now reads as `away`.
+
+The earlier reasoning was not wrong, it was aimed at the wrong target.
+A fault genuinely is not an absence, and if the question were *where is
+the owner* then `unknown` is the honest answer. But the question this
+sensor answers is *may the house speak out loud into this room*, and
+there the two mistakes are not symmetrical: a missed greeting costs
+nothing, and reading a reminder aloud to whoever is in the room when
+the owner is not is the one that cannot be taken back.
+
+**The liveness checks had to stay, and only change their answer.**
+`sensor.watch_signal` keeps its last value when the publisher dies, so
+deleting the publisher and adapter checks would have made a crashed
+publisher read `present` for ever -- fail open, the exact outcome being
+designed out. The adapter must now read `ready` exactly; `unknown` and
+`unavailable` used to pass and no longer do.
+
+**`input_boolean.assume_present` is what pays for it.** Fail closed
+means a watch on its charger silences the house, and the owner asked
+for a switch in the Home Assistant UI for that: *"i may forget my watch
+or have it on charger -- if i turn it on, it means i'm available."* On
+beats everything, checked first. Off is not an absence; off hands the
+question back to the watch, which answers it fail closed. There is no
+third position forcing `away`, because the default already is one. No
+`initial:`, so a restart leaves it where it was.
+
+**The greeting gained the dwell the sensor gave up.** With no
+`unknown`, a publisher restart is a real `away` and a real return, and
+the automation would greet it. Measured over the previous 24 hours,
+`owner_presence` entered `unknown` eleven times. So
+`welcome_when_they_come_back` now requires the absence to have lasted
+**two minutes**, from `trigger.from_state.last_changed`. The smoothing
+is deliberately in the automation and not in the sensor: whatever reads
+the sensor to decide about speaking aloud should see the strict answer.
+
+**This also fixed a miss nobody had noticed.** The old trigger was
+`away -> present`, but leaving the house took the sensor
+`present -> away -> unknown` as the watch went from far to inaudible,
+so a return came back as `unknown -> present` and never fired. In the
+24 hours before this change, 11 returns were greeted and **6 were
+not**. With `unknown` gone, every return is `away -> present`.
+
+Verified by rendering all nine cases: wrist, another room, watch
+off/flat/charging, phone Bluetooth back on, radio soft-blocked, adapter
+missing, publisher dead, laptop suspended -- eight `away`, one
+`present` -- and the ninth, the switch on, `present` through all of
+them.
+
+**What this still does not fix.** Nothing distinguishes a watch on its
+charger from a watch that left the house; that is what the switch is
+for, and it has to be remembered. The `-85` threshold has never been
+walked out of doors. And the udev rule that stops USB autosuspend
+killing the adapter is written but not yet installed, which under fail
+closed now means silence rather than a frozen `present`.
+
 ## A frozen sensor is worse than a missing one
 
 Built 29 September 2026, the first of three pieces agreed for
@@ -1421,9 +1488,11 @@ that did not have it needs a **restart**, not `template.reload`: the
 integration was never set up, so there was nothing for the reload to
 reload. Neither produced a log line.
 
-Still to come: three states instead of two, so a fault reads as
-`unknown` rather than `away`; and the wifi SSID, so leaving with the
-laptop is visible.
+Still to come at the time: three states instead of two, and the wifi
+SSID so leaving with the laptop is visible. The first was built and
+then reversed -- see *Presence fails closed*. The second was not
+built: the laptop is the thing doing the measuring, so it cannot
+watch itself leave.
 
 ## voice_only is not there when PulseAudio starts
 
