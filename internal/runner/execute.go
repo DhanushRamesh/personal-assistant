@@ -82,6 +82,10 @@ func (r *Runner) consume(runCtx, ctx context.Context, t *chat.Chat, systemPrompt
 	// model may take several rounds to get to its answer.
 	var owed []tool.Owed
 
+	// What this turn tried to change and what it managed, so an answer
+	// cannot report a change the server knows did not happen.
+	var wrote writing
+
 	// Whether the model said aloud what it was about to do. Once per turn
 	// at most: a chain of five rounds would otherwise interrupt five times
 	// to describe work the person did not ask about.
@@ -243,8 +247,17 @@ func (r *Runner) consume(runCtx, ctx context.Context, t *chat.Chat, systemPrompt
 				prompt = lookFirst
 				continue
 			}
-			r.complete(ctx, t, aloud, tool.Ensure(final.Text,
-				persona.AddressFor(r.personaID()), tool.Merged(owed)))
+			address := persona.AddressFor(r.personaID())
+			answer := tool.Ensure(final.Text, address, tool.Merged(owed))
+			// A turn that reached for a write and never landed one
+			// may not end as though it had. The model has been seen
+			// to describe the change it was refused.
+			if !wrote.claimable() {
+				r.logger.WarnContext(ctx, "the answer is denied a change that did not happen",
+					slog.Int("writes_tried", wrote.tried))
+				answer = tool.Unchanged(answer, address)
+			}
+			r.complete(ctx, t, aloud, answer)
 			return
 		}
 		reached = true
@@ -282,7 +295,7 @@ func (r *Runner) consume(runCtx, ctx context.Context, t *chat.Chat, systemPrompt
 		// calls were all refused adds nothing and is not charged.
 		before := len(ran)
 
-		ranTurns, ranOwed, reveal := r.runTools(ctx, t, final.ToolCalls, &ran, revealed)
+		ranTurns, ranOwed, reveal := r.runTools(ctx, t, final.ToolCalls, &ran, revealed, &wrote)
 		if did(ran[before:]) {
 			worked++
 		}

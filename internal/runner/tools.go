@@ -116,6 +116,24 @@ func (r *Runner) asking(systemPrompt string, t *chat.Chat, revealed map[string]b
 	return prompt.Block(systemPrompt, catalogue)
 }
 
+// writing : What a chat tried to change, and what it managed.
+//
+// Counted for the whole chat rather than for one round, because a write
+// refused and then done properly in the next round is a change made:
+// that is the correcting machinery working, not a turn that failed.
+type writing struct {
+	// tried : Calls to a tool that creates, changes or removes
+	// something, whether or not the call was allowed to run.
+	tried int
+	// took : Those that ran and did not fail. A write that ran and
+	// found the value already correct counts: the state is what was
+	// asked for, which is all the person cares about.
+	took int
+}
+
+// claimable : Whether the answer may report that something changed.
+func (w writing) claimable() bool { return w.tried == 0 || w.took > 0 }
+
 // runTools : Runs what the model asked for and records both halves.
 //
 // The call and the answer are both written to the conversation before the
@@ -128,6 +146,7 @@ func (r *Runner) runTools(
 	calls []environment.ToolCall,
 	seen *[]string,
 	revealed map[string]bool,
+	wrote *writing,
 ) ([]environment.Turn, []tool.Owed, []string) {
 	asked := make([]conversation.ToolCall, 0, len(calls))
 	for _, c := range calls {
@@ -142,6 +161,14 @@ func (r *Runner) runTools(
 	ran := make([]tool.Result, 0, len(calls))
 	for _, c := range calls {
 		started := time.Now()
+
+		// Whether this call was going to change something. Counted
+		// before the branch below, so a write refused for never having
+		// been described still counts as having been tried.
+		x, known := r.tools.Get(c.Name)
+		if known && x.Writes {
+			wrote.tried++
+		}
 
 		// A tool the model was not given, called anyway. Being left
 		// out of the request does not stop it: the endpoint forwards
@@ -176,6 +203,9 @@ func (r *Runner) runTools(
 		// lean on it however the model phrased its question.
 		if result.Outcome != conversation.OutcomeFailed {
 			*seen = append(*seen, c.Name)
+			if known && x.Writes {
+				wrote.took++
+			}
 		}
 
 		r.logger.InfoContext(ctx, "tool ran",

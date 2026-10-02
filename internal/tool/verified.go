@@ -345,3 +345,27 @@ func Partly(did string, gone, asked int, stayed []string, before, after int, nou
 		Else:    fmt.Sprintf("%d of the %d were removed; the rest are still there.", gone, asked),
 	}
 }
+
+// Unchanged : The answer, with a plain denial added, for a turn that
+// tried to change something and changed nothing.
+//
+// Everything else in this file catches a write that went wrong and hands
+// the model the words to report it. The model reports it anyway. Handed
+// "calendar_update was not run: you had not been given its arguments",
+// it answered "Meesaya Murukku 2 at 6:10 PM on Sunday the 4th, sir" --
+// the change described as done, by a tool that never ran. The person
+// then spent two more turns insisting it had not happened.
+//
+// So the denial is appended rather than asked for, and appended without
+// reading the answer. Whether a sentence claims success can only be
+// decided by reading English, and a server that matches on English words
+// is one that quietly stops working in another language. A turn that
+// managed no write ends by saying so; a model that already said so costs
+// the person one repeated clause.
+func Unchanged(answer, address string) string {
+	denial := addressed("I have not actually made that change.", address, strings.ToLower(answer))
+	if strings.TrimSpace(answer) == "" {
+		return denial
+	}
+	return strings.TrimRight(answer, " ") + " " + denial
+}

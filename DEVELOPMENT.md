@@ -791,6 +791,39 @@ Covered: reminders (set, update, snooze, cancel), memories (remember,
 update, forget), conversations (new, switch, rename, archive, delete),
 calendar (add, cancel).
 
+### A turn that changed nothing may not say it did
+
+**2 October 2026.** Reviewing a stored conversation about a cinema
+booking, two answers reported changes that had not happened.
+`calendar_update` was refused for never having been described -- the
+result said in so many words that it was not run -- and the assistant
+answered "Meesaya Murukku 2 at 6:10 PM on Sunday the 4th, sir". The
+owner then said "It's not updated in calendar" twice while it kept
+insisting. The same turn later asserted a birthday from a
+`memory_search` that had also been refused.
+
+Everything above catches the bad write and hands the model the words to
+report it. The model does not report it. So the denial is no longer
+asked for: the runner counts, over the whole chat, the calls to tools
+with `Writes` set and how many of them ran without failing. If it tried
+and none took, `tool.Unchanged` appends "I have not actually made that
+change" to the answer.
+
+**Counted per chat, not per round**, or the server would call its own
+corrections failures: refused for writing before reading, then reading
+and writing properly, is a change made.
+
+**Appended without reading the answer.** Deciding whether a sentence
+claims success means matching English words, and a server that matches
+on English stops working the moment somebody speaks Tamil to it -- the
+same rule as everywhere else here. A model that already admitted it
+costs the person one repeated clause; the alternative is being lied to.
+
+A write that ran and found the value already correct counts as having
+taken. The state is what was asked for, which is the only part the
+person cares about, and `Changed` already says "nothing had actually
+moved: it already held those values".
+
 ## How prompt text is written
 
 `internal/prompt` joins the pieces: `Text` for sentences of one

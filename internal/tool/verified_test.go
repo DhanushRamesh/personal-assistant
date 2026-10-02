@@ -244,3 +244,41 @@ func TestAddedSentencesSpeakInThePersona(t *testing.T) {
 		t.Errorf("friday was not addressed as boss: %s", boss)
 	}
 }
+
+// The denial follows what the model said rather than replacing it. What
+// it wrote is usually the better sentence; it is only the claim at the
+// end of it that is false.
+func TestADenialFollowsTheAnswer(t *testing.T) {
+	got := tool.Unchanged("Moved it to six ten on Sunday.", "sir")
+
+	if !strings.HasPrefix(got, "Moved it to six ten on Sunday.") {
+		t.Errorf("the answer was not kept: %q", got)
+	}
+	if !strings.Contains(got, "not actually made that change") {
+		t.Errorf("the change was not denied: %q", got)
+	}
+	if !strings.Contains(got, "sir") {
+		t.Errorf("the denial is not in the persona's manner: %q", got)
+	}
+}
+
+// Said once. An answer already addressing the person is not addressed
+// twice in two sentences.
+func TestADenialDoesNotRepeatTheAddress(t *testing.T) {
+	got := tool.Unchanged("I could not reach the diary, sir.", "sir")
+
+	if n := strings.Count(got, "sir"); n != 1 {
+		t.Errorf("the person is addressed %d times: %q", n, got)
+	}
+}
+
+// An empty answer is a denial on its own, not a leading space. The
+// model returning nothing is a failed turn, and the person still has to
+// be told that nothing moved.
+func TestADenialStandsAloneWhenThereIsNoAnswer(t *testing.T) {
+	got := tool.Unchanged("", "sir")
+
+	if got != "I have not actually made that change, sir." {
+		t.Errorf("the denial alone reads as %q", got)
+	}
+}
