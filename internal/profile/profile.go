@@ -44,6 +44,7 @@ import (
 	"github.com/DhanushRamesh/personal-assistant/internal/conversation"
 	"github.com/DhanushRamesh/personal-assistant/internal/event"
 	"github.com/DhanushRamesh/personal-assistant/internal/memory"
+	"github.com/DhanushRamesh/personal-assistant/internal/prompt"
 )
 
 // Subject : How the profile memory is recognised among the others.
@@ -291,7 +292,10 @@ func (b *Builder) rhythm(ctx context.Context, userID string) string {
 		}
 		return ""
 	}
-	return Rhythm(did, b.Where)
+	// The counts, then what is different about them. Both from the
+	// same read: the change is a property of the four weeks, not a
+	// fifth thing to go and fetch.
+	return prompt.Block(Rhythm(did, b.Where), Changed(did, b.Where, b.clock()))
 }
 
 // asking : What the assistant ran for them over the same four weeks.

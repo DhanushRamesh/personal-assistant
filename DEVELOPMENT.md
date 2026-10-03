@@ -2863,6 +2863,61 @@ is *"switch to a new conversation"* twelve times and *"what's the time
 now"* five times, which is machinery rather than a person.
 
 
+## What stopped is in no list of what happened
+
+Owner, on what profiling is for: *"imagine you are a stalker and you
+want to know about me with these details."* Then, on how to send a
+month of events: preprocess them if it helps.
+
+Everything the description was written from answers *what do they do*.
+A model can read that off a list. Nothing answered *what did they stop
+doing*, and nothing could: a thing that stopped appears in no list of
+what happened. It exists only as the difference between two counts, so
+it is computed rather than asked for.
+
+`Changed` compares the last week against the three before it, per
+label, and reports three things: no longer happening, new this week,
+and happening at a different rate. Rates are per week, because the two
+periods are different lengths.
+
+**Nothing in it knows the name of a single kind of event**, which is
+the standing rule here and the owner's first correction when this was
+being designed: the incoming events describe themselves, so a prompt
+or a function that names kinds rots the day a new sender is added. A
+thing is whatever label it carries, and what matters is whether that
+label used to turn up and does not any more.
+
+**Three guards, each for a way of being wrong:**
+
+- `Enough`, three occurrences. Two of anything is a coincidence, and
+  announcing that somebody has stopped doing something on the strength
+  of two is worse than saying nothing.
+- `Spread`, two distinct days. Three in one evening is one occasion,
+  not a habit that has since ended.
+- `Swing`, twice or half. Devices miss things and weeks differ; a
+  description noting every wobble is noise that reads as insight.
+
+**And it says it does not know why.** A thing can stop because they
+stopped doing it or because a device stopped reporting it, and the
+counts cannot tell those apart. The prompt says so rather than letting
+the model pick the interesting one.
+
+**It reports nothing for the first four weeks**, when everything a
+device has ever sent is new. Saying otherwise would describe the day
+the phone was set up. There are three days of events today, so this
+produces nothing at all yet -- which is the correct output and is what
+the test pins.
+
+**On sending a month of events at all.** Measured: 632 events over
+three days is 11,400 tokens raw, but 449 of them are position
+readings whose values are all distinct, so they fold to nothing. They
+are already turned into stays by code and already withheld. The
+remaining 181 fold 3.4 to 1, and better with volume, because the same
+places and people recur. At the owner's expected volume a month of raw
+events is around 300,000 tokens, so raw was never an option -- the
+model sees counts, never rows.
+
+
 ## The narration was the wait it was covering
 
 Owner: *"calculate the full latency... I want ultra low latency."*
