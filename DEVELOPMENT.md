@@ -2203,12 +2203,34 @@ profile is then one more notification profile setting the same two
 variables, and nothing in the call tasks changes. Same rule as the
 helmet: the sender describes itself.
 
-**Still open: a stale name has no expiry.** A missed Meet call posts a
-notification but never reaches Phone Idle, so `%VOIPWITH` is not
-cleared, and the next outgoing cellular call would be filed under that
-name with `via` meet. Incoming is safe -- `%CRNUM ~ 0` fails for a real
-number -- and outgoing is not. The fix is a `%VOIPAT` timestamp and a
-freshness test in both tasks; it was offered and not taken up yet.
+**A stale name expires after two minutes.** A missed Meet call posts a
+notification but never reaches Phone Idle, so nothing cleared
+`%VOIPWITH`, and the next outgoing cellular call would have been filed
+under that name with `via` meet.
+
+`Meet Who` stamps `%VOIPAT` with `%TIMES` on every Meet notification,
+and both Phone Idle tasks begin with
+
+    Variable Clear %VOIPWITH   If %TIMES-%VOIPAT > 120   (Maths)
+
+placed before the `If %OSTART Set` / `If %CSTART Set` block, so it runs
+on every call end whether or not that task handles the call. Nothing
+else changed: every condition downstream still reads `%VOIPWITH Set`,
+and a name that has expired is simply not set any more.
+
+**Found live while testing it.** `%VOIPWITH` was still holding
+"Alekhya Chintada" from the 11:57 call, hours later -- the trap was not
+hypothetical, it was already armed. Verified by setting `%VOIPAT` to 1
+and running the task by hand: the variable went from "Alekhya
+Chintada" to empty. That also confirmed the part worth doubting, that
+Tasker evaluates `%TIMES-%VOIPAT` as arithmetic in a Maths condition
+rather than comparing it as text.
+
+**It fails safe when `%VOIPAT` has never been set.** An invalid
+expression makes the condition false, so nothing is cleared -- which is
+the old behaviour, not a new fault. `%VOIPAT` is written by the same
+task that writes `%VOIPWITH`, so in practice one is never set without
+the other.
 
 ## The profile is taught a method, not a list of patterns
 
