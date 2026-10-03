@@ -408,3 +408,34 @@ func TestTokenFileMissingIsAnError(t *testing.T) {
 		t.Fatal("expected a missing token file to be an error")
 	}
 }
+
+// TestAsidesAreSilentUnlessAskedFor : A Home Assistant section that
+// says nothing about asides does not get them.
+//
+// They were unconditional until the answer began being spoken as it
+// was written, which left them covering a wait that had mostly gone.
+// Turning them back on is one line; having them appear because a
+// media player is configured is not what anyone meant by configuring
+// a media player.
+func TestAsidesAreSilentUnlessAskedFor(t *testing.T) {
+	cfg, err := config.Load(
+		writeINI(t, "[homeassistant]\nurl = http://x:8123\ntoken = abc\n"+
+			"media_player = media_player.study\ntts_engine = tts.piper\n"),
+		env(nil))
+	if err != nil {
+		t.Fatalf("loading: %v", err)
+	}
+	if cfg.HomeAssistant.SayAside {
+		t.Error("a turn narrates itself aloud without having been asked to")
+	}
+
+	on, err := config.Load(
+		writeINI(t, "[homeassistant]\nurl = http://x:8123\nsay_aside = true\n"),
+		env(nil))
+	if err != nil {
+		t.Fatalf("loading: %v", err)
+	}
+	if !on.HomeAssistant.SayAside {
+		t.Error("asking for asides did not turn them on")
+	}
+}

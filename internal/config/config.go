@@ -257,6 +257,20 @@ type HomeAssistant struct {
 	// said before it is still being spoken. Zero selects the default;
 	// negative cuts the aside off rather than waiting.
 	AsideSettleWait time.Duration
+	// SayAside : Whether to speak a sentence beside a turn saying what
+	// is being done. Off by default.
+	//
+	// It was built to cover a wait, and the wait it covered is mostly
+	// gone: the answer is now spoken as it is written, so the silence
+	// it filled ends a second or two after it begins. What is left is
+	// a sentence in front of every slow turn and, because the two go
+	// through different players, one that can still be playing when
+	// the answer starts.
+	//
+	// Nothing else changes when this is off. The same sentence is
+	// still published to the chat, so a screen shows what the turn is
+	// doing; it is only not spoken.
+	SayAside bool
 }
 
 // Google : The client credentials this assistant asks Google with.
@@ -507,6 +521,7 @@ func Load(path string, lookup Lookup) (Config, error) {
 			TTSVoice:        l.str("homeassistant", "tts_voice", ""),
 			TTSLanguage:     l.str("homeassistant", "tts_language", ""),
 			AsideSettleWait: l.duration("homeassistant", "aside_settle_wait", 0),
+			SayAside:        l.boolean("homeassistant", "say_aside", false),
 		},
 		Google: Google{
 			ClientID:     l.str("google", "client_id", ""),

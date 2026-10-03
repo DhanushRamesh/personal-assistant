@@ -2522,6 +2522,46 @@ means the turn said nothing worth timing. Logged as `the answer began`,
 with the whole turn's duration beside it so the two can be compared.
 
 
+## The aside is off
+
+Owner, after the first clean measurement: *"currently stop aside
+reciting."*
+
+`[homeassistant] say_aside`, false by default. Nothing is built rather
+than built and left unused, so the startup log says it: *nothing is
+said while an answer is being worked out, by configuration*.
+
+**What it was for has mostly gone.** It covered a wait. The answer is
+now spoken as it is written, so the silence it filled ends a second or
+two after it begins, and what is left is a sentence in front of every
+slow turn.
+
+**And it was landing on top of the answer.** Measured on the turn that
+prompted this:
+
+    23:44:44.476  the tool call arrives, carrying "checking what you
+                  have been up to today"
+    23:44:47.217  the first piece of the answer goes out
+    23:44:47.435  the speaker starts the answer
+    23:44:47.961  the aside stops being audible
+
+Half a second of both at once. `settleAside` exists to prevent exactly
+this -- its own comment says the two "go through different players and
+nothing sequences them" -- but it gates the finished answer, and a
+streamed piece is published straight through without passing it.
+
+**Nothing else changes.** The sentence is still published to the chat,
+so a screen shows what a turn is doing, and the model is still asked
+for `saying` on a tool call. It is only not spoken.
+
+**A measurement this invalidates.** `spoke_after_ms` times the first
+text on the chat stream. The aside never travelled on that stream --
+it went through the announce player -- so on a turn with an aside the
+person heard the assistant before the number says they did. With the
+aside off the number is the whole truth again, which is the other
+reason not to leave this half-done.
+
+
 ## The narration was the wait it was covering
 
 Owner: *"calculate the full latency... I want ultra low latency."*

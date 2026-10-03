@@ -700,6 +700,14 @@ func announcer(cfg config.Config, logger *slog.Logger) announce.Announcer {
 // through the satellite mid-turn ends the turn, because an announcement and
 // an answer share the completion callback that marks a turn finished.
 func aside(cfg config.Config, logger *slog.Logger) runner.Aside {
+	// Asked for off on 3 October 2026, once the answer began being
+	// spoken as it was written. Nothing is built rather than built and
+	// not used, so the absence is visible in the startup log.
+	if !cfg.HomeAssistant.SayAside {
+		logger.Info("nothing is said while an answer is being worked out, by configuration")
+		return nil
+	}
+
 	said, err := hass.NewAside(hass.AsideConfig{
 		URL:         cfg.HomeAssistant.URL,
 		Token:       cfg.HomeAssistant.Token,
