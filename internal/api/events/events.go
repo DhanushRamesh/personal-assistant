@@ -396,12 +396,31 @@ func labelled(payload json.RawMessage) json.RawMessage {
 	}
 
 	value, _ := into["value"].(string)
-	if !unset(value) {
+	switch {
+	case unset(value):
+		// Nothing was sent. "unknown" either way, and the number that
+		// came with it stays in the payload rather than becoming the
+		// label.
+	case event.Number(value):
+		// A bare telephone number is not a name, whoever sent it.
+		//
+		// A cellular call says nothing at all when the caller is a
+		// stranger, so the case above covers it. A call from an app
+		// does not: the name comes from the notification, and Meet
+		// puts the person's number in the title when they are not in
+		// the contacts. That arrives set, so a test for being set
+		// passes it through and the digits become the label -- the one
+		// thing the owner asked to be rid of.
+		//
+		// Moved rather than dropped, so the record still has it when
+		// the sender had nowhere else to put it.
+		if number, _ := into["number"].(string); unset(number) {
+			into["number"] = strings.TrimSpace(value)
+		}
+	default:
 		return payload
 	}
-	// Named, either way. A caller with no name is "unknown" whether or
-	// not a number came with them, and the number stays in the payload
-	// rather than becoming the label.
+
 	into["value"] = event.Unknown
 	out, err := json.Marshal(into)
 	if err != nil {

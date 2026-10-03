@@ -2177,6 +2177,19 @@ counted by; it did not stop being the record. `event.Unknown` holds the
 word, next to `event.UnknownNumber`, which is still what a bare number
 is called when it is spoken.
 
+**And a number sent *as* the name is not a name either.** Writing the
+cases out in full found the hole: the substitution fires when the
+value is empty, which is what a cellular call sends for a stranger --
+but a call from an app takes its value from the notification title,
+and Meet puts the person's number there when they are not in the
+contacts. That arrives set, so it would have sailed through and become
+the label, which is the exact thing being removed. `event.Number`
+already existed to decide whether a string is a bare telephone number
+and nothing else; `labelled` uses it now, so the rule holds for every
+sender rather than only for the cellular path, and the WhatsApp
+profile inherits it. The number is moved into the `number` field
+rather than dropped, because the sender had nowhere else to put it.
+
 **Every call event carries how the call came.** *"I want via for
 everything, because I will be adding WhatsApp call and other calls
 too."* `call.missed` was the one left without it, and it has

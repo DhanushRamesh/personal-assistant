@@ -324,6 +324,10 @@ func TestACallerWithNoNameIsUnknown(t *testing.T) {
 			`{"value":"%CNAME","number":"+919876543210"}`, event.Unknown},
 		{"neither one leaves unknown rather than nothing",
 			`{"value":"","number":""}`, event.Unknown},
+		{"a number sent as the name is not a name",
+			`{"value":"+919876543210","number":""}`, event.Unknown},
+		{"a number sent as the name and again as the number",
+			`{"value":"+919876543210","number":"+919876543210"}`, event.Unknown},
 	} {
 		store := inmemory.New()
 		e := apitest.NewWith(t, apitest.Options{DeviceEvents: store})
@@ -450,5 +454,42 @@ func TestTheScreenLeavesOutPositionReadingsUnlessAsked(t *testing.T) {
 	asked := listing(t, e, "?kind="+event.Fixed)
 	if len(asked.Events) != 2 {
 		t.Errorf("asked for by name, expected both readings, got %d", len(asked.Events))
+	}
+}
+
+// TestANumberSentAsTheNameKeepsTheNumber : Meet puts the person's
+// telephone number in the notification title when they are not in the
+// contacts, so the value arrives set and would have become the label.
+// It is moved into the number rather than thrown away, because the
+// sender had nowhere else to put it.
+func TestANumberSentAsTheNameKeepsTheNumber(t *testing.T) {
+	store := inmemory.New()
+	e := apitest.NewWith(t, apitest.Options{DeviceEvents: store})
+
+	code, _ := post(t, e, `{"source":"tasker","events":[
+		{"kind":"call.received","payload":{"value":"+919876543210","number":"","via":"meet"},
+		 "dedupe_key":"k"}]}`)
+	if code != http.StatusOK {
+		t.Fatalf("expected 200, got %d", code)
+	}
+
+	got, _ := store.Recent(context.Background(), e.User.ID, event.Query{})
+	if len(got) != 1 {
+		t.Fatalf("expected one event, got %d", len(got))
+	}
+	var into struct {
+		Value  string `json:"value"`
+		Number string `json:"number"`
+		Via    string `json:"via"`
+	}
+	_ = json.Unmarshal(got[0].Payload, &into)
+	if into.Value != event.Unknown {
+		t.Errorf("value = %q, want %q", into.Value, event.Unknown)
+	}
+	if into.Number != "+919876543210" {
+		t.Errorf("the number was lost: %s", got[0].Payload)
+	}
+	if into.Via != "meet" {
+		t.Errorf("via = %q, want meet", into.Via)
 	}
 }
