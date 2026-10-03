@@ -2078,6 +2078,83 @@ disagreed with each other in ways nobody could see by reading them.
 Every new tool is also an edit to every existing one. The eval is the
 only place that shows it.
 
+## A call with no number is still a call with somebody
+
+Owner, pointing at a ninety-minute row in the events table: *"this is a
+one and half hr call, it's noted as unknown, but it's from Alekhya in
+Google Meet -- how to capture them."*
+
+    call.received  {"value": "", "number": "0", "seconds": 5360}
+
+The duration was right and the person was missing, for a structural
+reason rather than a bug. Meet registers its call with Android's
+telecom framework, so `PHONE_STATE` fires and the Phone Offhook and
+Phone Idle profiles run -- but there is no telephone number in it, so
+`%CNUM` is 0 and the contact lookup has nothing to look up. The guard
+that turns 0 into nothing is why it read as unknown rather than as a
+person called 0.
+
+**The name comes from the notification, and the device resolves it.**
+AutoNotification Intercept, filtered to `com.google.android.apps.tachyon`
+by package rather than by app name, sets `%VOIPWITH` from `%antitle`.
+Measured on a real call, the three lines it wrote were
+
+    Created::Alekhya Chintada::Tap to return to the call
+    Created::Alekhya Chintada::Tap to return to the call
+    Cancelled::Alekhya Chintada::Tap to return to the call
+
+so the title is the person. `%ancategoryname` and `%anpeople` came back
+unset and are not used. Jarvis learns nothing about Meet.
+
+**What the test call actually exposed was worse than a missing name.**
+A nine-second Meet call to the same person produced
+
+    call.made  {"value": "Alekhya Chintada", "number": "+91…", "seconds": 27}
+
+Twenty-seven seconds was *the previous day's* call to her. The outgoing
+payload was `{"value":"%CONAME","number":"%CONUM","seconds":%CODUR}` --
+every field from the cellular call log, which a Meet call never enters.
+It looked right only because the last call happened to be to the same
+person; had it been to somebody else, the Meet call would have been
+filed under their name. The branch between `call.made` and
+`call.unanswered` turned on `%CODUR` too, so an unanswered Meet call
+would have been recorded as answered for a stranger's duration.
+
+**`%CODUR` is right about the call log and wrong about the call.** It
+was adopted because it is more accurate than dial-to-hangup for a
+cellular call, and that still holds. It is simply not evidence about a
+call that was never written there.
+
+**So each task now builds its payload before it sends it.** Both Phone
+Idle tasks set a local `%payload` to the telephony version, then
+overwrite it when the call was a Meet one:
+
+    %payload = {"value":"%CONAME","number":"%CONUM","seconds":%CODUR,"via":"phone"}
+    %payload = {"value":"%VOIPWITH","number":"","seconds":%OSECS,"via":"meet"}   if %VOIPWITH is set
+
+`call.made` now fires on `%CODUR > 0` **or** `%VOIPWITH` set;
+`call.unanswered` on `%CODUR < 1` **and** `%VOIPWITH` not set, because a
+Meet call that never connected posts no ongoing-call notification.
+Incoming is the same shape with `%CRING`/`%CRNUM`/`%SECS`, guarded
+additionally by `%CRNUM ~ 0` -- telephony having no number at all is
+what a VoIP call looks like from that side.
+
+**A Meet duration is dial-to-hangup, and that is the price.** There is
+no connected time to read for a call the log never saw, so `%OSECS` and
+`%SECS` include the ringing. Accepted knowingly: a wrong name is worse
+than a long duration.
+
+**`%VOIPWITH` is cleared by whichever task used it**, inside its own
+`If` block, so the one that did not handle the call cannot clear it
+first. The residual risk is a Meet notification that never leads to a
+Phone Idle run -- a missed Meet call -- leaving a name set for the next
+call. The incoming side is protected by `%CRNUM ~ 0`; the outgoing side
+is not, and a timestamp on `%VOIPWITH` is the fix if it ever shows up.
+
+**And `via` is in the payload now.** A ninety-minute Meet call and a
+ninety-minute phone call are not the same thing, and the field costs
+nothing because the sender already knows which it was.
+
 ## The profile is taught a method, not a list of patterns
 
 Owner, 2 October 2026, on what the counted half is for: *"when I leave
