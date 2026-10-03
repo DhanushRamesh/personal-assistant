@@ -83,6 +83,15 @@ const Doings = 4000
 // the most recent Most when it does not.
 const Most = 400
 
+// Again : How close together two identical things said count as one
+// thing said twice rather than two occasions.
+//
+// Generous, because the failure it exists for is a whole evening of
+// the same sentence. A person who asks the same question tomorrow is
+// asking it again; a person who asks it eleven times in four minutes
+// is not telling you anything about themselves.
+const Again = 30 * time.Minute
+
 // Least : Fewer messages than this and no profile is written.
 //
 // Describing somebody from a handful of sentences produces confident
@@ -173,7 +182,7 @@ func (b *Builder) Build(ctx context.Context, userID string) error {
 	}
 	was, _ := b.previously(ctx, userID)
 
-	answer, err := b.Ask(ctx, Prompt(said, b.rhythm(ctx, userID), b.asking(ctx, userID), was))
+	answer, err := b.Ask(ctx, Prompt(Folded(said), b.rhythm(ctx, userID), b.asking(ctx, userID), was))
 	if err != nil {
 		return fmt.Errorf("profile: asking for the description: %w", err)
 	}

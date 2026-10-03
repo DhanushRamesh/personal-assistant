@@ -2833,6 +2833,36 @@ instruction in the prompt, so the next attempt at the wording is one
 command from an answer rather than a guess.
 
 
+## An afternoon of testing is not a character
+
+The description written on 4 October 2026 said he *"repeats himself
+heavily, sometimes cycling through the same request a dozen times in
+a row"*, *"loses patience quickly"*, *"checks both repeatedly within a
+single session without anything having changed"*.
+
+None of it was about him. It was a day of saying the same five
+questions into the microphone to time them.
+
+**A prompt rule was already there and did not hold.** It says
+*"describe them, not what they asked the assistant to do"*. So the
+repetition is taken out before the model sees it: a run of the same
+thing inside thirty minutes becomes one thing.
+
+**Removed rather than counted.** "Said eleven times" is still
+evidence, and it invites exactly the sentence this exists to prevent.
+Real insistence survives: the same question tomorrow is outside the
+window and is kept.
+
+**Matched on the letters and digits alone**, case, spacing and
+punctuation dropped. Speech punctuates differently every time, so
+matching the characters would fold nothing -- and the test is the same
+in any language, which matching the meaning would not be.
+
+On the real week: 400 messages to 356, 11% gone. The top of what went
+is *"switch to a new conversation"* twelve times and *"what's the time
+now"* five times, which is machinery rather than a person.
+
+
 ## The narration was the wait it was covering
 
 Owner: *"calculate the full latency... I want ultra low latency."*

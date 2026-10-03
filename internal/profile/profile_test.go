@@ -288,3 +288,59 @@ func TestTheDescriptionSoFarIsGivenBackToBeCorrected(t *testing.T) {
 		}
 	}
 }
+
+// TestAnAfternoonOfTestingIsNotACharacter : The bug this exists for.
+//
+// The description written on 4 October 2026 said he "repeats himself
+// heavily, sometimes cycling through the same request a dozen times
+// in a row" and "loses patience quickly". Neither was about him. It
+// was an afternoon of saying the same questions into the microphone
+// to time them.
+func TestAnAfternoonOfTestingIsNotACharacter(t *testing.T) {
+	at := time.Date(2026, 10, 3, 18, 0, 0, 0, time.UTC)
+	var said []conversation.Message
+	for i := 0; i < 11; i++ {
+		said = append(said, conversation.Message{
+			Content: "What is the time?",
+			At:      at.Add(time.Duration(i) * 20 * time.Second),
+		})
+	}
+	said = append(said, conversation.Message{Content: "What is the time?", At: at.Add(90 * time.Minute)})
+
+	got := profile.Folded(said)
+	if len(got) != 2 {
+		t.Fatalf("eleven askings in four minutes became %d, want 2 "+
+			"(the run, and the one an hour and a half later)", len(got))
+	}
+	if !got[1].At.Equal(at.Add(90 * time.Minute)) {
+		t.Errorf("the later asking was folded away: %v", got[1].At)
+	}
+}
+
+// TestPunctuationAndCaseAreNotADifferentSentence : "Hello?" and
+// "hello." are one thing said twice. Speech punctuates differently
+// every time, so matching on the characters would fold nothing.
+func TestPunctuationAndCaseAreNotADifferentSentence(t *testing.T) {
+	at := time.Date(2026, 10, 3, 18, 0, 0, 0, time.UTC)
+	got := profile.Folded([]conversation.Message{
+		{Content: "Hello?", At: at},
+		{Content: "hello.", At: at.Add(time.Second)},
+		{Content: "  HELLO  ", At: at.Add(2 * time.Second)},
+	})
+	if len(got) != 1 {
+		t.Errorf("the same greeting three ways stayed %d messages", len(got))
+	}
+}
+
+// TestDifferentThingsAreKept : The fold must not quietly eat a week.
+func TestDifferentThingsAreKept(t *testing.T) {
+	at := time.Date(2026, 10, 3, 18, 0, 0, 0, time.UTC)
+	got := profile.Folded([]conversation.Message{
+		{Content: "what reminders do I have", At: at},
+		{Content: "what is on my calendar tomorrow", At: at.Add(time.Minute)},
+		{Content: "call Alekhya", At: at.Add(2 * time.Minute)},
+	})
+	if len(got) != 3 {
+		t.Errorf("three different things became %d", len(got))
+	}
+}

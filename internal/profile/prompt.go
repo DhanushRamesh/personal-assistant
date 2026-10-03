@@ -3,6 +3,7 @@ package profile
 import (
 	"strings"
 	"time"
+	"unicode"
 
 	"github.com/DhanushRamesh/personal-assistant/internal/conversation"
 	"github.com/DhanushRamesh/personal-assistant/internal/prompt"
@@ -154,3 +155,59 @@ func collapse(text string) string {
 
 // Since : The start of the window a rebuild reads, from a clock.
 func Since(now time.Time) time.Time { return now.Add(-Window) }
+
+// Folded : The same thing said over and over, counted once.
+//
+// The description is read before every answer, so anything in it is
+// acted on. What went in on 4 October 2026 was "repeats himself
+// heavily, sometimes cycling through the same request a dozen times
+// in a row", "loses patience quickly", "checks both repeatedly within
+// a single session without anything having changed". None of it was
+// about the person. It was an afternoon of saying the same five
+// questions into the microphone to measure how long they took.
+//
+// The evidence cannot tell that apart from insistence, and neither
+// can a rule in the prompt -- there is one already, and the
+// description broke it. So the repetition is removed before the model
+// sees it: a run of the same thing becomes one thing.
+//
+// Removed rather than counted. A count is still evidence, and the
+// model drew a character from it; writing "said eleven times" invites
+// exactly the sentence this exists to prevent. Insistence that is real
+// survives anyway, because a question asked again tomorrow is outside
+// Again and is kept.
+//
+// Matched on the words with their spacing, case and punctuation taken
+// off, which is the same test in any language. Nothing is matched on
+// what the words mean.
+func Folded(said []conversation.Message) []conversation.Message {
+	out := make([]conversation.Message, 0, len(said))
+	last := make(map[string]time.Time, len(said))
+	for _, m := range said {
+		key := bare(m.Content)
+		if key == "" {
+			out = append(out, m)
+			continue
+		}
+		if when, seen := last[key]; seen && m.At.Sub(when) < Again {
+			last[key] = m.At
+			continue
+		}
+		last[key] = m.At
+		out = append(out, m)
+	}
+	return out
+}
+
+// bare : The words alone, for deciding whether two messages are the
+// same one said twice.
+func bare(text string) string {
+	var b strings.Builder
+	b.Grow(len(text))
+	for _, r := range strings.ToLower(text) {
+		if unicode.IsLetter(r) || unicode.IsDigit(r) {
+			b.WriteRune(r)
+		}
+	}
+	return b.String()
+}
