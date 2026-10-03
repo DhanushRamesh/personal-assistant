@@ -131,7 +131,10 @@ func recent(reader Reader, clock Clock) tool.Tool {
 					Type: "string",
 					Description: "Only this kind of event, as a dotted name such as wifi.joined. " +
 						"Leave it out for everything. Call once without it first if you do not " +
-						"know which kinds exist: the answer lists them.",
+						"know which kinds exist: the answer lists them. A few kinds are too " +
+						"many to hand over unasked -- a row a song, a position every five " +
+						"minutes -- and are left out until you name one, so ask for the kind " +
+						"by name when the question is about what is in it.",
 				},
 				"days": {
 					Type: "integer",
@@ -194,19 +197,31 @@ func recent(reader Reader, clock Clock) tool.Tool {
 				q.Kind = kind
 			}
 
-			// Never the raw position readings.
+			// Never the working material, unless it is what was asked
+			// for.
 			//
-			// A phone reports where it is every five minutes. They are
-			// what place.stayed is worked out from and they answer no
-			// question anybody asks: "where was I on Tuesday" wants the
-			// three places, not the three hundred readings. Left in,
-			// any window long enough to be interesting is nothing else,
-			// and the kinds worth seeing fall off the end of the limit.
+			// A phone reports where it is every five minutes and what
+			// it is playing once a track: hundreds a day, against a
+			// couple of dozen of everything else. Left in, any window
+			// long enough to be interesting is nothing but these, and
+			// the kinds worth seeing fall off the end of the limit.
+			// "Where was I on Tuesday" wants the three places, not the
+			// three hundred readings.
 			//
-			// Omitted even when asked for by name, so that a kind
-			// listing offering them cannot talk the model into it.
-			// Reading them back is a question for the database.
-			q.Omit = []string{event.Fixed}
+			// The position readings are omitted even when asked for by
+			// name, because what they are for is working out stays and
+			// nothing in a conversation wants a coordinate. Reading
+			// them back is a question for the database.
+			//
+			// Music is not the same. "What was I listening to this
+			// afternoon" is a real question and the tracks are the
+			// only answer to it, so asking for the kind by name gets
+			// them -- it is being handed them unasked that buries
+			// everything else.
+			q.Omit = event.Churn
+			if event.Working(kind) && kind != event.Fixed && kind != event.Fixed+"." {
+				q.Omit = []string{event.Fixed}
+			}
 
 			q.Limit = args.Limit
 			if q.Limit <= 0 {

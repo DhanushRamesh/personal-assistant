@@ -2377,6 +2377,20 @@ not a time at all, and the arrival time stands instead. Milliseconds
 sent as seconds land in the year 56000 and are caught by the floor;
 an unsubstituted `%MUSICLAST` is caught by the leading percent.
 
+**The tool and the greeting leave the churn out.** `event.Churn`
+names the kinds that are working material rather than history --
+`location.fix`, `music.playing`, `music.paused` -- and both the events
+tool and the greeting omit them. A track a song is a hundred rows an
+evening against a couple of dozen of everything else, and a greeting
+built from them would be nothing but what was playing.
+
+Music differs from the readings in one way, and the difference is the
+whole of the rule. A coordinate answers no question anybody asks, so
+`location.fix` is omitted even when named. *"What was I listening to
+this afternoon"* is a real question and the tracks are the only answer
+to it, so naming the kind gets them. It is being handed them unasked
+that buries the day.
+
 **Still to do.** The API half needs an app registered at Spotify and
 an OAuth link mirroring `internal/google`; the 2026 quota change was
 checked and does not restrict a one-user app. Then the poll, the

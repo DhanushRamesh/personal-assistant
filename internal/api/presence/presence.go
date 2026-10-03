@@ -341,7 +341,10 @@ func (h *Handler) happened(ctx context.Context, user string, from time.Time) ([]
 	}
 	all, err := h.reported.Recent(ctx, user, event.Query{
 		Since: since, Limit: OrdinaryMost,
-		Omit: []string{event.Fixed, event.Stayed},
+		// The working material as well as the stays: a track a song
+		// is a hundred rows an evening, and a greeting built from
+		// them would be nothing but what was playing.
+		Omit: append([]string{event.Stayed}, event.Churn...),
 		// Not what this machine reported about itself. It publishes
 		// its own network so the person's phone can be compared
 		// against it, and a laptop reconnecting to its own wifi is not

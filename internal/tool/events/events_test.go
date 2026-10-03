@@ -327,3 +327,31 @@ func TestPositionReadingsAreNotOffered(t *testing.T) {
 		t.Errorf("the kind listing offered position readings:\n%s", got)
 	}
 }
+
+// TestMusicIsLeftOutUntilItIsAskedFor : A track a song is a hundred
+// rows an evening against a couple of dozen of everything else, so
+// handing them over unasked buries the day. Asking for the kind is a
+// real question with a real answer, though, which is where this
+// differs from the position readings.
+func TestMusicIsLeftOutUntilItIsAskedFor(t *testing.T) {
+	for _, c := range []struct {
+		what, kind string
+		want       bool
+	}{
+		{"nothing asked for", "", false},
+		{"another kind", "call.received", false},
+		{"the music kind by name", event.Playing, true},
+		{"the music family", "music.", true},
+		{"the pauses", event.Paused, true},
+	} {
+		if got := event.Working(c.kind); got != c.want {
+			t.Errorf("%s: Working(%q) = %v, want %v", c.what, c.kind, got, c.want)
+		}
+	}
+	// The position readings stay out whatever is asked, which the
+	// tool enforces separately; what matters here is that they are
+	// never mistaken for something worth handing over.
+	if !event.Working(event.Fixed) {
+		t.Error("position readings should count as working material")
+	}
+}
