@@ -5,8 +5,10 @@ import (
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
+	"strconv"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/DhanushRamesh/personal-assistant/internal/api/apitest"
 	"github.com/DhanushRamesh/personal-assistant/internal/api/events"
@@ -491,5 +493,81 @@ func TestANumberSentAsTheNameKeepsTheNumber(t *testing.T) {
 	}
 	if into.Via != "meet" {
 		t.Errorf("via = %q, want meet", into.Via)
+	}
+}
+
+// TestASenderMaySayWhenItHappened : Spotify's notification outlives
+// the music by minutes, so the phone learns that playing stopped long
+// after it did. It keeps the last moment it saw music and sends that
+// inside the event, in the epoch seconds its clock variable holds.
+func TestASenderMaySayWhenItHappened(t *testing.T) {
+	store := inmemory.New()
+	e := apitest.NewWith(t, apitest.Options{DeviceEvents: store})
+
+	real := time.Now().UTC().Add(-7 * time.Minute).Truncate(time.Second)
+	code, _ := post(t, e, `{"source":"tasker","events":[
+		{"kind":"music.stopped","dedupe_key":"k","payload":{"value":"Daft Punk",
+		 "via":"spotify","occurred_at":"`+strconv.FormatInt(real.Unix(), 10)+`"}}]}`)
+	if code != http.StatusOK {
+		t.Fatalf("expected 200, got %d", code)
+	}
+
+	got, _ := store.Recent(context.Background(), e.User.ID, event.Query{})
+	if len(got) != 1 {
+		t.Fatalf("expected one event, got %d", len(got))
+	}
+	if !got[0].OccurredAt.Equal(real) {
+		t.Errorf("occurred_at = %s, want %s", got[0].OccurredAt, real)
+	}
+	if got[0].ReceivedAt.Sub(got[0].OccurredAt) < 6*time.Minute {
+		t.Errorf("the lateness was lost: %s", got[0].Payload)
+	}
+	if strings.Contains(string(got[0].Payload), "occurred_at") {
+		t.Errorf("the field was left in the payload: %s", got[0].Payload)
+	}
+	var into struct {
+		Value string `json:"value"`
+		Via   string `json:"via"`
+	}
+	_ = json.Unmarshal(got[0].Payload, &into)
+	if into.Value != "Daft Punk" || into.Via != "spotify" {
+		t.Errorf("the rest of the payload was disturbed: %s", got[0].Payload)
+	}
+}
+
+// TestATimeNobodyCanExplainIsIgnored : Believed only within reason. An
+// unsubstituted variable, a clock set wrongly, milliseconds sent as
+// seconds, and a time last week all fall back to the arrival time --
+// and the field comes out of the payload either way, because left in
+// it reaches a prompt disagreeing with the time beside it.
+func TestATimeNobodyCanExplainIsIgnored(t *testing.T) {
+	for _, c := range []struct{ what, at string }{
+		{"a variable that never substituted", "%MUSICLAST"},
+		{"empty", ""},
+		{"not a time at all", "soon"},
+		{"milliseconds sent as seconds", "1759500000000"},
+		{"before anything existed", "946684800"},
+		{"last week", strconv.FormatInt(time.Now().Add(-7*24*time.Hour).Unix(), 10)},
+		{"tomorrow", strconv.FormatInt(time.Now().Add(24*time.Hour).Unix(), 10)},
+	} {
+		store := inmemory.New()
+		e := apitest.NewWith(t, apitest.Options{DeviceEvents: store})
+		before := time.Now().UTC().Add(-time.Second)
+		code, _ := post(t, e, `{"source":"tasker","events":[
+			{"kind":"music.stopped","dedupe_key":"k","payload":{"value":"X","occurred_at":`+
+			quoted(c.at)+`}}]}`)
+		if code != http.StatusOK {
+			t.Fatalf("%s: expected 200, got %d", c.what, code)
+		}
+		got, _ := store.Recent(context.Background(), e.User.ID, event.Query{})
+		if len(got) != 1 {
+			t.Fatalf("%s: expected one event", c.what)
+		}
+		if got[0].OccurredAt.Before(before) {
+			t.Errorf("%s: believed %q, occurred_at = %s", c.what, c.at, got[0].OccurredAt)
+		}
+		if strings.Contains(string(got[0].Payload), "occurred_at") {
+			t.Errorf("%s: the field was left in the payload: %s", c.what, got[0].Payload)
+		}
 	}
 }

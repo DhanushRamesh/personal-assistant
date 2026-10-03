@@ -245,11 +245,12 @@ func (h *Handler) Record(w http.ResponseWriter, r *http.Request) {
 		// moment the signal came back -- which is why this is a
 		// default and not a replacement.
 		at := in.OccurredAt
+		payload := unpacked(in.Payload)
 		if at.IsZero() {
-			at = received
+			at, payload = stamped(payload, received)
 		}
 		e, err := event.New(user, batch.Source, batch.Device, in.Kind,
-			at, received, labelled(unpacked(in.Payload)), in.DedupeKey)
+			at, received, labelled(payload), in.DedupeKey)
 		if err != nil {
 			rejected = append(rejected, Rejected{
 				DedupeKey: in.DedupeKey, At: i, Why: err.Error()})
@@ -427,6 +428,104 @@ func labelled(payload json.RawMessage) json.RawMessage {
 		return payload
 	}
 	return out
+}
+
+// Stale : How far back inside the payload a device may say something
+// happened.
+//
+// Long enough for the case this exists for -- a notification that
+// outlives what it was about -- and short enough that a clock set
+// wrongly, or a variable holding last week, cannot file something in
+// the middle of a day that is already written.
+const Stale = 6 * time.Hour
+
+// Ahead : How far into the future a device's own time may be and
+// still be believed, which is only as far as two clocks disagree.
+const Ahead = 2 * time.Minute
+
+// Earliest : A sanity floor. Epoch seconds that are really
+// milliseconds land in the year 56000, and a variable that never
+// substituted parses as nothing; both are caught before this.
+var Earliest = time.Date(2020, 1, 1, 0, 0, 0, 0, time.UTC)
+
+// stamped : When the payload says it happened, and the payload with
+// that taken out of it.
+//
+// The batch already carries occurred_at per event, and the comment
+// where it is read says why a phone rarely fills it in: it wants
+// RFC 3339 in UTC from a tool whose clock is epoch seconds, and it is
+// the field most likely to arrive unsubstituted.
+//
+// This is the other way round. A sender writes the moment into the
+// event's own text, in the units it already has, and the server lifts
+// it out. Nothing in here knows which sender did it or what for.
+//
+// The case it was built for: Spotify's notification outlives the
+// music by minutes -- measured at six minutes forty on 3 October 2026
+// -- so the phone learns that playing stopped long after it did. It
+// keeps overwriting the last moment it saw music and sends that.
+// Anything else that finds out late can do the same.
+//
+// Believed only within reason. A time outside the window is ignored
+// rather than refused: the event is still worth having, and the hour
+// it arrived is a better guess than a number nobody can explain.
+func stamped(payload json.RawMessage, received time.Time) (time.Time, json.RawMessage) {
+	if len(payload) == 0 {
+		return received, payload
+	}
+	var into map[string]any
+	if err := json.Unmarshal(payload, &into); err != nil {
+		return received, payload
+	}
+	raw, ok := into["occurred_at"]
+	if !ok {
+		return received, payload
+	}
+	delete(into, "occurred_at")
+	rest, err := json.Marshal(into)
+	if err != nil {
+		rest = payload
+	}
+
+	at, ok := moment(raw)
+	switch {
+	case !ok:
+	case at.Before(Earliest):
+	case at.Before(received.Add(-Stale)):
+	case at.After(received.Add(Ahead)):
+	default:
+		return at, rest
+	}
+	// Taken out of the payload even when it is not believed. Left in,
+	// it reaches a prompt as a field called occurred_at that
+	// disagrees with the time beside it.
+	return received, rest
+}
+
+// moment : A time written the two ways a device writes one.
+//
+// Epoch seconds, because that is what Tasker's %TIMES holds and what
+// a shell gives. RFC 3339 because that is what everything else gives.
+// A number arrives from JSON as a float and as a string when it was
+// quoted, which it will be, because it was written inside a quoted
+// field by hand.
+func moment(raw any) (time.Time, bool) {
+	switch v := raw.(type) {
+	case float64:
+		return time.Unix(int64(v), 0).UTC(), true
+	case string:
+		v = strings.TrimSpace(v)
+		if v == "" || strings.HasPrefix(v, "%") {
+			return time.Time{}, false
+		}
+		if secs, err := strconv.ParseInt(v, 10, 64); err == nil {
+			return time.Unix(secs, 0).UTC(), true
+		}
+		if t, err := time.Parse(time.RFC3339, v); err == nil {
+			return t.UTC(), true
+		}
+	}
+	return time.Time{}, false
 }
 
 // unset : Whether a field says nothing.

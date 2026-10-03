@@ -2344,6 +2344,39 @@ only, guarded by a `%MUSICON` flag: `music.started` on the first
 `Cancelled`. Two events a session instead of 240, and the track by
 track record is the API's job.
 
+**A notification outlives what it was about.** Measured: the owner
+stopped the music at 14:10 and `Cancelled` did not arrive until
+**14:17:19**. Both events were correct and the record was a lie --
+seven minutes of listening where there had been one. Android keeps the
+media session alive for minutes after playback ends, so the
+disappearance of the notification is the teardown and not the stop.
+
+The owner's suggestion was to report the pause instead, which fires at
+the right moment. It cannot be used on its own: `persistent` goes
+false at the end of **every** track, so an evening of twenty songs
+would report forty pauses that never happened. Telling a pause from a
+gap needs a wait, which is the complication that idea was avoiding.
+
+So the moment is carried rather than inferred. Spotify refreshes its
+notification about seven times a song; each refresh overwrites
+`%MUSICLAST` with the clock. When the teardown finally comes, the stop
+event carries that number instead of being stamped with its arrival.
+
+**And the server believes a sender that says when.** `occurred_at`
+already exists on a batch, and the comment where it is read says why a
+phone rarely fills it in: it wants RFC 3339 in UTC from a tool whose
+clock variable is epoch seconds, and it is the field most likely to
+arrive unsubstituted. `stamped` takes it from inside the payload
+instead, in whichever of the two forms it was written, and removes it
+so it cannot reach a prompt disagreeing with the time beside it.
+
+Generic on purpose: nothing in the server knows this was for music.
+Anything that finds out late can say so. Believed only within reason
+-- older than six hours, more than two minutes ahead, before 2020, or
+not a time at all, and the arrival time stands instead. Milliseconds
+sent as seconds land in the year 56000 and are caught by the floor;
+an unsubstituted `%MUSICLAST` is caught by the leading percent.
+
 **Still to do.** The API half needs an app registered at Spotify and
 an OAuth link mirroring `internal/google`; the 2026 quota change was
 checked and does not restrict a one-user app. Then the poll, the
