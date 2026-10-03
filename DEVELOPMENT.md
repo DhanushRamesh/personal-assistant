@@ -3043,6 +3043,55 @@ refuse the moment. A candidate that is never made cannot be rescued
 by either.
 
 
+## Wiring the remarks: a tick, three refusals and a way to decline
+
+**A tick, not an arrival.** Events come in bursts -- six in two
+seconds when somebody walks through a door -- and reacting to each
+would make six remarks out of one moment. The watcher looks every
+thirty seconds at the last five minutes. The window is longer than
+the tick on purpose, so something arriving late or during a restart
+is still seen; saying it twice is the gate's job, not the window's.
+
+**One remark per look.** Two things worth saying in the same moment
+are two remarks, and the second is still worth saying in twenty
+minutes if it was worth saying now.
+
+**The model is given a word to refuse with.** `NOTHING`. A model
+asked to say nothing produces something anyway -- an apology, or a
+sentence about having nothing to say -- and that would be spoken
+aloud. Given something to return it returns it, and the recogniser
+is generous about case, quotes and a full stop, because the cost of
+misreading a refusal is reading the refusal out.
+
+Silence is the ordinary answer and a success. The prompt says so
+twice.
+
+**Presence had to learn a new answer.** `Away` folds "cannot tell"
+into "not away", deliberately: it chooses between losing a reminder
+and wasting a sentence, and losing the reminder is worse. A remark
+chooses between different mistakes -- saying nothing costs nothing,
+and talking to an empty room is what makes somebody switch the
+feature off. So `Here` answers properly, with "present" and "known"
+separately, and the watcher refuses unless both are true.
+
+**Its own announcement kind, `remark`.** Not a reminder, which is a
+time coming round, and not a greeting, which is somebody arriving.
+Audience `Asked`: the room and nowhere else. A remark is the
+assistant being company, and company followed onto a phone in a
+meeting is an interruption from something nobody asked a question.
+
+It is written into the conversation like the others, so that "who
+was it?" has something to refer to.
+
+**Off unless there is somewhere to say it and something watching the
+room**, and it says so at startup -- a silent assistant and a broken
+one look identical in a log.
+
+**It starts five minutes after the server does**, so a restart in the
+middle of an evening of changes does not produce a remark about
+whatever happened to be arriving at the time.
+
+
 ## The narration was the wait it was covering
 
 Owner: *"calculate the full latency... I want ultra low latency."*

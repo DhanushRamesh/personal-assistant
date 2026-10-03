@@ -41,6 +41,7 @@ import (
 	"github.com/DhanushRamesh/personal-assistant/internal/mail"
 	"github.com/DhanushRamesh/personal-assistant/internal/memory"
 	memorymysql "github.com/DhanushRamesh/personal-assistant/internal/memory/mysql"
+	"github.com/DhanushRamesh/personal-assistant/internal/notice"
 	"github.com/DhanushRamesh/personal-assistant/internal/persona"
 	"github.com/DhanushRamesh/personal-assistant/internal/place"
 	"github.com/DhanushRamesh/personal-assistant/internal/profile"
@@ -452,6 +453,16 @@ func run() error {
 	logger.Info("writing the greeting at the door",
 		slog.String("model", cmp.Or(cfg.PlatformAI.FastModel, cfg.PlatformAI.Model)),
 		slog.Duration("within", greet.Within))
+
+	// Someone in the room rather than something reading events out.
+	// Most looks find nothing, most of what they find is refused by
+	// the model, and what survives both is said once and not again.
+	watching.Add(1)
+	go func() {
+		defer watching.Done()
+		noticing(remindCtx, cfg, deviceEvents, chats, answerer, speaker,
+			announcements, logger.Logger)
+	}()
 
 	handler := api.New(api.Options{
 		Logger:        logger.Logger,
@@ -1155,4 +1166,85 @@ func askAs(
 		return "", fmt.Errorf("%s", last.Text)
 	}
 	return last.Text, nil
+}
+
+// noticeFirst : How long after startup the watcher starts looking.
+//
+// Long enough that a restart during an evening of changes does not
+// produce a remark about whatever happened to be arriving at the
+// time. Nothing here is urgent: the whole feature is about things
+// worth mentioning, and anything worth mentioning will still be
+// worth it in a few minutes.
+const noticeFirst = 5 * time.Minute
+
+// noticing : Says something about what just happened, occasionally.
+//
+// Everything that decides whether to speak lives in internal/notice.
+// This is only the wiring: where events come from, who is in the
+// room, how the model is asked, and where the words go.
+func noticing(
+	ctx context.Context,
+	cfg config.Config,
+	events *eventmysql.Store,
+	talkers interface {
+		Talkers(ctx context.Context, since time.Time) ([]string, error)
+	},
+	answerer environment.Environment,
+	speaker announce.Announcer,
+	announcements *announcement.Writer,
+	logger *slog.Logger,
+) {
+	// Nothing to say it with, or nothing watching the room: the
+	// feature is off rather than half on. Said once, at startup,
+	// because a silent assistant and a broken one look identical.
+	here, err := hass.NewPresence(hass.PresenceConfig{
+		URL:    cfg.HomeAssistant.URL,
+		Token:  cfg.HomeAssistant.Token,
+		Entity: cfg.HomeAssistant.PresenceEntity,
+	})
+	if err != nil || speaker == nil || !speaker.Available() {
+		logger.Info("saying nothing unasked about what happens, " +
+			"with nothing watching the room or nowhere to say it")
+		return
+	}
+
+	model := cmp.Or(cfg.PlatformAI.FastModel, cfg.PlatformAI.Model)
+	watcher := &notice.Watcher{
+		Events: events,
+		Gate: &notice.Gate{Away: func(userID string) (bool, bool) {
+			present, known := here.Here(ctx, userID)
+			return !present, known
+		}},
+		Ask: func(ctx context.Context, _, ask string) (string, error) {
+			return askAs(ctx, answerer, cfg.PlatformAI.Vendor, model,
+				persona.Voice(cfg.Assistant.Persona, cfg.Assistant.Name),
+				environment.PurposeRemark, ask)
+		},
+		Say: func(ctx context.Context, userID, text string) error {
+			if err := announcement.Speak(ctx, speaker, conversation.Remark, text); err != nil {
+				return err
+			}
+			// Written down after it was said, like every other
+			// announcement: they answer in the room, and the answer
+			// needs the remark to be there to make sense of.
+			announcements.Remarked(ctx, userID, text)
+			return nil
+		},
+		Now:    cfg.Assistant.Now,
+		Logger: logger,
+	}
+
+	logger.Info("saying something about what happens",
+		slog.String("model", model),
+		slog.Duration("every", notice.Every),
+		slog.Duration("quiet", notice.Quiet))
+
+	select {
+	case <-ctx.Done():
+		return
+	case <-time.After(noticeFirst):
+	}
+	watcher.Run(ctx, func(ctx context.Context) ([]string, error) {
+		return talkers.Talkers(ctx, cfg.Assistant.Now().Add(-notice.Since))
+	})
 }

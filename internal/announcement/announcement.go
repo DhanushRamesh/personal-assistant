@@ -94,6 +94,16 @@ func (w *Writer) Arrived(ctx context.Context, userID, text string) {
 	w.said(ctx, userID, "", conversation.PresenceAnnouncement, text)
 }
 
+// Remarked : Notes something said about what just happened, unasked.
+//
+// Asked, and the asker is the room, like a greeting. Written down for
+// the same reason the others are: the person answers "who was it?" in
+// the room, and the answer only makes sense to a turn that can see
+// what was said to provoke it.
+func (w *Writer) Remarked(ctx context.Context, userID, text string) {
+	w.said(ctx, userID, "", conversation.Remark, text)
+}
+
 // Renamed : Notes the assistant having given a conversation its name.
 //
 // Asked, and the conversation is known, so it is given rather than

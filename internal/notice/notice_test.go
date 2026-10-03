@@ -1,6 +1,7 @@
 package notice_test
 
 import (
+	"context"
 	"encoding/json"
 	"testing"
 	"time"
@@ -153,5 +154,122 @@ func TestNotTwiceAboutTheSameThing(t *testing.T) {
 	}
 	if !g.Allow("usr_1", c, at.Add(notice.Over+time.Minute)) {
 		t.Error("the same thing a month later is still news, and was refused")
+	}
+}
+
+// recorded : An event store holding a fixed set.
+type recorded struct{ held []event.Event }
+
+func (r recorded) Recent(_ context.Context, _ string, _ event.Query) ([]event.Event, error) {
+	return r.held, nil
+}
+
+// TestTheModelMayAnswerWithNothing : The pressure valve. Code finds
+// candidates generously, so most looks must end in silence, and
+// silence is a success rather than a wasted call.
+func TestTheModelMayAnswerWithNothing(t *testing.T) {
+	var spoke []string
+	w := &notice.Watcher{
+		Events: recorded{held: []event.Event{happened("music.started", "a new song", 0)}},
+		Gate:   &notice.Gate{Away: func(string) (bool, bool) { return false, true }},
+		Ask:    func(context.Context, string, string) (string, error) { return notice.Silence, nil },
+		Say:    func(_ context.Context, _, text string) error { spoke = append(spoke, text); return nil },
+		Now:    func() time.Time { return at },
+	}
+
+	said, err := w.Look(context.Background(), "usr_1")
+	if err != nil {
+		t.Fatalf("look: %v", err)
+	}
+	if said != "" || len(spoke) != 0 {
+		t.Errorf("a refusal was read out loud: %q %v", said, spoke)
+	}
+}
+
+// TestARemarkIsSpoken : And the other way: when the model has
+// something, it reaches the person.
+func TestARemarkIsSpoken(t *testing.T) {
+	var spoke []string
+	w := &notice.Watcher{
+		Events: recorded{held: []event.Event{happened("music.started", "a new song", 0)}},
+		Gate:   &notice.Gate{Away: func(string) (bool, bool) { return false, true }},
+		Ask: func(context.Context, string, string) (string, error) {
+			return "That is a new one, sir.", nil
+		},
+		Say: func(_ context.Context, _, text string) error { spoke = append(spoke, text); return nil },
+		Now: func() time.Time { return at },
+	}
+
+	if _, err := w.Look(context.Background(), "usr_1"); err != nil {
+		t.Fatalf("look: %v", err)
+	}
+	if len(spoke) != 1 || spoke[0] != "That is a new one, sir." {
+		t.Errorf("the remark did not reach them: %v", spoke)
+	}
+}
+
+// TestOneRemarkPerLook : Two things worth saying in the same moment
+// are two remarks, and the second is still worth saying in twenty
+// minutes if it was worth saying now.
+func TestOneRemarkPerLook(t *testing.T) {
+	var asked int
+	w := &notice.Watcher{
+		Events: recorded{held: []event.Event{
+			happened("music.started", "a new song", 0),
+			happened("wifi.joined", "a new network", 0),
+		}},
+		Gate: &notice.Gate{Away: func(string) (bool, bool) { return false, true }},
+		Ask: func(context.Context, string, string) (string, error) {
+			asked++
+			return "Something, sir.", nil
+		},
+		Say: func(context.Context, string, string) error { return nil },
+		Now: func() time.Time { return at },
+	}
+
+	if _, err := w.Look(context.Background(), "usr_1"); err != nil {
+		t.Fatalf("look: %v", err)
+	}
+	if asked != 1 {
+		t.Errorf("asked the model %d times for one moment, want 1", asked)
+	}
+}
+
+// TestNothingArrivedCostsNothing : Most ticks. No model is asked and
+// no event store is troubled beyond the one read.
+func TestNothingArrivedCostsNothing(t *testing.T) {
+	var asked int
+	w := &notice.Watcher{
+		Events: recorded{held: []event.Event{happened("wifi.joined", "home", 3*time.Hour)}},
+		Gate:   &notice.Gate{Away: func(string) (bool, bool) { return false, true }},
+		Ask: func(context.Context, string, string) (string, error) {
+			asked++
+			return "Something, sir.", nil
+		},
+		Say: func(context.Context, string, string) error { return nil },
+		Now: func() time.Time { return at },
+	}
+
+	if _, err := w.Look(context.Background(), "usr_1"); err != nil {
+		t.Fatalf("look: %v", err)
+	}
+	if asked != 0 {
+		t.Errorf("asked a model about a quiet five minutes %d times", asked)
+	}
+}
+
+// TestARefusalIsRecognisedHoweverItIsWritten : A model asked for
+// nothing produces something anyway unless it is given something to
+// return, and whatever it returns must not be spoken.
+func TestARefusalIsRecognisedHoweverItIsWritten(t *testing.T) {
+	for _, said := range []string{"NOTHING", "nothing", " Nothing. ", "\"NOTHING\""} {
+		if !notice.Nothing(said) {
+			t.Errorf("a refusal written as %q would have been spoken", said)
+		}
+	}
+	for _, said := range []string{"Nothing much has happened, sir.", "That is a new one, sir."} {
+		if notice.Nothing(said) {
+			t.Errorf("a real remark was thrown away: %q", said)
+		}
 	}
 }

@@ -199,6 +199,13 @@ const (
 	// PurposeVocabulary : Finding the names in what they have said, for
 	// speech recognition to expect.
 	PurposeVocabulary Purpose = "vocabulary"
+	// PurposeRemark : Deciding whether something that just happened is
+	// worth saying out loud, and saying it.
+	//
+	// Its own purpose because most of these answer with nothing, and a
+	// call that usually declines is worth being able to count
+	// separately from the ones that had to produce something.
+	PurposeRemark Purpose = "remark"
 )
 
 // Request : What an environment is asked to do.

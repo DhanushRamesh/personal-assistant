@@ -79,6 +79,16 @@ const (
 	// said as somebody came into the room.
 	PresenceAnnouncement Kind = "presence"
 
+	// Remark : Something said about what just happened, unasked.
+	//
+	// Not a reminder, which is a time coming round, and not a
+	// greeting, which is somebody arriving. This is the assistant
+	// noticing: a number that has rung three times, a thing it has
+	// never seen before. Told apart from the other two for the same
+	// reason they are told apart from each other -- somebody reading
+	// the conversation back wants to know why it spoke.
+	Remark Kind = "remark"
+
 	// Renaming : The assistant giving the conversation its name.
 	//
 	// An announcement although nothing is necessarily said aloud, because
@@ -134,7 +144,12 @@ const (
 var announcements = map[Kind]Audience{
 	ReminderAnnouncement: Everywhere,
 	PresenceAnnouncement: Asked,
-	Renaming:             Asked,
+	// The room, and only the room. A remark is the assistant being
+	// company, which is a thing that belongs where the person is
+	// standing; followed onto a phone in a meeting it is an
+	// interruption from something that was not asked a question.
+	Remark:   Asked,
+	Renaming: Asked,
 }
 
 // Announcement : Whether this is the assistant having spoken unprompted.

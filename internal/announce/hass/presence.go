@@ -59,35 +59,8 @@ func NewPresence(cfg PresenceConfig) (*Presence, error) {
 // reminder back from somebody sitting right there loses it until they
 // think to ask.
 func (p *Presence) Away(ctx context.Context, _ string) bool {
-	if p == nil {
-		return false
-	}
-
-	ctx, cancel := context.WithTimeout(ctx, p.cfg.Timeout())
-	defer cancel()
-
-	url := p.cfg.URL + "/api/states/" + p.cfg.Entity
-	req, err := http.NewRequestWithContext(ctx, http.MethodGet, url, nil)
-	if err != nil {
-		return false
-	}
-	req.Header.Set("Authorization", "Bearer "+p.cfg.Token.Reveal())
-
-	resp, err := p.http.Do(req)
-	if err != nil {
-		return false
-	}
-	defer resp.Body.Close()
-
-	body, _ := io.ReadAll(io.LimitReader(resp.Body, maxResponseBytes))
-	if resp.StatusCode >= 400 {
-		return false
-	}
-
-	var parsed struct {
-		State string `json:"state"`
-	}
-	if err := json.Unmarshal(body, &parsed); err != nil {
+	state, ok := p.state(ctx)
+	if !ok {
 		return false
 	}
 	// Only a state that says, positively, that they are not here.
@@ -98,7 +71,72 @@ func (p *Presence) Away(ctx context.Context, _ string) bool {
 	// not be trusted -- a dead publisher, a blocked radio -- and holding
 	// a reminder back on the strength of a fault loses it for somebody
 	// sitting right there. "unavailable" is the same kind of silence.
-	return parsed.State == "off" || parsed.State == "away"
+	return state == "off" || state == "away"
+}
+
+// Here : Whether the person is known to be in the room, and whether
+// that is known at all.
+//
+// The other half of Away, and not its opposite. Away folds "cannot
+// tell" into "not away" on purpose, because the two mistakes it
+// chooses between are losing a reminder and wasting a sentence. A
+// remark nobody asked for chooses between different mistakes: saying
+// nothing costs nothing, and talking to an empty room is the thing
+// that makes somebody turn the feature off.
+//
+// So this answers the question properly and lets the caller decide.
+// Only a plain, current, positive state counts as present.
+func (p *Presence) Here(ctx context.Context, _ string) (present, known bool) {
+	state, ok := p.state(ctx)
+	if !ok {
+		return false, false
+	}
+	switch state {
+	case "on", "home", "present":
+		return true, true
+	case "off", "away", "not_home":
+		return false, true
+	default:
+		// "unknown" and "unavailable": the sensor saying it could not
+		// tell, which is not the same as saying they are out.
+		return false, false
+	}
+}
+
+// state : What the entity says, and whether it could be read at all.
+func (p *Presence) state(ctx context.Context) (string, bool) {
+	if p == nil {
+		return "", false
+	}
+
+	ctx, cancel := context.WithTimeout(ctx, p.cfg.Timeout())
+	defer cancel()
+
+	url := p.cfg.URL + "/api/states/" + p.cfg.Entity
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, url, nil)
+	if err != nil {
+		return "", false
+	}
+	req.Header.Set("Authorization", "Bearer "+p.cfg.Token.Reveal())
+
+	resp, err := p.http.Do(req)
+	if err != nil {
+		return "", false
+	}
+	defer resp.Body.Close()
+
+	body, _ := io.ReadAll(io.LimitReader(resp.Body, maxResponseBytes))
+	if resp.StatusCode >= 400 {
+		return "", false
+	}
+
+	var parsed struct {
+		State string `json:"state"`
+	}
+	if err := json.Unmarshal(body, &parsed); err != nil {
+		return "", false
+	}
+	return parsed.State, true
 }
 
 // Timeout : How long the question may take. Short: the firing loop waits
