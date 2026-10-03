@@ -134,7 +134,10 @@ func recent(reader Reader, clock Clock) tool.Tool {
 						"know which kinds exist: the answer lists them. A few kinds are too " +
 						"many to hand over unasked -- a row a song, a position every five " +
 						"minutes -- and are left out until you name one, so ask for the kind " +
-						"by name when the question is about what is in it.",
+						"by name when the question is about what is in it. What is playing now " +
+						"is music.state with a limit of 1: the newest one says which track and " +
+						"whether it is playing, and a newest one that is not playing means " +
+						"nothing is.",
 				},
 				"days": {
 					Type: "integer",
@@ -164,6 +167,10 @@ func recent(reader Reader, clock Clock) tool.Tool {
 		Examples: []tool.Example{
 			{Ask: "what have I been up to today", Args: `{"saying":"looking at your day"}`},
 			{Ask: "who did I talk to today", Args: `{"kind":"call.","saying":"checking your calls"}`},
+			{Ask: "what am I listening to right now",
+				Args: `{"kind":"music.state","limit":1,"saying":"checking what is playing"}`},
+			{Ask: "what was I listening to this afternoon",
+				Args: `{"kind":"music.state","saying":"looking at what you played"}`},
 			{Ask: "when did I last leave the office", Args: `{"kind":"wifi.left","days":30}`},
 		},
 		Run: func(ctx context.Context, in tool.Invocation) tool.Result {

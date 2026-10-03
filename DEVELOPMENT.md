@@ -2401,6 +2401,22 @@ contradicting each other. The judgement moves here, where the next
 event is already known and a wrong rule is a test rather than an
 evening of tapping conditions into a phone.
 
+**Holding a kind back means saying how to ask for it.** Live, twice:
+*"What am I hearing right now?"* was answered with a song that had
+stopped twenty minutes earlier. `music.state` had just become churn,
+so a call with no kind returned no music at all -- and rather than say
+so, the model used what it had itself said earlier in the same
+conversation. The rule against that was already in the tool's `Avoid`
+and in a memory, and it still lost to having nothing to look at.
+
+So the kind parameter says what is held back and how to get it, and
+two examples carry the shape: what is playing now is `music.state`
+with a limit of 1, and a newest state that is not playing means
+nothing is. Both are in the eval, which is at 71 of 71 -- the second
+one, *what was I listening to this afternoon*, is there because an
+example that only covers "now" teaches the model that the kind is for
+one question.
+
 **The tool and the greeting leave the churn out.** `event.Churn`
 names the kinds that are working material rather than history --
 `location.fix`, `music.playing`, `music.paused` -- and both the events

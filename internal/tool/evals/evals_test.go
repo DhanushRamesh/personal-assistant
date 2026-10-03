@@ -153,6 +153,15 @@ var cases = []eval{
 	{Say: "I have to submit the form before Friday",
 		Tool: []string{"calendar_events", "calendar_add", "task_add", "task_lists", "task_list"}},
 
+	// What is playing, which is the case that failed live: the kind is
+	// held back unless it is named, so a call without one returns no
+	// music at all and the model answered from what it had said
+	// earlier in the conversation.
+	{Say: "what am I listening to right now",
+		Tool: []string{"event_recent"}, Args: []string{"music"}},
+	{Say: "what was I listening to this afternoon",
+		Tool: []string{"event_recent"}, Args: []string{"music"}},
+
 	// What the devices reported. The first of these is the one that
 	// failed: asked who they had spoken to, the assistant said it had no
 	// tool that reads call logs, because the description listed places
