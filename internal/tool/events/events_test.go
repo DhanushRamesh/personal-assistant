@@ -340,7 +340,8 @@ func TestMusicIsLeftOutUntilItIsAskedFor(t *testing.T) {
 	}{
 		{"nothing asked for", "", false},
 		{"another kind", "call.received", false},
-		{"the music kind by name", event.Playing, true},
+		{"the music kind by name", event.State, true},
+		{"the kind the phone used to send", event.Playing, true},
 		{"the music family", "music.", true},
 		{"the pauses", event.Paused, true},
 	} {

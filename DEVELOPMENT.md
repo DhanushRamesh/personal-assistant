@@ -2377,6 +2377,30 @@ not a time at all, and the arrival time stands instead. Milliseconds
 sent as seconds land in the year 56000 and are caught by the floor;
 an unsubstituted `%MUSICLAST` is caught by the leading percent.
 
+**The phone stopped interpreting, after three attempts proved it
+could not.** It was deciding whether a notification meant paused,
+resumed, skipped or stopped. It cannot. The notifications arrive in
+bursts, several inside one second, and a pause is indistinguishable
+from the half second between two tracks until you see what comes
+next. Each rule added fixed one case and invented another:
+
+- matching on the title missed a resume, so `music.resumed` was added
+- `music.resumed` then fired at the end of every track, because a gap
+  looks exactly like a pause
+- `Abort New Task` -- Tasker's default -- was silently dropping whole
+  notifications when two arrived together, which is why a pause
+  sometimes recorded and sometimes did not
+- `Run Both Together` fixed that and let two instances race, giving
+  `paused`, `resumed`, `paused` inside two seconds for one skip
+
+Eleven actions became four. The phone sends `music.state` with the
+track and whether it is playing, only when one of those has changed,
+and makes no claim about what it meant. Two instances racing now
+produce two identical states, which deduplicate to nothing instead of
+contradicting each other. The judgement moves here, where the next
+event is already known and a wrong rule is a test rather than an
+evening of tapping conditions into a phone.
+
 **The tool and the greeting leave the churn out.** `event.Churn`
 names the kinds that are working material rather than history --
 `location.fix`, `music.playing`, `music.paused` -- and both the events

@@ -20,6 +20,25 @@ const (
 	Paused  = "music.paused"
 )
 
+// State : What a player is doing, as the device sees it and without
+// any judgement about what it meant.
+//
+// This replaced Playing and Paused on 3 October 2026. The phone was
+// deciding whether a notification meant paused, resumed, skipped or
+// stopped, and could not: the notifications arrive in bursts, several
+// in the same second, and only what comes next separates a pause from
+// the half second between two tracks. Every rule added to the phone
+// fixed one case and invented another, ending in three events in two
+// seconds for one skip.
+//
+// So the device reports the track and whether it is playing, when
+// either has changed, and nothing else. The judgement is made here,
+// where the next event is already in hand.
+//
+// The two older kinds stay named because the rows they wrote are
+// still in the table.
+const State = "music.state"
+
 // Started, Stopped : The edges of a sitting, as the phone sees them.
 const (
 	Started = "music.started"
@@ -32,7 +51,7 @@ const (
 // were recomputed twice in a week -- and discarded from anything that
 // has to be read, because a day of them is longer than a day of
 // everything else put together.
-var Churn = []string{Fixed, Playing, Paused}
+var Churn = []string{Fixed, State, Playing, Paused}
 
 // Working : Whether a kind is one of those.
 //
