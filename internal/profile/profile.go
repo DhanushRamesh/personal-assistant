@@ -138,6 +138,10 @@ type Builder struct {
 	Ask Ask
 	// Now : The clock, replaceable in tests. Nil uses the real one.
 	Now func() time.Time
+	// Domain : What a tool belongs to, for saying "their diary" rather
+	// than "calendar_events". Nil leaves the tool's own name, which is
+	// what this did before there was anywhere to ask.
+	Domain func(tool string) string
 	// Logger : Where failures go. Nil is silent.
 	Logger *slog.Logger
 
@@ -314,7 +318,7 @@ func (b *Builder) asking(ctx context.Context, userID string) string {
 		}
 		return ""
 	}
-	return Asking(called, b.Where)
+	return Asking(called, b.Where, b.Domain)
 }
 
 // keep : Stores the description, replacing the one already there.

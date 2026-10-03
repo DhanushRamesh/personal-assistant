@@ -127,53 +127,46 @@ func Rhythm(events []event.Event, where *time.Location) string {
 // Named as the thing rather than the tool, because a description
 // saying somebody "frequently triggers calendar_events" is written
 // about a system and this is meant to be about a person.
-func Asking(called []conversation.Message, where *time.Location) string {
-	if where == nil {
-		where = time.UTC
-	}
-
-	times := map[string]int{}
-	days := map[string]map[string]bool{}
+func Asking(called []conversation.Message, where *time.Location, domainOf func(string) string) string {
+	seen := map[string]int{}
 	order := []string{}
-	total := 0
 	for _, m := range called {
 		for _, c := range m.ToolCalls {
 			if c.Name == "" || c.Name == tool.DescribeName {
 				continue
 			}
-			if _, seen := times[c.Name]; !seen {
-				order = append(order, c.Name)
-				days[c.Name] = map[string]bool{}
+			name := c.Name
+			if domainOf != nil {
+				if d := domainOf(c.Name); d != "" {
+					name = d
+				}
 			}
-			times[c.Name]++
-			days[c.Name][m.At.In(where).Format("2006-01-02")] = true
-			total++
+			if _, had := seen[name]; !had {
+				order = append(order, name)
+			}
+			seen[name]++
 		}
 	}
-	if total == 0 {
+	if len(order) == 0 {
 		return ""
 	}
 
-	sort.SliceStable(order, func(i, j int) bool { return times[order[i]] > times[order[j]] })
-
-	lines := make([]string, 0, len(order))
-	for _, name := range order {
-		if len(lines) == Mostly {
-			break
-		}
-		lines = append(lines, fmt.Sprintf("- %s: %d %s, on %d %s",
-			name, times[name], plural("time", times[name]),
-			len(days[name]), plural("day", len(days[name]))))
+	sort.SliceStable(order, func(i, j int) bool { return seen[order[i]] > seen[order[j]] })
+	if len(order) > Mostly {
+		order = order[:Mostly]
 	}
 
 	return prompt.Block(
 		prompt.Text(
-			fmt.Sprintf("What they asked the assistant to do, over the same four weeks: %d %s in all.",
-				total, plural("thing", total)),
-			"Written as tool names because that is how they are recorded.",
-			"Say what they keep wanting, in their own terms -- their diary, their reminders, their mail -- never by the name of a tool.",
+			"What they keep coming back to, most first:",
+			strings.Join(order, ", ")+".",
 		),
-		prompt.Lines(lines...),
+		prompt.Text(
+			"This is the only thing here with no counts, deliberately.",
+			"How many times somebody asked for their diary is a fact about a diary being read, not a fact about them,",
+			"and it was being copied into the description as though it were one.",
+			"What it is for is the order: it says what they care about. Nothing in it belongs in a list of what is so about them.",
+		),
 	)
 }
 

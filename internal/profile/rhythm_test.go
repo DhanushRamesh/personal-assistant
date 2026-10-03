@@ -228,27 +228,38 @@ func TestWhatWasRunForThemIsCounted(t *testing.T) {
 		ran(day(3, 9, 0), "tool_describe"),
 	}
 
-	got := profile.Asking(called, india())
-
-	if !strings.Contains(got, "calendar_events: 3 times, on 2 days") {
-		t.Errorf("the diary readings were not counted:\n%s", got)
+	domain := func(name string) string {
+		return map[string]string{
+			"calendar_events": "their diary",
+			"reminder_set":    "their reminders",
+		}[name]
 	}
-	if !strings.Contains(got, "reminder_set: 1 time, on 1 day") {
-		t.Errorf("the reminder was not counted:\n%s", got)
+	got := profile.Asking(called, india(), domain)
+
+	// What they keep coming back to, in order and in their terms.
+	if !strings.Contains(got, "their diary, their reminders") {
+		t.Errorf("what they keep wanting is not given, most first:\n%s", got)
 	}
 	// Describing a tool is the deferring mechanism costing a round, not
 	// something the person wanted.
 	if strings.Contains(got, "tool_describe") {
 		t.Errorf("the describing mechanism was counted as something they asked for:\n%s", got)
 	}
-	if !strings.Contains(got, "never by the name of a tool") {
-		t.Errorf("nothing stops it writing about tools:\n%s", got)
+	// No counts at all. With them, the description copied "calendar_events:
+	// 104 times on 7 days" into its list of facts about the person.
+	for _, n := range []string{"3 times", "1 time", "2 days"} {
+		if strings.Contains(got, n) {
+			t.Errorf("a count survived, and it will be copied as a fact about him: %q\n%s", n, got)
+		}
+	}
+	if !strings.Contains(got, "not a fact about them") {
+		t.Errorf("nothing says these are not facts about the person:\n%s", got)
 	}
 }
 
 // Nothing run is nothing said.
 func TestNothingRunSaysNothing(t *testing.T) {
-	if got := profile.Asking(nil, india()); got != "" {
+	if got := profile.Asking(nil, india(), nil); got != "" {
 		t.Errorf("an empty month produced %q", got)
 	}
 }

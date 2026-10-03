@@ -376,6 +376,14 @@ func run() error {
 		Memories: remembering.Store,
 		Now:      cfg.Assistant.Now,
 		Logger:   logger.Logger,
+		// So the description says "their diary" rather than
+		// "calendar_events". The registry already knows.
+		Domain: func(name string) string {
+			if t, ok := tools.Get(name); ok {
+				return t.Domain
+			}
+			return ""
+		},
 		Ask: func(ctx context.Context, ask string) (string, error) {
 			return askOnce(ctx, answerer, cfg.PlatformAI.Vendor, cfg.PlatformAI.Model,
 				environment.PurposeProfile, ask)
