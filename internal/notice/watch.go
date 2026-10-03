@@ -104,8 +104,28 @@ func (w *Watcher) Look(ctx context.Context, userID string) (string, error) {
 		return "", nil
 	}
 
-	for _, c := range Find(arrived, history, now) {
+	found := Find(arrived, history, now)
+	if len(found) == 0 {
+		return "", nil
+	}
+	// Logged whatever happens next, because the ordinary output of
+	// this whole feature is silence and silence has four different
+	// causes. Without a line here, "nothing was said" cannot be told
+	// apart from "nothing was running".
+	if w.Logger != nil {
+		w.Logger.InfoContext(ctx, "something might be worth saying",
+			slog.String("user_id", userID),
+			slog.Int("candidates", len(found)),
+			slog.String("first", found[0].Label),
+			slog.String("because", string(found[0].Reason)))
+	}
+
+	for _, c := range found {
 		if !w.Gate.Allow(userID, c, now) {
+			if w.Logger != nil {
+				w.Logger.InfoContext(ctx, "not the moment to say it",
+					slog.String("about", c.Label))
+			}
 			continue
 		}
 		// One at a time. Two things worth saying in the same moment
@@ -118,6 +138,10 @@ func (w *Watcher) Look(ctx context.Context, userID string) (string, error) {
 		said = strings.TrimSpace(said)
 		if said == "" || Nothing(said) {
 			// The model's own refusal, and the point of asking it.
+			if w.Logger != nil {
+				w.Logger.InfoContext(ctx, "decided it was not worth saying",
+					slog.String("about", c.Label))
+			}
 			return "", nil
 		}
 		if err := w.Say(ctx, userID, said); err != nil {
