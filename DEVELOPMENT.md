@@ -3092,6 +3092,44 @@ middle of an evening of changes does not produce a remark about
 whatever happened to be arriving at the time.
 
 
+## The phone knows how the names are spelt
+
+Owner: *"vocabulary should get updated with events."*
+
+The list of names given to speech recognition was built from the
+transcript, which is the one place the spellings cannot be trusted.
+Everything in it has already been through a microphone: a week of
+somebody saying "Alekhya" produces whatever the engine heard, and the
+model is then asked to guess back from the mishearing to the name.
+
+Their devices have the answer. A contact name is read off the phone's
+own address book, a place is one they named themselves, a track is
+what the player calls it. None of it has been through speech
+recognition, and all of it is exactly the words that keep being got
+wrong -- which is the entire purpose of the list.
+
+So the four weeks of events are read alongside the week of words, the
+values are taken most-reported first, and the prompt says plainly
+which spelling wins: *where one of these is also in what they said
+above but spelt differently, this is the spelling and that is the
+mishearing.*
+
+**Offered, not forced.** The rules about everyday words hold either
+way. A network called Home and a song called Cars are as bad primed
+from a device as from a transcript, and priming one of those makes
+the ordinary word worse -- which is how "what is the time" once came
+back as "what is the thing".
+
+**Three shapes are never names**, and each is here because it would
+otherwise be handed to a speech engine as a word to expect: a
+coordinate, a telephone number, and the word stored when a caller had
+no name at all. Nothing else knows what kind of event anything is.
+
+**Most-reported first, capped at sixty candidates.** There are a
+hundred places on the final list. A name reported twenty times is one
+they live with; a name reported once may be a stranger who rang.
+
+
 ## The narration was the wait it was covering
 
 Owner: *"calculate the full latency... I want ultra low latency."*

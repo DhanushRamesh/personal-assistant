@@ -11,7 +11,7 @@ import (
 // somebody said.
 //
 // Exported so an eval builds the same thing the server does.
-func Prompt(said []conversation.Message) string {
+func Prompt(said []conversation.Message, reported []string) string {
 	return prompt.Block(
 		prompt.Text(
 			"Below is one person talking to their assistant over the past week.",
@@ -42,6 +42,35 @@ func Prompt(said []conversation.Message) string {
 		),
 		"Here is what they said:",
 		heard(said),
+		reportedBy(reported),
+	)
+}
+
+// reportedBy : The names their own devices gave.
+//
+// Given apart from the transcript and said to be spelt correctly,
+// because that is the whole of what they are for. Everything above
+// has been through speech recognition and may already be wrong; a
+// contact name, a place they named themselves, a track a player
+// reported are the spellings as they actually are. They are exactly
+// the words that keep being misheard, which is exactly what this
+// list is for.
+//
+// Still offered rather than forced. The rules above about everyday
+// words hold here too -- a network called Home and a song called
+// Cars are as bad primed from a device as from a transcript.
+func reportedBy(reported []string) string {
+	if len(reported) == 0 {
+		return ""
+	}
+	return prompt.Block(
+		prompt.Text(
+			"Their own devices also reported these, most-reported first.",
+			"These have not been through speech recognition: they are contact names, names they gave places themselves, and what their players and devices call themselves, spelt as they really are.",
+			"So where one of these is also in what they said above but spelt differently, this is the spelling and that is the mishearing.",
+			"They are candidates on the same terms as the rest: include the ones that are names worth expecting, and leave out the ones that are everyday words.",
+		),
+		prompt.Lines(reported...),
 	)
 }
 

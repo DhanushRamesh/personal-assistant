@@ -36,6 +36,7 @@ import (
 	"unicode"
 
 	"github.com/DhanushRamesh/personal-assistant/internal/conversation"
+	"github.com/DhanushRamesh/personal-assistant/internal/event"
 )
 
 // Window : How far back a rebuild reads.
@@ -93,6 +94,10 @@ type Ask func(ctx context.Context, prompt string) (string, error)
 type Builder struct {
 	// Said : Where the person's own messages come from. Required.
 	Said Said
+	// Did : Where what their devices reported comes from. Optional:
+	// with none, the names come from the transcript alone, which is
+	// how this worked before anything was watching.
+	Did Did
 	// Store : Where the list is kept. Required.
 	Store Store
 	// Ask : How the model is asked to find the names. Required.
@@ -122,7 +127,7 @@ func (b *Builder) Build(ctx context.Context, userID string) error {
 		return nil
 	}
 
-	answer, err := b.Ask(ctx, Prompt(said))
+	answer, err := b.Ask(ctx, Prompt(said, b.reported(ctx, userID)))
 	if err != nil {
 		return fmt.Errorf("vocabulary: asking for the names: %w", err)
 	}
@@ -137,6 +142,36 @@ func (b *Builder) Build(ctx context.Context, userID string) error {
 
 	return b.Store.Put(ctx, userID, terms, b.clock().UTC())
 }
+
+// reported : The names their own devices gave over four weeks.
+//
+// A failure costs the list the spellings and not the list. The
+// transcript has always been there and losing a week of names
+// because one query failed would be the wrong trade.
+func (b *Builder) reported(ctx context.Context, userID string) []string {
+	if b.Did == nil {
+		return nil
+	}
+	did, err := b.Did.Recent(ctx, userID, event.Query{
+		Since: b.clock().Add(-Reported),
+		Limit: Doings,
+		// Not the raw position readings: every value is a coordinate
+		// and none of them is a name.
+		Omit: []string{event.Fixed},
+	})
+	if err != nil {
+		if b.Logger != nil {
+			b.Logger.ErrorContext(ctx, "cannot read the names their devices gave",
+				slog.String("user_id", userID), slog.Any("error", err))
+		}
+		return nil
+	}
+	return Heard(did)
+}
+
+// Doings : The most events one pass reads, a cap rather than a
+// promise.
+const Doings = 4000
 
 // Clean : The terms in an answer, with everything that is not one
 // dropped.

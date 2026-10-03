@@ -403,7 +403,11 @@ func run() error {
 	// the machine with the microphones fetches this and decides what to
 	// do with it.
 	listening := &vocabulary.Builder{
-		Said:   chats,
+		Said: chats,
+		// The spellings the transcript cannot have. A contact name
+		// read off the phone is how they spell it; the same name
+		// heard through a microphone is a guess.
+		Did:    deviceEvents,
 		Store:  names,
 		Now:    cfg.Assistant.Now,
 		Logger: logger.Logger,
