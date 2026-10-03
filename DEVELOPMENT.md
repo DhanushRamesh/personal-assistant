@@ -2990,6 +2990,59 @@ A number followed by one fewer line reads as a memory having gone
 missing.
 
 
+## Someone in the room, not something reading out events
+
+Owner: *"Jarvis should talk to me on event arrival -- if I get a
+missed call for the third time from a number it can say 'sir, you are
+getting calls from this number'. It should act like someone is in my
+room."* And then, on what counts: *"it's not just reminding, it can
+say facts too -- if I hear a song it can say it's a nice song."*
+
+Somebody in your room does not read out what you just did, because
+you were there. They mention the thing you would not have noticed. So
+nothing here reacts to an event happening -- events happening is the
+normal state of the world, hundreds a day. What earns a remark is an
+event being different.
+
+**Two shapes, and nothing names a kind of event.**
+
+`Often`: the same label three times inside a quarter of an hour.
+Three rather than two, because two of anything is a coincidence and a
+remark made on a coincidence is worse than one not made.
+
+`Novel`: a label with nothing like it in the record. This is the
+owner's song: a thing he has not played before is worth a word, and
+so is a number that has never called and a place he has never been.
+One rule, no kinds.
+
+**Two kinds are excluded, as mechanism rather than judgement.** The
+raw position readings, because they arrive every few minutes and
+every value is distinct, so unchecked every one of them would look
+like something never seen before. And the music churn the states are
+worked out from.
+
+**The gate is the whole design.** What kills a feature like this is
+not missing something; it is being a nuisance by Tuesday, after which
+the remarks worth hearing are ignored along with the rest. Three
+refusals, cheapest first: nobody is there to hear it, something was
+said inside the last twenty minutes, or this exact thing has been
+said already today.
+
+Not said for ever -- somebody calling repeatedly today and again next
+month is two pieces of news, and a gate that remembers for ever turns
+the second into silence.
+
+**Nothing is said when it cannot tell whether the room is empty.**
+The same rule the reminder loop has, for the same reason: an
+assistant that cannot tell talks to the wall.
+
+**Being quiet is decided three times**, and finding candidates is
+deliberately the generous one. After this a model may answer with
+nothing -- which is a success, not a wasted call -- and the gate may
+refuse the moment. A candidate that is never made cannot be rescued
+by either.
+
+
 ## The narration was the wait it was covering
 
 Owner: *"calculate the full latency... I want ultra low latency."*
