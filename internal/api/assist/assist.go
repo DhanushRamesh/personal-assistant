@@ -352,6 +352,11 @@ func (h *Handler) follow(
 	keepAlive := time.NewTicker(keepAliveInterval)
 	defer keepAlive.Stop()
 
+	// Whether any of the answer has already gone out in pieces. What
+	// was streamed must not be sent again whole at the end, or it is
+	// spoken twice.
+	streamed := false
+
 	for {
 		select {
 		case <-ctx.Done():
@@ -385,8 +390,22 @@ func (h *Handler) follow(
 				return
 			}
 
+			if ev.Kind == events.KindPartial {
+				// A piece of the answer, put through as it arrives so
+				// Home Assistant can start speaking on the first
+				// clause. No newline and no trimming: this is the
+				// middle of a sentence, and the spaces are part of it.
+				if ev.Text != "" {
+					writeChunk(w, flusher, chunk(ev.Text, false, ""))
+					streamed = true
+				}
+				continue
+			}
+
 			if ev.Kind.Terminal() {
-				if text := settled(strings.TrimSpace(ev.Text)); text != "" {
+				// Only when it has not already gone out in pieces.
+				// Sent again whole, the answer would be spoken twice.
+				if text := settled(strings.TrimSpace(ev.Text)); text != "" && !streamed {
 					writeChunk(w, flusher, chunk(text, false, ""))
 				}
 				last := chunk("", true, reasonFor(ev.Kind))

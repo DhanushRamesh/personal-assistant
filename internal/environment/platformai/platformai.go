@@ -256,7 +256,12 @@ func (p *Environment) Run(ctx context.Context, req environment.Request) (<-chan 
 		defer close(ch)
 
 		started := time.Now()
-		got, err := p.chat(ctx, req)
+		// Each fragment of the answer, as the model writes it. The
+		// runner puts these straight through to whoever is listening,
+		// so speech can start on the first clause.
+		got, err := p.chat(ctx, req, func(text string) {
+			send(ctx, ch, environment.Partial(text))
+		})
 		if err != nil {
 			// A cancelled chat is the user's doing, not a failure worth
 			// reporting to them.

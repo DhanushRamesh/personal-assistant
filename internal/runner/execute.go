@@ -469,6 +469,17 @@ func (r *Runner) drain(
 				*spoke = true
 				saidThisRound = true
 			}
+		case environment.KindPartial:
+			// Straight through, and never spoken beside the turn.
+			// This is the answer arriving in pieces, not a sentence
+			// about the work: narrating it would read the answer out
+			// twice, once in fragments and once whole.
+			r.publish(events.Event{
+				ChatID: t.ID,
+				Kind:   events.KindPartial,
+				Text:   msg.Text,
+				At:     msg.At,
+			})
 		case environment.KindFinal, environment.KindError, environment.KindToolCalls:
 			m := msg
 			final = &m

@@ -1,6 +1,7 @@
 package platformai
 
 import (
+	"bufio"
 	"bytes"
 	"context"
 	"encoding/json"
@@ -86,6 +87,9 @@ type chatRequest struct {
 	Context  string        `json:"context"`
 	Messages []chatMessage `json:"messages"`
 	Tools    []wireTool    `json:"tools,omitempty"`
+	// Stream : Ask for the reply as server-sent events rather than one
+	// body when it is finished. See Streaming.
+	Stream bool `json:"stream,omitempty"`
 }
 
 // chatResponse : The reply to a chat call. Content is either a plain string or
@@ -235,8 +239,12 @@ func (p *Environment) mintToken(ctx context.Context) (string, error) {
 
 // chat : Sends a prompt, preceded by what was said earlier, and returns the
 // assistant's reply.
-func (p *Environment) chat(ctx context.Context, ask environment.Request) (reply, error) {
-	got, status, err := p.attemptChat(ctx, ask)
+// onText, when the reply is streamed, is handed each fragment of the
+// answer as it arrives. A retry passes nil: whatever the first attempt
+// put through has already been said, and saying the second attempt's
+// version as well would say it twice.
+func (p *Environment) chat(ctx context.Context, ask environment.Request, onText func(string)) (reply, error) {
+	got, status, err := p.attemptChat(ctx, ask, onText)
 	if err == nil {
 		return got, nil
 	}
@@ -247,7 +255,7 @@ func (p *Environment) chat(ctx context.Context, ask environment.Request) (reply,
 	// been revoked would otherwise loop.
 	if status == http.StatusUnauthorized {
 		p.forgetToken()
-		got, _, err = p.attemptChat(ctx, ask)
+		got, _, err = p.attemptChat(ctx, ask, nil)
 		return got, err
 	}
 
@@ -262,7 +270,7 @@ func (p *Environment) chat(ctx context.Context, ask environment.Request) (reply,
 	if status == 0 && dropped(err) && ctx.Err() == nil {
 		p.logger.WarnContext(ctx, "the connection to platform ai was dead, asking again",
 			slog.Any("error", err))
-		got, _, err = p.attemptChat(ctx, ask)
+		got, _, err = p.attemptChat(ctx, ask, nil)
 		return got, err
 	}
 	return reply{}, err
@@ -300,7 +308,7 @@ func withSummary(prompt, summary string) string {
 	return prompt + "\n\nEarlier in this conversation, summarised:\n" + summary
 }
 
-func (p *Environment) attemptChat(ctx context.Context, ask environment.Request) (reply, int, error) {
+func (p *Environment) attemptChat(ctx context.Context, ask environment.Request, onText func(string)) (reply, int, error) {
 	token, err := p.accessToken(ctx)
 	if err != nil {
 		// A refusal minting the token is the same problem as a refusal
@@ -341,6 +349,7 @@ func (p *Environment) attemptChat(ctx context.Context, ask environment.Request) 
 		Context:  context,
 		Messages: messages,
 		Tools:    tools,
+		Stream:   Streaming,
 	})
 	if err != nil {
 		return reply{}, 0, fmt.Errorf("platformai: building chat request: %w", err)
@@ -374,6 +383,18 @@ func (p *Environment) attemptChat(ctx context.Context, ask environment.Request) 
 		slog.Int("tool_count", len(tools)),
 		slog.Int("messages_bytes", len(body)-len(context)-toolBytes(tools)),
 		slog.Int("whole_bytes", len(body)))
+
+	// A streamed reply is read as it arrives; that is the whole point
+	// of asking for one. The endpoint labels it application/json all
+	// the same, so what it is is decided by what it starts with.
+	if Streaming && resp.StatusCode == http.StatusOK {
+		peek := bufio.NewReader(resp.Body)
+		if head, _ := peek.Peek(6); bytes.HasPrefix(head, []byte("event:")) ||
+			bytes.HasPrefix(head, []byte("data:")) {
+			return p.fromStream(ctx, peek, resp.StatusCode, onText)
+		}
+		resp.Body = io.NopCloser(peek)
+	}
 
 	raw, err := io.ReadAll(io.LimitReader(resp.Body, maxResponseBytes))
 	if err != nil {

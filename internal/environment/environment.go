@@ -21,6 +21,13 @@ type Kind string
 const (
 	// KindUpdate : Transient progress. More messages will follow.
 	KindUpdate Kind = "update"
+	// KindPartial : A piece of the answer, as the model writes it.
+	//
+	// Separate from an update because the two want opposite handling:
+	// an update is a sentence about the work and is spoken beside the
+	// turn, and a partial is the answer itself and must not be. A
+	// provider that cannot stream never sends one.
+	KindPartial Kind = "partial"
 	// KindFinal : The result. The stream ends after it.
 	KindFinal Kind = "final"
 	// KindError : The run failed. The stream ends after it.
@@ -34,7 +41,7 @@ const (
 // Valid : Reports whether k is a known kind.
 func (k Kind) Valid() bool {
 	switch k {
-	case KindUpdate, KindFinal, KindError, KindToolCalls:
+	case KindUpdate, KindPartial, KindFinal, KindError, KindToolCalls:
 		return true
 	default:
 		return false
@@ -76,6 +83,14 @@ func ToolCalls(calls []ToolCall) Message {
 // Update : Returns a transient progress message.
 func Update(text string) Message {
 	return Message{Kind: KindUpdate, Text: text, At: time.Now().UTC()}
+}
+
+// Partial : Returns a piece of the answer, as it is being written.
+//
+// Not progress: see KindPartial. Whatever consumes these must not also
+// speak the finished answer, or it is heard twice.
+func Partial(text string) Message {
+	return Message{Kind: KindPartial, Text: text, At: time.Now().UTC()}
 }
 
 // Final : Returns the message carrying a run's result.

@@ -2311,6 +2311,63 @@ Both new names came from Geoapify, which is what the naming fallback
 is for: no geofence there, so the name comes from the coordinates --
 and the coordinates had to be in the payload for any of it to work.
 
+## Every hop was ready for a stream except this one
+
+Owner, looking at the latency breakdown: *"stream:true in platform ai
+works I guess, check."* It does.
+
+    event: generate
+    data: {"messages":[{"content":"Ready"}],"object":"stream.chunk"}
+
+The client had never asked. Its own comment said *"the service answers
+in one piece"*, which was true of how it was being called and not of
+the service.
+
+**Checked before building, because one answer could have killed it.**
+A streamed reply only reaches a speaker if every hop after it carries
+one:
+
+| hop | streams |
+| --- | --- |
+| gateway to here | yes, once asked |
+| here to Home Assistant | the endpoint already did |
+| Home Assistant's Ollama integration | sends `stream=True`, reads deltas |
+| its pipeline to TTS | `tts_stream.supports_streaming_input` |
+| Piper | `supports_synthesize_streaming = True` |
+
+Piper was asked directly over Wyoming rather than believed from the
+integration's source. Everything between the model and the speaker was
+waiting for text that arrived in one lump.
+
+**A tool call arrives in pieces and has to survive being put back
+together.** The name and the identifier come once, in the first chunk,
+and the arguments as fragments of a JSON string -- `{"days`, `: 1`,
+`, "kind`, `": "mus`, `ic"}` -- which are JSON only in that order. The
+test holding this is the events the live endpoint actually sent,
+recorded verbatim.
+
+**`KindPartial`, because an update is the opposite thing.** The runner
+speaks a `KindUpdate` beside the turn: it is a sentence about the
+work. A partial is the answer itself and must never be narrated, or it
+is heard twice -- once in fragments and once whole. For the same
+reason the assist endpoint stops sending the finished answer once any
+of it has gone out in pieces.
+
+**And a sentence that comes with a tool call is not streamed.** A
+model asking for a tool sometimes says what it is about to do; that is
+progress, spoken beside the turn by the aside. Put through as a
+partial it would be spoken as the answer and again as the aside. In
+every streamed tool call measured, the call arrives before any text of
+its own, so a text fragment is only put through while no call has
+appeared in this round.
+
+**What is still wrong.** A retried call passes no callback, so
+whatever the first attempt streamed has already been said -- if it
+streamed half an answer and then failed, the retry's answer is heard
+after it. The retries only fire on a dead connection or a refused
+token, both of which happen before any text, so this is a hole rather
+than a fault seen.
+
 ## The narration was the wait it was covering
 
 Owner: *"calculate the full latency... I want ultra low latency."*

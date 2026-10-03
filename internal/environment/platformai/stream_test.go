@@ -117,3 +117,34 @@ func TestAnEmptyStreamIsNoticed(t *testing.T) {
 		t.Error("an empty stream looked like it carried something")
 	}
 }
+
+// A sentence that comes with a tool call is progress, not the answer,
+// and must not be put through as the answer arriving.
+func TestTextBesideAToolCallIsNotStreamed(t *testing.T) {
+	const withSaying = `event: generate
+data: {"messages":[{"tool_calls":[{"function":{"name":"event_recent","arguments":"{}"},"id":"t1","type":"function"}]}],"object":"stream.chunk"}
+
+event: generate
+data: {"messages":[{"content":"checking your calls"}],"object":"stream.chunk"}
+
+event: generate
+data: {"data":{"stream":true,"is_final_chunk":true}}
+`
+	var pieces []string
+	got, err := readStream(strings.NewReader(withSaying), func(s string) {
+		pieces = append(pieces, s)
+	})
+	if err != nil {
+		t.Fatalf("readStream: %v", err)
+	}
+	if len(pieces) != 0 {
+		t.Errorf("streamed a sentence belonging to a tool call: %q", pieces)
+	}
+	// Still collected, because the caller sends it on as progress.
+	if got.text.String() != "checking your calls" {
+		t.Errorf("text = %q, want it kept for the caller", got.text.String())
+	}
+	if len(got.calls) != 1 {
+		t.Fatalf("got %d calls, want 1", len(got.calls))
+	}
+}

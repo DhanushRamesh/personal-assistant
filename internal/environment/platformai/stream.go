@@ -3,6 +3,7 @@ package platformai
 import (
 	"bufio"
 	"bytes"
+	"context"
 	"encoding/json"
 	"fmt"
 	"io"
@@ -111,7 +112,17 @@ func readStream(body io.Reader, onText func(string)) (gathered, error) {
 		for _, m := range c.Messages {
 			if text := contentText(m.Content); text != "" {
 				out.text.WriteString(text)
-				if onText != nil {
+				// Only while this round is still an answer. A model
+				// asking for a tool sometimes sends a sentence with
+				// it, describing what it is about to do; that is
+				// progress, spoken beside the turn, and putting it
+				// through here would have it spoken as the answer and
+				// then again as the aside.
+				//
+				// The shape makes this enough: in every streamed tool
+				// call measured, the call arrives before any text of
+				// its own.
+				if onText != nil && len(building) == 0 {
 					onText(text)
 				}
 			}
@@ -145,4 +156,31 @@ func readStream(body io.Reader, onText func(string)) (gathered, error) {
 		out.calls = append(out.calls, *call)
 	}
 	return out, nil
+}
+
+// fromStream : A streamed reply, read as it arrives and returned in the
+// same shape the plain endpoint gives.
+//
+// The caller cannot tell the difference afterwards, which is the point:
+// only the timing changes, and everything that reads a reply carries on
+// reading the same thing.
+func (p *Environment) fromStream(_ context.Context, body io.Reader, status int,
+	onText func(string),
+) (reply, int, error) {
+	got, err := readStream(body, onText)
+	if err != nil {
+		return reply{}, status, err
+	}
+	if !got.seen {
+		return reply{}, status, fmt.Errorf("platformai: the streamed reply was empty")
+	}
+
+	text := strings.TrimSpace(got.text.String())
+	if len(got.calls) > 0 {
+		return reply{Text: text, ToolCalls: got.calls, Usage: got.usage}, status, nil
+	}
+	if text == "" {
+		return reply{}, status, fmt.Errorf("platformai: the reply was empty")
+	}
+	return reply{Text: text, Usage: got.usage}, status, nil
 }

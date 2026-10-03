@@ -29,6 +29,17 @@ type Kind string
 const (
 	// KindUpdate : Transient progress. More will follow.
 	KindUpdate Kind = "update"
+	// KindPartial : A piece of the answer itself, as it is written.
+	//
+	// Not progress. An update is a sentence about the work -- "looking
+	// at your inbox" -- and is spoken beside the turn; this is the
+	// answer arriving in fragments, to be put straight through to
+	// whoever is listening so speech can start on the first clause
+	// instead of the last.
+	//
+	// More will follow, so it is not terminal. What is sent in pieces
+	// must not be sent again whole at the end.
+	KindPartial Kind = "partial"
 	// KindFinal : The chat's answer. The stream ends after it.
 	KindFinal Kind = "final"
 	// KindError : The chat failed. The stream ends after it.
