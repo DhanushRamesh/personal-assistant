@@ -34,6 +34,16 @@ type Property struct {
 	// Default : What is used when it is not given. Nil for none.
 	Default any
 
+	// Properties, Required : The fields of an object, for a property
+	// of type object or for the elements of an array of them.
+	//
+	// Added for a batch whose parts belong together. memory_forget
+	// takes an identifier and the subject it is expected to have, so
+	// that a wrong identifier forgets nothing; asked for many at once
+	// those two have to stay paired, and two parallel arrays matched
+	// by position is exactly the shape that lets them drift.
+	Properties map[string]Property
+	Required   []string
 	// Items : What each element is, for a property of type array. The
 	// element's own constraints apply to every one of them, so a list of
 	// identifiers is pattern-checked the same way a single one would be.
@@ -90,6 +100,20 @@ func (p Property) asMap() map[string]any {
 	}
 	if p.Items != nil {
 		out["items"] = p.Items.asMap()
+	}
+	if len(p.Properties) > 0 {
+		fields := make(map[string]any, len(p.Properties))
+		for name, field := range p.Properties {
+			fields[name] = field.asMap()
+		}
+		out["properties"] = fields
+		// Stated even when empty, for the same reason a schema states
+		// it: absent reads as unknown rather than as none.
+		required := p.Required
+		if required == nil {
+			required = []string{}
+		}
+		out["required"] = required
 	}
 	if p.MinItems != nil {
 		out["minItems"] = *p.MinItems

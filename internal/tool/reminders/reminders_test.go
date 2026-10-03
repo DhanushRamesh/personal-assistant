@@ -260,7 +260,7 @@ func TestCancellingStopsIt(t *testing.T) {
 	call(t, r, "reminder_set", `{"title":"Timer","say":"Up.","say_if_late":"You should have done it","minutes_from_now":20}`)
 	all, _ := store.List(context.Background(), user, remind.Pending)
 
-	got := call(t, r, "reminder_cancel", `{"id":"`+all[0].ID+`"}`)
+	got := call(t, r, "reminder_cancel", `{"ids":["`+all[0].ID+`"]}`)
 	if got.Outcome != conversation.OutcomeOK {
 		t.Fatalf("outcome = %s: %s", got.Outcome, got.Content)
 	}
@@ -275,7 +275,7 @@ func TestCancellingStopsIt(t *testing.T) {
 func TestCancellingSomethingThatIsNotThere(t *testing.T) {
 	r, _ := harness(t)
 
-	got := call(t, r, "reminder_cancel", `{"id":"rem_01M3D477HXQ4YNQX7BNXJZZCV0"}`)
+	got := call(t, r, "reminder_cancel", `{"ids":["rem_01M3D477HXQ4YNQX7BNXJZZCV0"]}`)
 	if got.Outcome != conversation.OutcomeFailed {
 		t.Fatalf("outcome = %s, want a failure", got.Outcome)
 	}
@@ -292,7 +292,7 @@ func TestAnotherPersonCannotCancelIt(t *testing.T) {
 
 	got := r.Call(context.Background(), "reminder_cancel", tool.Invocation{
 		Caller: tool.Caller{UserID: "usr_01M3D477HXQ4YNQX7BNXJZZCV1", Channel: chat.ChannelDirect},
-		Args:   json.RawMessage(`{"id":"` + all[0].ID + `"}`),
+		Args:   json.RawMessage(`{"ids":["` + all[0].ID + `"]}`),
 		Ran:    alreadyListed,
 	})
 	if got.Outcome != conversation.OutcomeFailed {
@@ -809,3 +809,54 @@ func TestAnotherPersonsIsNotChanged(t *testing.T) {
 var alreadyListed = []string{"memory_list", "memory_search", "conversation_list",
 	"conversation_find", "calendar_events", "calendar_calendars", "reminder_list",
 	"reminder_recent"}
+
+// TestCancellingManyIsOneCall : several timers go in one call, and
+// what comes back is a count rather than every title read out.
+func TestCancellingManyIsOneCall(t *testing.T) {
+	r, store := harness(t)
+
+	for _, title := range []string{"Washing", "Bread", "Call back"} {
+		call(t, r, "reminder_set",
+			`{"title":"`+title+`","say":"now","say_if_late":"you missed it","minutes_from_now":20}`)
+	}
+	all, _ := store.List(context.Background(), user, remind.Pending)
+	if len(all) != 3 {
+		t.Fatalf("set %d, want 3", len(all))
+	}
+
+	ids := make([]string, 0, len(all))
+	for _, rem := range all {
+		ids = append(ids, `"`+rem.ID+`"`)
+	}
+	got := call(t, r, "reminder_cancel", `{"ids":[`+strings.Join(ids, ",")+`]}`)
+	if got.Outcome != conversation.OutcomeOK {
+		t.Fatalf("outcome = %s: %s", got.Outcome, got.Content)
+	}
+
+	left, _ := store.List(context.Background(), user, remind.Pending)
+	if len(left) != 0 {
+		t.Errorf("%d reminders left, want none", len(left))
+	}
+	if strings.Contains(got.Content, "Bread") {
+		t.Errorf("every title was read back: %q", got.Content)
+	}
+}
+
+// TestOneBadIdentifierCancelsNothing : a batch is checked before any
+// of it is acted on, so a single wrong identifier leaves everything.
+func TestOneBadIdentifierCancelsNothing(t *testing.T) {
+	r, store := harness(t)
+
+	call(t, r, "reminder_set",
+		`{"title":"Washing","say":"now","say_if_late":"you missed it","minutes_from_now":20}`)
+	all, _ := store.List(context.Background(), user, remind.Pending)
+
+	got := call(t, r, "reminder_cancel",
+		`{"ids":["`+all[0].ID+`","rem_01M3D477HXQ4YNQX7BNXJZZCV9"]}`)
+	if got.Outcome == conversation.OutcomeOK {
+		t.Fatalf("a made-up identifier was accepted: %s", got.Content)
+	}
+	if left, _ := store.List(context.Background(), user, remind.Pending); len(left) != 1 {
+		t.Errorf("%d left, want the real one untouched", len(left))
+	}
+}

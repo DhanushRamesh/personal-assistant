@@ -203,7 +203,7 @@ func TestForgettingRemovesIt(t *testing.T) {
 	id := all[0].ID
 
 	got := call(t, r, chat.ChannelDirect, "memory_forget",
-		`{"id":"`+id+`","confirm_subject":"Roof quote"}`)
+		`{"memories":[{"id":"`+id+`","confirm_subject":"Roof quote"}]}`)
 	if got.Outcome != conversation.OutcomeOK {
 		t.Fatalf("outcome = %s: %s", got.Outcome, got.Content)
 	}
@@ -346,3 +346,66 @@ func TestRememberingTellsTheModelToSaySo(t *testing.T) {
 // alreadyListed : Every domain's listings, so a write under test is not
 // refused for want of a read it is not testing.
 var alreadyListed = []string{"memory_list", "memory_search", "conversation_list", "conversation_find", "calendar_events", "calendar_calendars", "reminder_list", "reminder_recent"}
+
+// TestForgettingManyIsOneCall : clearing out old notes was one call
+// per memory -- fifteen of them in a row, each answering with how many
+// were left, which is fifteen sentences nobody wants read out.
+func TestForgettingManyIsOneCall(t *testing.T) {
+	r, store, _ := harness(t)
+
+	subjects := []string{"Milk cost", "Radish cost", "Urban cost"}
+	for _, s := range subjects {
+		call(t, r, chat.ChannelDirect, "memory_remember",
+			`{"subject":"`+s+`","body":"a figure"}`)
+	}
+	all, _ := store.All(context.Background(), user, memory.TierRecall)
+	if len(all) != len(subjects) {
+		t.Fatalf("stored %d, want %d", len(all), len(subjects))
+	}
+
+	var want strings.Builder
+	want.WriteString(`{"memories":[`)
+	for i, m := range all {
+		if i > 0 {
+			want.WriteString(",")
+		}
+		want.WriteString(`{"id":"` + m.ID + `","confirm_subject":"` + m.Subject + `"}`)
+	}
+	want.WriteString(`]}`)
+
+	got := call(t, r, chat.ChannelDirect, "memory_forget", want.String())
+	if got.Outcome != conversation.OutcomeOK {
+		t.Fatalf("outcome = %s: %s", got.Outcome, got.Content)
+	}
+	if left, _ := store.All(context.Background(), user, memory.TierRecall); len(left) != 0 {
+		t.Errorf("%d memories left, want none", len(left))
+	}
+	// Counted, not recited. Reading three subjects back is the thing
+	// taking a list was meant to stop.
+	if strings.Count(got.Content, "cost") > 1 {
+		t.Errorf("every subject was read back: %q", got.Content)
+	}
+}
+
+// TestOneWrongSubjectForgetsNothing : the guard is per memory, and a
+// batch that is half right would leave the person told it failed with
+// no way to know which half went.
+func TestOneWrongSubjectForgetsNothing(t *testing.T) {
+	r, store, _ := harness(t)
+
+	for _, s := range []string{"Milk cost", "Radish cost"} {
+		call(t, r, chat.ChannelDirect, "memory_remember",
+			`{"subject":"`+s+`","body":"a figure"}`)
+	}
+	all, _ := store.All(context.Background(), user, memory.TierRecall)
+
+	got := call(t, r, chat.ChannelDirect, "memory_forget",
+		`{"memories":[{"id":"`+all[0].ID+`","confirm_subject":"`+all[0].Subject+`"},`+
+			`{"id":"`+all[1].ID+`","confirm_subject":"Something else"}]}`)
+	if got.Outcome == conversation.OutcomeOK {
+		t.Fatalf("a wrong subject was accepted: %s", got.Content)
+	}
+	if left, _ := store.All(context.Background(), user, memory.TierRecall); len(left) != 2 {
+		t.Errorf("%d memories left, want both: a refused batch must forget nothing", len(left))
+	}
+}

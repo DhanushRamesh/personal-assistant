@@ -762,31 +762,42 @@ func list(store remind.Store, clock Clock) tool.Tool {
 	}
 }
 
-// cancel : Calls one off.
+// cancel : Calls one or more off.
 func cancel(store remind.Store) tool.Tool {
 	return tool.Tool{
-		Name:     "reminder_cancel",
-		Domain:   "reminder",
-		Writes:   true,
-		Purpose:  "Call off something that was going to be said.",
-		UseWhen:  "The person asks to cancel or stop a reminder or timer.",
-		Avoid:    "Do not guess the identifier: list them first. If more than one could be the one they mean, ask which.",
+		Name:    "reminder_cancel",
+		Domain:  "reminder",
+		Writes:  true,
+		Purpose: "Call off one or more things that were going to be said.",
+		UseWhen: "The person asks to cancel or stop a reminder or timer. Several " +
+			"at once go in one call rather than one call each.",
+		Avoid:    "Do not guess an identifier: list them first. If more than one could be the one they mean, ask which.",
 		Channels: []chat.Channel{chat.ChannelVoice, chat.ChannelDirect},
 		Params: tool.Schema{
-			Required: []string{"id"},
+			Required: []string{"ids"},
 			Properties: map[string]tool.Property{
-				"id": {
-					Type: "string", Description: "The reminder's identifier, from a listing.",
-					Pattern: idPattern,
+				"ids": {
+					Type: "array", MinItems: tool.Bound(1), MaxItems: tool.Bound(25),
+					Description: "Which reminders to call off. Give every one you mean in a " +
+						"single call: they are counted and read back together, so the person " +
+						"is told once how many went rather than once per reminder.",
+					Items: &tool.Property{
+						Type: "string", Pattern: idPattern,
+						Description: "A reminder's identifier, exactly as a listing gave it.",
+					},
 				},
 			},
 		},
 		Examples: []tool.Example{
-			{Ask: "cancel that timer", Args: `{"id":"rem_01M3D477HXQ4YNQX7BNXJZZCV0","saying":"cancelling that timer"}`},
+			{Ask: "cancel that timer",
+				Args: `{"ids":["rem_01M3D477HXQ4YNQX7BNXJZZCV0"],"saying":"cancelling that timer"}`},
+			{Ask: "cancel all my timers",
+				Args: `{"ids":["rem_01M3D477HXQ4YNQX7BNXJZZCV0","rem_01M3D477HXQ4YNQX7BNXJZZCV1"],` +
+					`"saying":"cancelling your timers"}`},
 		},
 		Run: func(ctx context.Context, in tool.Invocation) tool.Result {
 			var args struct {
-				ID string `json:"id"`
+				IDs []string `json:"ids"`
 			}
 			_ = json.Unmarshal(in.Args, &args)
 
@@ -796,32 +807,56 @@ func cancel(store remind.Store) tool.Tool {
 			if in.Caller.UserID == "" {
 				return tool.Failed("This request did not come from a known person.")
 			}
+			if len(args.IDs) == 0 {
+				return tool.Failed("Nothing was called off: no reminder was named.")
+			}
 
-			existing, err := store.Get(ctx, in.Caller.UserID, args.ID)
-			if err != nil {
-				if errors.Is(err, remind.ErrNotFound) {
-					return tool.Failed(fmt.Sprintf(
-						"There is no reminder with the identifier %s. List them rather than guessing.", args.ID))
+			// Found before any is cancelled, so a batch with one bad
+			// identifier changes nothing rather than half of it.
+			titles := make([]string, 0, len(args.IDs))
+			for _, id := range args.IDs {
+				existing, err := store.Get(ctx, in.Caller.UserID, id)
+				if err != nil {
+					if errors.Is(err, remind.ErrNotFound) {
+						return tool.Failed(fmt.Sprintf(
+							"There is no reminder with the identifier %s. List them rather than guessing.", id))
+					}
+					return tool.Failed(err.Error())
 				}
-				return tool.Failed(err.Error())
+				titles = append(titles, existing.Title)
 			}
+
 			before := count(ctx, store, in.Caller.UserID)
-
-			if err := store.Cancel(ctx, in.Caller.UserID, args.ID); err != nil {
-				return tool.Failed(err.Error())
+			for _, id := range args.IDs {
+				if err := store.Cancel(ctx, in.Caller.UserID, id); err != nil {
+					return tool.Failed(err.Error())
+				}
 			}
 
-			// Confirm it actually went, rather than trusting that the
-			// write said so.
-			if still, err := store.Get(ctx, in.Caller.UserID, args.ID); err == nil && still != nil &&
-				still.Status != remind.Cancelled {
-				return tool.Unverified("Calling off "+strconv.Quote(existing.Title),
-					"it is still there and still "+string(still.Status))
+			// Confirm they actually went, rather than trusting that
+			// the writes said so.
+			for i, id := range args.IDs {
+				if still, err := store.Get(ctx, in.Caller.UserID, id); err == nil && still != nil &&
+					still.Status != remind.Cancelled {
+					return tool.Unverified("Calling off "+strconv.Quote(titles[i]),
+						"it is still there and still "+string(still.Status))
+				}
 			}
-			return tool.Removed("Called off "+strconv.Quote(existing.Title),
+			return tool.RemovedMany(calledOff(titles), len(titles),
 				before, count(ctx, store, in.Caller.UserID), "reminder")
 		},
 	}
+}
+
+// calledOff : What went, said the way somebody would say it. One is
+// named; several are counted, because reciting them is what taking a
+// list was meant to stop.
+func calledOff(titles []string) string {
+	if len(titles) == 1 {
+		return "Called off " + strconv.Quote(titles[0])
+	}
+	return fmt.Sprintf("Called off %d reminders, including %s",
+		len(titles), strconv.Quote(titles[0]))
 }
 
 // wasWere : Agreement for a count, since this is read aloud.

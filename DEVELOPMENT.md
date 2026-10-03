@@ -2311,6 +2311,48 @@ Both new names came from Geoapify, which is what the naming fallback
 is for: no geofence there, so the name comes from the coordinates --
 and the coordinates had to be in the payload for any of it to work.
 
+## One call, not fifteen
+
+Owner, with a screenshot of `memory_forget` fired thirteen times in a
+row: *"we can make the tools take array of values right... all tools."*
+
+Each call took ten milliseconds and answered with a sentence: *"there
+were 28 memories before, and there are 27 now. Tell them both
+numbers."* Thirteen of those, to clear out a set of old cost notes.
+
+The pattern was already here and two tools had missed it.
+`task_remove`, `task_done`, `task_move` and `calendar_cancel` all take
+an `ids` array and say *"Give every one you mean in a single call, not
+one call each: they are counted and read back together, so the person
+is told once how many went."* `memory_forget` and `reminder_cancel`
+took one identifier.
+
+**The schema could not express what memory_forget needs.** It takes an
+identifier *and* the subject that identifier is expected to have, so a
+wrong one forgets nothing. Batched, those have to stay paired, and
+`Property` could describe an array of strings but not an array of
+objects. Two parallel arrays matched by position is precisely the
+shape that lets them drift, so `Property` gained `Properties` and
+`Required` instead.
+
+**Both check everything before changing anything.** A batch with one
+bad identifier changes nothing rather than half of it; otherwise the
+person is told it failed with no way to know which half went.
+
+**And `RemovedMany` rather than `Removed`.** `Removed` calls three
+gone when one was asked for a partial success and says so -- rightly,
+since "one fewer" is the surprise there. For a batch the surprise is
+the opposite, and it already existed for the task tools.
+
+What comes back is a count: *"Forgotten 3 memories, including 'Milk
+cost'"*. Reciting fifteen subjects is what taking a list was meant to
+stop, and a test fails if more than one is named.
+
+**What was left alone, and why.** `mail_read` takes one on purpose --
+"a body is long, and reading several fills the answer with text nobody
+asked for". The update tools take one because applying the same change
+to many is rarely what anybody means. 71 of 71 on the eval after.
+
 ## Every hop was ready for a stream except this one
 
 Owner, looking at the latency breakdown: *"stream:true in platform ai

@@ -368,63 +368,113 @@ func forget(recall *memory.Recall) tool.Tool {
 		Name:    "memory_forget",
 		Domain:  "memory",
 		Writes:  true,
-		Purpose: "Forget something, permanently.",
-		UseWhen: "The person asks you to forget something and has made clear which one.",
-		Avoid: "There is no undo. Do not guess the identifier, and do not forget something because it looks wrong or stale -- " +
+		Purpose: "Forget one or more things, permanently.",
+		UseWhen: "The person asks you to forget something and has made clear which. " +
+			"Several at once go in a single call, not one call each: clearing " +
+			"out fifteen notes was fifteen calls and fifteen sentences about " +
+			"how many memories were left.",
+		Avoid: "There is no undo. Do not guess an identifier, and do not forget something because it looks wrong or stale -- " +
 			"only because the person asked. If more than one memory could be the one they mean, ask which.",
 		// Typed only. Spoken, a misheard sentence is the whole
 		// authorisation, and nothing can be recovered by asking again.
 		Channels: []chat.Channel{chat.ChannelDirect},
 		Params: tool.Schema{
-			Required: []string{"id", "confirm_subject"},
+			Required: []string{"memories"},
 			Properties: map[string]tool.Property{
-				"id": {
-					Type: "string", Description: "The memory's identifier, from a search.",
-					Pattern: idPattern,
-				},
-				"confirm_subject": {
-					Type:        "string",
-					Description: "The subject of that exact memory, copied from the search result. It is checked against the stored one, so a wrong identifier forgets nothing.",
+				"memories": {
+					Type: "array", MinItems: tool.Bound(1), MaxItems: tool.Bound(50),
+					Description: "Which memories to forget. Give every one you mean here, " +
+						"not one call each: they are counted and read back together, so the " +
+						"person hears once how many went rather than once per memory.",
+					Items: &tool.Property{
+						Type:        "object",
+						Description: "One memory, and the subject it is expected to have.",
+						Required:    []string{"id", "confirm_subject"},
+						Properties: map[string]tool.Property{
+							"id": {
+								Type: "string", Description: "The memory's identifier, from a search.",
+								Pattern: idPattern,
+							},
+							"confirm_subject": {
+								Type:        "string",
+								Description: "The subject of that exact memory, copied from the search result. It is checked against the stored one, so a wrong identifier forgets nothing.",
+							},
+						},
+					},
 				},
 			},
 		},
 		Examples: []tool.Example{
 			{Ask: "forget what I told you about the roof",
-				Args: `{"id":"mem_01M3D477HXQ4YNQX7BNXJZZCV0","confirm_subject":"Roof quote","saying":"forgetting the note about the roof"}`},
+				Args: `{"memories":[{"id":"mem_01M3D477HXQ4YNQX7BNXJZZCV0","confirm_subject":"Roof quote"}],"saying":"forgetting the note about the roof"}`},
+			{Ask: "forget all the cost notes",
+				Args: `{"memories":[{"id":"mem_01M3D477HXQ4YNQX7BNXJZZCV0","confirm_subject":"Milk cost"},` +
+					`{"id":"mem_01M3D477HXQ4YNQX7BNXJZZCV1","confirm_subject":"Radish cost"}],` +
+					`"saying":"forgetting the cost notes"}`},
 		},
 		Run: func(ctx context.Context, in tool.Invocation) tool.Result {
 			var args struct {
-				ID      string `json:"id"`
-				Confirm string `json:"confirm_subject"`
+				Memories []struct {
+					ID      string `json:"id"`
+					Confirm string `json:"confirm_subject"`
+				} `json:"memories"`
 			}
 			_ = json.Unmarshal(in.Args, &args)
+			if len(args.Memories) == 0 {
+				return tool.Failed("Nothing was forgotten: no memory was named.")
+			}
 
 			store, fail := storeFor(recall, in)
 			if fail != nil {
 				return *fail
 			}
 
-			existing, err := store.Get(ctx, in.Caller.UserID, args.ID)
-			if err != nil {
-				return tool.Failed(notFound(err, args.ID))
+			// Every one checked before any one is forgotten. A batch
+			// that is half right would otherwise leave the person
+			// told that something failed, with no way to know which
+			// half went.
+			subjects := make([]string, 0, len(args.Memories))
+			for _, want := range args.Memories {
+				existing, err := store.Get(ctx, in.Caller.UserID, want.ID)
+				if err != nil {
+					return tool.Failed(notFound(err, want.ID))
+				}
+				if !strings.EqualFold(strings.TrimSpace(want.Confirm), existing.Subject) {
+					return tool.Failed(fmt.Sprintf(
+						"Nothing was forgotten: %s is %q, not %q. Search again and use the subject exactly as it came back.",
+						want.ID, existing.Subject, want.Confirm))
+				}
+				subjects = append(subjects, existing.Subject)
 			}
-			if !strings.EqualFold(strings.TrimSpace(args.Confirm), existing.Subject) {
-				return tool.Failed(fmt.Sprintf(
-					"Nothing was forgotten: %s is %q, not %q. Search again and use the subject exactly as it came back.",
-					args.ID, existing.Subject, args.Confirm))
-			}
+
 			before := kept(ctx, store, in.Caller.UserID)
-			if err := store.Forget(ctx, in.Caller.UserID, args.ID); err != nil {
-				return tool.Failed(err.Error())
+			for _, want := range args.Memories {
+				if err := store.Forget(ctx, in.Caller.UserID, want.ID); err != nil {
+					return tool.Failed(err.Error())
+				}
 			}
-			if still, err := store.Get(ctx, in.Caller.UserID, args.ID); err == nil && still != nil {
-				return tool.Unverified("Forgetting "+strconv.Quote(existing.Subject),
-					"it is still there")
+			for _, want := range args.Memories {
+				if still, err := store.Get(ctx, in.Caller.UserID, want.ID); err == nil && still != nil {
+					return tool.Unverified("Forgetting "+strconv.Quote(subjects[0]),
+						"at least one is still there")
+				}
 			}
-			return tool.Removed("Forgotten "+strconv.Quote(existing.Subject),
+			return tool.RemovedMany(forgotten(subjects), len(subjects),
 				before, kept(ctx, store, in.Caller.UserID), "memory")
 		},
 	}
+}
+
+// forgotten : What was forgotten, said the way somebody would say it.
+//
+// One is named. Several are counted, because reading fifteen subjects
+// back is the thing this tool taking a list was meant to stop.
+func forgotten(subjects []string) string {
+	if len(subjects) == 1 {
+		return "Forgotten " + strconv.Quote(subjects[0])
+	}
+	return fmt.Sprintf("Forgotten %d memories, including %s",
+		len(subjects), strconv.Quote(subjects[0]))
 }
 
 // kept : How many memories are held, for saying what a deletion cost.
