@@ -399,23 +399,10 @@ func labelled(payload json.RawMessage) json.RawMessage {
 	if !unset(value) {
 		return payload
 	}
-	number, _ := into["number"].(string)
-	if unset(number) {
-		// Neither says anything. The value is cleared rather than left
-		// holding a placeholder, so whatever counts this has one
-		// nameless thing rather than a person called %CNAME and
-		// another called 0.
-		if value != "" {
-			into["value"] = ""
-			if out, err := json.Marshal(into); err == nil {
-				return out
-			}
-		}
-		return payload
-	}
-
-	into["value"] = strings.TrimSpace(number)
-	delete(into, "number")
+	// Named, either way. A caller with no name is "unknown" whether or
+	// not a number came with them, and the number stays in the payload
+	// rather than becoming the label.
+	into["value"] = event.Unknown
 	out, err := json.Marshal(into)
 	if err != nil {
 		return payload

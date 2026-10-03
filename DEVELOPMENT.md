@@ -2155,6 +2155,48 @@ is not, and a timestamp on `%VOIPWITH` is the fix if it ever shows up.
 ninety-minute phone call are not the same thing, and the field costs
 nothing because the sender already knows which it was.
 
+## Unknown is a name, and the channel is a field
+
+Two decisions on 3 October 2026, both the owner's, both reversing
+something written a day earlier.
+
+**A caller with no name is "unknown".** Asked for directly: *"I will
+get the value as contact name if contact name is there, else I want it
+as unknown."* Until now the number became the value, because a label
+has to tell one stranger from another -- four calls from one of them
+is the thing worth noticing, and that was measured and written down.
+
+That is exactly what this gives up. Every caller without a contact now
+shares one label, so eleven calls from "unknown" could be one person or
+nine. The owner was shown that in the choice and took it anyway, and
+the reason is simple enough: the number was visible on the events
+screen, and they would rather it never be a label at all.
+
+The number stays in the payload. It stopped being what the event is
+counted by; it did not stop being the record. `event.Unknown` holds the
+word, next to `event.UnknownNumber`, which is still what a bare number
+is called when it is spoken.
+
+**Every call event carries how the call came.** *"I want via for
+everything, because I will be adding WhatsApp call and other calls
+too."* `call.missed` was the one left without it, and it has
+`"via":"phone"` now.
+
+**The channel is the sender's to name, not the call task's.** The Meet
+payload said `"via":"meet"`, which would have meant editing both Phone
+Idle tasks for every new app. `Meet Who` sets `%VOIPVIA` beside
+`%VOIPWITH`, and the payload carries `"via":"%VOIPVIA"`. A WhatsApp
+profile is then one more notification profile setting the same two
+variables, and nothing in the call tasks changes. Same rule as the
+helmet: the sender describes itself.
+
+**Still open: a stale name has no expiry.** A missed Meet call posts a
+notification but never reaches Phone Idle, so `%VOIPWITH` is not
+cleared, and the next outgoing cellular call would be filed under that
+name with `via` meet. Incoming is safe -- `%CRNUM ~ 0` fails for a real
+number -- and outgoing is not. The fix is a `%VOIPAT` timestamp and a
+freshness test in both tasks; it was offered and not taken up yet.
+
 ## The profile is taught a method, not a list of patterns
 
 Owner, 2 October 2026, on what the counted half is for: *"when I leave

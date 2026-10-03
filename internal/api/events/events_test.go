@@ -305,21 +305,25 @@ func TestAnOrdinaryValueIsLeftAlone(t *testing.T) {
 func quoted(s string) string { b, _ := json.Marshal(s); return string(b) }
 func itoa(i int) string      { return string(rune('0' + i)) }
 
-// TestAnUnknownNumberIsLabelledByItsNumber : A caller with no name
-// would otherwise share a label with every other caller who has none,
-// and four calls from one stranger would look like four strangers.
-func TestAnUnknownNumberIsLabelledByItsNumber(t *testing.T) {
+// TestACallerWithNoNameIsUnknown : The owner's decision, 3 October
+// 2026, asked for in those words. It replaces labelling a stranger by
+// their number, and the cost is written down where the behaviour is:
+// every stranger now shares one label.
+//
+// What must not change is that the number is still in the payload. It
+// stopped being the label; it did not stop being the record.
+func TestACallerWithNoNameIsUnknown(t *testing.T) {
 	for _, c := range []struct {
 		what, payload, want string
 	}{
 		{"a name and a number keep the name",
 			`{"value":"Priya","number":"+919876543210"}`, "Priya"},
-		{"no name falls back to the number",
-			`{"value":"","number":"+919876543210"}`, "+919876543210"},
+		{"no name reads as unknown",
+			`{"value":"","number":"+919876543210"}`, event.Unknown},
 		{"an unsubstituted variable counts as no name",
-			`{"value":"%CNAME","number":"+919876543210"}`, "+919876543210"},
-		{"neither is left alone rather than invented",
-			`{"value":"","number":""}`, ""},
+			`{"value":"%CNAME","number":"+919876543210"}`, event.Unknown},
+		{"neither one leaves unknown rather than nothing",
+			`{"value":"","number":""}`, event.Unknown},
 	} {
 		store := inmemory.New()
 		e := apitest.NewWith(t, apitest.Options{DeviceEvents: store})
@@ -340,8 +344,8 @@ func TestAnUnknownNumberIsLabelledByItsNumber(t *testing.T) {
 		if into.Value != c.want {
 			t.Errorf("%s: value = %q, want %q", c.what, into.Value, c.want)
 		}
-		if c.want != "" && into.Value == into.Number {
-			t.Errorf("%s: the number was left behind as well as promoted", c.what)
+		if strings.Contains(c.payload, "+91") && into.Number != "+919876543210" {
+			t.Errorf("%s: the number left the payload: %s", c.what, got[0].Payload)
 		}
 	}
 }
@@ -393,9 +397,9 @@ func TestZeroIsNotACaller(t *testing.T) {
 		byKey[ev.DedupeKey] = into.Value
 	}
 	for key, want := range map[string]string{
-		"k1": "",              // nothing at all, and not a person called 0
-		"k2": "+919876543210", // zero name, real number
-		"k3": "Alekhya",       // both, the name wins
+		"k1": event.Unknown, // nothing at all, and not a person called 0
+		"k2": event.Unknown, // zero name, real number, still no name
+		"k3": "Alekhya",     // both, the name wins
 	} {
 		if byKey[key] != want {
 			t.Errorf("%s: value = %q, want %q", key, byKey[key], want)

@@ -294,6 +294,19 @@ type Query struct {
 // said out loud.
 const UnknownNumber = "an unknown number"
 
+// Unknown : The value given to a call from somebody with no name.
+//
+// The owner's decision, 3 October 2026, asked for directly: *"I want
+// the value as contact name if contact name is there, else I want it
+// as unknown."* It costs what the comment on labelled() says it costs
+// -- every stranger shares one label, so four calls from one of them
+// and one call each from four look alike -- and it was chosen with
+// that written down.
+//
+// The number is kept in the payload beside it, so nothing is lost from
+// the record; it is only no longer what the event is counted by.
+const Unknown = "unknown"
+
 // Readable : A value as it should be shown to something that will
 // speak it.
 //
