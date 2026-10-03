@@ -2794,6 +2794,45 @@ Neither send-back was spoken, and no narration was spoken. Both fixes
 from earlier in the day held.
 
 
+## Saying "look first" up front made it look less
+
+The send-back costs a whole round -- 2.78s and 3.13s on two of five
+measured turns -- and its instruction never depended on what the first
+round said, so it looked like it could simply be said first. It
+cannot.
+
+Eight eval cases are right to answer with no tool, and they were the
+risk I measured: none of them reached for a tool with the instruction
+in front, and none without. Clean. Then the full suite:
+
+| | score |
+| --- | --- |
+| without it | 71 of 71 |
+| with it, first run | 70 of 71 |
+| with it, second run | 69 of 71 |
+
+Both regressions are the same shape, and neither is a question:
+
+    "my sister's flight lands on the 3rd of March"  called nothing
+    "I have to submit the form before Friday"       called nothing
+
+The wording was *"if the answer turns on anything about them"*, ending
+*"plenty of questions need no tool"*. A statement has no answer that
+turns on anything, so the model did nothing -- against the standing
+rule that anything placed in the future is offered to the diary.
+
+**The over-reach probe could not have caught this.** It asked whether
+the instruction makes the model reach when it should not. The damage
+was the opposite, on cases the probe did not contain. Eight cases
+chosen for one failure mode said nothing about the other, and the
+clean result read as permission.
+
+Reverted. The send-back stays and keeps costing its round. What is
+kept is the measurement: `EVAL_LOOK_FIRST=1` runs the suite with the
+instruction in the prompt, so the next attempt at the wording is one
+command from an answer rather than a guess.
+
+
 ## The narration was the wait it was covering
 
 Owner: *"calculate the full latency... I want ultra low latency."*

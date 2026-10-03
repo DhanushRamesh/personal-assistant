@@ -36,6 +36,7 @@ import (
 	"github.com/DhanushRamesh/personal-assistant/internal/memory"
 	"github.com/DhanushRamesh/personal-assistant/internal/memory/inmemory"
 	"github.com/DhanushRamesh/personal-assistant/internal/persona"
+	"github.com/DhanushRamesh/personal-assistant/internal/prompt"
 	remindmemory "github.com/DhanushRamesh/personal-assistant/internal/remind/inmemory"
 	"github.com/DhanushRamesh/personal-assistant/internal/tool"
 	"github.com/DhanushRamesh/personal-assistant/internal/tool/calendar"
@@ -331,6 +332,12 @@ func ask(t *testing.T, env *platformai.Environment, registry *tool.Registry, cha
 	ctx, cancel := context.WithTimeout(context.Background(), 90*time.Second)
 	defer cancel()
 
+	// With EVAL_LOOK_FIRST=1, the question carries what the runner
+	// now puts after it, so the suite measures the prompt production
+	// actually sends rather than the bare question.
+	if os.Getenv("EVAL_LOOK_FIRST") == "1" {
+		say = prompt.Block(say, lookFirstDraft)
+	}
 	stream, err := env.Run(ctx, environment.Request{Prompt: say, Tools: specs})
 	if err != nil {
 		t.Fatalf("Run: %v", err)
