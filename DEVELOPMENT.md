@@ -2961,6 +2961,35 @@ are facts about a tool being used. The fold handles repetition inside
 half an hour, and this covers the rest.
 
 
+## The description was listed as one note among forty
+
+Owner: *"while I ask anything in the conversation this profiling must
+be given a weightage, because these are the real facts about me."*
+
+It was not getting any. The standing description is kept as an
+ordinary memory, which is deliberate -- `memory_list` shows it and
+they can have it changed or dropped like anything else -- but the
+listing rendered it as one more line of `<id>  <text>`, among single
+facts somebody mentioned once. It read as a note and was weighed as
+one.
+
+It is not that kind of thing. The others are something they said; this
+is what a month of their own devices and a week of their words add up
+to, counted. So the listing gives it its own heading and says what it
+is: counted evidence, why the assistant can speak about their habits
+without looking anything up, and where it disagrees with what the
+model would otherwise assume, it wins.
+
+**It keeps its identifier**, printed with it rather than left out,
+because it is still an ordinary memory underneath and neither
+changing a line of it nor dropping the whole thing is possible
+without one.
+
+**And the total still counts it**, said as "counting the one above".
+A number followed by one fewer line reads as a memory having gone
+missing.
+
+
 ## The narration was the wait it was covering
 
 Owner: *"calculate the full latency... I want ultra low latency."*

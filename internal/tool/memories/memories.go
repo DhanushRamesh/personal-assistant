@@ -16,6 +16,7 @@ import (
 
 	"github.com/DhanushRamesh/personal-assistant/internal/chat"
 	"github.com/DhanushRamesh/personal-assistant/internal/memory"
+	"github.com/DhanushRamesh/personal-assistant/internal/profile"
 	"github.com/DhanushRamesh/personal-assistant/internal/prompt"
 	"github.com/DhanushRamesh/personal-assistant/internal/tool"
 )
@@ -120,14 +121,55 @@ func list(recall *memory.Recall) tool.Tool {
 // The count leads, so the number of memories is a thing the model was told
 // rather than a thing it counts off a list that might have been cut short.
 func everything(held []memory.Memory) string {
-	var b strings.Builder
-	fmt.Fprintf(&b, "There are %d memories in total. ", len(held))
-	b.WriteString("Each line is an identifier, then what is remembered.\n")
+	// The standing description is given its own heading rather than a
+	// line among the rest.
+	//
+	// It is not the same kind of thing as the others. They are single
+	// facts somebody said once; this is what a month of their own
+	// devices and a week of their words add up to, counted. Listed
+	// flat it reads as one more note, and the assistant weighs it
+	// like one -- it was being set aside in favour of a guess about
+	// the person it describes.
+	//
+	// It keeps its identifier, because it is still an ordinary memory
+	// underneath: they can have a line of it changed or the whole
+	// thing dropped, and neither is possible without the id.
+	var standing *memory.Memory
+	rest := make([]memory.Memory, 0, len(held))
 	for i := range held {
+		if standing == nil && held[i].Subject == profile.Subject {
+			standing = &held[i]
+			continue
+		}
+		rest = append(rest, held[i])
+	}
+
+	var b strings.Builder
+	if standing != nil {
+		b.WriteString(prompt.Block(
+			prompt.Text(
+				"What is established about them, worked out from what they have said and what their own devices reported.",
+				"This is counted evidence rather than something you were told once, and it is why you can speak about their habits without looking anything up.",
+				"Treat it as true of them. Where it disagrees with what you would otherwise assume, it wins.",
+				"It can still be wrong, and they can have any of it changed or dropped like any other memory, which is why its identifier is given with it -- but do not set it aside for a guess.",
+			),
+			standing.ID+"  "+standing.Text(),
+		))
+		b.WriteString("\n\n")
+	}
+
+	fmt.Fprintf(&b, "There are %d memories in total", len(held))
+	if standing != nil {
+		// Counted, not listed again. Saying a number and then showing
+		// one fewer line reads as a memory having gone missing.
+		b.WriteString(", counting the one above")
+	}
+	b.WriteString(". Each line is an identifier, then what is remembered.\n")
+	for i := range rest {
 		b.WriteString("\n")
-		b.WriteString(held[i].ID)
+		b.WriteString(rest[i].ID)
 		b.WriteString("  ")
-		b.WriteString(held[i].Text())
+		b.WriteString(rest[i].Text())
 	}
 	return b.String()
 }

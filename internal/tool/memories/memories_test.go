@@ -11,6 +11,7 @@ import (
 	"github.com/DhanushRamesh/personal-assistant/internal/embed"
 	"github.com/DhanushRamesh/personal-assistant/internal/memory"
 	"github.com/DhanushRamesh/personal-assistant/internal/memory/inmemory"
+	"github.com/DhanushRamesh/personal-assistant/internal/profile"
 	"github.com/DhanushRamesh/personal-assistant/internal/tool"
 	"github.com/DhanushRamesh/personal-assistant/internal/tool/memories"
 )
@@ -407,5 +408,50 @@ func TestOneWrongSubjectForgetsNothing(t *testing.T) {
 	}
 	if left, _ := store.All(context.Background(), user, memory.TierRecall); len(left) != 2 {
 		t.Errorf("%d memories left, want both: a refused batch must forget nothing", len(left))
+	}
+}
+
+// TestTheStandingDescriptionIsNotJustAnotherNote : It was listed flat
+// among the single facts somebody mentioned once, and weighed like
+// one -- set aside in favour of a guess about the person it
+// describes.
+//
+// It is a different kind of thing: counted, from a month of what
+// their devices reported and a week of what they said. The listing
+// says so.
+func TestTheStandingDescriptionIsNotJustAnotherNote(t *testing.T) {
+	r, store, _ := harness(t)
+
+	if err := store.Create(context.Background(), &memory.Memory{
+		ID:     "mem_01M3D477HXQ4YNQX7BNXJZZCV1",
+		UserID: user, Subject: profile.Subject, Tier: memory.TierAlways,
+		Body: "WHAT IS SO\n- goes to the office, 11 times over 14 days",
+	}); err != nil {
+		t.Fatalf("storing the description: %v", err)
+	}
+	if err := store.Create(context.Background(), &memory.Memory{
+		ID:     "mem_01M3D477HXQ4YNQX7BNXJZZCV2",
+		UserID: user, Subject: "Coffee", Tier: memory.TierAlways,
+		Body: "They take filter coffee.",
+	}); err != nil {
+		t.Fatalf("storing a memory: %v", err)
+	}
+
+	listed := call(t, r, chat.ChannelDirect, "memory_list", `{}`).Content
+
+	if !strings.Contains(listed, "counted evidence") {
+		t.Errorf("the standing description is listed as an ordinary note:\n%s", listed)
+	}
+	// Still an ordinary memory underneath: without the identifier
+	// they cannot have a line of it changed or the whole thing
+	// dropped.
+	if !strings.Contains(listed, "mem_") {
+		t.Errorf("the standing description lost its identifier:\n%s", listed)
+	}
+	if !strings.Contains(listed, "filter coffee") {
+		t.Errorf("pulling the description out dropped the other memories:\n%s", listed)
+	}
+	if !strings.Contains(listed, "goes to the office") {
+		t.Errorf("the description itself is missing:\n%s", listed)
 	}
 }
