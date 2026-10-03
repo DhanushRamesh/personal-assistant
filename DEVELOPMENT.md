@@ -2452,6 +2452,76 @@ whether the wire streamed at all is not visible anywhere else: a reply
 read and put back together looks exactly like one that arrived whole.
 
 
+## It was streaming to Piper the whole time
+
+Owner: *"check the Piper streaming support."* Every hop supports it,
+and every hop was using it.
+
+| hop | asked | answer |
+| --- | --- | --- |
+| Piper | Wyoming `describe` | `supports_synthesize_streaming: True`, 2.5.2 |
+| Wyoming TTS entity | `async_supports_streaming_input` | returns that flag straight through |
+| the agent | `ollama/conversation.py` | `_attr_supports_streaming = True` |
+| the pipeline | `tts_output.stream_response` | both of the above, so true |
+| the satellite | `satellite.py:574` | `tts_start_streaming == "1"` -> `play_tts()` |
+
+**I had concluded it was not working, from the wrong event.** The
+reasoning was that `TTS_START` matched `INTENT_END` to the millisecond,
+so speech could not have begun early. It always matches: `TTS_START`
+marks the pipeline opening its TTS stage, which happens straight after
+the intent stage whatever the answer did. It is not when anybody hears
+anything.
+
+**The speaker starts at `INTENT_PROGRESS`.** In the satellite's log,
+six hours of it:
+
+    17:53:48.085  INTENT_START
+    17:53:51.236  INTENT_PROGRESS {'tts_start_streaming': '1'}
+    17:53:51.236  Playing TTS response: .../api/tts_proxy/nVrEB-A6gNlM...
+    17:54:00.072  INTENT_END / TTS_START / TTS_END
+
+Speech began 8.8 seconds before the answer was finished. To time a
+voice turn, diff `INTENT_START` against `Playing TTS response`, never
+against `TTS_START` or `TTS_END`.
+
+**Two of the three early starts measured were flattered by a bug.**
+Both runs with the largest head start were the double-answer turns of
+the same evening: what began playing early was the answer the runner
+then sent back. The honest number from that batch is the single-answer
+run, which started 0.09s early because its answer was short enough that
+the sixty-character threshold was not crossed until it was nearly
+done. The head start is real and it is worth having; the size of it
+has not been measured on a clean turn yet.
+
+## A turn is over when the speaker starts
+
+Owner: *"the first token arrival (as voice) is considered as the
+response start time -- from my voice end till Jarvis voice start --
+treat it as metadata while streaming."*
+
+So the number that describes a voice turn is not how long it ran. The
+answer is spoken as it is written, and by the time the turn ends the
+person has been listening for several seconds. Timing the whole turn
+describes a wait nobody had.
+
+**The clock starts when the request arrives.** That is the nearest the
+server stands to the person's last word: Home Assistant calls `/api/chat`
+a millisecond or two after it finishes the transcript. The part the
+server cannot see is the recogniser's, and that is measured on the
+satellite.
+
+**It stops at the first chunk carrying text**, whatever kind it is. An
+aside is spoken too, so the wait ends when the aside goes out, not when
+the answer does.
+
+**`spoke_after_ms` on the final chunk**, alongside `error_code` and
+`chat_id`: beyond Ollama's shape, omitted when absent, ignored by Home
+Assistant. A pointer rather than a plain integer, because zero is a
+real answer -- a turn can begin inside a millisecond -- and absent
+means the turn said nothing worth timing. Logged as `the answer began`,
+with the whole turn's duration beside it so the two can be compared.
+
+
 ## The narration was the wait it was covering
 
 Owner: *"calculate the full latency... I want ultra low latency."*

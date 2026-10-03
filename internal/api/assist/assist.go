@@ -141,9 +141,25 @@ type ChatChunk struct {
 	// cannot show what a turn is doing while it does it without knowing
 	// which turn to ask about, and this stream is the only thing that
 	// knows. Home Assistant ignores it, and nothing spoken changes.
-	ChatID     string `json:"chat_id,omitempty"`
-	Done       bool   `json:"done"`
-	DoneReason string `json:"done_reason,omitempty"`
+	ChatID string `json:"chat_id,omitempty"`
+	// SpokeAfterMS : How long the person waited to hear anything,
+	// milliseconds, sent once on the final chunk.
+	//
+	// Measured to the first chunk carrying text, not to this one. The
+	// answer is spoken as it is written, so the turn is over for the
+	// person listening long before it is over here, and the duration
+	// of the whole turn describes a wait nobody had.
+	//
+	// Beyond Ollama's shape and omitted when absent, like the two
+	// above. It is for a screen and for the log; nothing spoken
+	// changes.
+	//
+	// A pointer because zero is an answer: a turn can begin inside a
+	// millisecond, and that is not the same as a turn with nothing to
+	// measure.
+	SpokeAfterMS *int64 `json:"spoke_after_ms,omitempty"`
+	Done         bool   `json:"done"`
+	DoneReason   string `json:"done_reason,omitempty"`
 }
 
 // ModelsResponse : The body of a model listing.
@@ -231,6 +247,11 @@ func (h *Handler) Models(w http.ResponseWriter, r *http.Request) {
 // disagreeing accounts of what was said.
 func (h *Handler) Chat(w http.ResponseWriter, r *http.Request) {
 	ctx := r.Context()
+	// The nearest the server stands to the moment the person stopped
+	// talking. Home Assistant calls this within a millisecond or two of
+	// finishing the transcript, so the gap it cannot see is the
+	// recogniser's, which is measured on the satellite.
+	arrived := time.Now()
 
 	flusher, ok := w.(http.Flusher)
 	if !ok {
@@ -342,7 +363,7 @@ func (h *Handler) Chat(w http.ResponseWriter, r *http.Request) {
 	// -- and the web client, which shares this endpoint, has never
 	// been sent them: it drew the fragments and then the finished
 	// answer underneath, so "Good evening, sir." arrived twice.
-	h.follow(ctx, w, flusher, live, t.ID, t.Channel == chat.ChannelVoice)
+	h.follow(ctx, w, flusher, live, t.ID, t.Channel == chat.ChannelVoice, arrived)
 }
 
 // follow : Writes the chat's messages as chunks until it ends or the caller
@@ -354,6 +375,7 @@ func (h *Handler) follow(
 	live <-chan events.Event,
 	chatID string,
 	partials bool,
+	arrived time.Time,
 ) {
 	keepAlive := time.NewTicker(keepAliveInterval)
 	defer keepAlive.Stop()
@@ -362,6 +384,19 @@ func (h *Handler) follow(
 	// was streamed must not be sent again whole at the end, or it is
 	// spoken twice.
 	streamed := false
+
+	// When the first thing that would be spoken went out. What the
+	// person waited for is this, not the end of the turn: by the time
+	// the turn ends they have been listening for several seconds.
+	var spoke time.Time
+
+	// say : Writes a chunk, noting the first one that carries text.
+	say := func(c ChatChunk) {
+		if spoke.IsZero() && c.Message.Content != "" {
+			spoke = time.Now()
+		}
+		writeChunk(w, flusher, c)
+	}
 
 	for {
 		select {
@@ -405,7 +440,7 @@ func (h *Handler) follow(
 				// clause. No newline and no trimming: this is the
 				// middle of a sentence, and the spaces are part of it.
 				if ev.Text != "" {
-					writeChunk(w, flusher, chunk(ev.Text, false, ""))
+					say(chunk(ev.Text, false, ""))
 					streamed = true
 				}
 				continue
@@ -415,9 +450,22 @@ func (h *Handler) follow(
 				// Only when it has not already gone out in pieces.
 				// Sent again whole, the answer would be spoken twice.
 				if text := settled(strings.TrimSpace(ev.Text)); text != "" && !streamed {
-					writeChunk(w, flusher, chunk(text, false, ""))
+					say(chunk(text, false, ""))
 				}
 				last := chunk("", true, reasonFor(ev.Kind))
+				// How long the person waited to hear anything.
+				// Left absent by a turn that said nothing,
+				// which has no wait to report.
+				if !spoke.IsZero() {
+					waited := spoke.Sub(arrived)
+					ms := waited.Milliseconds()
+					last.SpokeAfterMS = &ms
+					h.Logger.InfoContext(ctx, "the answer began",
+						slog.String("chat_id", chatID),
+						slog.Duration("spoke_after", waited),
+						slog.Duration("turn_took", time.Since(arrived)),
+						slog.Bool("in_pieces", streamed))
+				}
 				// Only a screen can use these, and only a failure has them.
 				// Home Assistant ignores fields it does not know, so the
 				// spoken answer is unchanged by their being here.
@@ -434,7 +482,7 @@ func (h *Handler) follow(
 			// Progress, spoken as it happens. A chat reporting where it has
 			// got to is why the connection is held open at all.
 			if text := strings.TrimSpace(ev.Text); text != "" {
-				writeChunk(w, flusher, chunk(text+"\n", false, ""))
+				say(chunk(text+"\n", false, ""))
 			}
 		}
 	}
