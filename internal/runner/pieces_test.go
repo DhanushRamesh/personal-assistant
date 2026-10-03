@@ -105,3 +105,79 @@ func TestTheAnswerAfterToolsIsStreamed(t *testing.T) {
 		t.Errorf("a write that worked was denied: %q", answer)
 	}
 }
+
+// narrating : A provider that says what it is about to do and then
+// calls a tool, which is the shape of every turn that reads something.
+type narrating struct {
+	mu sync.Mutex
+	at int
+}
+
+func (p *narrating) Name() string { return "narrating" }
+
+func (p *narrating) Run(_ context.Context, req environment.Request) (<-chan environment.Message, error) {
+	ch := make(chan environment.Message, 1)
+	if req.Purpose != environment.PurposeChat {
+		ch <- environment.Final("an answer")
+		close(ch)
+		return ch, nil
+	}
+	p.mu.Lock()
+	first := p.at == 0
+	p.at++
+	p.mu.Unlock()
+
+	if first {
+		ch <- environment.ToolCalls([]environment.ToolCall{{
+			ID: "call-1", Name: "calendar_update",
+			Arguments: `{"saying":"starting a new conversation"}`,
+		}})
+	} else {
+		ch <- environment.Final("A new conversation has been created, sir.")
+	}
+	close(ch)
+	return ch, nil
+}
+
+// TestAVoiceTurnIsNotToldWhatIsBeingDone : The owner, hearing
+// "starting a new conversation" in front of "a new conversation has
+// been created, sir": "no need for aside now, turn it off."
+//
+// Home Assistant speaks everything written to the stream, so a
+// narration put there is recited whether or not anybody asked for
+// one. Aloud it belongs to the aside player, which is off.
+func TestAVoiceTurnIsNotToldWhatIsBeingDone(t *testing.T) {
+	h := newHarness(t, &narrating{}, runner.Options{Tools: writer(true)})
+
+	tk := h.submitOn(t, chat.ChannelVoice, "switch to a new conversation")
+	heard := h.listen(t, tk.ID)
+	h.await(t, tk.ID, chat.StatusCompleted, chat.StatusFailed)
+
+	if got := heard(); len(got) > 0 {
+		t.Errorf("a voice turn was narrated, and Home Assistant speaks it: %q", got)
+	}
+	if answer := answered(t, h); !strings.Contains(answer, "created") {
+		t.Errorf("the answer did not survive: %q", answer)
+	}
+}
+
+// TestAScreenIsStillToldWhatIsBeingDone : The other half. A progress
+// line on a screen is never spoken, and a turn that works in silence
+// for nine seconds reads as having stopped.
+func TestAScreenIsStillToldWhatIsBeingDone(t *testing.T) {
+	h := newHarness(t, &narrating{}, runner.Options{Tools: writer(true)})
+
+	tk := h.submitOn(t, chat.ChannelDirect, "switch to a new conversation")
+	heard := h.listen(t, tk.ID)
+	h.await(t, tk.ID, chat.StatusCompleted, chat.StatusFailed)
+
+	var found bool
+	for _, got := range heard() {
+		if strings.Contains(got, "starting a new conversation") {
+			found = true
+		}
+	}
+	if !found {
+		t.Errorf("a screen was told nothing about what the turn was doing: %q", heard())
+	}
+}

@@ -2715,6 +2715,37 @@ asserts anything -- a gateway's latency moves on its own, and a
 threshold here would fail for reasons outside this repository.
 
 
+## A voice stream has no status line
+
+Owner, hearing *"starting a new conversation"* in front of *"a new
+conversation has been created, sir"*: **"no need for aside now, turn
+it off."**
+
+Reversing the choice made an hour earlier, which was to keep the
+narration and make it shorter and more useful. Hearing it decided it:
+on a turn whose answer is one sentence, a sentence in front of it
+saying the same thing is not a head start, it is the answer twice.
+
+**Home Assistant speaks everything written to the stream.** That is
+the whole rule, and it is why this kept coming back in different
+shapes -- first the aside player, then the model's free prose, then
+the saying argument. A narration written to a voice stream is recited
+whether or not anybody asked for one, because there is no such thing
+as a status line you can only see.
+
+So the narration is announced on a screen and not on a voice turn.
+Aloud it belongs to the aside player, which is off by default, and
+which `settleAside` sequences against the answer so the two cannot
+overlap -- the thing writing it to the stream could never do.
+
+**The test for it had to be rewritten before it was worth anything.**
+The first version read the conversation messages, where a narration
+never goes, and passed with the fix removed. The second reads the
+event bus through the harness's `listen`, and failed with the fix
+removed for the right reason. `submit` makes a direct chat, not a
+voice one, which is the other thing the first version got wrong.
+
+
 ## The narration was the wait it was covering
 
 Owner: *"calculate the full latency... I want ultra low latency."*
