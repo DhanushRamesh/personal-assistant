@@ -87,7 +87,13 @@ func (w *Watcher) Look(ctx context.Context, userID string) (string, error) {
 	history, err := w.Events.Recent(ctx, userID, event.Query{
 		Since: now.Add(-Since),
 		Limit: Seen,
-		Omit:  event.Churn,
+		// The position readings only. Every value is a coordinate,
+		// there are more of them than of everything else together,
+		// and they would fill the cap on their own. The rest of the
+		// working material is kept: a player's state is the only
+		// place a track is named, and a thing can be new without
+		// being countable.
+		Omit: []string{event.Fixed},
 	})
 	if err != nil {
 		return "", err

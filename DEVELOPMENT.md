@@ -3130,6 +3130,46 @@ hundred places on the final list. A name reported twenty times is one
 they live with; a name reported once may be a stranger who rang.
 
 
+## New without being frequent, and the track that is not the value
+
+The owner's own example -- *"if I hear a song it can say it's a nice
+song"* -- could not fire. The player's events are working material
+and the watcher was omitting all of it, which is right for prompt
+size and wrong here: that is the only place a track is named.
+
+**So the only thing omitted now is the position readings.** There are
+more of them than of everything else together and every value is a
+coordinate; the rest of the working material is read. The watcher
+folds by label anyway, so the volume that made churn a problem
+elsewhere is not a problem here.
+
+**But working material is a state, not an occurrence.** A player
+reporting playing, then paused, then playing is one song being
+listened to, not three of anything, and counting the toggles would
+have the assistant remark on somebody using a pause button. So such
+a thing may be `Novel` and may never be `Often`. New without being
+frequent, which is exactly the half that was wanted.
+
+**And the track is not the value.** A player reports the artist as
+the value and the track in a field beside it:
+
+    {"via": "spotify", "from": "Liked Songs",
+     "track": "Poongatre Poongatre",
+     "value": "Yuvan Shankar Raja, Benny Dayal, Na.Muthukumar"}
+
+A label is the kind and the value and nothing else -- the standing
+rule, so that two of a thing are counted as two of the same thing --
+so novelty here is per artist, not per song. Letting the track into
+the label to get the owner's example working would have broken the
+counting for every kind of event at once.
+
+Instead the candidate carries what the label leaves out, and the
+remark is written from both: the counting uses the label, the
+sentence uses the rest. A remark about music that cannot name the
+song is not worth making, and nothing in the code knows that
+`track` means a song.
+
+
 ## The narration was the wait it was covering
 
 Owner: *"calculate the full latency... I want ultra low latency."*

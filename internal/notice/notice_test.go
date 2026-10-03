@@ -3,6 +3,7 @@ package notice_test
 import (
 	"context"
 	"encoding/json"
+	"strings"
 	"testing"
 	"time"
 
@@ -88,16 +89,73 @@ func TestSomethingOrdinaryIsNotMentioned(t *testing.T) {
 	}
 }
 
-// TestWorkingMaterialIsNeverMentioned : Position readings arrive
-// every few minutes and every value is distinct, so unchecked every
-// one of them would look like something never seen before.
-func TestWorkingMaterialIsNeverMentioned(t *testing.T) {
-	arrived := []event.Event{
-		happened(event.Fixed, "12.91100,80.06241", 0),
-		happened("music.state", "something", 0),
-	}
+// TestAPositionReadingIsNeverMentioned : They arrive every few
+// minutes and every value is distinct, so unchecked every one of
+// them would look like something never seen before.
+func TestAPositionReadingIsNeverMentioned(t *testing.T) {
+	arrived := []event.Event{happened(event.Fixed, "12.91100,80.06241", 0)}
 	if got := notice.Find(arrived, arrived, at); len(got) != 0 {
-		t.Errorf("working material was offered as news: %+v", got)
+		t.Errorf("a coordinate was offered as news: %+v", got)
+	}
+}
+
+// TestWorkingMaterialCanBeNewButNotFrequent : A player reporting
+// playing, paused, playing is one song being listened to, not three
+// of anything. Counting the toggles would have the assistant remark
+// on somebody using a pause button.
+//
+// It can still be new, which is the half worth having: the owner's
+// own example is hearing a song it has not heard before.
+func TestWorkingMaterialCanBeNewButNotFrequent(t *testing.T) {
+	// The same artist toggling, five times in ten minutes, and
+	// familiar from a month of it.
+	var all []event.Event
+	for d := 1; d <= 20; d++ {
+		all = append(all, happened(event.State, "A familiar artist", time.Duration(d)*8*time.Hour))
+	}
+	var toggling []event.Event
+	for i := 0; i < 5; i++ {
+		toggling = append(toggling, happened(event.State, "A familiar artist", time.Duration(i)*2*time.Minute))
+	}
+	all = append(all, toggling...)
+
+	for _, c := range notice.Find(toggling, all, at) {
+		if c.Reason == notice.Often {
+			t.Errorf("a pause button was counted as something happening a lot: %+v", c)
+		}
+	}
+
+	// But an artist never reported before is news.
+	fresh := []event.Event{happened(event.State, "Somebody new", 0)}
+	got := notice.Find(fresh, append(all, fresh...), at)
+	if len(got) != 1 || got[0].Reason != notice.Novel {
+		t.Fatalf("a first hearing was not noticed: %+v", got)
+	}
+}
+
+// TestTheTrackReachesTheRemark : A label is the kind and the value
+// and nothing else, so that two of a thing are counted as two of the
+// same thing. A player reports the artist as the value and the track
+// beside it, and a remark about music that cannot name the song is
+// not worth making.
+func TestTheTrackReachesTheRemark(t *testing.T) {
+	payload, _ := json.Marshal(map[string]string{
+		"value": "Yuvan Shankar Raja", "track": "Poongatre Poongatre", "via": "spotify",
+	})
+	fresh := event.Event{Kind: event.State, Payload: payload, OccurredAt: at}
+
+	got := notice.Find([]event.Event{fresh}, []event.Event{fresh}, at)
+	if len(got) != 1 {
+		t.Fatalf("found %d, want 1", len(got))
+	}
+	if got[0].Label != "music.state Yuvan Shankar Raja" {
+		t.Errorf("the track got into the label, which is counted: %q", got[0].Label)
+	}
+	if !strings.Contains(got[0].Detail, "Poongatre Poongatre") {
+		t.Errorf("the track is not available to say: %q", got[0].Detail)
+	}
+	if !strings.Contains(notice.Remark(got[0], at), "Poongatre Poongatre") {
+		t.Error("the track did not reach the prompt")
 	}
 }
 

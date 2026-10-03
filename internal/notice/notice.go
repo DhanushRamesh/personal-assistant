@@ -26,6 +26,7 @@ package notice
 import (
 	"encoding/json"
 	"fmt"
+	"sort"
 	"strings"
 	"time"
 
@@ -79,6 +80,16 @@ type Candidate struct {
 	Before int
 	// At : When the latest of them happened.
 	At time.Time
+	// Detail : Whatever else the sender said about it, which the
+	// label deliberately leaves out.
+	//
+	// A label is the kind and the value and nothing else, so that two
+	// of a thing are counted as two of the same thing. But a player
+	// reports the artist as the value and the track beside it, and a
+	// remark about music that cannot name the song is not worth
+	// making. So the counting uses the label and the sentence uses
+	// this.
+	Detail string
 }
 
 // Find : What among the things that just arrived might be worth
@@ -109,6 +120,7 @@ func Find(arrived, history []event.Event, now time.Time) []Candidate {
 	// first.
 	lately := map[string]int{}
 	latest := map[string]time.Time{}
+	detail := map[string]string{}
 	order := []string{}
 	for _, e := range arrived {
 		if skip(e) {
@@ -118,8 +130,9 @@ func Find(arrived, history []event.Event, now time.Time) []Candidate {
 		if _, had := latest[label]; !had {
 			order = append(order, label)
 		}
-		if e.OccurredAt.After(latest[label]) {
+		if e.OccurredAt.After(latest[label]) || detail[label] == "" {
 			latest[label] = e.OccurredAt
+			detail[label] = Beside(e.Payload)
 		}
 	}
 
@@ -137,17 +150,18 @@ func Find(arrived, history []event.Event, now time.Time) []Candidate {
 	out := make([]Candidate, 0, len(order))
 	for _, label := range order {
 		switch {
-		case lately[label] >= Insistent:
+		case lately[label] >= Insistent && countable(label):
 			out = append(out, Candidate{
 				Label: label, Reason: Often,
 				Times: lately[label], Before: seen[label] - lately[label],
-				At: latest[label],
+				At: latest[label], Detail: detail[label],
 			})
 		case seen[label] <= lately[label]:
 			// Nothing of it before this window, so this is the first
 			// time it has ever been reported.
 			out = append(out, Candidate{
-				Label: label, Reason: Novel, Times: 1, Before: 0, At: latest[label],
+				Label: label, Reason: Novel, Times: 1, Before: 0,
+				At: latest[label], Detail: detail[label],
 			})
 		}
 	}
@@ -167,15 +181,27 @@ func Label(e event.Event) string {
 	return e.Kind + " " + value
 }
 
-// skip : Working material, which is not history and must not be
-// remarked on.
+// skip : What is never worth a remark whatever it says.
+//
+// A coordinate only. Every one of them is distinct, so unchecked
+// every reading would look like something never seen before, and
+// none of them is a thing to say a sentence about.
 func skip(e event.Event) bool {
-	if event.Working(e.Kind) {
-		return true
-	}
-	// A coordinate is never a thing to say something about, and every
-	// one of them is distinct, so unchecked they would all look new.
 	return event.Position(valueOf(e.Payload))
+}
+
+// countable : Whether several of these in a row mean it is
+// happening a lot.
+//
+// Working material is a state rather than an occurrence. A player
+// reporting that it is playing, then paused, then playing is one
+// song being listened to, not three of anything, and counting the
+// toggles would have the assistant remark on somebody using a pause
+// button. Such a thing can still be new -- which is the half worth
+// having -- but it cannot be frequent.
+func countable(label string) bool {
+	kind, _, _ := strings.Cut(label, " ")
+	return !event.Working(kind)
 }
 
 // valueOf : The value a sender gave, if it gave one.
@@ -190,4 +216,39 @@ func valueOf(payload json.RawMessage) string {
 		return ""
 	}
 	return strings.TrimSpace(fmt.Sprint(into.Value))
+}
+
+// Beside : Whatever a sender said about a thing apart from its value,
+// as one readable line.
+//
+// Every field but the one already in the label, in a fixed order so
+// the same event always reads the same way. Nothing here knows what
+// any of the names mean, and it does not need to: the model is being
+// shown what the device said, not told what it is.
+func Beside(payload json.RawMessage) string {
+	if len(payload) == 0 {
+		return ""
+	}
+	var fields map[string]any
+	if err := json.Unmarshal(payload, &fields); err != nil {
+		return ""
+	}
+	keys := make([]string, 0, len(fields))
+	for k := range fields {
+		if k == "value" || fields[k] == nil {
+			continue
+		}
+		keys = append(keys, k)
+	}
+	sort.Strings(keys)
+
+	parts := make([]string, 0, len(keys))
+	for _, k := range keys {
+		said := strings.TrimSpace(fmt.Sprint(fields[k]))
+		if said == "" || len([]rune(said)) > 120 {
+			continue
+		}
+		parts = append(parts, k+": "+said)
+	}
+	return strings.Join(parts, ", ")
 }

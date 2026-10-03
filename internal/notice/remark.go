@@ -45,11 +45,11 @@ func Remark(c Candidate, now time.Time) string {
 		prompt.Text(
 			"Here it is, as their own device reported it, with what makes it stand out:",
 		),
-		prompt.Lines(
-			"- the thing: "+c.Label,
-			"- "+because(c),
-			"- when: "+c.At.Format("Monday 2 January at 3:04 pm"),
-		),
+		prompt.Lines(append([]string{
+			"- the thing: " + c.Label,
+			"- " + because(c),
+			"- when: " + c.At.Format("Monday 2 January at 3:04 pm"),
+		}, beside(c)...)...),
 		prompt.Text(
 			"They were there when it happened, so telling them it happened is telling them nothing.",
 			"Say the part they would not have noticed: that it is the third time, that it has not happened before, what it might mean.",
@@ -82,4 +82,17 @@ func because(c Candidate) string {
 	default:
 		return "unusual"
 	}
+}
+
+// beside : What else the sender said, as a line of its own.
+//
+// Kept apart from the thing itself because it is a different kind of
+// evidence: the thing is what was counted, and this is what the
+// device happened to say alongside it. A remark about music that
+// cannot name the track is not worth making, and the track is here.
+func beside(c Candidate) []string {
+	if c.Detail == "" {
+		return nil
+	}
+	return []string{"- also reported: " + c.Detail}
 }
