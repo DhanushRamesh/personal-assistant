@@ -259,7 +259,12 @@ func (p *Environment) Run(ctx context.Context, req environment.Request) (<-chan 
 		// Each fragment of the answer, as the model writes it. The
 		// runner puts these straight through to whoever is listening,
 		// so speech can start on the first clause.
+		// Counted, because whether the reply streamed at all is not
+		// visible anywhere else: a stream that is read and put back
+		// together looks exactly like a reply that arrived whole.
+		var pieces int
 		got, err := p.chat(ctx, req, func(text string) {
+			pieces++
 			send(ctx, ch, environment.Partial(text))
 		})
 		if err != nil {
@@ -282,6 +287,7 @@ func (p *Environment) Run(ctx context.Context, req environment.Request) (<-chan 
 				names = append(names, c.Name)
 			}
 			p.logger.InfoContext(ctx, "platform ai asked for tools",
+				slog.Int("streamed_pieces", pieces),
 				slog.Int("in_tokens", got.Usage.Input),
 				slog.Int("out_tokens", got.Usage.Output),
 				slog.Duration("after", time.Since(started)),
@@ -299,6 +305,7 @@ func (p *Environment) Run(ctx context.Context, req environment.Request) (<-chan 
 		}
 
 		p.logger.InfoContext(ctx, "platform ai answered",
+			slog.Int("streamed_pieces", pieces),
 			slog.Int("in_tokens", got.Usage.Input),
 			slog.Int("out_tokens", got.Usage.Output),
 			slog.Duration("after", time.Since(started)),

@@ -337,7 +337,12 @@ func (h *Handler) Chat(w http.ResponseWriter, r *http.Request) {
 	opening.ChatID = t.ID
 	writeChunk(w, flusher, opening)
 
-	h.follow(ctx, w, flusher, live, t.ID)
+	// Pieces of the answer go to a voice turn only. A screen gains
+	// nothing from them -- nobody is waiting to hear the first clause
+	// -- and the web client, which shares this endpoint, has never
+	// been sent them: it drew the fragments and then the finished
+	// answer underneath, so "Good evening, sir." arrived twice.
+	h.follow(ctx, w, flusher, live, t.ID, t.Channel == chat.ChannelVoice)
 }
 
 // follow : Writes the chat's messages as chunks until it ends or the caller
@@ -348,6 +353,7 @@ func (h *Handler) follow(
 	flusher http.Flusher,
 	live <-chan events.Event,
 	chatID string,
+	partials bool,
 ) {
 	keepAlive := time.NewTicker(keepAliveInterval)
 	defer keepAlive.Stop()
@@ -391,6 +397,9 @@ func (h *Handler) follow(
 			}
 
 			if ev.Kind == events.KindPartial {
+				if !partials {
+					continue
+				}
 				// A piece of the answer, put through as it arrives so
 				// Home Assistant can start speaking on the first
 				// clause. No newline and no trimming: this is the

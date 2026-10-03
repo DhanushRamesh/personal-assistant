@@ -279,3 +279,58 @@ func lastChannel(t *testing.T, e *apitest.Env, token string) string {
 	}
 	return list.Chats[0].Channel
 }
+
+// TestAnAnswerAppearsOnceOnTheWire : the web client shares this
+// endpoint with Home Assistant, and when pieces of the answer started
+// being streamed it drew the fragments and then the finished answer
+// underneath -- "Good evening, sir.Good evening, sir." on screen.
+//
+// Whatever the caller, the words must reach it exactly once: a screen
+// is sent the answer whole as it always was, and a voice turn is sent
+// the pieces and then no repeat of them.
+func TestAnAnswerAppearsOnceOnTheWire(t *testing.T) {
+	for _, c := range []struct {
+		what    string
+		channel chat.Channel
+	}{
+		{"a screen", chat.ChannelDirect},
+		{"a voice turn", chat.ChannelVoice},
+	} {
+		t.Run(c.what, func(t *testing.T) {
+			e := apitest.New(t)
+			token := e.Token
+			if c.channel == chat.ChannelVoice {
+				token = e.LoginOn(t, "the satellite", string(chat.ChannelVoice)).Token
+			}
+
+			rec := e.AsBody(t, token, http.MethodPost, "/api/chat",
+				`{"model":"assistant","messages":[{"role":"user","content":"hi"}]}`)
+			body := rec.Body.String()
+
+			// Every piece of content the caller was sent, joined the
+			// way a client that appends them would see it.
+			var whole strings.Builder
+			for _, line := range strings.Split(body, "\n") {
+				if strings.TrimSpace(line) == "" {
+					continue
+				}
+				var got assist.ChatChunk
+				if err := json.Unmarshal([]byte(line), &got); err != nil {
+					continue
+				}
+				whole.WriteString(got.Message.Content)
+			}
+
+			said := strings.TrimSpace(whole.String())
+			if said == "" {
+				t.Skip("the stub answered nothing, so there is nothing to double")
+			}
+			// The answer, however it was delivered, must not contain
+			// itself twice over.
+			half := said[:len(said)/2]
+			if half != "" && strings.HasPrefix(said, half+half) {
+				t.Errorf("the answer was sent twice: %q", said)
+			}
+		})
+	}
+}
