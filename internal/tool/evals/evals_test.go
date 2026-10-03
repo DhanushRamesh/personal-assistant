@@ -41,8 +41,11 @@ import (
 	"github.com/DhanushRamesh/personal-assistant/internal/tool/calendar"
 	"github.com/DhanushRamesh/personal-assistant/internal/tool/conversations"
 	"github.com/DhanushRamesh/personal-assistant/internal/tool/events"
+	"github.com/DhanushRamesh/personal-assistant/internal/tool/mail"
 	"github.com/DhanushRamesh/personal-assistant/internal/tool/memories"
+	"github.com/DhanushRamesh/personal-assistant/internal/tool/places"
 	"github.com/DhanushRamesh/personal-assistant/internal/tool/reminders"
+	"github.com/DhanushRamesh/personal-assistant/internal/tool/tasks"
 )
 
 // eval : One thing a person might say, and what should happen.
@@ -146,8 +149,49 @@ var cases = []eval{
 	{Say: "with whom did I talk today", Tool: []string{"event_recent"}},
 	{Say: "who called me this morning", Tool: []string{"event_recent"}},
 	{Say: "what have I been up to today", Tool: []string{"event_recent"}},
-	{Say: "when did I last leave the office", Tool: []string{"event_recent"}},
-	{Say: "have I been out at all today", Tool: []string{"event_recent"}},
+	{Say: "have I been out at all today", Tool: []string{"place_visits", "event_recent"}},
+
+	// Lists. Every write needs an identifier that only a read can give,
+	// so reading first is as right an answer as writing.
+	{Say: "what is on my to-do list", Tool: []string{"task_list", "task_lists"}},
+	{Say: "add milk to the shopping list",
+		Tool: []string{"task_add", "task_lists", "task_list"}},
+	{Say: "is bread on the shopping list",
+		Tool: []string{"task_list", "task_find", "task_lists"}},
+	{Say: "I have bought the milk",
+		Tool: []string{"task_done", "task_list", "task_find", "task_lists"}},
+	{Say: "start a new list called Work", Tool: []string{"task_list_add", "task_lists"}},
+	{Say: "move the paint to the DIY list",
+		Tool: []string{"task_move", "task_find", "task_list", "task_lists"}},
+
+	// The line between the three things that sound alike. A task has no
+	// time, a reminder is said aloud at one, and an event takes up time
+	// in the diary and is attended.
+	{Say: "I need to buy paint at some point",
+		Tool: []string{"task_add", "task_lists", "task_list"}},
+	{Say: "remind me to call the plumber at four", Tool: []string{"reminder_set"}},
+	{Say: "I have the dentist on Tuesday at four",
+		Tool: []string{"calendar_add", "calendar_events", "calendar_free"}},
+
+	// Mail. Which one is right turns on what is being asked for: a count,
+	// a glance, a sender, an exchange, or the whole of one message.
+	{Say: "has anything come in", Tool: []string{"mail_inbox", "mail_unread"}},
+	{Say: "how many unread do I have", Tool: []string{"mail_unread"}},
+	{Say: "anything from Amazon", Tool: []string{"mail_search"}, Args: []string{"amazon"}},
+	{Say: "what did Alekhya say about the flat",
+		Tool: []string{"mail_thread", "mail_search"}, Args: []string{"alekhya"}},
+	{Say: "is there anything I have not replied to",
+		Tool: []string{"mail_thread"}, Args: []string{"unanswered"}},
+	{Say: "when did I last email Giridharan",
+		Tool: []string{"mail_search"}, Args: []string{"giridharan"}},
+
+	// Where they have been is its own tool, and the raw readings are not
+	// it. The events tool says who called and what connected; this says
+	// where they were and for how long.
+	{Say: "where was I on Tuesday", Tool: []string{"place_visits"}},
+	{Say: "how long was I at the office today", Tool: []string{"place_visits"}},
+	{Say: "have I been to the badminton court this week", Tool: []string{"place_visits"}},
+	{Say: "when did I last leave the office", Tool: []string{"place_visits", "event_recent"}},
 
 	// Reaching for none. A model that calls a tool at every question is as
 	// wrong as one that never does.
@@ -178,6 +222,9 @@ func TestTheModelReachesForTheRightTool(t *testing.T) {
 		reminders.All(remindmemory.New(), clock),
 		events.Tools(eventmemory.New(), events.Clock{Location: time.UTC}),
 		calendar.All(nil, calendar.Clock{Location: time.UTC}),
+		tasks.All(nil, tasks.Clock{Location: time.UTC}),
+		mail.All(nil, mail.Clock{Location: time.UTC}),
+		places.Tools(nil, places.Clock{Location: time.UTC}),
 	)...)
 	if err != nil {
 		t.Fatalf("NewRegistry: %v", err)

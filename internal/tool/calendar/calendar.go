@@ -679,8 +679,13 @@ func free(diary Diary, clock Clock) tool.Tool {
 		Domain:  "calendar",
 		Purpose: "Say whether the person is free at a time, across all of their calendars.",
 		UseWhen: "They ask whether they are free, whether something clashes, or when they are " +
-			"available. Also before putting anything in the diary at a time they proposed.",
-		Avoid: "This sees when they are busy and never what they are doing: the permission granted " +
+			"available. Also before putting an event in the diary at a time they proposed -- an " +
+			"event, which takes up the time and can be clashed with. Not before a reminder: " +
+			"\"remind me at four\" takes up nothing and asks nothing of the diary.",
+		Avoid: "Not for a reminder. Something they want said aloud at a moment takes up no time and " +
+			"clashes with nothing, so there is nothing to check: reminder_set takes it, and asking " +
+			"the diary first is a step that only delays them. " +
+			"This sees when they are busy and never what they are doing: the permission granted " +
 			"is availability only. Do not guess at what a busy period is, and do not describe it as " +
 			"a meeting -- say the time is taken and leave it there.",
 		Channels: []chat.Channel{chat.ChannelVoice, chat.ChannelDirect},

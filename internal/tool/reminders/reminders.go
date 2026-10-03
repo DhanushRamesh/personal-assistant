@@ -564,7 +564,10 @@ func set(store remind.Store, clock Clock) tool.Tool {
 		Name:    "reminder_set",
 		Domain:  "reminder",
 		Purpose: "Arrange for something to be said out loud at a time, once or repeatedly.",
-		UseWhen: "The person asks to be reminded, wants a timer, or wants telling at a time or on a day.",
+		UseWhen: "The person asks to be reminded, wants a timer, or wants telling at a time or on a day. " +
+			"Nothing needs looking up first. A reminder takes up no time and can clash with " +
+			"nothing, so do not read the diary or check whether they are free before setting " +
+			"one: \"remind me to call the plumber at four\" is this tool and no other.",
 		Avoid: "Give exactly one of seconds_from_now, minutes_from_now or at. Use one of the first two for " +
 			"anything said as a length of time, so the arithmetic is not yours to get wrong: do not " +
 			"convert seconds into minutes, and never refuse a length because it is not a whole number " +

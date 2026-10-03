@@ -110,9 +110,11 @@ func recent(reader Reader, clock Clock) tool.Tool {
 		Purpose: "Read what the person's own devices reported about them: who called, where they " +
 			"were, what they connected to.",
 		UseWhen: "A question about what the person has actually been doing rather than what they have " +
-			"told you: who they spoke to or missed a call from, where they have been, when they got " +
-			"in or went out, whether they have moved, what their day looked like, when something " +
-			"last happened. Their phone, their watch and their laptop report here and more kinds " +
+			"told you: who they spoke to or missed a call from, what their day looked like, what " +
+			"else has been going on, when something last happened. Where they were and how long " +
+			"for is place_visits, which reads the same days more plainly; come here for everything " +
+			"else, and for the day as a whole even when part of the answer is places. " +
+			"Their phone, their watch and their laptop report here and more kinds " +
 			"arrive without this description changing, so when you are unsure whether something " +
 			"about their own day was reported, call this once without a kind and read what it lists " +
 			"rather than telling them there is no record of it. Also when you are about to remark " +

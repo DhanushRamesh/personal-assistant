@@ -87,12 +87,17 @@ func visits(reader Reader, clock Clock) tool.Tool {
 		Domain:  "event",
 		Lists:   true,
 		Purpose: "Read where the person has been, when they arrived and left, and how long they stayed.",
-		UseWhen: "Any question about where they went, where they are, how long they were somewhere, " +
-			"when they got in or out, or whether they have been somewhere lately. Also before " +
-			"remarking on their day unprompted.",
-		Avoid: "Not for what they said about where they were going, which is the conversation, and " +
-			"not for what is planned, which is the calendar. Do not work this out from event_recent: " +
-			"that carries every network a laptop joined and answering from it reads out wifi names.",
+		UseWhen: "A question about where: where they went, where they are, how long they were " +
+			"somewhere, when they got in or out, whether they have been somewhere lately. Also " +
+			"before remarking on where they have been unprompted. A question about their day " +
+			"rather than about a place -- what they have been up to, what has been going on -- is " +
+			"event_recent, even though places are part of that answer.",
+		Avoid: "This answers where, not what happened. Their day as a whole -- who rang, what " +
+			"connected, what else their devices saw -- is event_recent, and a question about it " +
+			"belongs there even though some of the answer is places. Not for what they said about " +
+			"where they were going, which is the conversation, and not for what is planned, which " +
+			"is the calendar. Do not work the stays out from event_recent: that carries every " +
+			"network a laptop joined and answering from it reads out wifi names.",
 		Channels: []chat.Channel{chat.ChannelVoice, chat.ChannelDirect},
 		Params: tool.Schema{
 			Properties: map[string]tool.Property{

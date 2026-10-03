@@ -2013,6 +2013,71 @@ it down, or read the diary -- because with a calendar registered,
 looking before answering is the rule, and what would be wrong is none
 of the three.
 
+## Every tool description, put in front of a model
+
+Owner: *"now check all other tool descriptions the same way."*
+
+The eval covered eleven tools out of twenty-nine. Tasks, mail, places
+and the calendar were never asked about, so nothing in them had ever
+been measured. All four are registered now, with eighteen more cases:
+the task-reminder-event line, each of the five mail tools answering
+the thing only it can answer, where-they-went against what-happened,
+and the writes that need an identifier a read has to give first.
+
+**45 of 48 before this, 66 of 66 after, three runs clean.** What the
+three cost, and what each one turned out to be:
+
+**Two tools claimed the same day.** `place_visits` answered "what have
+I been up to today", which is not a question about a place. Both it
+and `event_recent` said *also before remarking on their day
+unprompted*, and `event_recent`'s own `UseWhen` listed "where they
+have been" -- written before `place_visits` existed and left there.
+Now the line is drawn in both: `place_visits` answers *where*,
+`event_recent` answers *what else*, and a question about the day as a
+whole is `event_recent` even though places are part of the answer.
+
+**"Remind me to call the plumber at four" read the diary first.** It
+went to `calendar_free`, which was obeying two rules at once: its own
+*before putting anything in the diary at a time they proposed*, and
+the persona's *anything to do with a date or a time is read from the
+calendar before you answer*. A reminder takes up no time and clashes
+with nothing, so there was nothing to check and the look cost a second
+of a thirty-second turn.
+
+Three attempts, which is the part worth recording. Saying it in
+`calendar_free`'s `Avoid` did nothing. Saying it in its `UseWhen` as
+well did nothing. Narrowing the persona from *placed at a time* to
+*takes up the day* fixed it and broke the sister's flight, which takes
+up nothing either. What worked was putting it on the **right** tool
+rather than the wrong one: `reminder_set` now says nothing needs
+looking up first, and names that sentence. **A rule lands where the
+model is being told what to do, not where it is being told what not
+to.**
+
+**And the rule about remembering was being crowded out.** "The plumber
+and I agreed twelve thousand for the bathroom" was remembered every
+time with eleven tools registered and about half the time with
+twenty-nine -- no wording changed, only how much else there was to
+read. One tool's description is a smaller share of the prompt with
+every tool added, and a rule that applies whatever is being discussed
+does not belong in one. `persona.keeping` says it once, next to
+`noticing` and `timekeeping`, which are there for the same reason.
+
+**One pass is not a measurement.** The first clean run was followed by
+a 65: *"I am a bit tired this evening"* read the diary, having not
+done so for several runs. The three sentences it should be measured
+against were written into `calendar_events`' own `Avoid` and nowhere
+else, and the pull was coming from the persona, which the model reads
+first and which only said the rule in the abstract. Naming the same
+three sentences in `timekeeping` settled it: three runs at 66 since.
+**A borderline case that passes once has not passed.**
+
+**What this says about adding tools.** Twenty-nine descriptions were
+written one at a time, each sound on its own, and three of them
+disagreed with each other in ways nobody could see by reading them.
+Every new tool is also an edit to every existing one. The eval is the
+only place that shows it.
+
 ## The profile is taught a method, not a list of patterns
 
 Owner, 2 October 2026, on what the counted half is for: *"when I leave
