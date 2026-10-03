@@ -697,14 +697,19 @@ func (r *Runner) finishWith(ctx context.Context, t *chat.Chat, aloud *speech, tr
 		return
 	}
 
-	// A turn that did not succeed stops narrating. The asides describe
-	// work that was about to be done, they are queued a second and a half
-	// apart, and most of a turn's asides are still waiting their turn when
-	// it goes wrong. Left running, they announce the work after it has
-	// already failed and the apology arrives behind all of them: one
-	// failed turn said "creating that list" seven seconds after it had
-	// given up on creating the list.
-	if aloud != nil && (t.Status == chat.StatusFailed || t.Status == chat.StatusCancelled) {
+	// A turn that is over stops narrating, however it ended. The
+	// asides describe work that was about to be done, they are queued
+	// a second and a half apart, and most of a turn's asides are
+	// still waiting their turn when it finishes.
+	//
+	// It was only failures that stopped them, because left running
+	// they announce work after it has already gone wrong and the
+	// apology arrives behind all of them: one failed turn said
+	// "creating that list" seven seconds after giving up on it. A
+	// turn that succeeded is the same waste without the insult --
+	// narration of work that is done, in front of the answer to it,
+	// which the answer then waits out.
+	if aloud != nil {
 		aloud.stop()
 	}
 

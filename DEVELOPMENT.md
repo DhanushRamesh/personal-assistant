@@ -2311,6 +2311,62 @@ Both new names came from Geoapify, which is what the naming fallback
 is for: no geofence there, so the name comes from the coordinates --
 and the coordinates had to be in the payload for any of it to work.
 
+## The narration was the wait it was covering
+
+Owner: *"calculate the full latency... I want ultra low latency."*
+
+Measured across 31 complete voice runs on 3 October 2026, wake word to
+reply:
+
+| stage | seconds |
+| --- | --- |
+| wake word to recording | 0.8 |
+| speech | 0.7 - 3 |
+| speech ends to text in hand | 1.8 - 3 |
+| model decides on a tool | 2 - 4 |
+| the tool itself | 0.01 - 0.5 |
+| **asides and their gaps** | **2.5 - 12** |
+| model writes the answer | 2 - 4 |
+
+Two different systems are being measured. "Hello" and "what is the
+time" are caught by Home Assistant's local intents, answered in six
+milliseconds, and never reach this server at all: 3.4 to 5 seconds
+end to end. Anything that does reach it costs 10 to 27.
+
+**The largest single cost was the narration.** The median turn spent
+**4.5 seconds after its tool had already returned**, and the worst
+spent twelve:
+
+    16:11:13.057  tool ran
+    16:11:14.700  said what is being done
+    16:11:16.212  said what is being done
+    16:11:19.832  said what is being done
+    16:11:21.835  held the answer back until the aside finished
+
+The aside exists to cover a wait, and it was being said whether or not
+there was one -- then the finished answer was held until it stopped
+playing. Insurance against a slow turn had become a tax on every turn.
+
+**So nothing is said until the turn has been slow.** `AsideAfter` is
+1.2 seconds of hesitation before any aside is spoken; a turn that
+finishes inside it says nothing beside itself, which is what fast
+should sound like. And every turn now stops its narration when it
+ends, not only a failed one: narration of finished work, in front of
+the answer to it, is the same waste without the insult.
+
+`AnswerGap` falls from 2 seconds to 800ms and `AsideGap` from 1.5 to
+400ms. Both were chosen when the narration was unconditional and
+nobody had measured it. The invariant a test holds -- the beat before
+the answer is the longest in the turn, or the answer sounds like more
+narration -- still holds.
+
+**What this does not touch.** Speech-to-text is still batch: the
+recording is posted after the person stops talking, so 1.8 to 3
+seconds are spent on a transcript that streaming would have had ready.
+And a tool-using turn is still two gateway round trips. Those are the
+next two, worth about 2 and 3 seconds, and both are real work rather
+than a constant.
+
 ## A rule that was never in the prompt
 
 Owner, with a screenshot of seven calls read out one by one: *"do you

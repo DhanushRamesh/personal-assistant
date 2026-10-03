@@ -21,6 +21,20 @@ import (
 // thing it was covering the wait for.
 const AsideFor = 30 * time.Second
 
+// AsideAfter : How long a turn may take before anything is said
+// beside it.
+//
+// The aside exists to cover a wait. It was being said whether or not
+// there was one: measured on 3 October 2026, the median turn spent
+// 4.5 seconds after its tool had already returned, and the worst
+// spent 12 -- four sentences of narration in front of an answer that
+// had been ready for ten milliseconds. Insurance against a slow turn
+// had become a tax on every turn.
+//
+// So nothing is said until the turn has actually been slow. Under
+// this it answers in silence, which is what fast should sound like.
+const AsideAfter = 1200 * time.Millisecond
+
 // AsideGap : The least quiet between one thing being said beside a
 // turn and the next.
 //
@@ -28,7 +42,13 @@ const AsideFor = 30 * time.Second
 // apart on their own, so most of the time this costs nothing -- it is
 // there for the round that comes back fast, where two sentences would
 // otherwise arrive as one run-on and sound like a fault.
-const AsideGap = 1500 * time.Millisecond
+//
+// Shortened with AnswerGap on 3 October 2026. Both were set when the
+// narration was unconditional and nobody had measured what it cost;
+// with asides said only on a turn that is actually slow, a second and
+// a half between two of them is a second and a half of a wait that is
+// already too long.
+const AsideGap = 400 * time.Millisecond
 
 // AnswerGap : The least quiet between the last thing said beside a
 // turn and the answer itself.
@@ -37,7 +57,13 @@ const AsideGap = 1500 * time.Millisecond
 // different kind of thing from the narration in front of it. Without
 // it, "looking at your inbox" and "you have ten messages from Amazon"
 // run together and the person cannot tell which part was the answer.
-const AnswerGap = 2 * time.Second
+// A test holds that invariant: this has to be the longest beat in the
+// turn, or the answer sounds like one more piece of narration.
+//
+// Two seconds was chosen for that and paid on every spoken turn that
+// narrated anything. Eight hundred milliseconds separates them
+// audibly and is over a second nobody is waiting through.
+const AnswerGap = 800 * time.Millisecond
 
 // speech : What has already been said beside one turn.
 //
@@ -102,6 +128,15 @@ func (r *Runner) sayAside(ctx context.Context, t *chat.Chat, s *speech, text str
 	go func() {
 		said, done := context.WithTimeout(context.WithoutCancel(ctx), AsideFor)
 		defer done()
+
+		// Nothing at all until the turn has been slow enough to need
+		// covering. A turn that finishes inside this says nothing
+		// beside itself, because there was no silence to fill.
+		select {
+		case <-time.After(AsideAfter):
+		case <-said.Done():
+			return
+		}
 
 		// One at a time, in the order the rounds happened. Held for
 		// as long as the sentence takes to play, so the next round

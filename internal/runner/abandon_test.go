@@ -82,16 +82,40 @@ func TestNothingIsSaidAfterStop(t *testing.T) {
 	}
 }
 
-// A turn that succeeds must still say what it was doing.
-func TestASucceedingTurnStillNarrates(t *testing.T) {
+// A turn slow enough to need covering must still say what it was
+// doing.
+func TestASlowTurnStillNarrates(t *testing.T) {
 	player := &sayings{}
 	r := &Runner{aside: player, logger: quiet()}
 	aloud := &speech{}
 
 	r.sayAside(context.Background(), &chat.Chat{Channel: chat.ChannelVoice}, aloud, "looking at your inbox")
-	time.Sleep(100 * time.Millisecond)
+	time.Sleep(AsideAfter + 300*time.Millisecond)
 
 	if got := player.spoken(); len(got) != 1 {
-		t.Fatalf("a healthy turn did not narrate: %q", got)
+		t.Fatalf("a slow turn did not narrate: %q", got)
+	}
+}
+
+// And a turn that answers quickly says nothing beside itself.
+//
+// The aside is there to cover a wait. Measured on 3 October 2026 it
+// was being said when there was none: the median turn spent four and
+// a half seconds after its tool had already returned, narrating work
+// that was finished, with the answer held behind it.
+func TestAQuickTurnSaysNothingBesideItself(t *testing.T) {
+	player := &sayings{}
+	r := &Runner{aside: player, logger: quiet()}
+	aloud := &speech{}
+
+	r.sayAside(context.Background(), &chat.Chat{Channel: chat.ChannelVoice}, aloud, "looking at your inbox")
+	// The answer arrives before the hesitation is out, which is what
+	// the end of every turn now does.
+	time.Sleep(AsideAfter / 4)
+	aloud.stop()
+	time.Sleep(AsideAfter + 300*time.Millisecond)
+
+	if got := player.spoken(); len(got) != 0 {
+		t.Fatalf("narrated a turn that was already answered: %q", got)
 	}
 }
