@@ -2918,6 +2918,49 @@ events is around 300,000 tokens, so raw was never an option -- the
 model sees counts, never rows.
 
 
+## A dossier, not a summary
+
+Owner, on what the description is for: *"imagine you are a stalker
+and you want to know about me."* The brief was the problem. It said
+*"write a short description, under two hundred words"*, which asks for
+a summary, and a summary is the opposite of what was wanted.
+
+Now: *work out what is true of this person and keeps being true. Not
+a summary. Miss nothing that recurs.*
+
+**Two parts, with fixed headings.**
+
+`WHAT IS SO` is one line per thing, as many as the evidence supports,
+and every line carries how many times and over what stretch of days.
+A line that cannot take a count does not belong in it.
+
+`WHAT THEY ARE LIKE` is prose, under a hundred and fifty words, and
+is the only part allowed to say what the counts merely imply.
+
+Prose was the whole of it before. Prose cannot be checked, so a wrong
+line lives until somebody notices and says so; a line with a count can
+be argued with. The owner chose prose knowing that, and this keeps it
+while giving it something underneath.
+
+**The method is seven generic rules** and names nothing: what repeats
+is a pattern, what co-occurs explains itself, a repeated gap is a
+duration, the first and last of a day is its shape, what stopped
+matters more than what continues, what is missing is a fact, and what
+cannot be made sense of is reported as unexplained rather than guessed
+at or dropped.
+
+**A test fails if the prompt names any kind of thing** -- wifi,
+calendar, music, call, location and so on. It caught one on the first
+run: *"a name they chose for a geofence is not an address"*. Nobody
+would have noticed that by reading it.
+
+**And it says to describe them, not their use of the assistant.**
+What they keep asking about says what they care about; how many times
+they asked, how they phrased it and whether they repeated themselves
+are facts about a tool being used. The fold handles repetition inside
+half an hour, and this covers the rest.
+
+
 ## The narration was the wait it was covering
 
 Owner: *"calculate the full latency... I want ultra low latency."*

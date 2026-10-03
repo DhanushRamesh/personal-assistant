@@ -344,3 +344,55 @@ func TestDifferentThingsAreKept(t *testing.T) {
 		t.Errorf("three different things became %d", len(got))
 	}
 }
+
+// TestThePromptAsksForTwoLayers : The description is read before
+// every answer and acted on, so the part of it that can be checked
+// has to be separable from the part that cannot.
+//
+// Prose alone was the whole of it until 4 October 2026, and a wrong
+// line in prose lives until somebody notices and says so. A line
+// carrying a count can be argued with.
+func TestThePromptAsksForTwoLayers(t *testing.T) {
+	p := profile.Prompt(said(3), "", "", "")
+
+	for _, want := range []string{"WHAT IS SO", "WHAT THEY ARE LIKE"} {
+		if !strings.Contains(p, want) {
+			t.Errorf("the prompt does not ask for the %q part", want)
+		}
+	}
+	if !strings.Contains(p, "cannot put a count on does not belong") {
+		t.Error("a fact without a count is not refused")
+	}
+	// The brief is the job, and "summary" was the old one.
+	if !strings.Contains(p, "Not a summary") {
+		t.Error("the prompt still reads as a request for a summary")
+	}
+}
+
+// TestTheMethodNamesNoKindOfThing : The owner's rule. The incoming
+// events describe themselves, so a prompt that names kinds rots the
+// day a new sender is added.
+func TestTheMethodNamesNoKindOfThing(t *testing.T) {
+	p := profile.Prompt(said(3), "", "", "")
+
+	for _, named := range []string{
+		"wifi", "bluetooth", "calendar", "music", "call.", "location",
+		"reminder", "geofence", "battery", "step",
+	} {
+		if strings.Contains(strings.ToLower(p), named) {
+			t.Errorf("the prompt names a kind of thing: %q", named)
+		}
+	}
+}
+
+// TestUsingTheAssistantIsNotTheSubject : The description said he
+// repeats himself and loses patience, which was an afternoon of
+// timing the same questions. The fold removes the evidence; this
+// says it in words as well, because the fold only catches repetition
+// inside half an hour.
+func TestUsingTheAssistantIsNotTheSubject(t *testing.T) {
+	p := profile.Prompt(said(3), "", "", "")
+	if !strings.Contains(p, "not their use of the assistant") {
+		t.Error("the prompt does not say to describe the person rather than the usage")
+	}
+}
