@@ -485,7 +485,7 @@ func rest(e event.Event) string {
 			// the field the masking does not look at, and get read
 			// out in a room. Nothing is lost -- when the number is
 			// the only identity there is, it is already the value.
-			if v = strings.TrimSpace(v); v != "" && !event.Number(v) {
+			if v = strings.TrimSpace(v); v != "" && !event.Number(v) && !event.Position(v) {
 				out = append(out, name+" "+v)
 			}
 		case float64:

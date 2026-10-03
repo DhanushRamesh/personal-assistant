@@ -22,6 +22,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"strconv"
 	"strings"
 	"time"
 	"unicode/utf8"
@@ -326,6 +327,32 @@ func Readable(value string) string {
 		return UnknownNumber
 	}
 	return value
+}
+
+// Position : Whether a value is a pair of coordinates and nothing
+// else.
+//
+// Kept out of every prompt for the same reason a telephone number is:
+// "twelve point nine six five four, eighty point one two six five"
+// is unsayable, and nobody asked to hear it. The record keeps it --
+// a stay is matched to a place it has been given a name for by being
+// near it, and that needs the decimals.
+func Position(value string) bool {
+	lat, lon, ok := strings.Cut(strings.TrimSpace(value), ",")
+	if !ok {
+		return false
+	}
+	for _, half := range []string{lat, lon} {
+		if _, err := strconv.ParseFloat(strings.TrimSpace(half), 64); err != nil {
+			return false
+		}
+		if !strings.Contains(half, ".") {
+			// Whole numbers are a count or a pair of anything else;
+			// a position written by a phone has decimals.
+			return false
+		}
+	}
+	return true
 }
 
 // Number : Whether a value is a telephone number and nothing else.

@@ -535,7 +535,12 @@ func (h *Handler) named(ctx context.Context, user string) ([]event.Fence, []even
 
 // call : What to call a place, without asking anybody.
 func (h *Handler) call(s event.Stay, fences []event.Fence, known []event.Event) string {
-	if name := event.In(s, fences); name != "" {
+	// The fence first, because a name the person drew themselves
+	// beats one worked out from readings -- but only while the
+	// readings do not contradict it. An exit that never fired leaves
+	// the window open and it will otherwise name everywhere they go
+	// afterwards.
+	if name := event.In(s, fences); name != "" && !event.Elsewhere(s, name, known) {
 		return name
 	}
 	if name := event.Called(s, known); name != "" {

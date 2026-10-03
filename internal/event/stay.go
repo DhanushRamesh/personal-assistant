@@ -196,18 +196,29 @@ func (s Stay) Key() string {
 // and because what the description of somebody should group on is the
 // place rather than the particular readings.
 func (s Stay) Payload(called string) json.RawMessage {
-	// No coordinates. The place already has a name, and a pair of
-	// decimals is the one thing in here nothing downstream can use:
-	// not the counting, which keys on the name, and not the model,
-	// which would read it out. Where it actually happened is still
-	// recoverable from the readings this was worked out from, for as
-	// long as they are kept.
+	// The coordinates stay, and taking them out was a mistake.
+	//
+	// They were removed on 3 October 2026 on the grounds that nothing
+	// downstream could use them: not the counting, which keys on the
+	// name, and not the model, which would read them out. Called()
+	// uses them, and says so in its own comment -- it is how a stay
+	// gets the name of a place the person has already named, by being
+	// near one. Without them every stay failed that test silently,
+	// and naming fell through to the geofence, which is a window in
+	// time and not a place. A fence left open by a missing exit then
+	// put "home" on four hours spent nine kilometres away.
+	//
+	// What was right about the removal was that a coordinate must not
+	// reach a prompt. That is handled where it belongs, next to the
+	// masking of telephone numbers, rather than by deleting the
+	// record.
 	body, err := json.Marshal(struct {
 		Value   string `json:"value"`
 		Minutes int    `json:"minutes"`
+		At      string `json:"at"`
 		Still   bool   `json:"still,omitempty"`
 	}{Value: called, Minutes: int(s.Long().Round(time.Minute).Minutes()),
-		Still: s.Open})
+		At: s.Where(), Still: s.Open})
 	if err != nil {
 		// Unreachable: three strings and an integer.
 		return json.RawMessage(`{"value":""}`)
@@ -726,4 +737,56 @@ func (st Settler) called(ctx context.Context, s Stay, fences []Fence, known []Ev
 		return name
 	}
 	return s.Where()
+}
+
+// Elastic : How many times Near a stay may be from a place of that
+// name and still be taken for it.
+//
+// Generous on purpose. A geofence is drawn by hand and is usually
+// wider than the scatter of a few readings, and a large place -- a
+// campus, a mall -- is more than one stay's worth of ground. This has
+// to be wrong only when somewhere is plainly a different place: nine
+// kilometres, not ninety metres.
+const Elastic = 6
+
+// Elsewhere : Whether a place of this name is known, and this is not
+// it.
+//
+// A Fence is a window in time, not a place: it runs from a
+// place.entered to the place.exited that closes it. When the exit
+// never fires -- and it does not, reliably -- the window stays open
+// and goes on naming whatever the person does next. On 3 October 2026
+// four hours spent nine kilometres from home were recorded as home,
+// because the morning's entry had never been closed.
+//
+// So a fence is believed only until the readings disagree with it.
+// Where a stay named "home" is already on record with coordinates,
+// and this stay is nowhere near it, the fence has outlived its exit
+// and its name is not used.
+//
+// Silent when the place has never been named, which is the honest
+// answer: nothing here knows where it is, so nothing here can
+// contradict the fence.
+func Elsewhere(s Stay, name string, known []Event) bool {
+	for _, e := range known {
+		if e.Kind != Stayed {
+			continue
+		}
+		var into struct {
+			Value string `json:"value"`
+			At    string `json:"at"`
+		}
+		if err := json.Unmarshal(e.Payload, &into); err != nil || into.Value != name {
+			continue
+		}
+		lat, lon, ok := LatLon(into.At)
+		if !ok {
+			continue
+		}
+		if s.Apart(lat, lon) <= Elastic*Near {
+			return false
+		}
+		return true
+	}
+	return false
 }

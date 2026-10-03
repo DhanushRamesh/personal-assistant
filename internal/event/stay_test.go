@@ -476,3 +476,93 @@ func TestTheOpenStayKeepsItsKeyAsItGrows(t *testing.T) {
 		t.Errorf("it did not grow: %v then %v", first.Long(), later.Long())
 	}
 }
+
+// TestAStayKeepsItsCoordinates : they were removed once, on the
+// grounds that nothing used them, and Called used them -- it is how a
+// stay is matched to a place the person has already named. Without
+// them naming fell through to the geofence, which is a window in time
+// rather than a place, and four hours nine kilometres from home were
+// recorded as home.
+func TestAStayKeepsItsCoordinates(t *testing.T) {
+	s := event.Stay{
+		From: time.Date(2026, 10, 3, 12, 20, 0, 0, time.UTC),
+		To:   time.Date(2026, 10, 3, 16, 20, 0, 0, time.UTC),
+		Lat:  12.9654819, Lon: 80.1265254,
+	}
+	var into struct {
+		Value string `json:"value"`
+		At    string `json:"at"`
+	}
+	if err := json.Unmarshal(s.Payload("somewhere"), &into); err != nil {
+		t.Fatalf("payload: %v", err)
+	}
+	if into.At == "" {
+		t.Fatal("a stay with no coordinates cannot be matched to a place")
+	}
+	lat, lon, ok := event.LatLon(into.At)
+	if !ok {
+		t.Fatalf("coordinates did not read back: %q", into.At)
+	}
+	if (event.Stay{Lat: lat, Lon: lon}).Apart(12.9654819, 80.1265254) > event.Near {
+		t.Errorf("read back somewhere else: %f,%f", lat, lon)
+	}
+
+	// And a stay written this way is found again by position, which
+	// is the whole point of keeping them.
+	known := []event.Event{{Kind: event.Stayed, Payload: s.Payload("the office")}}
+	near := event.Stay{Lat: 12.9654900, Lon: 80.1265500}
+	if got := event.Called(near, known); got != "the office" {
+		t.Errorf("Called = %q, want %q", got, "the office")
+	}
+}
+
+// TestACoordinateIsNeverReadOut : what was right about the removal.
+func TestACoordinateIsNeverReadOut(t *testing.T) {
+	for _, c := range []struct {
+		value string
+		want  bool
+	}{
+		{"12.9654819,80.1265254", true},
+		{"12.91100, 80.06241", true},
+		{"home", false},
+		{"", false},
+		{"+919876543210", false},
+		{"3,4", false},
+		{"Simon K. King, Yazin Nizar", false},
+	} {
+		if got := event.Position(c.value); got != c.want {
+			t.Errorf("event.Position(%q) = %v, want %v", c.value, got, c.want)
+		}
+	}
+}
+
+// TestAnOpenFenceDoesNotNameSomewhereElse : the fault reported on 3
+// October 2026. The morning's place.entered "home" was never closed by
+// an exit, so the fence stayed open, and four hours spent nine
+// kilometres away were written down as home.
+func TestAnOpenFenceDoesNotNameSomewhereElse(t *testing.T) {
+	home := event.Stay{Lat: 12.9110135, Lon: 80.0624294,
+		From: time.Date(2026, 10, 3, 2, 0, 0, 0, time.UTC),
+		To:   time.Date(2026, 10, 3, 6, 0, 0, 0, time.UTC)}
+	known := []event.Event{{Kind: event.Stayed, Payload: home.Payload("home")}}
+
+	away := event.Stay{Lat: 12.9654819, Lon: 80.1265254,
+		From: time.Date(2026, 10, 3, 12, 20, 0, 0, time.UTC),
+		To:   time.Date(2026, 10, 3, 16, 20, 0, 0, time.UTC)}
+
+	if !event.Elsewhere(away, "home", known) {
+		t.Error("nine kilometres from home was taken for home")
+	}
+	// The same place, with the scatter a few readings have, is still
+	// that place.
+	same := event.Stay{Lat: 12.9111, Lon: 80.0625,
+		From: away.From, To: away.To}
+	if event.Elsewhere(same, "home", known) {
+		t.Error("home was not recognised as home")
+	}
+	// A place never named cannot be contradicted, and the fence is
+	// all there is.
+	if event.Elsewhere(away, "the office", known) {
+		t.Error("a name never recorded should not be second-guessed")
+	}
+}

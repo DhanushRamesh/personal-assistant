@@ -2232,6 +2232,64 @@ the old behaviour, not a new fault. `%VOIPAT` is written by the same
 task that writes `%VOIPWITH`, so in practice one is never set without
 the other.
 
+## Four hours nine kilometres from home, recorded as home
+
+Owner: *"I went to a place, stayed there for almost 4 hours, but it
+didn't capture place.stayed, and didn't set the geofence value for
+that either."*
+
+The stay was captured. It is the name that was wrong:
+
+    12:20  place.stayed  {"value": "home", "minutes": 240}
+    12:30 - 15:30        12.9654,80.1265   steady for three hours
+    home is              12.9110,80.0624   about nine kilometres away
+
+**Two faults, and the first was made this morning.** `Called` matches
+a stay to a place the person has already named, by being near one, and
+reads the coordinates out of previous stays' `at`. Those were removed
+a few hours earlier on the grounds that *"a pair of decimals is the one
+thing in here nothing downstream can use"*, and `JSON_REMOVE` was run
+over the existing rows. The comment inside `Called` says what `at` is
+for. It was not read.
+
+So `LatLon` failed on every known stay, `Called` returned nothing
+every time, and naming fell through to the only thing left.
+
+**The second fault is what it fell through to.** `In` names a stay
+from a `Fence`, and a Fence is a **window in time** -- from a
+`place.entered` to the `place.exited` that closes it. The exit had not
+fired. An open window has no end, so it went on putting "home" on
+everywhere he went for the rest of the day.
+
+Neither alone would have been visible. Together they renamed an
+afternoon.
+
+**The coordinates are back, and the thing that was right about
+removing them is kept.** A coordinate must not reach a prompt --
+"twelve point nine six five four, eighty point one two six five" is
+unsayable. That belongs next to the masking of telephone numbers, not
+in deleting the record: `event.Position` recognises a pair of
+decimals and `rest` drops it, exactly as `event.Number` drops a
+telephone number.
+
+**And a fence is now believed only until the readings disagree.**
+`Elsewhere` asks whether a place of that name is already on record
+with coordinates and this stay is nowhere near it. If so the fence has
+outlived its exit and its name is not used. Silent when the place has
+never been named, which is honest: nothing here knows where it is, so
+nothing here can contradict the fence.
+
+The tolerance is six times `Near` -- nine hundred metres. A hand-drawn
+geofence is wider than the scatter of a few readings and a campus is
+more than one stay's worth of ground; this has to be wrong only when
+somewhere is plainly somewhere else.
+
+**What this does not do.** Every stay already on record lost its
+coordinates to that `JSON_REMOVE` and cannot be matched against, so
+`Elsewhere` stays silent until home has been recorded again with an
+`at`. The readings are kept seven days, so the stays could be
+recomputed; that is worth doing and has not been.
+
 ## A rule that was never in the prompt
 
 Owner, with a screenshot of seven calls read out one by one: *"do you
