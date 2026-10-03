@@ -3170,6 +3170,49 @@ song is not worth making, and nothing in the code knows that
 `track` means a song.
 
 
+## The sender says whether it is a state
+
+Owner: *"we can add screen lock/unlock event?"*
+
+Nothing in the server needs changing to take a new kind of event.
+That is the whole of the design and it held -- except in one place,
+which the question found.
+
+A screen is unlocked fifty times a day. Under the repeat rule that
+is a nuisance from the first hour, and what stopped the same problem
+for a music player was a list of kinds inside the watcher. A list
+means every toggle the person invents needs a line in this server
+before it behaves, which is exactly the coupling everything else
+here avoids.
+
+**The answer was already in the payload.** A sender describing a
+state writes the state down:
+
+    "playing": "false"      a player
+    "connected": "true"     a radio
+    "locked": "false"       a screen
+
+So a field that is true or false, other than the value itself, says
+the event is a state rather than something that happened. A state
+may be new -- the half worth having -- and may never be frequent,
+because playing, paused, playing is one song and not three of
+anything.
+
+**The value itself does not count.** A thing whose whole value is
+"true" is a sender saying something happened, not a sender
+describing the state of something.
+
+**And the rule it must not swallow:** a missed call carries fields
+too, and none of them says true or false, so the third call from one
+number is still counted. There is a test for each half, because this
+is a rule that could quietly disable the feature it sits inside.
+
+Screen events themselves still need a sender. Nothing here is
+waiting on code: post the kind with a value naming the device and
+`locked` beside it, and the watcher will treat it correctly the
+first time it arrives.
+
+
 ## The narration was the wait it was covering
 
 Owner: *"calculate the full latency... I want ultra low latency."*

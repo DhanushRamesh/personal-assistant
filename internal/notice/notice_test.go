@@ -13,6 +13,14 @@ import (
 
 var at = time.Date(2026, 10, 4, 21, 0, 0, 0, time.UTC)
 
+// toggling : One thing a sender reported as a state, the way a
+// player and a screen do: a value, and a field saying which way it
+// is.
+func toggling(kind, value, field, is string, ago time.Duration) event.Event {
+	payload, _ := json.Marshal(map[string]string{"value": value, field: is})
+	return event.Event{Kind: kind, Payload: payload, OccurredAt: at.Add(-ago)}
+}
+
 // happened : One thing, a given time before now.
 func happened(kind, value string, ago time.Duration) event.Event {
 	payload, _ := json.Marshal(map[string]string{"value": value})
@@ -107,29 +115,82 @@ func TestAPositionReadingIsNeverMentioned(t *testing.T) {
 // It can still be new, which is the half worth having: the owner's
 // own example is hearing a song it has not heard before.
 func TestWorkingMaterialCanBeNewButNotFrequent(t *testing.T) {
-	// The same artist toggling, five times in ten minutes, and
-	// familiar from a month of it.
 	var all []event.Event
 	for d := 1; d <= 20; d++ {
-		all = append(all, happened(event.State, "A familiar artist", time.Duration(d)*8*time.Hour))
+		all = append(all, toggling(event.State, "A familiar artist", "playing", "true", time.Duration(d)*8*time.Hour))
 	}
-	var toggling []event.Event
+	var toggles []event.Event
 	for i := 0; i < 5; i++ {
-		toggling = append(toggling, happened(event.State, "A familiar artist", time.Duration(i)*2*time.Minute))
+		is := []string{"true", "false"}[i%2]
+		toggles = append(toggles, toggling(event.State, "A familiar artist", "playing", is, time.Duration(i)*2*time.Minute))
 	}
-	all = append(all, toggling...)
+	all = append(all, toggles...)
 
-	for _, c := range notice.Find(toggling, all, at) {
+	for _, c := range notice.Find(toggles, all, at) {
 		if c.Reason == notice.Often {
 			t.Errorf("a pause button was counted as something happening a lot: %+v", c)
 		}
 	}
 
 	// But an artist never reported before is news.
-	fresh := []event.Event{happened(event.State, "Somebody new", 0)}
+	fresh := []event.Event{toggling(event.State, "Somebody new", "playing", "true", 0)}
 	got := notice.Find(fresh, append(all, fresh...), at)
 	if len(got) != 1 || got[0].Reason != notice.Novel {
 		t.Fatalf("a first hearing was not noticed: %+v", got)
+	}
+}
+
+// TestANewSenderNeedsNoCodeHere : The owner, asking whether screen
+// lock and unlock could be added: it must cost nothing in this
+// server.
+//
+// A screen is unlocked fifty times a day, so under the repeat rule
+// it would be a nuisance from the first hour. What stops that used
+// to be a list of kinds in this package, which meant every toggle
+// the person invented needed a line here before it behaved. It is
+// read from the payload now: a field that is true or false says
+// what the event is, and the sender has already written it.
+func TestANewSenderNeedsNoCodeHere(t *testing.T) {
+	var all []event.Event
+	for d := 1; d <= 10; d++ {
+		all = append(all, toggling("screen.changed", "pixel 7", "locked", "false", time.Duration(d)*6*time.Hour))
+	}
+	var unlocks []event.Event
+	for i := 0; i < 6; i++ {
+		is := []string{"false", "true"}[i%2]
+		unlocks = append(unlocks, toggling("screen.changed", "pixel 7", "locked", is, time.Duration(i)*90*time.Second))
+	}
+	all = append(all, unlocks...)
+
+	for _, c := range notice.Find(unlocks, all, at) {
+		if c.Reason == notice.Often {
+			t.Errorf("checking a phone six times was called news: %+v", c)
+		}
+	}
+}
+
+// TestSomethingThatHappenedIsStillCounted : The rule must not
+// swallow the thing it was built for. A missed call carries fields
+// too, and none of them says true or false.
+func TestSomethingThatHappenedIsStillCounted(t *testing.T) {
+	history := []event.Event{
+		happened("call.missed", "+919000000001", 12*time.Minute),
+		happened("call.missed", "+919000000001", 6*time.Minute),
+		happened("call.missed", "+919000000001", 0),
+	}
+	got := notice.Find(history[2:], history, at)
+	if len(got) != 1 || got[0].Reason != notice.Often {
+		t.Fatalf("the third call stopped being counted: %+v", got)
+	}
+}
+
+// TestTheValueItselfIsNotAState : A sender whose whole value is
+// "true" is saying something happened, not describing a state of
+// something.
+func TestTheValueItselfIsNotAState(t *testing.T) {
+	payload, _ := json.Marshal(map[string]string{"value": "true"})
+	if notice.Toggling(payload) {
+		t.Error("a value of true was read as a state field")
 	}
 }
 

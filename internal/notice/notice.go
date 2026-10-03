@@ -121,6 +121,7 @@ func Find(arrived, history []event.Event, now time.Time) []Candidate {
 	lately := map[string]int{}
 	latest := map[string]time.Time{}
 	detail := map[string]string{}
+	state := map[string]bool{}
 	order := []string{}
 	for _, e := range arrived {
 		if skip(e) {
@@ -129,6 +130,9 @@ func Find(arrived, history []event.Event, now time.Time) []Candidate {
 		label := Label(e)
 		if _, had := latest[label]; !had {
 			order = append(order, label)
+		}
+		if Toggling(e.Payload) {
+			state[label] = true
 		}
 		if e.OccurredAt.After(latest[label]) || detail[label] == "" {
 			latest[label] = e.OccurredAt
@@ -150,7 +154,7 @@ func Find(arrived, history []event.Event, now time.Time) []Candidate {
 	out := make([]Candidate, 0, len(order))
 	for _, label := range order {
 		switch {
-		case lately[label] >= Insistent && countable(label):
+		case lately[label] >= Insistent && !state[label]:
 			out = append(out, Candidate{
 				Label: label, Reason: Often,
 				Times: lately[label], Before: seen[label] - lately[label],
@@ -190,18 +194,53 @@ func skip(e event.Event) bool {
 	return event.Position(valueOf(e.Payload))
 }
 
-// countable : Whether several of these in a row mean it is
-// happening a lot.
+// Toggling : Whether a sender is reporting a state rather than
+// something that happened.
 //
-// Working material is a state rather than an occurrence. A player
-// reporting that it is playing, then paused, then playing is one
-// song being listened to, not three of anything, and counting the
-// toggles would have the assistant remark on somebody using a pause
-// button. Such a thing can still be new -- which is the half worth
-// having -- but it cannot be frequent.
-func countable(label string) bool {
-	kind, _, _ := strings.Cut(label, " ")
-	return !event.Working(kind)
+// A state is not an occurrence. A player reporting that it is
+// playing, then paused, then playing is one song being listened to,
+// not three of anything, and counting the toggles would have the
+// assistant remark on somebody using a pause button. A screen
+// reporting locked and unlocked fifty times a day is the same thing
+// again. Such a sender can still report something new -- which is
+// the half worth having -- but it can never be frequent.
+//
+// Read from the payload rather than from a list of kinds here. The
+// senders describe themselves and more of them are coming; a list
+// means every new toggle the person adds needs a line in this
+// server before it stops being a nuisance, which is exactly the
+// coupling the rest of this design avoids. A field that is true or
+// false says what the event is, and the sender has already written
+// it: playing, connected, locked.
+//
+// The value itself does not count. A thing whose whole value is
+// "true" is a sender saying something happened, not a sender
+// describing a state of something.
+func Toggling(payload json.RawMessage) bool {
+	if len(payload) == 0 {
+		return false
+	}
+	var fields map[string]any
+	if err := json.Unmarshal(payload, &fields); err != nil {
+		return false
+	}
+	for name, said := range fields {
+		if name == "value" {
+			continue
+		}
+		switch v := said.(type) {
+		case bool:
+			return true
+		case string:
+			if strings.EqualFold(strings.TrimSpace(v), "true") ||
+				strings.EqualFold(strings.TrimSpace(v), "false") {
+				return true
+			}
+		default:
+			_ = v
+		}
+	}
+	return false
 }
 
 // valueOf : The value a sender gave, if it gave one.
