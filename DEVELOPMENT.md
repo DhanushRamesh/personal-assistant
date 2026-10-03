@@ -2284,6 +2284,73 @@ whether it *says* "shall I put that in?", and whether it asks for a
 spelling -- because the harness measures which tool is reached for,
 not what is said. Those two need a conversation to judge.
 
+## What is playing, without 240 events an hour
+
+Owner, 3 October 2026: *"now location, wifi, bluetooth, calls (meet
+and cellular) are captured right. Now I want the Spotify playing --
+what I play, when I play, when I stop."*
+
+**Two senders, and they must not write the same kind.** The owner
+chose both the phone and the Spotify API. If both emitted
+`music.played` every track would be counted twice, so they are given
+different jobs:
+
+| kind | from | job |
+| --- | --- | --- |
+| `music.started`, `music.stopped` | the phone's notification | the moments, exact to the second |
+| `music.played` | the Web API | the record: every device, real metadata |
+| `music.session` | folded from the record | the history |
+
+**`value` is the artist, not the track.** A title is unique and a
+unique label is noise -- the rule that keeps `location.fix` off the
+events tool and the one `valueOf` got wrong three times. Counting on
+the artist gives "Ilaiyaraaja: 6 times, usually around 9pm"; counting
+on the title gives six hundred things that happened once.
+
+**The volume is the whole design, for the third time.** Two hours a
+day is about 34 tracks, 12,000 rows a year. `music.played` will be
+pruned at seven days and hidden from the events tool exactly as the
+position readings are, and only the folded session is kept. Readings
+are working material; sessions are the history.
+
+**What the notification actually says, measured rather than assumed.**
+A discovery profile wrote one line per notification and the owner
+played, paused for half a minute, resumed and stopped:
+
+    Created  Face to Face  Daft Punk  Liked Songs  true   <- playing
+    Created  Face to Face  Daft Punk  Liked Songs  false  <- paused, and it stayed false
+    Created  Face to Face  Daft Punk  Liked Songs  true   <- resumed
+    Cancelled                                             <- stopped
+
+Three things came out of it, two of which contradicted the plan.
+
+`%antitle` is the **track**, `%antext` the **artist** and `%ansubtext`
+where it came from. Cleanly split, nothing to parse.
+
+`%anmediabutton_names()` is **not** the transport. It returns the
+custom actions -- toggle shuffle, start radio -- and never Play or
+Pause, so the state signal it was chosen for does not exist.
+
+`%anpersistent` **is** that signal. It held false across the whole
+pause and flipped back on resume. And `Cancelled` fires only at a real
+stop: never at a track change, which the first sample proves, where
+false was followed straight by the next track.
+
+**Fourteen notifications for two tracks.** Spotify rewrites its
+notification about seven times a song, so a two-hour session would
+fire the profile some 240 times. The phone therefore reports edges
+only, guarded by a `%MUSICON` flag: `music.started` on the first
+`persistent=true` while nothing is playing, `music.stopped` on
+`Cancelled`. Two events a session instead of 240, and the track by
+track record is the API's job.
+
+**Still to do.** The API half needs an app registered at Spotify and
+an OAuth link mirroring `internal/google`; the 2026 quota change was
+checked and does not restrict a one-user app. Then the poll, the
+prune, the fold, and a tool for what is playing this second -- which
+is a tool and not a poll, because the player endpoint rate-limits at
+anything under about fifteen seconds.
+
 ## The profile is taught a method, not a list of patterns
 
 Owner, 2 October 2026, on what the counted half is for: *"when I leave
