@@ -263,7 +263,17 @@ func (p *Environment) Run(ctx context.Context, req environment.Request) (<-chan 
 		// visible anywhere else: a stream that is read and put back
 		// together looks exactly like a reply that arrived whole.
 		var pieces int
+		// When the first fragment arrived, which splits a call into
+		// the part spent thinking and the part spent writing. The
+		// two behave nothing alike -- one grows with how hard the
+		// question is, the other with how long the answer is -- and
+		// one duration for the whole call hides which of them is
+		// costing the wait.
+		var firstPiece time.Duration
 		got, err := p.chat(ctx, req, func(text string) {
+			if pieces == 0 {
+				firstPiece = time.Since(started)
+			}
 			pieces++
 			// Counted either way, but only passed on when the
 			// caller said this round's answer is the one that
@@ -296,6 +306,7 @@ func (p *Environment) Run(ctx context.Context, req environment.Request) (<-chan 
 				slog.Int("in_tokens", got.Usage.Input),
 				slog.Int("out_tokens", got.Usage.Output),
 				slog.Duration("after", time.Since(started)),
+				slog.Duration("first_piece_after", firstPiece),
 				slog.Any("tools", names),
 				slog.String("saying", got.Text))
 
@@ -319,6 +330,7 @@ func (p *Environment) Run(ctx context.Context, req environment.Request) (<-chan 
 			slog.Int("in_tokens", got.Usage.Input),
 			slog.Int("out_tokens", got.Usage.Output),
 			slog.Duration("after", time.Since(started)),
+			slog.Duration("first_piece_after", firstPiece),
 			slog.Int("reply_bytes", len(got.Text)))
 		send(ctx, ch, environment.Final(got.Text))
 	}()
