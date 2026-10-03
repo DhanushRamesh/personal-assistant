@@ -713,10 +713,7 @@ func (st Settler) Settle(ctx context.Context, userID string, now time.Time) ([]N
 // those, the coordinates, which name nothing but group correctly and
 // can be corrected later.
 func (st Settler) called(ctx context.Context, s Stay, fences []Fence, known []Event) string {
-	if name := In(s, fences); name != "" {
-		return name
-	}
-	if name := Called(s, known); name != "" {
+	if name := Names(s, fences, known); name != "" {
 		return name
 	}
 	if st.Naming == nil {
@@ -737,6 +734,25 @@ func (st Settler) called(ctx context.Context, s Stay, fences []Fence, known []Ev
 		return name
 	}
 	return s.Where()
+}
+
+// Names : What to call a stay, from the places the person drew and the
+// places they have already named. Empty when neither knows.
+//
+// One function, because there were two. The greeting had its own copy
+// of this and so did the settler, and on 3 October 2026 a fix went
+// into the copy that does not write anything down: the stays kept the
+// wrong name and the change looked like it had failed. Anything that
+// names a stay calls this.
+func Names(s Stay, fences []Fence, known []Event) string {
+	// The fence first, because a name somebody drew themselves beats
+	// one worked out from readings -- but only while the readings do
+	// not contradict it. An exit that never fired leaves the window
+	// open, and it will otherwise name everywhere they go afterwards.
+	if name := In(s, fences); name != "" && !Elsewhere(s, name, known) {
+		return name
+	}
+	return Called(s, known)
 }
 
 // Elastic : How many times Near a stay may be from a place of that

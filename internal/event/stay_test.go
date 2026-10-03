@@ -566,3 +566,33 @@ func TestAnOpenFenceDoesNotNameSomewhereElse(t *testing.T) {
 		t.Error("a name never recorded should not be second-guessed")
 	}
 }
+
+// TestNamesIsTheOnlyPlaceAStayIsNamed : there were two copies of this,
+// and the fix for an open fence went into the one that does not write
+// anything down. The stays kept the wrong name and the change looked
+// like it had failed.
+func TestNamesIsTheOnlyPlaceAStayIsNamed(t *testing.T) {
+	home := event.Stay{Lat: 12.9110135, Lon: 80.0624294,
+		From: time.Date(2026, 10, 2, 6, 0, 0, 0, time.UTC),
+		To:   time.Date(2026, 10, 3, 11, 0, 0, 0, time.UTC)}
+	known := []event.Event{{Kind: event.Stayed, Payload: home.Payload("home")}}
+
+	// A fence entered this morning and never closed.
+	open := []event.Fence{{Name: "home",
+		From: time.Date(2026, 10, 3, 2, 0, 0, 0, time.UTC),
+		To:   time.Date(2026, 10, 4, 0, 0, 0, 0, time.UTC)}}
+
+	away := event.Stay{Lat: 12.9654819, Lon: 80.1265254,
+		From: time.Date(2026, 10, 3, 12, 20, 0, 0, time.UTC),
+		To:   time.Date(2026, 10, 3, 16, 20, 0, 0, time.UTC)}
+	if got := event.Names(away, open, known); got != "" {
+		t.Errorf("an open fence named somewhere nine kilometres away %q", got)
+	}
+
+	// And the fence still names the place it is actually about.
+	athome := event.Stay{Lat: 12.9111, Lon: 80.0625,
+		From: away.From, To: away.To}
+	if got := event.Names(athome, open, known); got != "home" {
+		t.Errorf("Names at home = %q, want home", got)
+	}
+}

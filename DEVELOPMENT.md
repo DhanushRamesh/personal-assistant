@@ -2284,11 +2284,32 @@ geofence is wider than the scatter of a few readings and a campus is
 more than one stay's worth of ground; this has to be wrong only when
 somewhere is plainly somewhere else.
 
-**What this does not do.** Every stay already on record lost its
-coordinates to that `JSON_REMOVE` and cannot be matched against, so
-`Elsewhere` stays silent until home has been recorded again with an
-`at`. The readings are kept seven days, so the stays could be
-recomputed; that is worth doing and has not been.
+**There were two of these functions, and the fix went into the wrong
+one.** `Settler.called` names the stays that get written; the greeting
+had its own copy in `presence.go`. The guard went into the copy that
+writes nothing, so the stays kept the wrong name and the change looked
+like it had failed. `event.Names` is now the only place a stay is
+named and both call it.
+
+**No recompute was needed.** `Settle` works the stays out again from
+the readings on every fix and amends what it wrote before -- the
+comment on it says why there is no cursor: *"a cursor that is ever
+wrong loses a day of somebody's life quietly."* One location fix after
+the fix shipped, the afternoon corrected itself:
+
+    before   17:50  {"value": "home",               "minutes": 240}
+    after    17:50  {"value": "Ammaniammal School", "minutes": 185}
+             21:15  {"value": "Muthu Supermarket",  "minutes": 10}
+             21:35  {"value": "home", "still": true, "minutes": 35}
+
+185 minutes is what the raw readings say to the minute. The 240 was
+the open fence merging the afternoon into the stay at home. The
+ten-minute stop on the way back had not been recorded at all, and is a
+supermarket -- which is the kind of thing worth being asked about.
+
+Both new names came from Geoapify, which is what the naming fallback
+is for: no geofence there, so the name comes from the coordinates --
+and the coordinates had to be in the payload for any of it to work.
 
 ## A rule that was never in the prompt
 
