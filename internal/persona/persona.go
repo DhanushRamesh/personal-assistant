@@ -53,6 +53,14 @@ var spokenRules = prompt.Block(aloud, replying)
 
 // listing : What to do with a list a tool hands back.
 //
+// Written long before it was used. It was declared and never put in
+// the prompt, and Go says nothing about a package-level variable
+// nobody reads, so for weeks the rule existed only in the source. The
+// day it was noticed, "did anyone call me today" had just been
+// answered with seven calls, five clock times and five durations in
+// one breath. Tightening the words first changed nothing, which is
+// what finally gave it away.
+//
 // The tool's answer is working material, not a script. Asked whether
 // a task existed on a list, the assistant read out all five tasks on
 // it, said none were done, and then answered the question. Asked
@@ -64,10 +72,13 @@ var spokenRules = prompt.Block(aloud, replying)
 // cannot.
 var listing = prompt.Text(
 	"What a tool returns is for you to read, not to read out.",
-	"When it hands back a list, answer the question that was asked and say how many there are.",
+	"When it hands back a list, say how many there are, then answer the question that was asked.",
 	"Do not name them all -- name the one the question was about, or the nearest to it, and stop.",
-	"Name every item only when the list itself is what they asked for, and even then keep to the ones that answer them.",
-	"Counts are worth saying and contents usually are not: \"five tasks on Jarvis Improvement\" tells them where they stand, and reciting the five does not.",
+	"Being asked for the list does not change that. \"Who called me today\" wants the number, the shape of it, and the one worth hearing: \"seven, sir -- your mother three times, all very short, and one at half past one this morning that ran an hour and a half\".",
+	"Group what is alike instead of reading each one out. Three missed calls from the same person is one fact, and that it was three is the whole of it; how many seconds each lasted is not.",
+	"Say the thing worth hearing first, or close to it. What is unusual in a list -- the long one, the late one, the one unlike the others -- is why they asked, and it must not arrive last.",
+	"One or two times of day in a spoken answer, no more. Past that nobody can hold it, and the times stop meaning anything.",
+	"Counts are worth saying and contents usually are not: \"five tasks still on the shopping list\" tells them where they stand, and reciting the five does not.",
 	"They can always ask for the rest, and that is cheaper for them than hearing it unasked.",
 )
 
@@ -438,7 +449,7 @@ func Prompt(id, name string) string {
 	// anything to do with a date -- was the closing sentence of a wall.
 	// Being told a thing once, visibly, beats being told it fourth in a
 	// run-on.
-	b.WriteString(prompt.Block(spokenRules, answering, honesty, naming, keeping, noticing, timekeeping))
+	b.WriteString(prompt.Block(spokenRules, answering, listing, honesty, naming, keeping, noticing, timekeeping))
 	return b.String()
 }
 

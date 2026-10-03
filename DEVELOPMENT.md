@@ -2232,6 +2232,43 @@ the old behaviour, not a new fault. `%VOIPAT` is written by the same
 task that writes `%VOIPWITH`, so in practice one is never set without
 the other.
 
+## A rule that was never in the prompt
+
+Owner, with a screenshot of seven calls read out one by one: *"do you
+think the response is apt, like listen friendly?"*
+
+It was not. Five clock times, five durations, seventy-one words, and
+the only thing worth saying -- an hour-and-a-half call at half past
+one in the morning -- arrived last, after three six-second misses from
+the same person enumerated individually.
+
+**`persona.listing` already forbade exactly that**, and had since it
+was written: *what a tool returns is for you to read, not to read
+out*. So the wording was tightened -- group what is alike, say the
+unusual one first, one or two clock times at most -- and measured
+against a new eval holding that day's seven calls.
+
+**Nothing changed. 0 of 3 before, 0 of 3 after.** Which is what gave
+it away: `listing` was declared and never passed to `prompt.Block`.
+Go says nothing about a package-level variable nobody reads, so the
+rule had existed only in the source, for weeks, while every spoken
+answer went out without it.
+
+Added to the block: **3 of 3**.
+
+**And the dead code was hiding a broken rule.** The moment it reached
+the prompt, `TestNoAssistantNameIsHardcoded` failed: the example in it
+read *"five tasks on Jarvis Improvement"*. The one rule this file
+states three times, broken in the source for weeks, invisible because
+the test could only see what the prompt contained.
+
+**A note on measuring against a model.** The honesty eval dropped to 6
+of 8 on the run after this change and was 8 of 8 on the next two, with
+the same code. It was variance, and it was nearly recorded as a
+regression. One run is not a measurement -- the same lesson the tool
+evals gave on 3 October, and it applies to every number in this file
+that came from asking a model.
+
 ## Anything put in the future, and a name that is not guessed into it
 
 Owner, 3 October 2026: *"whenever I say something like that is gonna
