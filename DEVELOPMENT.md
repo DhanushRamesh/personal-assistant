@@ -2746,6 +2746,54 @@ removed for the right reason. `submit` makes a direct chat, not a
 voice one, which is the other thing the first version got wrong.
 
 
+## Haiku, measured on the voice path
+
+The same five questions, said aloud, on claude-haiku-4-5 set against
+the Home Assistant client in Settings. The per-round numbers are the
+provider's own `first_piece_after`, logged for this.
+
+| asked | pre-streaming | sonnet | haiku |
+| --- | --- | --- | --- |
+| what reminders do I have | 10.44s | 6.66s | 5.31s |
+| events in September 2026 | 9.66s | 12.97s | 8.06s |
+| nice day tomorrow | 14.04s | 9.89s | 10.45s |
+| the platform I'm hearing | 13.42s | 13.30s | 7.39s |
+
+**Its virtue is steadiness more than speed.** The answer round's time
+to first token across the five: 2.02, 2.28, 2.66, 2.59, 2.10 -- a
+spread of six tenths of a second. Sonnet's equivalents ranged from
+2.16 to 7.26. Round one averages 3.11s against 4.18s. Over the four
+comparable questions the turn fell from 10.71s to 7.80s.
+
+**Mouth to speaker barely moved, and the reason is worth keeping.**
+
+| | sonnet | haiku |
+| --- | --- | --- |
+| reminders | 7.40s | 5.68s |
+| September | 12.47s | 7.50s |
+| nice day | 3.62s | 10.19s |
+| platform | 11.03s | 7.51s |
+| mean | 8.63s | 7.72s |
+
+*Nice day* spoke at 3.62 seconds on Sonnet because an 83-character
+narration cleared Home Assistant's sixty-character gate and covered
+the whole tool-running period. With the narration gone the speaker
+waits for the answer, and the head start over the four is now between
+0.11 and 0.93 seconds. A covered wait was traded for an honest one.
+The mean improved by nine tenths of a second, not by three.
+
+**The send-back is now the largest single cost.** Two of the five
+answered without touching a tool, were sent back to look at them, and
+paid for a whole extra round: 2.78s on *nice day*, 3.13s on *tell me
+something about today*. Both then called the right tool, so the guard
+earns its place -- but it fires on something like two turns in five
+and costs about three seconds when it does, which is more than the
+whole difference between the two models.
+
+Neither send-back was spoken, and no narration was spoken. Both fixes
+from earlier in the day held.
+
+
 ## The narration was the wait it was covering
 
 Owner: *"calculate the full latency... I want ultra low latency."*
