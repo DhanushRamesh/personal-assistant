@@ -142,6 +142,17 @@ var cases = []eval{
 	{Say: "I am thinking of going to Chennai next weekend", Tool: []string{"calendar_events"}},
 	{Say: "is anything happening on the 26th", Tool: []string{"calendar_events"}},
 
+	// Something placed in the future, which is now offered for the diary
+	// whatever kind of thing it is. Reading the diary, looking the name
+	// up and writing it down are all right first moves; saying nothing
+	// is not.
+	{Say: "I am having dinner with Alekhya tomorrow",
+		Tool: []string{"calendar_events", "calendar_add", "memory_search", "conversation_find"}},
+	{Say: "the plumber is coming on Thursday morning",
+		Tool: []string{"calendar_events", "calendar_add", "calendar_free"}},
+	{Say: "I have to submit the form before Friday",
+		Tool: []string{"calendar_events", "calendar_add", "task_add", "task_lists", "task_list"}},
+
 	// What the devices reported. The first of these is the one that
 	// failed: asked who they had spoken to, the assistant said it had no
 	// tool that reads call logs, because the description listed places

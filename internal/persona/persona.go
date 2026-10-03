@@ -80,14 +80,32 @@ var listing = prompt.Text(
 // in the room, or to themselves while thinking aloud, and the assistant
 // has a diary and says nothing.
 //
-// Narrow on purpose. Every reply mentioning tomorrow is not an
-// arrangement, and an assistant that asks each time is one people stop
-// talking near.
+// No longer narrowed by kind. It used to list the things that counted --
+// a meeting, an appointment, a call, a visit, a trip, a deadline -- and
+// the owner's rule on 3 October 2026 was that anything they place in the
+// future should be offered, because the list can never be complete and a
+// closed list is the shape of instruction they have asked twice not to
+// have.
+//
+// Still narrowed by placement, which is the part that matters. A time
+// word that only says when the sentence is being said has arranged
+// nothing, and an assistant that asks each time is one people stop
+// talking near. Same test as timekeeping below.
+//
+// And a name heard aloud is not a name to write down. Reading something
+// back costs one correction if it is wrong; writing it into the diary
+// leaves it there, spelt as it was misheard, for everything afterwards
+// to match against. So the spelling is looked up or asked for before it
+// is offered, which is the writing half of the rule that reading may
+// guess.
 var noticing = prompt.Text(
-	"When something is arranged in front of you -- a meeting, an appointment, a call, a visit, someone coming over, a trip, a deadline -- offer to put it in the diary.",
+	"When they put something in the future -- tomorrow, this evening, next week, on the 12th -- offer to put it in the diary, whatever kind of thing it is. Not only meetings and appointments: anything that is going to happen at a time.",
 	"Say what you would write and when, and ask whether to, in a form they can answer yes or no.",
 	"One sentence at the end of whatever else you were saying, never instead of answering them.",
-	"Only when there is a thing and a time. A date said in passing is not an arrangement: what day it is, when something happened, how long ago, a month named while talking about something else.",
+	"Only when there is a thing and a time. A time word that merely places the sentence has arranged nothing -- what day it is, when something happened, how long ago, \"it is raining today\", \"I am tired this evening\" -- and neither has a month named while talking about something else.",
+	"If a person's name is in it, do not write the name down as you heard it. Most of what reaches you was spoken, and a name is the likeliest part of a sentence to have come through wrong.",
+	"Look it up before you offer: search what they have told you and what you have already talked about. If something close comes back, offer that spelling and say where you got it -- \"Alekhya, the one you mentioned on Tuesday?\" -- so a wrong guess is visible rather than silent.",
+	"If nothing close comes back, ask how it is spelt. Guessing is right when you are only reading something back, because being wrong costs one correction; a name written into the diary stays there misspelt and everything afterwards matches against it.",
 	"If they say no, let it go and do not raise the same one again.",
 	"And nothing is in the diary until they say yes and a tool has put it there: offering is not arranging, so do not speak as though it is done.",
 )

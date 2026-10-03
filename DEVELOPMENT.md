@@ -2232,6 +2232,58 @@ the old behaviour, not a new fault. `%VOIPAT` is written by the same
 task that writes `%VOIPWITH`, so in practice one is never set without
 the other.
 
+## Anything put in the future, and a name that is not guessed into it
+
+Owner, 3 October 2026: *"whenever I say something like that is gonna
+happen in future, like tomorrow or next week or today evening, Jarvis
+should automatically ask should I add it as an event. And if it
+involves something like a name, it should refer to the names or proper
+nouns said before and ask if that's what I'm referring to, else it
+should ask me the spelling."*
+
+**The list of kinds is gone.** `noticing` used to name what counted --
+a meeting, an appointment, a call, a visit, a trip, a deadline -- and
+that list can never be complete. It is the shape of instruction the
+owner has now asked twice not to have: *"keep the instruction generic,
+because I'm going to add many events now and each one cannot be
+instructed."* It reads *anything that is going to happen at a time*.
+
+**What is kept is the other narrowing, and it is the one doing the
+work.** A time word that merely places the sentence has arranged
+nothing. The three the eval holds -- "it is raining here today", "I am
+a bit tired this evening", "that took longer than I expected" -- are
+the same three that `timekeeping` and `calendar_events` are measured
+against, and they still pass after the widening. That is the whole
+risk of this change and it is the thing that was checked.
+
+**A name heard aloud is not a name to write down.** The existing rule
+is that guessing is right when reading and asking is right when
+changing, because being wrong while reading costs one correction. A
+name written into the diary is not one correction: it stays there
+spelt as it was misheard, and everything afterwards matches against
+it.
+
+So before offering, the spelling is looked up in what the person has
+said before -- `memory_search` and `conversation_find`, which exist --
+and offered back with where it came from: *"Alekhya, the one you
+mentioned on Tuesday?"* With nothing close, it asks how it is spelt
+rather than guessing.
+
+**Looked up, not listed.** The obvious source was `internal/vocabulary`,
+which already holds every proper noun from the past week, spelt as the
+model believes it is spelt. It was offered as a tool and declined in
+favour of searching what is already there: nothing new to build, and
+no second place for names to live. The cost is that it is a search
+over prose rather than a lookup in a list, so it is slower and will
+sometimes miss.
+
+**69 of 69 on the eval, twice.** Three cases added: dinner with a
+person tomorrow, the plumber on Thursday, a form due before Friday.
+What the eval cannot see is the part the owner actually asked for --
+whether it *says* "shall I put that in?", and whether it asks for a
+spelling -- because the harness measures which tool is reached for,
+not what is said. Those two need a conversation to judge.
+
 ## The profile is taught a method, not a list of patterns
 
 Owner, 2 October 2026, on what the counted half is for: *"when I leave
