@@ -29,11 +29,15 @@ func saidWhile(address string) Property {
 	}
 	return Property{
 		Type: "string",
-		Description: "One short sentence, present tense, saying what you are about to do with this call. " +
+		Description: "One sentence, present tense, saying what you are about to do with this call. " +
 			"It is read aloud while the call runs, so the person is not waiting in silence. " +
-			"Under ten words, no question, and name the thing rather than the tool: " +
-			strconv.Quote("creating the event on the twenty-second of August"+end) + ", " +
-			strconv.Quote("looking through your reminders"+second) + ". " +
+			"Name what you are reading or changing and what it is about, in twelve to twenty words. " +
+			"No question, and name the thing rather than the tool: " +
+			strconv.Quote("creating the event on the twenty-second of August, at half past six"+end) + ", " +
+			strconv.Quote("reading your diary for tomorrow morning and the rest of the week"+second) + ". " +
+			"Never a restatement of what was asked and never what you are about to find: " +
+			strconv.Quote("checking what you are listening to") + " in front of an answer about " +
+			"what they are listening to tells them nothing they did not just say. " +
 			"It is not the answer and not a claim that anything worked.",
 	}
 }

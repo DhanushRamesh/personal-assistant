@@ -318,6 +318,14 @@ func (r *Runner) consume(runCtx, ctx context.Context, t *chat.Chat, systemPrompt
 		// for nine seconds reads as having stopped; the gaps in
 		// sayAside are what keep several of them from running
 		// together.
+		//
+		// Announced as well as said aloud, which is what puts it in
+		// front of the answer on a voice turn: Home Assistant speaks
+		// everything written to the stream, so this is the first
+		// clause the person hears while the tools run.
+		if said != "" {
+			r.announce(t.ID, environment.Update(said))
+		}
 		if r.sayAside(ctx, t, aloud, said) {
 			spoke = true
 		}

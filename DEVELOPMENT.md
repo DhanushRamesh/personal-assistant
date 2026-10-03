@@ -2597,6 +2597,61 @@ did the person wait, and where in the turn did the waiting end -- and
 collapsing them into one would make the timeline disagree with itself.
 
 
+## Turning the aside off did not stop it being recited
+
+Owner, after four questions re-run as an audit: the narration was
+still coming out of the speaker. `say_aside = false` stopped the
+announce player; it did not stop the sentence reaching Piper, because
+Home Assistant speaks everything written to the chat stream and the
+narration was being written to it as progress. What Piper said:
+
+    "I'll check what you're currently listening to.
+     You have not been playing any music today, sir."
+
+**There were two narrations, and the wrong one was being spoken.**
+`saying` is an argument on every tool: described, exampled, under a
+length, taken off the call before it runs. Beside it, the model also
+writes free prose, and that prose is what the provider was sending on
+as progress. Measured over the four turns, the prose was a restatement
+of the question every time -- *"I need to look at what you have
+planned for tomorrow before I can answer that, sir"* in front of an
+answer about tomorrow.
+
+So the prose is dropped, kept only in the log, and `saying` is
+announced instead.
+
+**The audit, four questions asked before and after:**
+
+| asked | before | now | first voice | answer proper |
+| --- | --- | --- | --- | --- |
+| what reminders do I have | 10.44s | 6.66s | 6.70s | 6.28s |
+| events in September 2026 | 9.66s | 12.97s | 12.13s | 11.99s |
+| nice day tomorrow | 14.04s | 9.89s | 3.28s | 7.02s |
+| the platform I'm hearing | 13.42s | 13.30s | 10.74s | 10.63s |
+
+Totals are not comparable -- the replies came back different lengths,
+and September answered with 382 characters against 253 before, which
+is most of why it got slower. First voice is the column that matters
+and has no before, because the number did not exist.
+
+**`STREAM_RESPONSE_CHARS = 60` decides every row.** Home Assistant
+will not start Piper until the deltas it has accumulated exceed sixty
+characters, and the count only grows when something arrives. The
+narration in front of *nice day* was 83 characters, cleared the bar on
+its own, and bought 6.6 seconds. The one in front of *September* was
+44, cleared nothing, and the speaker waited for the answer: 12.13s
+against an answer that began at 11.99s. A narration under sixty
+characters buys nothing at all.
+
+**Which leaves 132 examples in the wrong shape.** Every tool's
+examples carry a `saying`, and of the 132 of them not one is over
+sixty characters; the mean is 18. The argument's own description now
+asks for twelve to twenty words, and an example beats a rule -- that
+is why the argument exists at all, recorded further up this file. The
+description is changed and the examples are not, so the next thing to
+measure is which one the model follows.
+
+
 ## The narration was the wait it was covering
 
 Owner: *"calculate the full latency... I want ultra low latency."*

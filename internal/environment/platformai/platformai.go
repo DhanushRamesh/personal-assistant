@@ -299,12 +299,17 @@ func (p *Environment) Run(ctx context.Context, req environment.Request) (<-chan 
 				slog.Any("tools", names),
 				slog.String("saying", got.Text))
 
-			// What the model said it was about to do, sent as progress
-			// ahead of the calls it goes with. Transient by nature: the
-			// work it describes has not happened yet.
-			if got.Text != "" {
-				send(ctx, ch, environment.Update(got.Text))
-			}
+			// Prose beside a tool call is not sent on. What the
+			// model says it is about to do belongs in the saying
+			// argument, which is described, exampled and under a
+			// length; this is whatever it felt like writing, and
+			// on a voice turn it is spoken.
+			//
+			// Measured on 4 October 2026, it was a restatement of
+			// the question every time -- "I need to look at what
+			// you have planned for tomorrow before I can answer
+			// that, sir" in front of an answer about tomorrow. It
+			// is kept in the log, where it costs nothing.
 			send(ctx, ch, environment.ToolCalls(got.ToolCalls))
 			return
 		}
