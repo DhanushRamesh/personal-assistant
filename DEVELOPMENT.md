@@ -2652,6 +2652,69 @@ description is changed and the examples are not, so the next thing to
 measure is which one the model follows.
 
 
+## The first word costs five seconds, and the tools are not why
+
+Owner, given the breakdown of a turn: *"we have to make the platform
+ai return the first word faster -- what can we do"*, then *"what if we
+use a faster model."*
+
+Three quarters of a voice turn happens before any word of the answer
+exists: the model picks a tool (4.18s mean), the tool runs (0.88s,
+nearly all of it Google), and then the model waits again before the
+answer's first token (3.82s). Everything that is not the model is
+under a tenth of a second.
+
+**The obvious suspect was the prompt, and it was wrong.** Forty-two
+tools are offered on a voice turn, 112KB of schema, about 28,000
+tokens -- roughly 90% of what the model is handed. Removing all of it
+saves 0.85 seconds.
+
+| tools | bytes | first word |
+| --- | --- | --- |
+| 42 | 112,260 | 2.72s |
+| 20 | 40,936 | 2.79s |
+| 8 | 14,855 | 2.05s |
+| 0 | 0 | 1.87s |
+
+There is a 1.9 second floor that no prompt change touches. So
+deferring tool schemas, which this file has had a plan for since the
+list started growing, is not worth building for 0.85s. It also
+explains the earlier prompt-caching result, where cutting 4,412 input
+tokens to 3 made the call *slower*: it was optimising something that
+was not costing anything.
+
+**The model is the lever.** The same question, the same forty-two
+tools, three runs each:
+
+| model | runs | mean |
+| --- | --- | --- |
+| claude-sonnet-4-6 | 5.24 / 4.69 / 5.32 | 5.08s |
+| claude-haiku-4-5 | 4.01 / 3.32 / 3.04 | 3.46s |
+| gpt-4o-mini | 2.68 / 2.12 / 5.12 | 3.31s |
+
+gpt-4o-mini's mean flatters it: three runs spanning 2.12s to 5.12s is
+not a latency you can promise anybody. Haiku is both faster and
+steadier. `claude-3-5-haiku` is refused by the gateway.
+
+**And it does not cost accuracy.** The tool-choice suite against
+Haiku: 71 of 71. Sonnet's last recorded run was 65 of 66, but the
+suite has grown since, so that is not a controlled comparison -- what
+can be said is that Haiku gets every case in the current suite right.
+
+**Set per client, not in the file.** The model picker in Settings
+writes to the client row, so the Home Assistant client answers on
+Haiku while the web client and Tasker stay on Sonnet. Voice is where
+the wait is heard; a screen can afford five seconds. `[platformai]
+model` stays as the fallback for whatever has not chosen.
+
+**Two measurements kept as tests**, behind the evals tag, because
+both questions will be asked again: `TestWhatThePromptWeighs` prints
+what each part of a request costs, and `TestWhatTheFirstWordCosts`
+times the first fragment against the size of the tool list. Neither
+asserts anything -- a gateway's latency moves on its own, and a
+threshold here would fail for reasons outside this repository.
+
+
 ## The narration was the wait it was covering
 
 Owner: *"calculate the full latency... I want ultra low latency."*

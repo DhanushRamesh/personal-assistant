@@ -133,6 +133,10 @@ type Config struct {
 	// SystemPrompt : How the model is told to answer. Defaults to
 	// DefaultSystemPrompt.
 	SystemPrompt string
+	// Thinking : How much the model may reason before answering, as the
+	// gateway's reasoning_effort: none, low, medium or high. Empty
+	// leaves it to the vendor.
+	Thinking string
 
 	// Timeout : How long one call may take. Zero selects DefaultTimeout.
 	Timeout time.Duration

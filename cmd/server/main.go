@@ -512,6 +512,7 @@ func buildProvider(cfg config.Config, logger *slog.Logger) (environment.Environm
 			Vendor:             cfg.PlatformAI.Vendor,
 			Model:              cfg.PlatformAI.Model,
 			SystemPrompt:       persona.Prompt(cfg.Assistant.Persona, cfg.Assistant.Name),
+			Thinking:           cfg.PlatformAI.Thinking,
 			Timeout:            cfg.PlatformAI.Timeout,
 			InsecureSkipVerify: cfg.PlatformAI.InsecureSkipVerify,
 		}, logger)

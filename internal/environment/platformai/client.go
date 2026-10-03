@@ -90,6 +90,13 @@ type chatRequest struct {
 	// Stream : Ask for the reply as server-sent events rather than one
 	// body when it is finished. See Streaming.
 	Stream bool `json:"stream,omitempty"`
+	// Thinking : How much the model may reason before it answers, as
+	// the gateway's reasoning_effort. Empty leaves it to the vendor.
+	//
+	// Measured rather than assumed: the first word of a turn costs two
+	// to seven seconds, and reasoning nobody reads would be the whole
+	// of it.
+	Thinking string `json:"reasoning_effort,omitempty"`
 }
 
 // chatResponse : The reply to a chat call. Content is either a plain string or
@@ -350,6 +357,7 @@ func (p *Environment) attemptChat(ctx context.Context, ask environment.Request, 
 		Messages: messages,
 		Tools:    tools,
 		Stream:   Streaming,
+		Thinking: p.cfg.Thinking,
 	})
 	if err != nil {
 		return reply{}, 0, fmt.Errorf("platformai: building chat request: %w", err)

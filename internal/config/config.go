@@ -339,6 +339,17 @@ type PlatformAI struct {
 	// two seconds before the fixed sentence is said instead, and a
 	// model that writes better greetings slowly writes none at all.
 	FastModel string
+	// Thinking : How much the model may reason before it answers, as
+	// the gateway's reasoning_effort: none, low, medium or high. Empty
+	// leaves it to the vendor, which is what it did before this
+	// existed.
+	//
+	// Here because the first word of a voice turn costs two to seven
+	// seconds and reasoning nobody reads would be the whole of it. A
+	// setting rather than a constant until that is measured: the
+	// gateway accepts the key, and whether it changes anything is a
+	// different question.
+	Thinking string
 
 	Timeout time.Duration
 	// InsecureSkipVerify : Skips certificate verification. Needed only for the
@@ -556,6 +567,7 @@ func Load(path string, lookup Lookup) (Config, error) {
 			Vendor:             l.str("platformai", "vendor", ""),
 			Model:              l.str("platformai", "model", ""),
 			FastModel:          l.str("platformai", "fast_model", ""),
+			Thinking:           l.str("platformai", "reasoning_effort", ""),
 			Timeout:            l.duration("platformai", "timeout", 120*time.Second),
 			InsecureSkipVerify: l.boolean("platformai", "insecure_skip_verify", false),
 		},
