@@ -19,6 +19,9 @@ const (
 	StepToolCall = "tool_call"
 	// StepToolResult : What that tool returned.
 	StepToolResult = "tool_result"
+	// StepBegan : When the first piece of the reply went out, on a turn
+	// whose reply was streamed. The moment the person stopped waiting.
+	StepBegan = "began"
 	// StepAnswered : The reply.
 	StepAnswered = "answered"
 	// StepFailed : Why there was no reply.
@@ -165,6 +168,16 @@ func OfTimeline(t *chat.Chat, wrote []conversation.Message) Timeline {
 			})
 
 		default:
+			// What the person actually waited for, in front of the
+			// answer it belongs to. The answer's own time is when
+			// the last word of it was written, by which point they
+			// had been listening for several seconds.
+			if t.AnswerBeganAt != nil {
+				began, beganOffset := at(*t.AnswerBeganAt)
+				out.Steps = append(out.Steps, Step{
+					Kind: StepBegan, At: began, OffsetMS: beganOffset,
+				})
+			}
 			out.Steps = append(out.Steps, Step{
 				Kind: StepAnswered, At: when, OffsetMS: offset, Text: m.Content,
 			})

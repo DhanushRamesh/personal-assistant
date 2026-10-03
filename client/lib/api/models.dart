@@ -645,6 +645,7 @@ enum AnswerStepKind {
   readFirst,
   toolCall,
   toolResult,
+  began,
   answered,
   failed,
   unknown;
@@ -656,6 +657,7 @@ enum AnswerStepKind {
     'read_first' => AnswerStepKind.readFirst,
     'tool_call' => AnswerStepKind.toolCall,
     'tool_result' => AnswerStepKind.toolResult,
+    'began' => AnswerStepKind.began,
     'answered' => AnswerStepKind.answered,
     'failed' => AnswerStepKind.failed,
     _ => AnswerStepKind.unknown,

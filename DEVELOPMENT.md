@@ -2562,6 +2562,41 @@ aside off the number is the whole truth again, which is the other
 reason not to leave this half-done.
 
 
+## Answered at 7.2s was a 5.9 second wait
+
+Owner, looking at a turn in the timeline: *"its 7.2s, but log the
+first token received time too there."*
+
+The timeline had one number for the answer, and it was the wrong one.
+`Answered` is stamped when the answer was written down, which happens
+once, whole, at the end. The answer is spoken as it is written, so the
+person had been listening to it for more than a second by then.
+
+**A column, because the moment is not recoverable afterwards.**
+`chats.answer_began_at`, migration 00032. Nothing in the messages
+holds it: the reply is one row written at the end, and when it started
+existing is not in it. Null for every turn before this and every turn
+that streams nothing -- a failure, a screen with nobody listening.
+Null is not measured, never zero.
+
+**Stamped on the first piece and stored at completion**, so it costs
+no write of its own. `Chat.Begun` ignores every piece after the first,
+because the ones after it are the same answer still arriving.
+
+**A step of its own, in front of the answer.** `began`, rendered as
+*Started answering*. Putting it on the answer step as another field
+would have hidden the one number worth reading behind the one that is
+not.
+
+**Two clocks for one thing, deliberately.** `spoke_after_ms` on the
+assist stream measures from the HTTP request arriving, which is the
+nearest the server stands to the person's last word. `answer_began_at`
+is on the chat's own clock, so its offset lines up with the tool calls
+above it in the timeline. They answer different questions -- how long
+did the person wait, and where in the turn did the waiting end -- and
+collapsing them into one would make the timeline disagree with itself.
+
+
 ## The narration was the wait it was covering
 
 Owner: *"calculate the full latency... I want ultra low latency."*

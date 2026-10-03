@@ -116,6 +116,16 @@ type Chat struct {
 	UpdatedAt time.Time
 	// StartedAt : When work began, or nil if it has not.
 	StartedAt *time.Time
+	// AnswerBeganAt : When the first piece of the answer went out, or nil
+	// if none did.
+	//
+	// The answer is written into the speaker as the model writes it, so
+	// this is when the person stopped waiting. FinishedAt is several
+	// seconds later and describes a wait they did not have.
+	//
+	// Nil for a turn that streamed nothing: a failure, or a channel with
+	// nobody listening. Nil is not measured, never zero.
+	AnswerBeganAt *time.Time
 	// FinishedAt : When the chat reached a terminal status, or nil if it has
 	// not.
 	FinishedAt *time.Time
@@ -201,6 +211,19 @@ func (t *Chat) Start() error {
 	started := t.UpdatedAt
 	t.StartedAt = &started
 	return nil
+}
+
+// Begun : Records that the first piece of the answer has gone out, if it
+// has not been recorded already.
+//
+// Only the first piece counts. The pieces after it are the same answer
+// still arriving, and the person stopped waiting at the first one.
+func (t *Chat) Begun(at time.Time) {
+	if t.AnswerBeganAt != nil {
+		return
+	}
+	when := at.UTC()
+	t.AnswerBeganAt = &when
 }
 
 // Complete : Finishes the chat successfully with the agent's final answer.

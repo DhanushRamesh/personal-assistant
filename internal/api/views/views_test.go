@@ -8,6 +8,7 @@ import (
 
 	"github.com/DhanushRamesh/personal-assistant/internal/api/views"
 	"github.com/DhanushRamesh/personal-assistant/internal/chat"
+	"github.com/DhanushRamesh/personal-assistant/internal/conversation"
 )
 
 // The JSON names here are the API's published contract: a client reads them,
@@ -133,4 +134,76 @@ func TestConversationPublishesItsFields(t *testing.T) {
 
 	assertKeys(t, views.OfConversation(*conversation, true),
 		"id", "title", "active", "created_at", "updated_at")
+}
+
+// TestTheTimelineSaysWhenTheAnswerBegan : The owner, looking at a turn
+// marked "Answered 7.2s": "log the first token received time too
+// there."
+//
+// 7.2s is when the last word was written. The answer is spoken as it
+// is written, so by then they had been listening for over a second,
+// and the only honest number for how long they waited is missing from
+// the timeline entirely.
+func TestTheTimelineSaysWhenTheAnswerBegan(t *testing.T) {
+	started := time.Date(2026, 10, 3, 18, 0, 0, 0, time.UTC)
+	began := started.Add(5900 * time.Millisecond)
+	done := started.Add(7200 * time.Millisecond)
+
+	tk := &chat.Chat{
+		ID: "chat_x", Status: chat.StatusCompleted,
+		StartedAt: &started, AnswerBeganAt: &began, FinishedAt: &done,
+	}
+	out := views.OfTimeline(tk, []conversation.Message{
+		{Role: conversation.Assistant, Kind: conversation.Chat,
+			Content: "You were at home most of the day, sir.", At: done},
+	})
+
+	var beganAt, answeredAt *int64
+	for _, s := range out.Steps {
+		switch s.Kind {
+		case views.StepBegan:
+			beganAt = s.OffsetMS
+		case views.StepAnswered:
+			answeredAt = s.OffsetMS
+		}
+	}
+	if beganAt == nil {
+		t.Fatal("the timeline does not say when the answer began")
+	}
+	if *beganAt != 5900 {
+		t.Errorf("began at %d ms, want 5900", *beganAt)
+	}
+	if answeredAt == nil || *answeredAt != 7200 {
+		t.Fatalf("the answer's own time moved: %v", answeredAt)
+	}
+	// In front of the answer, or a timeline read top to bottom has
+	// the turn finishing before it started speaking.
+	for _, s := range out.Steps {
+		if s.Kind == views.StepAnswered {
+			t.Fatal("the answer comes before the moment it began")
+		}
+		if s.Kind == views.StepBegan {
+			break
+		}
+	}
+}
+
+// TestATurnThatStreamedNothingSaysNothing : Nil is not measured, and a
+// turn that never streamed -- a failure, or a screen with nobody
+// listening -- must not grow a step claiming it began at zero.
+func TestATurnThatStreamedNothingSaysNothing(t *testing.T) {
+	started := time.Date(2026, 10, 3, 18, 0, 0, 0, time.UTC)
+	done := started.Add(time.Second)
+
+	out := views.OfTimeline(
+		&chat.Chat{ID: "chat_y", Status: chat.StatusCompleted,
+			StartedAt: &started, FinishedAt: &done},
+		[]conversation.Message{{Role: conversation.Assistant,
+			Kind: conversation.Chat, Content: "Good evening, sir.", At: done}})
+
+	for _, s := range out.Steps {
+		if s.Kind == views.StepBegan {
+			t.Error("a turn that streamed nothing reports when it began")
+		}
+	}
 }

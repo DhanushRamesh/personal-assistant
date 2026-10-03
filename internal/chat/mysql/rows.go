@@ -32,6 +32,7 @@ type chatRow struct {
 	CreatedAt      time.Time  `gorm:"column:created_at;autoCreateTime:false"`
 	UpdatedAt      time.Time  `gorm:"column:updated_at;autoUpdateTime:false"`
 	StartedAt      *time.Time `gorm:"column:started_at"`
+	AnswerBeganAt  *time.Time `gorm:"column:answer_began_at"`
 	FinishedAt     *time.Time `gorm:"column:finished_at"`
 }
 
@@ -165,6 +166,7 @@ func toRow(t *chat.Chat) *chatRow {
 		CreatedAt:      t.CreatedAt,
 		UpdatedAt:      t.UpdatedAt,
 		StartedAt:      t.StartedAt,
+		AnswerBeganAt:  t.AnswerBeganAt,
 		FinishedAt:     t.FinishedAt,
 	}
 }
@@ -187,6 +189,7 @@ func (r *chatRow) toChat() *chat.Chat {
 		CreatedAt:      r.CreatedAt.UTC(),
 		UpdatedAt:      r.UpdatedAt.UTC(),
 		StartedAt:      utc(r.StartedAt),
+		AnswerBeganAt:  utc(r.AnswerBeganAt),
 		FinishedAt:     utc(r.FinishedAt),
 	}
 }

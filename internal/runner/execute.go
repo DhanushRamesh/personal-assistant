@@ -471,6 +471,12 @@ func (r *Runner) drain(
 				saidThisRound = true
 			}
 		case environment.KindPartial:
+			// When the person stops waiting, which is not when the
+			// turn ends. Stamped here rather than worked out later,
+			// because the answer is written down once and whole and
+			// the moment it started is not in it. Stored with the
+			// chat at completion, so it costs no write of its own.
+			t.Begun(msg.At)
 			// Straight through, and never spoken beside the turn.
 			// This is the answer arriving in pieces, not a sentence
 			// about the work: narrating it would read the answer out
