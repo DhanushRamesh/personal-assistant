@@ -193,6 +193,7 @@ func (r *Runner) consume(runCtx, ctx context.Context, t *chat.Chat, systemPrompt
 			Vendor:  t.Model.Vendor,
 			Model:   t.Model.ID,
 			Tools:   tools,
+			Pieces:  !returnable(reached, pressed, nudged, wrote, tools),
 
 			SystemPrompt: asking,
 		})
@@ -786,4 +787,23 @@ func (r *Runner) save(ctx context.Context, t *chat.Chat) error {
 		return err
 	}
 	return nil
+}
+
+// returnable : Whether an answer given on this round could still be sent
+// back for another one.
+//
+// The two guards below both end in another round, and each may fire
+// once. Everything they test is known before the model is asked: a
+// round that answers without tool calls leaves the write tally exactly
+// as it found it.
+//
+// It is asked before the call because of what it decides -- whether the
+// answer may be spoken as it is written. A listener cannot unhear the
+// answer that was sent back, and would hear the one that replaced it as
+// the same thing said twice.
+func returnable(reached, pressed, nudged bool, wrote writing, tools []environment.ToolSpec) bool {
+	if len(tools) == 0 {
+		return false
+	}
+	return (!reached && !pressed) || (!wrote.claimable() && !nudged)
 }

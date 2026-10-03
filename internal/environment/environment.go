@@ -231,6 +231,14 @@ type Request struct {
 	// Tools : What the model may ask to be run. Empty offers none, and a
 	// model offered none cannot call one.
 	Tools []ToolSpec
+	// Pieces : Whether the answer may be put through as it is written,
+	// rather than only when it is whole.
+	//
+	// Off by default, and the caller is the one who knows. An answer
+	// that may still be sent back for another round must not be
+	// spoken: what a listener has already heard cannot be taken back,
+	// and the round that replaces it would be heard as a repeat.
+	Pieces bool
 	// Summary : The part of the conversation too old to send in full, condensed.
 	// Empty when the whole conversation fits.
 	//

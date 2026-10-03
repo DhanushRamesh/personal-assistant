@@ -2410,6 +2410,48 @@ after it. The retries only fire on a dead connection or a refused
 token, both of which happen before any text, so this is a hole rather
 than a fault seen.
 
+## A round that can be sent back may not be spoken
+
+Owner, the evening streaming went in: *"its repeating two times."*
+
+It was. Two answers to one question, in the log under one chat id:
+
+    23:17:00.058  chat_01M41E0HR...  pieces=32  out_tokens=75  reply_bytes=309
+    23:17:04.768  chat_01M41E0HR...  pieces=35  out_tokens=75  reply_bytes=309
+
+Not Home Assistant, which guards this properly -- it speaks the
+finished text only `if not self._streamed_response_text`. Ours.
+
+**The runner can send an answer back for another round, and streaming
+had already spoken the one it rejected.** There are two such guards.
+An answer reached without touching a tool, on a turn where tools were
+offered, goes back once to look at them. A turn that tried a write,
+landed none, and then answered goes back once to finish the job. Both
+existed long before streaming and both were invisible: only the last
+answer was ever sent. With partials, the rejected answer is already in
+the speaker, and the round that replaces it -- usually near enough the
+same words -- is heard as a repeat.
+
+**Whether a round's answer is final is known before the model is
+asked.** Both guards test `reached`, `pressed`, `nudged` and the write
+tally, and a round that answers without tool calls leaves the tally
+exactly as it found it. So `Request.Pieces` is decided at the call
+site, and a round that could still be sent back is read whole:
+
+    Pieces: !returnable(reached, pressed, nudged, wrote, tools)
+
+**The round that matters is streamed anyway.** The guard for an
+untouched tool cannot fire once a tool has been asked for, so every
+answer that follows tool results -- the long ones, the ones worth
+streaming -- goes out in pieces. What is held back is the first round
+of a turn that uses no tools at all, which is the short answer where
+streaming saves least.
+
+**The pieces are still counted when they are not sent**, because
+whether the wire streamed at all is not visible anywhere else: a reply
+read and put back together looks exactly like one that arrived whole.
+
+
 ## The narration was the wait it was covering
 
 Owner: *"calculate the full latency... I want ultra low latency."*

@@ -265,7 +265,12 @@ func (p *Environment) Run(ctx context.Context, req environment.Request) (<-chan 
 		var pieces int
 		got, err := p.chat(ctx, req, func(text string) {
 			pieces++
-			send(ctx, ch, environment.Partial(text))
+			// Counted either way, but only passed on when the
+			// caller said this round's answer is the one that
+			// stands.
+			if req.Pieces {
+				send(ctx, ch, environment.Partial(text))
+			}
 		})
 		if err != nil {
 			// A cancelled chat is the user's doing, not a failure worth
