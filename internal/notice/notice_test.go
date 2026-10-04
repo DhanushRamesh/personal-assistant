@@ -546,3 +546,35 @@ func TestTheModelMayNotDeclineAWarning(t *testing.T) {
 		t.Error("an ordinary remark was told it must be said")
 	}
 }
+
+// TestAReadingIsNotNews : A song, a place and a caller are
+// identities, and the first one is worth a word. A battery at
+// seventy-three per cent is a measurement, and every measurement is
+// new the first time it is taken.
+//
+// A phone reporting every one per cent would otherwise offer a
+// hundred novelties a day, each of them nothing, and each costing a
+// model call to decline.
+func TestAReadingIsNotNews(t *testing.T) {
+	fresh := []event.Event{toggling("battery.level", "73", "charging", "false", 0)}
+	if got := notice.Find(fresh, fresh, at); len(got) != 0 {
+		t.Errorf("a battery reading was offered as news: %+v", got)
+	}
+
+	// And a name still is.
+	song := []event.Event{toggling("music.state", "Stevie Wonder", "playing", "true", 0)}
+	if got := notice.Find(song, song, at); len(got) != 1 || got[0].Reason != notice.Novel {
+		t.Errorf("a first hearing stopped being news: %+v", got)
+	}
+}
+
+// TestAReadingCanStillInsist : Which is the whole point of the mark:
+// a battery at five per cent is not unusual and is still worth
+// saying.
+func TestAReadingCanStillInsist(t *testing.T) {
+	fresh := []event.Event{urgently("battery.level", "5", nil)}
+	got := notice.Find(fresh, fresh, at)
+	if len(got) != 1 || got[0].Reason != notice.Told {
+		t.Fatalf("a device insisting about a reading was not heard: %+v", got)
+	}
+}

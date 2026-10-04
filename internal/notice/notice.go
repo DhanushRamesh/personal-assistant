@@ -29,6 +29,7 @@ import (
 	"sort"
 	"strings"
 	"time"
+	"unicode"
 
 	"github.com/DhanushRamesh/personal-assistant/internal/event"
 )
@@ -200,7 +201,7 @@ func Find(arrived, history []event.Event, now time.Time) []Candidate {
 				Times: lately[label], Before: seen[label] - lately[label],
 				At: latest[label], Detail: detail[label],
 			})
-		case seen[label] <= lately[label]:
+		case seen[label] <= lately[label] && !measured(label):
 			// Nothing of it before this window, so this is the first
 			// time it has ever been reported.
 			out = append(out, Candidate{
@@ -354,4 +355,33 @@ func told(payload json.RawMessage) bool {
 		return strings.EqualFold(strings.TrimSpace(v), "true")
 	}
 	return false
+}
+
+// measured : Whether a label's value is a reading rather than a name.
+//
+// A song, a place, a caller are identities, and the first time one
+// appears is worth a word. A battery at seventy-three per cent is a
+// measurement, and every measurement is new the first time it is
+// taken -- a device reporting every one per cent would offer a
+// hundred novelties a day, each of them nothing.
+//
+// Nothing here knows what is being measured. A value made of digits
+// is a reading of something; a value made of words is the name of
+// something. That holds for a battery, a temperature, a step count
+// and whatever is sent next.
+func measured(label string) bool {
+	_, value, ok := strings.Cut(label, " ")
+	if !ok {
+		return false
+	}
+	value = strings.TrimSpace(value)
+	if value == "" {
+		return false
+	}
+	for _, r := range value {
+		if !unicode.IsDigit(r) && r != '.' && r != '-' && r != '+' && r != '%' {
+			return false
+		}
+	}
+	return true
 }
