@@ -9268,8 +9268,18 @@ said nothing"*, a different fault, all on 2 October, and every
 attempt since has succeeded. I had read a count of restarts as a
 count of attempts.
 
-Six buys headroom and nothing else. Reasoning costs 29 to 46
-seconds; no budget anybody would stand in a doorway for reaches it.
+Then: *"no max 10 secs."* So it is ten.
+
+Ten buys headroom and not reasoning. Low effort was 12.1, 16.7 and
+2.1 seconds on those same three evenings -- ten reaches it one time
+in three -- and high costs 29 to 46. Thinking cannot be paid for
+out of a doorway.
+
+**One stale comment corrected on the way past.** The note beside
+`Within` said Home Assistant gives up on the request at ten
+seconds. The rest_command says `timeout: 180`, and has for some
+time. Nothing was relying on the wrong number, but it was the
+reason ten looked like a ceiling rather than a choice.
 
 
 ## 12. Maintaining this file

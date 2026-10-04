@@ -39,23 +39,26 @@ import (
 // off most attempts, which is how this number came to be measured
 // rather than chosen.
 //
-// Six, which the owner set: *"it's ok to wait 6 seconds."* The
-// ceiling is not Home Assistant -- it gives up on the request at ten
-// seconds and the greeting outlives that on purpose -- it is somebody
-// standing in a doorway waiting to be spoken to, and the reminders
-// still have to be read out after this.
+// Ten, which the owner set: *"no max 10 secs."*
+//
+// The only ceiling is somebody standing in a doorway waiting to be
+// spoken to, and the reminders still have to be read out after
+// this. Home Assistant is not one: an older comment here said it
+// gave up at ten seconds, and the rest_command has said 180 for
+// some time.
 //
 // Measured over the last six real greetings the model took 1.7 to
-// 4.4 seconds, so five left almost nothing in hand for the slow end.
-// None of them actually overran; the four failures in the log say
-// "the provider said nothing", which is a different fault and was
-// fixed.
+// 4.4 seconds, so five left almost nothing in hand at the slow end.
+// None of them overran; the four failures in the log say "the
+// provider said nothing", which is a different fault and is fixed.
 //
-// It buys headroom and nothing else. Reasoning costs 29 to 46
-// seconds, so no budget anybody would stand in a doorway for reaches
-// it -- see internal/environment/platformai on why that is a head
-// start problem rather than a timeout one.
-const Within = 6 * time.Second
+// **It buys headroom and not reasoning.** Low effort was measured
+// at 12.1, 16.7 and 2.1 seconds on the same three evenings, so even
+// ten reaches it one time in three; high costs 29 to 46. Thinking
+// cannot be paid for out of a doorway, and what it needs is to
+// start before they are in it -- which is a different problem, and
+// the measurement that it has no easy answer is in DEVELOPMENT.md.
+const Within = 10 * time.Second
 
 // Recent : How far back events are read when the assistant has never
 // spoken to them before.
