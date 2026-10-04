@@ -86,6 +86,15 @@ type eval struct {
 	Never []string
 }
 
+// Pace : How long to wait between questions.
+//
+// Chosen against the limiter rather than for speed. The suite is
+// eighty-odd model calls and each already takes seconds; a short
+// pause between them costs under a minute on the whole run and
+// turns "you have made too many requests continuously" from a
+// regular event into none.
+const Pace = 1500 * time.Millisecond
+
 // cases : What the assistant is expected to do.
 var cases = []eval{
 	// Reaching for the right one.
@@ -361,10 +370,22 @@ func TestTheModelReachesForTheRightTool(t *testing.T) {
 	only := strings.ToLower(os.Getenv("EVAL_ONLY"))
 
 	var right, wrong int
+	var asked int
 	for _, c := range cases {
 		if only != "" && !strings.Contains(strings.ToLower(c.Say), only) {
 			continue
 		}
+
+		// Eighty-three questions as fast as the machine can send them
+		// is what the gateway means by "too many requests
+		// continuously", and a suite that trips the limiter measures
+		// the limiter. The server retries now, but a retry inside a
+		// test is a slower test for no information: the pause is
+		// cheaper than the refusal.
+		if asked > 0 {
+			time.Sleep(Pace)
+		}
+		asked++
 		channel := c.Channel
 		if channel == "" {
 			channel = chat.ChannelVoice

@@ -8550,6 +8550,43 @@ looked at. The follow-up question was the right answer to it;
 needing to ask was not.
 
 
+## Being told to slow down is not being told no
+
+The gateway answers a burst of calls with:
+
+    You have made too many requests continuously.
+    Please try again after some time. (HTTP 400)
+
+Nothing caught it. The client retries an expired token and a dead
+connection, and this is neither, so it came out as a failure and
+the person heard *"I am having some difficulty reaching the server,
+sir"* about a service that was working and merely busy. Owner:
+*"you know it's rate limiting right, then do something for it."*
+
+**It is a 400, not a 429**, with the reason only in words, so the
+status alone cannot tell it from a malformed request -- and
+retrying a malformed request for ever is exactly what must not
+happen. So it is read from the status where there is one and from
+the message where there is not, and nothing else is retried.
+
+Retrying is safe for the same reason a dead connection is: nothing
+was read, no tool ran, and the model was never reached, so asking
+again is asking once.
+
+**Two waits, one second then three.** A turn has thirty seconds
+before the caller cuts it and most of that is already spoken for; a
+third wait would spend the budget to arrive after nobody is
+listening. The wait ends with the turn rather than outlasting it.
+
+**And the suite stopped causing it.** Eighty-three questions as
+fast as the machine can send them is what the gateway means by
+"continuously". The run now pauses a second and a half between
+them, which costs under two minutes on a five-minute suite and
+turns a regular interruption into none. A retry inside a test is a
+slower test for no information; the pause is cheaper than the
+refusal.
+
+
 ## 12. Maintaining this file
 
 When the owner states a preference, makes a decision, or corrects something,

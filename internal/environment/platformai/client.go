@@ -280,7 +280,73 @@ func (p *Environment) chat(ctx context.Context, ask environment.Request, onText 
 		got, _, err = p.attemptChat(ctx, ask, nil)
 		return got, err
 	}
+
+	// Being told to slow down is not being told no. Nothing was read,
+	// no tool ran and the model was never reached, so waiting and
+	// asking again is asking once -- the same reasoning that makes a
+	// dead connection safe to retry.
+	//
+	// Worth doing because the alternative is what the person actually
+	// hears: "I am having some difficulty reaching the server, sir",
+	// for a service that was working and merely busy.
+	for _, wait := range Slowed {
+		if !limited(status, err) || ctx.Err() != nil {
+			break
+		}
+		p.logger.WarnContext(ctx, "platform ai asked us to slow down, waiting",
+			slog.Duration("waiting", wait), slog.Any("error", err))
+		if !sleep(ctx, wait) {
+			break
+		}
+		got, status, err = p.attemptChat(ctx, ask, nil)
+		if err == nil {
+			return got, nil
+		}
+	}
 	return reply{}, err
+}
+
+// Slowed : How long to wait before each attempt after being told to
+// slow down.
+//
+// Two, and short. A turn has thirty seconds before the caller cuts
+// it, and most of that is already spoken for; a third wait would
+// spend the budget to arrive after nobody is listening. Growing,
+// because a limiter that refused once at no delay usually wants more
+// than the same again.
+var Slowed = []time.Duration{time.Second, 3 * time.Second}
+
+// limited : Whether the service refused because it is being asked too
+// often, rather than because anything is wrong with the asking.
+//
+// By status where there is one, and otherwise by what it said. This
+// gateway reports it as a plain 400 with the reason in words, so the
+// status alone cannot tell it from a malformed request -- and
+// retrying a malformed request forever is exactly what must not
+// happen.
+func limited(status int, err error) bool {
+	if status == http.StatusTooManyRequests {
+		return true
+	}
+	var api *APIError
+	if !errors.As(err, &api) {
+		return false
+	}
+	said := strings.ToLower(api.Message)
+	return strings.Contains(said, "too many requests") ||
+		strings.Contains(said, "rate limit")
+}
+
+// sleep : Waits, unless the turn ends first. False when it did.
+func sleep(ctx context.Context, d time.Duration) bool {
+	t := time.NewTimer(d)
+	defer t.Stop()
+	select {
+	case <-ctx.Done():
+		return false
+	case <-t.C:
+		return true
+	}
 }
 
 // dropped : Whether the request failed because the connection went away
