@@ -8035,6 +8035,43 @@ brief (2 times, last at 10:43)"* is the shape of the morning, which
 is what this tool is for.
 
 
+## The description cannot list what arrives next
+
+Asked *"do you know what's my battery right now?"* the assistant
+answered *"I have no tool that tells me your device battery, sir."*
+Twenty-two readings had arrived from that phone the same morning. It
+never called the tool.
+
+This is the second time, and the first is in this file already: asked
+who he had spoken to, it said it had no tool that reads call logs,
+because the description listed places and networks and never people.
+Owner: *"remember, whenever a new event type is added, the event tool
+must adapt to it."*
+
+Quite right, and the adaptation cannot be a list. Any device may
+invent a kind; a description that enumerates them is wrong the day
+after it is written, and enumerating is also what teaches the model
+that what is *not* listed is not there. So the description now says
+the opposite of a list:
+
+- **A question in the present tense is this tool too.** How much is
+  left, what it is doing, what it is connected to, whether it is on.
+  A device reports a reading whenever it changes, so the newest
+  event of a kind *is* how that thing stands now -- ask for the kind
+  with a limit of 1. That generalises the music.state rule that was
+  already there as a one-off.
+- **Never answer from this text that a tool is missing.** "You cannot
+  know from this text what is in here. Call this once without a
+  kind, read the kinds it lists, and ask again by name."
+
+Measured both ways, as every description change here is. The old
+wording scores 73 of 74 and calls nothing at all for *"how much
+battery do I have left"*; the new wording 74 of 74. Only one of the
+three new cases failed before, which is the usual shape of these: the
+wording was not hopeless, it was unreliable, and unreliable is what
+produces one flat denial in the middle of a day that worked.
+
+
 ## 12. Maintaining this file
 
 When the owner states a preference, makes a decision, or corrects something,
