@@ -8282,12 +8282,27 @@ Two things, for free, the first time it ran against the real table:
 
 - `power.plugged` and `power.unplugged` have both fired -- 14:57 and
   15:10 -- so the charging profile works end to end.
-- **`screen.locked` has never arrived.** `screen.unlocked` has six
-  and `screen.changed` stopped at 14:00, which was before the edit.
-  So the locked path produces nothing at all rather than producing
-  the old shape. Either the *Display Off* profile is not firing its
-  task or the edit to that caller did not take. Open, and needs the
-  phone back on the cable.
+- **`screen.locked` had never arrived**, and the cause was mine.
+  Tasker's own run log named it in one line:
+
+      A IfFail   ID53.1   Screen Locked.Perform Task
+
+  The action was being skipped, not failing. *Screen Locked* guards
+  its report with `If %ScrOpen eq 1` -- only report a lock if an
+  unlock was seen -- and the first, mis-aimed attempt at editing
+  that caller had typed the word `locked` into the **condition's**
+  left-hand field instead of into Parameter 1. The guard read
+  `locked EQ 1`, which is false forever. I then scrolled up, set
+  Parameter 1 correctly, and never looked at what I had clobbered on
+  the way.
+
+  Restored to `%ScrOpen eq 1` and verified live: Tasker logged
+  `A OK ID53.1`, and `screen.locked` reached the table at 15:59.
+
+  **`/sdcard/Tasker/log/runlog.txt` is the thing to read** when a
+  profile looks dead. It distinguishes a profile that never fired
+  from a task that ran and skipped its action, which no amount of
+  staring at the server can.
 
 
 ## 12. Maintaining this file
