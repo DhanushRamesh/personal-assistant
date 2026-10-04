@@ -24,6 +24,8 @@ import (
 	"github.com/DhanushRamesh/personal-assistant/internal/calendar"
 	"github.com/DhanushRamesh/personal-assistant/internal/chat"
 	chatmysql "github.com/DhanushRamesh/personal-assistant/internal/chat/mysql"
+	"github.com/DhanushRamesh/personal-assistant/internal/coming"
+	comingmysql "github.com/DhanushRamesh/personal-assistant/internal/coming/mysql"
 	"github.com/DhanushRamesh/personal-assistant/internal/config"
 	"github.com/DhanushRamesh/personal-assistant/internal/conversation"
 	"github.com/DhanushRamesh/personal-assistant/internal/embed"
@@ -472,6 +474,14 @@ func run() error {
 			announcements, remarked, logger.Logger)
 	}()
 
+	// The diary, which until now never spoke first.
+	watching.Add(1)
+	go func() {
+		defer watching.Done()
+		lookingAhead(remindCtx, cfg, comingDiary(googleLink, cfg), comingmysql.New(db.DB),
+			chats, answerer, speaker, announcements, logger.Logger)
+	}()
+
 	handler := api.New(api.Options{
 		Logger:        logger.Logger,
 		DB:            db,
@@ -644,6 +654,15 @@ func mailboxOf(link *google.Link) mailtool.Mailbox {
 		return nil
 	}
 	return mail.New(link)
+}
+
+// comingDiary : The diary as the look-ahead wants it, or nothing when
+// Google is not configured. Untyped nil for the reason given above.
+func comingDiary(link *google.Link, cfg config.Config) coming.Diary {
+	if link == nil {
+		return nil
+	}
+	return calendar.New(link, cfg.Assistant.Location, cfg.Assistant.Now)
 }
 
 func diaryOf(link *google.Link, cfg config.Config) calendartool.Diary {
@@ -1175,6 +1194,63 @@ func askAs(
 		return "", fmt.Errorf("%s", last.Text)
 	}
 	return last.Text, nil
+}
+
+// lookingAhead : Says what is in the diary before it arrives.
+//
+// Everything that decides when to speak lives in internal/coming.
+// This is only the wiring: where the diary comes from, how the model
+// is asked to judge an entry, and where the words go.
+func lookingAhead(
+	ctx context.Context,
+	cfg config.Config,
+	diary coming.Diary,
+	judgements coming.Store,
+	talkers interface {
+		Talkers(ctx context.Context, since time.Time) ([]string, error)
+	},
+	answerer environment.Environment,
+	speaker announce.Announcer,
+	announcements *announcement.Writer,
+	logger *slog.Logger,
+) {
+	// No diary, or nowhere to say it. Said once at startup, because a
+	// silent assistant and a broken one look identical.
+	if diary == nil || speaker == nil || !speaker.Available() {
+		logger.Info("saying nothing about what is coming, " +
+			"with no diary or nowhere to say it")
+		return
+	}
+
+	model := cmp.Or(cfg.PlatformAI.FastModel, cfg.PlatformAI.Model)
+	ahead := &coming.Loop{
+		Diary: diary,
+		Store: judgements,
+		Ask: func(ctx context.Context, _, ask string) (string, error) {
+			return askAs(ctx, answerer, cfg.PlatformAI.Vendor, model,
+				persona.Voice(cfg.Assistant.Persona, cfg.Assistant.Name),
+				environment.PurposeRemark, ask)
+		},
+		Say: func(ctx context.Context, userID, text string) error {
+			if err := announcement.Speak(ctx, speaker, conversation.Coming, text); err != nil {
+				return err
+			}
+			announcements.Coming(ctx, userID, text)
+			return nil
+		},
+		Location: cfg.Assistant.Location,
+		Now:      cfg.Assistant.Now,
+		Logger:   logger,
+	}
+
+	logger.Info("saying what is coming",
+		slog.String("model", model),
+		slog.Duration("every", coming.Every),
+		slog.Duration("ahead", coming.Ahead))
+
+	ahead.Run(ctx, func(ctx context.Context) ([]string, error) {
+		return talkers.Talkers(ctx, cfg.Assistant.Now().Add(-notice.Since))
+	})
 }
 
 // noticeFirst : How long after startup the watcher starts looking.

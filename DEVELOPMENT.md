@@ -8305,6 +8305,75 @@ Two things, for free, the first time it ran against the real table:
   staring at the server can.
 
 
+## The diary speaks first
+
+Owner: *"a movie at 6 is fine a few hours before, maximum one day.
+But attending a wedding has to be said a day or two before, because
+I need to plan -- buy a gift, iron the shirts. It takes effort. So
+the reminder start depends on what action it is."*
+
+That sentence is the whole design. The diary has been read a hundred
+and four times in a week and has never once spoken first, and the
+reason it could not is that there is no offset that works for both
+of those. Fifteen minutes is useless for a wedding; two days is
+absurd for a film.
+
+**So the lead time is judged, once, per entry.** A model reads the
+entry when it first appears and says how much warning it needs and
+why. `internal/coming` keeps that decision, because it does not
+change -- what a wedding needs doing before it is the same at nine in
+the morning as at ten -- and asking again every five minutes would be
+three hundred calls a day to be told the same thing.
+
+**Nothing in the package knows what a wedding or a film is.** The
+question put to the model is one anybody could answer about
+anything: *how much is there to DO beforehand, not how important it
+is*. Something you only turn up to needs hours; something needing a
+present bought, clothes got ready, a journey worked out or somebody
+else arranged needs days, because that doing has to fit around the
+rest of the week. A list of kinds would have been wrong in another
+language and silent about the next sort of thing he writes down.
+
+**Several moments, not one.** The two examples are different shapes:
+a film earns one word, a wedding two -- days out while there is
+still time to buy something, and again on the day when all that is
+left is to leave. How many is part of what is judged, so the model
+returns a list and the server counts through it.
+
+**Guards, each for a stated reason.**
+
+| | |
+| --- | --- |
+| `Longest` 7 days | A fortnight's notice is forgotten by the time it matters. |
+| `Shortest` 10 min | Below that it is not notice, it is narration. |
+| `Every` 5 min | Leads are hours and days; a minute's precision buys nothing and costs a calendar read a minute. |
+| `Ahead` 21 days | Longer than the longest lead, or a thing needing a week's warning is first seen six days late. |
+| `Shape` | Title plus start. A rename or a move throws the judgement away: "dinner" becoming "dinner with the Raos at their place" is a different amount of doing. |
+| `Said` as a count | They are spoken in order, and a count cannot disagree with itself. |
+| recorded before speaking | A warning lost is one sentence; a warning repeated every five minutes until the thing starts is the feature being switched off. |
+
+**Audience `Everywhere`**, like a reminder and for the same reason: a
+wedding two days out is no use to somebody who is out of the house.
+Its own kind, `coming`, because nobody asked for it -- a reminder is
+a thing they set, this is the assistant reading the diary and
+deciding there is something to do first.
+
+**Silence is kept too.** Most of a diary owes nothing, and that
+answer has to be written down or it is paid for again on every tick.
+
+### What the first live pass did
+
+Seven entries in the next three weeks. Six holidays and a birthday
+were judged silent. The seventh was his own example, unprompted:
+
+    title="Meesaya Murukku 2 Movie"  before=2h  starts=18:10
+    "Meesaya Murukku 2 Movie is in 2 hours, at 6:10 pm.
+     Time to leave and let your mum and Muthuselvi know."
+
+One lead, two hours, and a reason it read out of the guest list. The
+wedding case is untested until there is a wedding.
+
+
 ## 12. Maintaining this file
 
 When the owner states a preference, makes a decision, or corrects something,

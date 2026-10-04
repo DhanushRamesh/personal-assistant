@@ -104,6 +104,11 @@ func (w *Writer) Remarked(ctx context.Context, userID, text string) {
 	w.said(ctx, userID, "", conversation.Remark, text)
 }
 
+// Coming : Notes a warning about something in the diary.
+func (w *Writer) Coming(ctx context.Context, userID, text string) {
+	w.said(ctx, userID, "", conversation.Coming, text)
+}
+
 // Announced : Notes something a device said to say at once.
 //
 // Written into the conversation like the rest, so "what was that?"

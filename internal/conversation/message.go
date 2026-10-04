@@ -98,6 +98,15 @@ const (
 	// otherwise.
 	Immediate Kind = "immediate"
 
+	// Coming : Warning of something in the diary before it arrives.
+	//
+	// Its own kind rather than a reminder, because nobody asked for
+	// it: a reminder is a thing they set, and this is the assistant
+	// reading the diary and deciding there is something to do first.
+	// The audience is the same, and for the same reason -- a wedding
+	// two days out is no use to somebody who is out of the house.
+	Coming Kind = "coming"
+
 	// Renaming : The assistant giving the conversation its name.
 	//
 	// An announcement although nothing is necessarily said aloud, because
@@ -165,6 +174,9 @@ var announcements = map[Kind]Audience{
 	// and a phone reports its own battery without help.
 	Immediate: Asked,
 	Renaming:  Asked,
+	// Nothing asked for it and it is about something hours or days
+	// away, so where they happen to be standing decides nothing.
+	Coming: Everywhere,
 }
 
 // Announcement : Whether this is the assistant having spoken unprompted.
