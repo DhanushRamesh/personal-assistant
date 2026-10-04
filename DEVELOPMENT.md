@@ -8119,6 +8119,75 @@ rather than a fault. Worth remembering when a hand-run event seems
 to vanish.
 
 
+## The direction belongs in the kind
+
+Every family of events splits its direction into the kind:
+`wifi.joined`/`wifi.left`, `place.entered`/`place.exited`,
+`music.playing`/`music.paused`, `call.made`/`received`/`missed`. Two
+did not. `screen.changed` carried `value: "Pixel 7"` with
+`locked: true|false`, and `bluetooth.changed` carried
+`value: "bike helmet"` with `connected: true|false`.
+
+**Everything here counts on kind *and value*.** So a lock and an
+unlock were one label, and so were the helmet going on and coming
+off. On 4 October the phone recorded 17 pickups and 25 screen-offs;
+the standing description could say he touched his phone 42 times and
+could not say which were which. `notice.Toggling` already refuses to
+remark on a state, which is right, but the profile's counting had no
+way to see past the single label either.
+
+Fixed on the phone, where it belongs:
+
+- `screen.locked` / `screen.unlocked`. The *Screen Changed* task now
+  builds `{"kind":"screen.%par1", ...}` and its two callers pass the
+  word rather than a boolean. The payload lost its `value`
+  altogether -- there is nothing about a screen event that varies, so
+  the kind is the whole fact, and `valueOf` seeing nothing gives a
+  label that is the bare kind.
+- `bluetooth.connected` / `bluetooth.disconnected`, by the same
+  shape. The task already mapped a MAC to a friendly name in two
+  actions; two more now map `%bt_connected` to a word, and `%par1`
+  is `bluetooth.%BTWORD`.
+
+Verified live: `screen.unlocked` arrived. `screen.locked` is
+**untested** -- adb cannot put this phone's display to sleep while it
+is charging, so no display-off has occurred since the edit.
+
+
+## Plugged and unplugged are a State, not an Event
+
+Owner picked this and the one above off a survey of what the phone
+could report. Worth recording what the survey found, because it is
+not what I expected:
+
+**Tasker's Power *event* category holds exactly three things** --
+Battery Changed, Battery Full, Battery Overheating -- and all three
+were already wired. There is nothing left in it. Charging has to
+come from the **State** context (State > Power > Power, source Any),
+which brings an enter task and an exit task with it.
+
+So `*Power Any` runs *Power Plugged* on entering and *Power
+Unplugged* on leaving, each calling `Jarvis Event` with the kind and
+`{"level":"%BATT"}`.
+
+**The level is not the value, deliberately.** Putting `%BATT` in
+`value` would make every percentage a different label -- the same
+mistake this file records three times already, most recently a call's
+length turning one caller into six strangers. The level goes in its
+own field, `value` is absent, and the label is the bare kind.
+
+About six rows a day, and it makes the twenty-four battery readings
+already arriving mean something: unplugged at 71 again, not on
+charge at eleven at night, charged through the night.
+
+**A warning about building this over adb.** Backing out of a profile
+whose task is half-made raises *"Delete unfinished profile?"*, and a
+blind tap took the OK -- losing the profile and both tasks. A second
+attempt bound the profile to *Jarvis Flush* because a tap landed on
+the wrong row of a picker. Build the task to completion before
+backing out of anything, and read the screen between every tap.
+
+
 ## 12. Maintaining this file
 
 When the owner states a preference, makes a decision, or corrects something,
