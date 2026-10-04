@@ -1,6 +1,7 @@
 package profile
 
 import (
+	"fmt"
 	"strings"
 	"time"
 	"unicode"
@@ -15,7 +16,7 @@ import (
 // Exported so an eval builds the same thing the server does. That was a
 // separate copy once elsewhere in this codebase, and the eval went on
 // passing against wording the server had stopped using.
-func Prompt(said []conversation.Message, rhythm, asking, was string) string {
+func Prompt(said []conversation.Message, rhythm, asking string, replies []conversation.Reply, was string) string {
 	return prompt.Block(
 		prompt.Text(
 			"Below is one person talking to their assistant over the past week, in the order they said it,",
@@ -93,11 +94,13 @@ func Prompt(said []conversation.Message, rhythm, asking, was string) string {
 			"Hedging is not a way round either of those.",
 			"'Almost certainly' and 'likely' are still claims, and a hedged guess in a description that is read before every answer is acted on exactly as a plain one is.",
 		),
+		answering(replies),
 		previously(was),
 		"Here is what they said:",
 		heard(said),
 		rhythm,
 		asking,
+		spoke(replies),
 	)
 }
 
@@ -222,4 +225,53 @@ func bare(text string) string {
 		}
 	}
 	return b.String()
+}
+
+// answering : What to make of a reply to something nobody asked for.
+//
+// Owner: *"whenever it announces or greets, the acknowledgement or
+// the respective response, if relevant, has to be taken more weight
+// in profiling, greeting and when talking to me."*
+//
+// The reason it is worth more is not that it is recent or rare. It
+// is that nobody asked for the sentence it answers. Everything else
+// here is the person starting something; this is the person judging
+// something the assistant chose to do, and there is no other
+// evidence of that at all.
+func answering(replies []conversation.Reply) string {
+	if len(replies) == 0 {
+		return ""
+	}
+	return prompt.Text(
+		"One section below is different from the rest and is worth more than its size suggests.",
+		"It is the times the assistant spoke first -- a greeting, a reminder, a warning, something it noticed, something coming up -- and what they said back within a few minutes.",
+		"Nobody asked for any of those sentences. So what they said back is the only evidence there is about whether being spoken to unprompted is wanted, and about which sorts of it are.",
+		"Read it for that and say what you find: what they take an interest in, what they answer flatly, what they ask you to stop, what they thank you for.",
+		"A single clear one of those is worth a dozen ordinary messages, because there is nothing else that tells you.",
+		"How quickly they answered is part of it: seconds is a reaction and minutes is a decision.",
+		"And it is still evidence about them rather than about the assistant: write what it says about the person, not how well the assistant is doing.",
+	)
+}
+
+// spoke : The pairs themselves.
+func spoke(replies []conversation.Reply) string {
+	if len(replies) == 0 {
+		return ""
+	}
+	var b strings.Builder
+	b.WriteString("Here is what they said back when the assistant spoke first:\n")
+	for _, r := range replies {
+		fmt.Fprintf(&b, "\n%s -- the assistant said, unasked (%s): %s\n  they answered %s later: %s\n",
+			r.At.Format("Mon 2 Jan 15:04"), r.Kind, strings.TrimSpace(r.Spoke),
+			after(r.After), strings.TrimSpace(r.Said))
+	}
+	return strings.TrimRight(b.String(), "\n")
+}
+
+// after : How long they took, as somebody would say it.
+func after(d time.Duration) string {
+	if d < time.Minute {
+		return fmt.Sprintf("%d seconds", int(d.Seconds()))
+	}
+	return fmt.Sprintf("%d minutes", int(d.Round(time.Minute).Minutes()))
 }

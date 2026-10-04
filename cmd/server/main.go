@@ -388,6 +388,7 @@ func run() error {
 		Said:     chats,
 		Did:      deviceEvents,
 		Asked:    chats,
+		Replies:  chats,
 		Where:    cfg.Assistant.Location,
 		Memories: remembering.Store,
 		Now:      cfg.Assistant.Now,

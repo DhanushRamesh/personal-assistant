@@ -8933,6 +8933,59 @@ argument for the forty-metre line, better than any reasoning:
 One of those three was where he actually was.
 
 
+## What they say back to an unprompted sentence is worth more
+
+Owner: *"whenever it announces or greets, the acknowledgement or
+the respective response, if relevant, has to be taken more weight
+in profiling, greeting and when talking to me."*
+
+**Nothing was carrying it.** `SaidSince` returns only what the
+person said -- the assistant's own turns are excluded on purpose,
+or the description would be of the assistant. The cost of that is
+that *"ok"* and *"stop telling me that"* arrive as two
+unremarkable messages, when one of them is the only direct
+evidence there is about whether an unprompted sentence was wanted.
+
+**Why it is worth more is not that it is rare.** Everything else
+in the description is the person starting something. This is the
+person judging something the assistant *chose* to do, unasked, and
+there is no other evidence of that anywhere.
+
+`RepliesSince` pairs each thing said unasked with the next thing
+the person said in the same conversation, within five minutes. A
+window function, because the question is "the next row in this
+conversation" and a join on "the smallest created_at greater than"
+re-reads the table once per announcement. How long they took is
+kept with it: seconds is a reaction, minutes is a decision.
+
+**One finding from the real transcript changed the design.**
+Renaming floods it and says nothing. *"I have called this
+conversation Today's alibi"* is spoken in the middle of a turn, so
+the next thing the person says is the next thing they were going
+to say anyway -- it was **seven of the first ten pairs**, every one
+a question with nothing to do with the name. `Volunteered()` is
+the audiences table less that one kind, so a new kind is weighed
+by default, which is right: a new kind is a new thing said unasked.
+
+What is left is the evidence that was wanted:
+
+| | |
+| --- | --- |
+| greeting | *"Good evening, sir. You were out a good while"* → **"The movie was quite good."** (14s) |
+| warning | *"your phone is fully charged"* → **"Thank you for saying that."** (7s) |
+| reminder | *"Good morning, sir."* → **"Good morning."** (249s) |
+
+**It reaches all three places through one change.** The greeting
+already reads the standing description, and so does every ordinary
+turn, so weighting it in the profile weights it everywhere without
+three separate mechanisms.
+
+**And it must stay a description of the person.** The prompt says
+so outright -- *"write what it says about the person, not how well
+the assistant is doing"* -- because the obvious failure is a
+profile that turns into a report card.
+
+
 ## 12. Maintaining this file
 
 When the owner states a preference, makes a decision, or corrects something,

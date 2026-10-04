@@ -436,3 +436,68 @@ func (r *Repository) Talkers(ctx context.Context, since time.Time) ([]string, er
 	}
 	return ids, nil
 }
+
+// RepliesSince : What the person said back when the assistant spoke
+// first.
+//
+// Every message of a kind the assistant says unasked, paired with
+// the next thing the person said in the same conversation, when
+// they said it soon enough to be answering it.
+//
+// A window function rather than a self-join: the question is "the
+// next row in this conversation", which is what LEAD is for, and a
+// join on "the smallest created_at greater than" re-reads the table
+// once per announcement.
+func (r *Repository) RepliesSince(ctx context.Context, userID string, since time.Time, limit int) ([]conversation.Reply, error) {
+	if userID == "" {
+		return nil, nil
+	}
+	if limit <= 0 {
+		limit = 200
+	}
+
+	kinds := conversation.Volunteered()
+	names := make([]string, 0, len(kinds))
+	for _, k := range kinds {
+		names = append(names, string(k))
+	}
+
+	var rows []struct {
+		Kind    string    `gorm:"column:kind"`
+		Spoke   string    `gorm:"column:spoke"`
+		Said    string    `gorm:"column:said"`
+		At      time.Time `gorm:"column:at"`
+		SpokeAt time.Time `gorm:"column:spoke_at"`
+	}
+	err := r.db.WithContext(ctx).Raw(`
+		SELECT kind, spoke, said, at, spoke_at FROM (
+			SELECT m.kind                                        AS kind,
+			       m.content                                     AS spoke,
+			       m.created_at                                  AS spoke_at,
+			       LEAD(m.role)       OVER w                     AS next_role,
+			       LEAD(m.content)    OVER w                     AS said,
+			       LEAD(m.created_at) OVER w                     AS at
+			FROM messages m
+			JOIN conversations c ON c.id = m.conversation_id
+			WHERE c.user_id = ? AND m.created_at >= ?
+			WINDOW w AS (PARTITION BY m.conversation_id ORDER BY m.created_at, m.id)
+		) paired
+		WHERE kind IN ? AND next_role = ? AND said IS NOT NULL
+		  AND TIMESTAMPDIFF(SECOND, spoke_at, at) BETWEEN 0 AND ?
+		ORDER BY at ASC
+		LIMIT ?`,
+		userID, since, names, string(conversation.User),
+		int(conversation.Within.Seconds()), limit).Scan(&rows).Error
+	if err != nil {
+		return nil, fmt.Errorf("conversation: reading what %s said back: %w", userID, err)
+	}
+
+	out := make([]conversation.Reply, 0, len(rows))
+	for _, row := range rows {
+		out = append(out, conversation.Reply{
+			Kind: conversation.Kind(row.Kind), Spoke: row.Spoke, Said: row.Said,
+			At: row.At, After: row.At.Sub(row.SpokeAt),
+		})
+	}
+	return out, nil
+}

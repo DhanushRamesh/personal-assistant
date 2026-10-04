@@ -7,6 +7,7 @@ package conversation
 
 import (
 	"errors"
+	"sort"
 	"strings"
 	"time"
 
@@ -559,3 +560,68 @@ func ForPerson(messages []Message) []Message {
 	}
 	return shown
 }
+
+// Reply : Something the assistant said unasked, and what they said
+// back.
+//
+// Owner: *"whenever it announces or greets, the acknowledgement or
+// the respective response, if relevant, has to be taken more
+// weight in profiling, greeting and when talking to me."*
+//
+// Quite right, and nothing was carrying it. What the person says is
+// read without what it was a reply to, deliberately -- feeding the
+// assistant's own words back would have it describing itself. The
+// cost of that is "ok" and "stop telling me that" arriving as two
+// unremarkable messages, when one of them is the only direct
+// evidence there is about whether an unprompted sentence was wanted.
+//
+// A reply to something volunteered is worth more than a reply to a
+// question, because nobody asked for the sentence it answers.
+type Reply struct {
+	// Kind : What sort of thing the assistant said -- a reminder, a
+	// greeting, a remark, a warning, something coming up.
+	Kind Kind
+	// Spoke : What it said.
+	Spoke string
+	// Said : What they said back.
+	Said string
+	// At : When they said it.
+	At time.Time
+	// After : How long they took to answer. A reply two seconds
+	// later is a reaction; one four minutes later is a decision.
+	After time.Duration
+}
+
+// Volunteered : The kinds whose reply is worth weighing.
+//
+// Everything the assistant says unasked, less the housekeeping.
+// Renaming is the housekeeping: "I have called this conversation
+// Today's alibi" is said in the middle of a turn, so the next thing
+// the person says is the next thing they were going to say anyway.
+// Measured against the real transcript it was seven of the first
+// ten pairs, every one of them a question that had nothing to do
+// with the name.
+//
+// Taken from the audiences table less that one, so a kind added
+// there is weighed here without a second edit -- which is the right
+// default, because a new kind is a new thing said unasked.
+func Volunteered() []Kind {
+	out := make([]Kind, 0, len(announcements))
+	for kind := range announcements {
+		if kind == Renaming {
+			continue
+		}
+		out = append(out, kind)
+	}
+	sort.Slice(out, func(i, j int) bool { return out[i] < out[j] })
+	return out
+}
+
+// Within : How long after something unprompted a reply is still a
+// reply to it.
+//
+// Short. Somebody who answers four minutes later is answering; one
+// who says something twenty minutes later has started a different
+// conversation, and reading it as agreement to a warning would put
+// words in their mouth.
+const Within = 5 * time.Minute

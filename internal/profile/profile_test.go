@@ -183,7 +183,7 @@ func TestItReadsAWeek(t *testing.T) {
 // TestThePromptAsksForWhatWasWanted : the things they talk about, the
 // people they know, and how they behave -- the owner's three.
 func TestThePromptAsksForWhatWasWanted(t *testing.T) {
-	p := profile.Prompt(said(3), "", "", "")
+	p := profile.Prompt(said(3), "", "", nil, "")
 
 	for _, want := range []string{"talk about", "people in their life", "behave"} {
 		if !strings.Contains(p, want) {
@@ -210,7 +210,7 @@ func TestThePromptAsksForWhatWasWanted(t *testing.T) {
 // said. A hedge is not a defence: a guess in a description read before
 // every answer is acted on exactly as a fact is.
 func TestItIsToldNotToGuessOriginOrRecordHealth(t *testing.T) {
-	p := profile.Prompt(said(3), "", "", "")
+	p := profile.Prompt(said(3), "", "", nil, "")
 
 	for _, want := range []string{
 		"Where they live, where they are from, their nationality",
@@ -353,7 +353,7 @@ func TestDifferentThingsAreKept(t *testing.T) {
 // line in prose lives until somebody notices and says so. A line
 // carrying a count can be argued with.
 func TestThePromptAsksForTwoLayers(t *testing.T) {
-	p := profile.Prompt(said(3), "", "", "")
+	p := profile.Prompt(said(3), "", "", nil, "")
 
 	for _, want := range []string{"WHAT IS SO", "WHAT THEY ARE LIKE"} {
 		if !strings.Contains(p, want) {
@@ -373,7 +373,7 @@ func TestThePromptAsksForTwoLayers(t *testing.T) {
 // events describe themselves, so a prompt that names kinds rots the
 // day a new sender is added.
 func TestTheMethodNamesNoKindOfThing(t *testing.T) {
-	p := profile.Prompt(said(3), "", "", "")
+	p := profile.Prompt(said(3), "", "", nil, "")
 
 	for _, named := range []string{
 		"wifi", "bluetooth", "calendar", "music", "call.", "location",
@@ -391,7 +391,7 @@ func TestTheMethodNamesNoKindOfThing(t *testing.T) {
 // says it in words as well, because the fold only catches repetition
 // inside half an hour.
 func TestUsingTheAssistantIsNotTheSubject(t *testing.T) {
-	p := profile.Prompt(said(3), "", "", "")
+	p := profile.Prompt(said(3), "", "", nil, "")
 	if !strings.Contains(p, "not their use of the assistant") {
 		t.Error("the prompt does not say to describe the person rather than the usage")
 	}

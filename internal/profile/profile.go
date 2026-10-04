@@ -119,6 +119,11 @@ type Asked interface {
 type Ask func(ctx context.Context, prompt string) (string, error)
 
 // Builder : Writes and rewrites the profile.
+// Replying : What they said back when the assistant spoke first.
+type Replying interface {
+	RepliesSince(ctx context.Context, userID string, since time.Time, limit int) ([]conversation.Reply, error)
+}
+
 type Builder struct {
 	// Said : Where the person's own messages come from. Required.
 	Said Said
@@ -129,6 +134,10 @@ type Builder struct {
 	// Asked : Where the tools run for them come from. Optional, like
 	// Did.
 	Asked Asked
+	// Replies : What they said back when the assistant spoke first.
+	// Optional: without it the description is written from what they
+	// said, as it was before this existed.
+	Replies Replying
 	// Where : The timezone their days are counted in. Nil is UTC, which
 	// puts their evenings on the wrong date.
 	Where *time.Location
@@ -187,7 +196,8 @@ func (b *Builder) Build(ctx context.Context, userID string) error {
 	}
 	was, _ := b.previously(ctx, userID)
 
-	answer, err := b.Ask(ctx, Prompt(Folded(said), b.rhythm(ctx, userID), b.asking(ctx, userID), was))
+	answer, err := b.Ask(ctx, Prompt(Folded(said), b.rhythm(ctx, userID),
+		b.asking(ctx, userID), b.replies(ctx, userID), was))
 	if err != nil {
 		return fmt.Errorf("profile: asking for the description: %w", err)
 	}
@@ -390,4 +400,25 @@ func (r *Reader) Profile(ctx context.Context, userID string) (string, error) {
 		}
 	}
 	return "", nil
+}
+
+// replies : What they said back when the assistant spoke first.
+//
+// Read over the four weeks the habits are read over, not the one
+// week of words: there are only a handful of these and a week of
+// them is not enough to say anything from.
+//
+// Failures are stepped over. A description written without this is
+// the description that was written before it existed, and that is
+// a great deal better than none.
+func (b *Builder) replies(ctx context.Context, userID string) []conversation.Reply {
+	if b.Replies == nil {
+		return nil
+	}
+	got, err := b.Replies.RepliesSince(ctx, userID, b.clock().Add(-Habits), Most)
+	if err != nil {
+		b.warn(ctx, "cannot read what they said back", err)
+		return nil
+	}
+	return got
 }
