@@ -279,12 +279,12 @@ func (p *Environment) Run(ctx context.Context, req environment.Request) (<-chan 
 				firstPiece = time.Since(started)
 			}
 			pieces++
-			// Counted either way, but only passed on when the
-			// caller said this round's answer is the one that
-			// stands.
-			if req.Pieces {
-				send(ctx, ch, environment.Partial(text))
-			}
+			// Always sent on. Whether a piece reaches the person is
+			// the runner's to decide, and it needs to see them
+			// either way: the first fragment of prose is how it
+			// learns this round is prose rather than a tool call,
+			// which is several seconds before the round says so.
+			send(ctx, ch, environment.Partial(text))
 		})
 		if err != nil {
 			// A cancelled chat is the user's doing, not a failure worth

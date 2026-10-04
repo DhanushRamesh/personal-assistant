@@ -3420,6 +3420,52 @@ alongside. That is work rather than wording, and it is what this
 note exists to point at.
 
 
+## The send-back stops being serial
+
+It is right about one turn in four -- 90 of 363 -- and the other
+three cost three to five seconds for an answer barely different from
+the one thrown away. On a plain "good morning" it doubled the turn to
+seven and a half seconds; the same greeting minutes later, when it
+did not fire, took four and three quarters.
+
+It cannot be prevented. The caution it applies was moved into the
+prompt twice and made tool choice worse both times, because it fires
+on something that cannot be known in advance.
+
+**But it can stop being serial.** A streamed round shows text before
+it shows a tool call -- measured, every streamed tool call in this
+system arrives before any prose of its own. So the first fragment of
+prose is proof that this round will be sent back, several seconds
+before it finishes saying so. The round the send-back would ask for
+is begun right then, beside the one still being written, and the
+loop takes it as though it had just asked.
+
+**A round begun early is only ever right for the send-back**, which
+is the whole hazard. If the round beside it goes on to call a tool,
+the history changes underneath it and what it holds is the answer to
+a question nobody is asking. So there are two variables rather than
+one: a round is dropped at the top of every turn unless the
+send-back branch has accepted it, and that branch is the only place
+that may.
+
+**The provider stopped deciding what is spoken.** It used to drop the
+pieces of a round that could still be sent back, on the caller's say
+so. Now it always sends them and the runner decides, because the
+runner needs to see them either way -- reading the first fragment is
+how it learns the round is prose at all.
+
+**Two tests, and one of them had to fail first.** One pins that the
+second round starts while the first is still writing; it fails with
+the overlap removed, reporting the rounds a full pause apart. The
+other pins that a round which calls a tool begins nothing early, so
+the saving is never paid for twice.
+
+**And an existing test caught a real mistake.** A sed meant to
+restore one line restored it in two places, so every send-back
+started an extra round -- three calls where there should be two.
+`TestItIsSentBackOnlyOnce` had it before anything else did.
+
+
 ## The narration was the wait it was covering
 
 Owner: *"calculate the full latency... I want ultra low latency."*

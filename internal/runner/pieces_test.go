@@ -5,24 +5,25 @@ import (
 	"strings"
 	"sync"
 	"testing"
+	"time"
 
 	"github.com/DhanushRamesh/personal-assistant/internal/chat"
 	"github.com/DhanushRamesh/personal-assistant/internal/environment"
+	"github.com/DhanushRamesh/personal-assistant/internal/events"
 	"github.com/DhanushRamesh/personal-assistant/internal/runner"
 )
 
-// watched : A scripted provider that records whether each round was
-// allowed to put the answer through in pieces.
-type watched struct {
+// speaking : A provider that writes its answer in pieces before
+// finishing it, which is what a real one does.
+type speaking struct {
 	rounds []environment.Message
 	mu     sync.Mutex
 	at     int
-	pieces []bool
 }
 
-func (p *watched) Name() string { return "watched" }
+func (p *speaking) Name() string { return "speaking" }
 
-func (p *watched) Run(_ context.Context, req environment.Request) (<-chan environment.Message, error) {
+func (p *speaking) Run(_ context.Context, req environment.Request) (<-chan environment.Message, error) {
 	ch := make(chan environment.Message, 1)
 	if req.Purpose != environment.PurposeChat {
 		ch <- environment.Final("an answer")
@@ -36,70 +37,100 @@ func (p *watched) Run(_ context.Context, req environment.Request) (<-chan enviro
 		at = len(p.rounds) - 1
 	}
 	p.at++
-	p.pieces = append(p.pieces, req.Pieces)
 	p.mu.Unlock()
 
-	ch <- p.rounds[at]
-	close(ch)
+	round := p.rounds[at]
+	// On its own goroutine, like a real provider: an answer is longer
+	// than any buffer and the caller reads while it is written.
+	go func() {
+		defer close(ch)
+		if round.Kind == environment.KindFinal {
+			// Written a word at a time, like the real thing.
+			for _, word := range strings.SplitAfter(round.Text, " ") {
+				if word != "" {
+					ch <- environment.Partial(word)
+				}
+			}
+		}
+		ch <- round
+	}()
 	return ch, nil
 }
 
-func (p *watched) allowed() []bool {
-	p.mu.Lock()
-	defer p.mu.Unlock()
-	return append([]bool(nil), p.pieces...)
+// overheard : The pieces of an answer that actually reached a
+// listener.
+func overheard(t *testing.T, h *harness, chatID string) func() []string {
+	t.Helper()
+	ch, stop := h.bus.Subscribe(chatID)
+	t.Cleanup(stop)
+
+	var mu sync.Mutex
+	var got []string
+	go func() {
+		for ev := range ch {
+			if ev.Kind != events.KindPartial {
+				continue
+			}
+			mu.Lock()
+			got = append(got, ev.Text)
+			mu.Unlock()
+		}
+	}()
+	return func() []string {
+		mu.Lock()
+		defer mu.Unlock()
+		return append([]string(nil), got...)
+	}
 }
 
-// TestAnAnswerThatCanBeSentBackIsNotStreamed : The bug this exists for.
+// TestAnAnswerThatCanBeSentBackIsNotSpoken : The bug this exists
+// for.
 //
-// Streaming went in, and the assistant started saying everything twice.
-// A model that answers without touching a tool is sent back once to
-// look at them -- but by then the answer it gave had already been
-// spoken, and the round that replaced it was heard as a repeat.
+// Streaming went in and the assistant started saying everything
+// twice. A model that answers without touching a tool is sent back
+// once to look at them -- but by then the answer it gave had already
+// been spoken, and the round that replaced it was heard as a repeat.
 //
-// So the first round, which can still be sent back, is not streamed,
-// and the one after it is.
-func TestAnAnswerThatCanBeSentBackIsNotStreamed(t *testing.T) {
-	p := &watched{rounds: []environment.Message{
+// The pieces of a round that may still be sent back are read -- that
+// is how the runner knows the round is prose rather than a tool call
+// -- and not passed on.
+func TestAnAnswerThatCanBeSentBackIsNotSpoken(t *testing.T) {
+	p := &speaking{rounds: []environment.Message{
 		environment.Final("There is no such thing, sir."),
-		environment.Final("There is no such thing, sir."),
+		environment.Final("Nothing of the kind, sir."),
 	}}
 	h := newHarness(t, p, runner.Options{Tools: writer(true)})
 
-	tk := h.submit(t, "move the movie to ten past six")
+	tk := h.submitOn(t, chat.ChannelVoice, "move the movie to ten past six")
+	heard := overheard(t, h, tk.ID)
 	h.await(t, tk.ID, chat.StatusCompleted, chat.StatusFailed)
 
-	got := p.allowed()
-	if len(got) < 2 {
-		t.Fatalf("the answer was not sent back: %d rounds", len(got))
+	said := strings.Join(heard(), "")
+	if strings.Contains(said, "There is no such thing") {
+		t.Errorf("an answer that was then sent back had already been spoken: %q", said)
 	}
-	if got[0] {
-		t.Error("an answer that could still be sent back was spoken as it was written")
-	}
-	if !got[1] {
-		t.Error("the answer that stands was not streamed")
+	if !strings.Contains(said, "Nothing of the kind") {
+		t.Errorf("the answer that stands was never spoken: %q", said)
 	}
 }
 
-// TestTheAnswerAfterToolsIsStreamed : The ordinary voice turn, and the
-// one the streaming was built for. Once a tool has been asked for the
-// answer cannot be sent back to look at them, so it goes out in pieces.
-func TestTheAnswerAfterToolsIsStreamed(t *testing.T) {
-	p := &watched{rounds: []environment.Message{
+// TestTheAnswerAfterToolsIsSpoken : The ordinary voice turn, and the
+// one streaming was built for. Once a tool has been asked for the
+// answer cannot be sent back to look at them, so it goes out in
+// pieces.
+func TestTheAnswerAfterToolsIsSpoken(t *testing.T) {
+	p := &speaking{rounds: []environment.Message{
 		calling("calendar_update"),
 		environment.Final("Moved it to six ten on Sunday."),
 	}}
 	h := newHarness(t, p, runner.Options{Tools: writer(true)})
 
-	tk := h.submit(t, "move the movie to ten past six")
+	tk := h.submitOn(t, chat.ChannelVoice, "move the movie to ten past six")
+	heard := overheard(t, h, tk.ID)
 	h.await(t, tk.ID, chat.StatusCompleted, chat.StatusFailed)
 
-	got := p.allowed()
-	if len(got) < 2 {
-		t.Fatalf("the tool round did not happen: %d rounds", len(got))
-	}
-	if !got[1] {
-		t.Error("the answer after a tool ran was held back instead of streamed")
+	if said := strings.Join(heard(), ""); !strings.Contains(said, "Moved it") {
+		t.Errorf("the answer after a tool ran was never spoken: %q", said)
 	}
 	if answer := answered(t, h); strings.Contains(answer, denied) {
 		t.Errorf("a write that worked was denied: %q", answer)
@@ -179,5 +210,120 @@ func TestAScreenIsStillToldWhatIsBeingDone(t *testing.T) {
 	}
 	if !found {
 		t.Errorf("a screen was told nothing about what the turn was doing: %q", heard())
+	}
+}
+
+// counting : A provider that records how many rounds were asked for
+// and how far apart, so the overlap can be seen.
+type counting struct {
+	mu     sync.Mutex
+	at     int
+	begun  []time.Time
+	rounds []environment.Message
+	pause  time.Duration
+}
+
+func (p *counting) Name() string { return "counting" }
+
+func (p *counting) Run(ctx context.Context, req environment.Request) (<-chan environment.Message, error) {
+	ch := make(chan environment.Message, 1)
+	if req.Purpose != environment.PurposeChat {
+		ch <- environment.Final("an answer")
+		close(ch)
+		return ch, nil
+	}
+
+	p.mu.Lock()
+	at := p.at
+	if at >= len(p.rounds) {
+		at = len(p.rounds) - 1
+	}
+	p.at++
+	p.begun = append(p.begun, time.Now())
+	p.mu.Unlock()
+
+	round := p.rounds[at]
+	go func() {
+		defer close(ch)
+		if round.Kind == environment.KindFinal {
+			// A word, then a pause, then the rest. The pause is where
+			// the round after this one has its chance to start.
+			words := strings.SplitAfter(round.Text, " ")
+			ch <- environment.Partial(words[0])
+			select {
+			case <-time.After(p.pause):
+			case <-ctx.Done():
+				return
+			}
+			for _, w := range words[1:] {
+				if w != "" {
+					ch <- environment.Partial(w)
+				}
+			}
+		}
+		ch <- round
+	}()
+	return ch, nil
+}
+
+func (p *counting) started() []time.Time {
+	p.mu.Lock()
+	defer p.mu.Unlock()
+	return append([]time.Time(nil), p.begun...)
+}
+
+// TestTheSendBackStartsBeforeItIsNeeded : The whole point of the
+// overlap.
+//
+// The send-back is right about one turn in four and the other three
+// cost three to five seconds for an answer barely different from the
+// one thrown away. It cannot be prevented -- moving its caution into
+// the prompt was tried twice and made tool choice worse both times --
+// but a streamed round shows text before it shows a tool call, so the
+// first fragment of prose is proof the round will be sent back, well
+// before it finishes saying so.
+func TestTheSendBackStartsBeforeItIsNeeded(t *testing.T) {
+	const pause = 300 * time.Millisecond
+	p := &counting{pause: pause, rounds: []environment.Message{
+		environment.Final("There is no such thing, sir."),
+		environment.Final("Nothing of the kind, sir."),
+	}}
+	h := newHarness(t, p, runner.Options{Tools: writer(true)})
+
+	tk := h.submitOn(t, chat.ChannelVoice, "move the movie to ten past six")
+	h.await(t, tk.ID, chat.StatusCompleted, chat.StatusFailed)
+
+	begun := p.started()
+	if len(begun) < 2 {
+		t.Fatalf("only %d rounds were asked for", len(begun))
+	}
+	// The second must have started while the first was still being
+	// written, which is during the pause rather than after it.
+	if gap := begun[1].Sub(begun[0]); gap >= pause {
+		t.Errorf("the second round waited for the first to finish: %s apart, "+
+			"and the first took at least %s", gap, pause)
+	}
+}
+
+// TestNothingIsStartedEarlyWhenAToolIsComing : A round begun early is
+// only ever right for the send-back. If the round beside it calls a
+// tool the history changes underneath it, and what it holds is the
+// answer to a question nobody is asking.
+func TestNothingIsStartedEarlyWhenAToolIsComing(t *testing.T) {
+	p := &counting{pause: 50 * time.Millisecond, rounds: []environment.Message{
+		calling("calendar_update"),
+		environment.Final("Moved it to six ten on Sunday."),
+	}}
+	h := newHarness(t, p, runner.Options{Tools: writer(true)})
+
+	tk := h.submitOn(t, chat.ChannelVoice, "move the movie to ten past six")
+	h.await(t, tk.ID, chat.StatusCompleted, chat.StatusFailed)
+
+	// Two rounds: the tool call and the answer. Not three.
+	if begun := p.started(); len(begun) != 2 {
+		t.Errorf("asked for %d rounds, want 2 -- one was begun early and wasted", len(begun))
+	}
+	if answer := answered(t, h); !strings.Contains(answer, "Moved it") {
+		t.Errorf("the answer was lost: %q", answer)
 	}
 }

@@ -100,6 +100,30 @@ func (r *Runner) consume(runCtx, ctx context.Context, t *chat.Chat, systemPrompt
 	// on a change it was asked to make.
 	var nudged bool
 
+	// A round begun before the one in front of it had finished, and
+	// the one that has been accepted for the next turn of the loop.
+	//
+	// Two of them rather than one, because a round begun early is
+	// only ever right for the send-back. If the round it was begun
+	// beside goes on to call a tool, the history changes underneath
+	// it and what it holds is the answer to a question nobody is
+	// asking any more. So it is dropped at the top of every turn
+	// unless it has been accepted. See ahead.
+	var waiting, accepted <-chan environment.Message
+	var stopWaiting, stopAccepted context.CancelFunc
+	drop := func() {
+		if stopWaiting != nil {
+			stopWaiting()
+		}
+		waiting, stopWaiting = nil, nil
+	}
+	defer func() {
+		drop()
+		if stopAccepted != nil {
+			stopAccepted()
+		}
+	}()
+
 	// Whether the model has asked for any tool this turn, and whether
 	// it has already been sent back once to look at what it has.
 	//
@@ -186,17 +210,27 @@ func (r *Runner) consume(runCtx, ctx context.Context, t *chat.Chat, systemPrompt
 			asking = r.asking(systemPrompt, t, revealed)
 		}
 
-		stream, err := r.environment.Run(runCtx, environment.Request{
-			Prompt:  prompt,
-			History: turns,
-			Summary: window.Summary,
-			Vendor:  t.Model.Vendor,
-			Model:   t.Model.ID,
-			Tools:   tools,
-			Pieces:  !returnable(reached, pressed, nudged, wrote, tools),
+		// The round begun early, if the one before it turned out to
+		// need it. Taken as though it had just been asked for.
+		stream, err := accepted, error(nil)
+		spent := stopAccepted
+		accepted, stopAccepted = nil, nil
+		// Anything begun early and not accepted is stale: the round
+		// beside it called a tool, so the history it was asked
+		// against no longer exists.
+		drop()
+		if stream == nil {
+			stream, err = r.environment.Run(runCtx, environment.Request{
+				Prompt:  prompt,
+				History: turns,
+				Summary: window.Summary,
+				Vendor:  t.Model.Vendor,
+				Model:   t.Model.ID,
+				Tools:   tools,
 
-			SystemPrompt: asking,
-		})
+				SystemPrompt: asking,
+			})
+		}
 		if err != nil {
 			r.logger.ErrorContext(ctx, "environment would not start", slog.Any("error", err))
 			r.finishWith(ctx, t, aloud, func() error {
@@ -211,7 +245,19 @@ func (r *Runner) consume(runCtx, ctx context.Context, t *chat.Chat, systemPrompt
 			return
 		}
 
-		final := r.drain(ctx, t, stream, aloud, &spoke)
+		// Whether this round's answer could still be sent back, which
+		// decides both whether it may be spoken and whether the round
+		// after it is worth beginning early.
+		sendable := returnable(reached, pressed, nudged, wrote, tools)
+		final := r.drain(ctx, t, stream, aloud, &spoke, !sendable, func() {
+			if sendable {
+				waiting, stopWaiting = r.ahead(runCtx, t, window, turns, prompt, asking, tools)
+			}
+		})
+		if spent != nil {
+			// Finished with. This only lets its context go.
+			spent()
+		}
 
 		switch {
 		case final == nil:
@@ -253,8 +299,13 @@ func (r *Runner) consume(runCtx, ctx context.Context, t *chat.Chat, systemPrompt
 			// say the same thing again. What it cannot do is never
 			// look.
 			if !reached && !pressed && len(tools) > 0 {
-				r.logger.InfoContext(ctx, "an answer was sent back to look at the tools")
+				r.logger.InfoContext(ctx, "an answer was sent back to look at the tools",
+					slog.Bool("already_running", waiting != nil))
 				pressed = true
+				// Begun while this answer was still being written, if
+				// it was. This is the only place it is right to use.
+				accepted, stopAccepted = waiting, stopWaiting
+				waiting, stopWaiting = nil, nil
 				turns = append(turns, asUserTurn(prompt)...)
 				prompt = lookFirst
 				continue
@@ -468,6 +519,14 @@ func (r *Runner) drain(
 	stream <-chan environment.Message,
 	aloud *speech,
 	spoke *bool,
+	// speak : Whether this round's pieces may reach the person. A
+	// round whose answer could still be sent back must be read in
+	// silence.
+	speak bool,
+	// began : Told the first time text arrives rather than a tool
+	// call, which is the earliest anything knows which sort of round
+	// this is. Nil when nobody is waiting on that.
+	began func(),
 ) *environment.Message {
 	var final *environment.Message
 	// One per stream. The model narrating twice inside a single round
@@ -484,6 +543,20 @@ func (r *Runner) drain(
 				saidThisRound = true
 			}
 		case environment.KindPartial:
+			// Text rather than a tool call, which is the earliest
+			// anything can know which sort of round this is. Told
+			// once, and only the first time.
+			if began != nil {
+				began()
+				began = nil
+			}
+			if !speak {
+				// This round's answer may still be sent back, and
+				// what a listener has heard cannot be unheard. The
+				// pieces are still read, because reading them is how
+				// the round is recognised at all.
+				continue
+			}
 			// When the person stops waiting, which is not when the
 			// turn ends. Stamped here rather than worked out later,
 			// because the answer is written down once and whole and
@@ -825,4 +898,52 @@ func returnable(reached, pressed, nudged bool, wrote writing, tools []environmen
 		return false
 	}
 	return (!reached && !pressed) || (!wrote.claimable() && !nudged)
+}
+
+// ahead : Starts the round the send-back would have asked for,
+// before the round in front of it has finished.
+//
+// The send-back is right about one turn in four -- 90 of 363
+// measured -- and the other three cost three to five seconds for an
+// answer barely different from the one thrown away. On a plain
+// "good morning" it doubled the turn to seven and a half seconds.
+//
+// It cannot be prevented: the caution it applies was moved into the
+// prompt twice and made the tool suite worse both times, because it
+// fires on something that cannot be known in advance. But it can
+// stop being serial. A streamed round shows text before it shows a
+// tool call, so the first fragment of prose is proof that this round
+// will be sent back, several seconds before it finishes saying so.
+//
+// What is started here is exactly what the next turn of the loop
+// would have built, so the loop takes it as though it had just asked
+// for it. Started in silence: it may be thrown away, and what a
+// listener has heard cannot be unheard.
+func (r *Runner) ahead(
+	runCtx context.Context,
+	t *chat.Chat,
+	window conversation.Window,
+	turns []environment.Turn,
+	prompt, asking string,
+	tools []environment.ToolSpec,
+) (<-chan environment.Message, context.CancelFunc) {
+	ctx, cancel := context.WithCancel(runCtx)
+	stream, err := r.environment.Run(ctx, environment.Request{
+		Prompt:  lookFirst,
+		History: append(append([]environment.Turn{}, turns...), asUserTurn(prompt)...),
+		Summary: window.Summary,
+		Vendor:  t.Model.Vendor,
+		Model:   t.Model.ID,
+		Tools:   tools,
+
+		SystemPrompt: asking,
+	})
+	if err != nil {
+		// Nothing is lost. The loop asks for the same thing itself a
+		// moment later and reports the failure then, in the one place
+		// that knows how to fail a chat properly.
+		cancel()
+		return nil, nil
+	}
+	return stream, cancel
 }
