@@ -11,6 +11,7 @@ import (
 	"github.com/DhanushRamesh/personal-assistant/internal/environment"
 	"github.com/DhanushRamesh/personal-assistant/internal/events"
 	"github.com/DhanushRamesh/personal-assistant/internal/runner"
+	"github.com/DhanushRamesh/personal-assistant/internal/tool"
 )
 
 // speaking : A provider that writes its answer in pieces before
@@ -33,10 +34,18 @@ func (p *speaking) Run(_ context.Context, req environment.Request) (<-chan envir
 
 	p.mu.Lock()
 	at := p.at
-	if at >= len(p.rounds) {
+	// The send-back's round is begun beside the one in front of it
+	// and is usually thrown away, so it takes no place in the
+	// script: a real provider answers what it is asked and keeps no
+	// queue.
+	if lookingFirst(req) {
 		at = len(p.rounds) - 1
+	} else {
+		if at >= len(p.rounds) {
+			at = len(p.rounds) - 1
+		}
+		p.at++
 	}
-	p.at++
 	p.mu.Unlock()
 
 	round := p.rounds[at]
@@ -235,10 +244,14 @@ func (p *counting) Run(ctx context.Context, req environment.Request) (<-chan env
 
 	p.mu.Lock()
 	at := p.at
-	if at >= len(p.rounds) {
+	if lookingFirst(req) {
 		at = len(p.rounds) - 1
+	} else {
+		if at >= len(p.rounds) {
+			at = len(p.rounds) - 1
+		}
+		p.at++
 	}
-	p.at++
 	p.begun = append(p.begun, time.Now())
 	p.mu.Unlock()
 
@@ -305,25 +318,66 @@ func TestTheSendBackStartsBeforeItIsNeeded(t *testing.T) {
 	}
 }
 
-// TestNothingIsStartedEarlyWhenAToolIsComing : A round begun early is
-// only ever right for the send-back. If the round beside it calls a
-// tool the history changes underneath it, and what it holds is the
-// answer to a question nobody is asking.
-func TestNothingIsStartedEarlyWhenAToolIsComing(t *testing.T) {
-	p := &counting{pause: 50 * time.Millisecond, rounds: []environment.Message{
+// TestARoundThrownAwayChangesNothing : The cost of beginning the
+// send-back at once is a round spent on the three turns in four
+// where the guard changes nothing. The cost it must never be is a
+// tool run twice.
+//
+// A discarded round is discarded whole: its stream is dropped
+// without its tool calls being read, so nothing it asked for
+// happens.
+func TestARoundThrownAwayChangesNothing(t *testing.T) {
+	var ran int
+	var mu sync.Mutex
+	counted, err := tool.NewRegistry(tool.Tool{
+		Name:     "calendar_update",
+		Domain:   "calendar",
+		Writes:   true,
+		Purpose:  "Change an event.",
+		UseWhen:  "They ask for an event to be moved.",
+		Channels: []chat.Channel{chat.ChannelVoice, chat.ChannelDirect},
+		Params:   tool.Schema{Properties: map[string]tool.Property{}},
+		Run: func(context.Context, tool.Invocation) tool.Result {
+			mu.Lock()
+			ran++
+			mu.Unlock()
+			return tool.OK("Moved it.")
+		},
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	p := &counting{pause: 20 * time.Millisecond, rounds: []environment.Message{
 		calling("calendar_update"),
 		environment.Final("Moved it to six ten on Sunday."),
 	}}
-	h := newHarness(t, p, runner.Options{Tools: writer(true)})
+	h := newHarness(t, p, runner.Options{Tools: counted})
 
 	tk := h.submitOn(t, chat.ChannelVoice, "move the movie to ten past six")
 	h.await(t, tk.ID, chat.StatusCompleted, chat.StatusFailed)
 
-	// Two rounds: the tool call and the answer. Not three.
-	if begun := p.started(); len(begun) != 2 {
-		t.Errorf("asked for %d rounds, want 2 -- one was begun early and wasted", len(begun))
+	mu.Lock()
+	times := ran
+	mu.Unlock()
+	if times != 1 {
+		t.Errorf("the write ran %d times, want 1", times)
 	}
 	if answer := answered(t, h); !strings.Contains(answer, "Moved it") {
 		t.Errorf("the answer was lost: %q", answer)
 	}
+	if answer := answered(t, h); strings.Contains(answer, denied) {
+		t.Errorf("a write that worked was denied: %q", answer)
+	}
+}
+
+// lookingFirst : Whether this request is the send-back's round.
+//
+// The runner starts that round at the same moment as the one before
+// it, so a provider that plays a fixed script would have the script
+// eaten by a round that may be thrown away. A real provider answers
+// whatever it is asked and keeps no place in a queue; these say so
+// by recognising the question.
+func lookingFirst(req environment.Request) bool {
+	return strings.Contains(req.Prompt, "you did not use any tool this turn")
 }

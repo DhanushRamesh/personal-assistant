@@ -3432,13 +3432,28 @@ It cannot be prevented. The caution it applies was moved into the
 prompt twice and made tool choice worse both times, because it fires
 on something that cannot be known in advance.
 
-**But it can stop being serial.** A streamed round shows text before
-it shows a tool call -- measured, every streamed tool call in this
-system arrives before any prose of its own. So the first fragment of
-prose is proof that this round will be sent back, several seconds
-before it finishes saying so. The round the send-back would ask for
-is begun right then, beside the one still being written, and the
+**But it can stop being serial.** The round the send-back would ask
+for is begun at the same moment as the round in front of it, and the
 loop takes it as though it had just asked.
+
+**Waiting for the first fragment of prose was tried first, and was
+useless.** The reasoning was sound -- a streamed tool call arrives
+before any text, so the first text is proof of a send-back -- and the
+measurement killed it:
+
+    round 1:  after=2.4416s   first_piece_after=2.4413s
+
+Three tenths of a millisecond between the first fragment and the end
+of the round. On a short answer the gateway delivers the whole thing
+in one burst, so there is no window to start anything in. The
+overlap fired, logged `already_running=true`, and saved nothing: 2.44
+plus 2.31 was still 4.75.
+
+**So it starts at once**, which spends a round on the three turns in
+four where the guard changes nothing. Owner, asked directly what to
+optimise for: *"accuracy high, latency low, cost is not my
+concern."* This is the shape of that -- the turn costs the longer of
+two rounds rather than the sum.
 
 **A round begun early is only ever right for the send-back**, which
 is the whole hazard. If the round beside it goes on to call a tool,
@@ -3454,11 +3469,20 @@ so. Now it always sends them and the runner decides, because the
 runner needs to see them either way -- reading the first fragment is
 how it learns the round is prose at all.
 
-**Two tests, and one of them had to fail first.** One pins that the
+**Two tests, and the second one changed shape.** One pins that the
 second round starts while the first is still writing; it fails with
 the overlap removed, reporting the rounds a full pause apart. The
-other pins that a round which calls a tool begins nothing early, so
-the saving is never paid for twice.
+other began life pinning that a round which calls a tool starts
+nothing early -- which stopped being true the moment speculation
+became unconditional. What it pins now is the invariant that
+actually matters: a discarded round is discarded whole, its tool
+calls never read, so a write asked for twice runs once.
+
+**The test providers had to stop queueing.** They played a fixed
+script in order, so a round that may be thrown away ate the next
+entry. A real provider answers what it is asked and keeps no place
+in a queue; they recognise the send-back's question now and answer
+it without taking a turn.
 
 **And an existing test caught a real mistake.** A sed meant to
 restore one line restored it in two places, so every send-back

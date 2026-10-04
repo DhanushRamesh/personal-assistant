@@ -28,6 +28,17 @@ type scripted struct {
 func (p *scripted) Name() string { return "scripted" }
 
 func (p *scripted) Run(_ context.Context, req environment.Request) (<-chan environment.Message, error) {
+	// The send-back's round is begun beside the one in front of it
+	// and is usually thrown away, so it takes no place in the
+	// script: a real provider answers what it is asked and keeps no
+	// queue. It is served the script's last word, which is what a
+	// model with nothing new to add would say.
+	if lookingFirst(req) {
+		ch := make(chan environment.Message, 1)
+		ch <- p.rounds[len(p.rounds)-1]
+		close(ch)
+		return ch, nil
+	}
 	ch := make(chan environment.Message, 1)
 	// Naming and condensing run after the answer and must not consume
 	// the script.

@@ -247,13 +247,12 @@ func (r *Runner) consume(runCtx, ctx context.Context, t *chat.Chat, systemPrompt
 
 		// Whether this round's answer could still be sent back, which
 		// decides both whether it may be spoken and whether the round
-		// after it is worth beginning early.
+		// after it is begun now.
 		sendable := returnable(reached, pressed, nudged, wrote, tools)
-		final := r.drain(ctx, t, stream, aloud, &spoke, !sendable, func() {
-			if sendable {
-				waiting, stopWaiting = r.ahead(runCtx, t, window, turns, prompt, asking, tools)
-			}
-		})
+		if sendable {
+			waiting, stopWaiting = r.ahead(runCtx, t, window, turns, prompt, asking, tools)
+		}
+		final := r.drain(ctx, t, stream, aloud, &spoke, !sendable, nil)
 		if spent != nil {
 			// Finished with. This only lets its context go.
 			spent()
@@ -900,8 +899,8 @@ func returnable(reached, pressed, nudged bool, wrote writing, tools []environmen
 	return (!reached && !pressed) || (!wrote.claimable() && !nudged)
 }
 
-// ahead : Starts the round the send-back would have asked for,
-// before the round in front of it has finished.
+// ahead : Starts the round the send-back would have asked for, at
+// the same moment as the round in front of it.
 //
 // The send-back is right about one turn in four -- 90 of 363
 // measured -- and the other three cost three to five seconds for an
@@ -910,10 +909,21 @@ func returnable(reached, pressed, nudged bool, wrote writing, tools []environmen
 //
 // It cannot be prevented: the caution it applies was moved into the
 // prompt twice and made the tool suite worse both times, because it
-// fires on something that cannot be known in advance. But it can
-// stop being serial. A streamed round shows text before it shows a
-// tool call, so the first fragment of prose is proof that this round
-// will be sent back, several seconds before it finishes saying so.
+// fires on something that cannot be known in advance. So it is paid
+// for in parallel instead of in series.
+//
+// Waiting for the first fragment of prose was tried first, on the
+// grounds that a streamed tool call arrives before any text and so
+// the first text is proof of a send-back. True, and useless: on a
+// short answer the gateway delivers the whole thing in one burst,
+// and the first fragment arrived three tenths of a millisecond
+// before the round ended. There was no window to start anything in.
+//
+// So it starts at once, whenever the send-back could fire at all.
+// That spends a round on the three turns in four where the guard
+// changes nothing. The owner's order was accuracy first, latency
+// second, cost not a concern, and this is the shape of that: the
+// turn costs the longer of two rounds instead of the sum.
 //
 // What is started here is exactly what the next turn of the loop
 // would have built, so the loop takes it as though it had just asked
