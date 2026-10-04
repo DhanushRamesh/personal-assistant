@@ -84,7 +84,19 @@ func TestWhatThePromptWeighs(t *testing.T) {
 	fmt.Printf("    of which prose     %d bytes\n", describe)
 	fmt.Printf("  biggest single tool  %s, %d bytes (~%d tokens)\n", worst, biggest, biggest/4)
 	fmt.Printf("  system prompt        %d bytes  (~%d tokens)\n", len(system), len(system)/4)
-	fmt.Printf("  everything above     ~%d tokens\n", (schema+len(system))/4)
+	// The one argument every tool carries, described in full on each
+	// of them.
+	saying, _ := tool.Narrated(tool.Schema{Properties: map[string]tool.Property{}},
+		address).MarshalJSON()
+	fmt.Printf("  the saying argument  %d bytes each, x%d = %d bytes (~%d tokens)\n",
+		len(saying), len(offered), len(saying)*len(offered),
+		len(saying)*len(offered)/4)
+
+	catalogue := registry.Catalogue(chat.ChannelVoice, nil)
+	fmt.Printf("  deferred catalogue   %d bytes  (~%d tokens)\n",
+		len(catalogue), len(catalogue)/4)
+	fmt.Printf("  everything above     ~%d tokens\n",
+		(schema+len(system)+len(catalogue))/4)
 	fmt.Printf("\n  every tool, heaviest first:\n")
 	for _, w := range all {
 		fmt.Printf("    %-24s %5d\n", w.name, w.size)

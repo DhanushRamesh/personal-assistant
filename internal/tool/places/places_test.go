@@ -149,3 +149,41 @@ func TestNothingRecordedIsNotSaidToBeADayAtHome(t *testing.T) {
 		t.Errorf("an unwatched day was not reported as unwatched:\n%s", got.Content)
 	}
 }
+
+// TestGoingOutAndComingBackIsVisible : The bug this exists for.
+//
+// Home until half past ten and home again from quarter to eleven
+// read as having been home the whole time, and the assistant
+// answered "no, you stayed home, sir" to somebody who had gone out.
+// The evidence was there; the fifteen minutes between the two
+// entries existed only if you subtracted them.
+func TestGoingOutAndComingBackIsVisible(t *testing.T) {
+	got := ask(t, []event.Event{
+		stayed("home", hhmm(8, 0), 145),   // 08:00 to 10:25
+		stayed("home", hhmm(10, 45), 125), // 10:45 onwards
+	}, `{"days":1}`)
+
+	if !strings.Contains(got.Content, "nothing recorded from 10:25 to 10:45") {
+		t.Errorf("the stretch they were out is not shown:\n%s", got.Content)
+	}
+	// And it must not decide what the stretch was.
+	for _, guess := range []string{"went out", "left home", "errand"} {
+		if strings.Contains(strings.ToLower(got.Content), guess) {
+			t.Errorf("the evidence drew the conclusion (%q):\n%s", guess, got.Content)
+		}
+	}
+}
+
+// TestBackToBackStaysAreNotAGap : Two stays that meet have nothing
+// between them, and a line saying so on every pair would bury the
+// ones that matter.
+func TestBackToBackStaysAreNotAGap(t *testing.T) {
+	got := ask(t, []event.Event{
+		stayed("home", hhmm(8, 0), 120),   // 08:00 to 10:00
+		stayed("office", hhmm(10, 0), 60), // 10:00 to 11:00
+	}, `{"days":1}`)
+
+	if strings.Contains(got.Content, "nothing recorded") {
+		t.Errorf("two stays that meet were reported as a gap:\n%s", got.Content)
+	}
+}

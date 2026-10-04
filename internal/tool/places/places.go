@@ -251,14 +251,54 @@ func describe(been []visit, where *time.Location, days int) string {
 		len(been), noun("place", len(been)), window(days))
 
 	day := ""
-	for _, v := range been {
+	var last *visit
+	for i := range been {
+		v := been[i]
 		if d := v.from.In(where).Format("Monday 2 January"); d != day {
 			day = d
 			b.WriteString("\n" + d + "\n")
 		}
+		if gap := between(last, v, where); gap != "" {
+			fmt.Fprintf(&b, "  %s\n", gap)
+		}
 		fmt.Fprintf(&b, "  %s\n", line(v, where))
+		last = &been[i]
 	}
 	return strings.TrimSpace(b.String())
+}
+
+// Elsewhere : The shortest unaccounted stretch worth a line.
+//
+// Shorter than the time it takes to be somewhere at all, because
+// this is not a visit: it is the absence of one. Five minutes is
+// about where walking to the gate stops and going out begins.
+const Elsewhere = 5 * time.Minute
+
+// between : The stretch between one visit and the next, when there
+// is one.
+//
+// Two stays at the same place read as having been there the whole
+// time, and that is exactly how the assistant came to say "no, you
+// stayed home, sir" to somebody who had gone out and come back. The
+// evidence was right in front of it -- home until half past ten,
+// home again from quarter to eleven -- and the fifteen minutes
+// between them existed only if you subtracted.
+//
+// Said as what is known rather than as a conclusion. Nothing here
+// can tell going out from a phone that was off, so it says nothing
+// was recorded and leaves the reading where it belongs.
+func between(last *visit, next visit, where *time.Location) string {
+	if last == nil || last.open || last.unreported {
+		return ""
+	}
+	gap := next.from.Sub(last.to)
+	if gap < Elsewhere {
+		return ""
+	}
+	return fmt.Sprintf("-- nothing recorded from %s to %s (%s): they were not at %s, "+
+		"and nowhere else was recorded either",
+		last.to.In(where).Format("15:04"), next.from.In(where).Format("15:04"),
+		spoken(gap), last.where)
 }
 
 // line : One visit.
