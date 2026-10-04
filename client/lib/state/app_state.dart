@@ -554,10 +554,10 @@ class AppState extends ChangeNotifier {
   /// loadEvents : Reads what the person's devices have reported.
   ///
   /// An empty kind means every kind, which is what the screen opens on.
-  Future<void> loadEvents({String kind = ''}) async {
+  Future<void> loadEvents({String kind = '', int days = 0}) async {
     _set(busy: true, error: null);
     try {
-      _events = await api.listEvents(kind: kind, limit: 200);
+      _events = await api.listEvents(kind: kind, limit: 200, days: days);
     } on Object catch (e) {
       _error = _explain(e);
     }

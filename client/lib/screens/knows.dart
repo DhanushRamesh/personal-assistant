@@ -191,10 +191,13 @@ class _KnowsModuleState extends State<KnowsModule> {
                 state: widget.state,
                 search: _search,
                 kind: _kind,
+                // Remembered and put in the address. The reading is
+                // left to the section, which is the only thing that
+                // knows which stretch of time is showing: reloading
+                // from here dropped it back to everything.
                 onKind: (k) {
                   setState(() => _kind = k);
                   _went();
-                  widget.state.loadEvents(kind: k);
                 },
               ),
               KnowsSection.tools => _Tools(
@@ -328,7 +331,25 @@ class _Memories extends StatelessWidget {
   }
 }
 
-class _Events extends StatelessWidget {
+/// _Since : How far back the events are read.
+///
+/// A window rather than a count, because the question being asked of
+/// this page is nearly always about a stretch of time -- what
+/// happened this morning, what has the phone been doing today -- and
+/// a count of two hundred answers a different question depending on
+/// how busy the day was.
+enum _Since {
+  today('Today', 1),
+  week('7 days', 7),
+  month('4 weeks', 28),
+  ever('Everything', 0);
+
+  const _Since(this.label, this.days);
+  final String label;
+  final int days;
+}
+
+class _Events extends StatefulWidget {
   const _Events({
     required this.state,
     required this.search,
@@ -342,46 +363,102 @@ class _Events extends StatelessWidget {
   final ValueChanged<String> onKind;
 
   @override
-  Widget build(BuildContext context) {
-    final e = state.events;
-    if (e == null) return const SizedBox.shrink();
+  State<_Events> createState() => _EventsState();
+}
 
-    String payload(Map<String, dynamic> p) =>
-        p.entries.map((x) => '${x.key}: ${x.value}').join('   ');
+class _EventsState extends State<_Events> {
+  _Since _since = _Since.ever;
+
+  /// _value : The one field worth a column of its own.
+  ///
+  /// Every sender writes what the thing was into "value" -- the name
+  /// of a caller, the network, the artist, the battery level -- and
+  /// read as part of a run of key: value pairs it is the hardest
+  /// thing on the row to find. Here it is the row.
+  static String _value(Map<String, dynamic> p) =>
+      (p['value'] ?? '').toString().trim();
+
+  /// _rest : Everything else the sender said, without the two that
+  /// say nothing.
+  ///
+  /// "value" has its own column. "via" repeats the source: every row
+  /// of a phone's events read "via: phone" beside "tasker", which is
+  /// one fact taking two columns and crowding out the ones that
+  /// differ.
+  static String _rest(Map<String, dynamic> p) => p.entries
+      .where((x) => x.key != 'value' && x.key != 'via')
+      .map((x) => '${x.key} ${x.value}')
+      .join('  ·  ');
+
+  @override
+  Widget build(BuildContext context) {
+    final e = widget.state.events;
+    if (e == null) return const SizedBox.shrink();
+    final search = widget.search;
 
     final items = e.items
         .where(
           (x) =>
               search.isEmpty ||
               x.kind.toLowerCase().contains(search) ||
-              payload(x.payload).toLowerCase().contains(search),
+              _value(x.payload).toLowerCase().contains(search) ||
+              _rest(x.payload).toLowerCase().contains(search),
         )
         .toList();
 
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
+        // When, then what. Two rows of chips rather than one list,
+        // because they narrow different things and mixing them reads
+        // as one long list of unrelated choices.
+        Wrap(
+          spacing: AppSpacing.sm,
+          runSpacing: AppSpacing.xs,
+          children: [
+            for (final s in _Since.values)
+              ChoiceChip(
+                label: Text(s.label),
+                selected: _since == s,
+                onSelected: (_) {
+                  setState(() => _since = s);
+                  widget.state.loadEvents(kind: widget.kind, days: s.days);
+                },
+              ),
+          ],
+        ),
+        const SizedBox(height: AppSpacing.xs),
         Wrap(
           spacing: AppSpacing.sm,
           runSpacing: AppSpacing.xs,
           children: [
             ChoiceChip(
               label: const Text('everything'),
-              selected: kind.isEmpty,
-              onSelected: (_) => onKind(''),
+              selected: widget.kind.isEmpty,
+              onSelected: (_) {
+                widget.onKind('');
+                widget.state.loadEvents(days: _since.days);
+              },
             ),
             for (final k in e.kinds)
               ChoiceChip(
                 label: Text('${k.kind}  ${k.count}'),
-                selected: kind == k.kind,
-                onSelected: (_) => onKind(k.kind),
+                selected: widget.kind == k.kind,
+                onSelected: (_) {
+                  widget.onKind(k.kind);
+                  widget.state.loadEvents(kind: k.kind, days: _since.days);
+                },
               ),
           ],
         ),
         const SizedBox(height: AppSpacing.md),
         _Table(
-          summary: '${items.length} shown',
-          columns: const ['Happened', 'Kind', 'Details', 'From', 'Arrived'],
+          summary: [
+            '${items.length} shown',
+            if (_since != _Since.ever) _since.label.toLowerCase(),
+            if (widget.kind.isNotEmpty) widget.kind,
+          ].join(' · '),
+          columns: const ['When', 'What', 'Kind', 'Detail', 'From', 'Arrived'],
           empty: const AppEmptyState(
             icon: Icons.sensors_outlined,
             title: 'Nothing to show',
@@ -391,19 +468,35 @@ class _Events extends StatelessWidget {
           rows: [
             for (final x in items)
               [
-                Text(_when(x.occurredAt)),
-                _cell(context, x.kind, width: 170),
-                _cell(context, payload(x.payload), width: 300),
+                _cell(context, _when(x.occurredAt), width: 92),
+                // The thing itself, in the reading weight of the
+                // page rather than the muted weight of a detail.
+                SizedBox(
+                  width: 210,
+                  child: Text(
+                    _value(x.payload).isEmpty ? '—' : _value(x.payload),
+                    overflow: TextOverflow.ellipsis,
+                    style: Theme.of(context).textTheme.bodyMedium?.copyWith(
+                      fontWeight: FontWeight.w600,
+                    ),
+                  ),
+                ),
+                _cell(context, x.kind, width: 150),
+                _cell(context, _rest(x.payload), width: 260),
                 _cell(
                   context,
                   x.device.isEmpty ? x.source : '${x.source} · ${x.device}',
-                  width: 150,
+                  width: 140,
                 ),
                 // The gap between happening and arriving is the one number
                 // that says the device had been offline. Shown only when it
                 // is real: "0s later" on every row would bury the ones that
                 // matter.
-                Text(x.lateBy > 60 ? '${_late(x.lateBy)} later' : 'at once'),
+                _cell(
+                  context,
+                  x.lateBy > 60 ? '${_late(x.lateBy)} later' : 'at once',
+                  width: 110,
+                ),
               ],
           ],
         ),

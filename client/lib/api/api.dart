@@ -354,7 +354,7 @@ class AssistantApi {
   ///
   /// Newest first by when it happened, not when it arrived: a phone that
   /// was offline all morning delivers the morning at teatime.
-  Future<Events> listEvents({String? kind, int? limit}) async =>
+  Future<Events> listEvents({String? kind, int? limit, int? days}) async =>
       Events.fromJson(
         await _send(
           'GET',
@@ -362,6 +362,12 @@ class AssistantApi {
           query: {
             if (kind != null && kind.isNotEmpty) 'kind': kind,
             if (limit != null) 'limit': '$limit',
+            if (days != null && days > 0)
+              'since': DateTime.now()
+                  .toUtc()
+                  .subtract(Duration(days: days))
+                  .toIso8601String()
+                  .replaceFirst(RegExp(r'\.\d+'), ''),
           },
         ),
       );
