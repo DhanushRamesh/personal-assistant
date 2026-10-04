@@ -3490,6 +3490,51 @@ started an extra round -- three calls where there should be two.
 `TestItIsSentBackOnlyOnce` had it before anything else did.
 
 
+## The tool list was already as small as it should be
+
+Owner, after the gateway turned out to cost only 0.28s: *"count
+them."* Which of the tools are cold enough to defer, and what would
+it save.
+
+The answer was 28% of the weight and four tenths of a second. The
+answer was wrong, and the way it was wrong is worth keeping.
+
+**A registry built without `tool_describe` defers nothing.** It
+cannot: a tool named and not described would be reachable by
+nothing, so `defers` returns false and `Offered` returns everything.
+Both probes built their registry the way the eval suite does, which
+leaves it out -- so they measured 42 tools and 112KB, and production
+sends 18 and 58KB.
+
+| | measured | actually sent |
+| --- | --- | --- |
+| tools | 42 | 18 |
+| bytes | 112,185 | 58,511 |
+| cost of the list | 1.27s | 0.4 to 0.9s |
+
+**Corrected, the conclusion reverses.** The thirteen cold tools were
+almost all deferred already. Of the eighteen actually sent, two are
+cold -- `mail_thread` at one call and `place_visits` at four -- and
+both are hot by measurement rather than by judgement: deferred,
+`mail_thread` had the model answer that it had *"no tool to compare
+incoming mail against your replies"* with the tool named one line
+above it, and `place_visits` had it work around to `event_recent`
+and describe an afternoon as *"moving between the Dhanush and
+Dhanush_EXT networks"*.
+
+Eleven per cent of the weight, perhaps a tenth of a second, against
+two failures already paid for once. Nothing to do.
+
+**Both probes now ask the registry what it would actually send**, so
+the next person to ask this question gets the real number. The
+budget for a short turn, finally honest:
+
+    0.28s   the gateway
+    1.41s   the model to its first token
+    0.7s    eighteen tool schemas
+    0.2s    writing a short answer
+
+
 ## The narration was the wait it was covering
 
 Owner: *"calculate the full latency... I want ultra low latency."*

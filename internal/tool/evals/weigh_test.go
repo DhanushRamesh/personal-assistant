@@ -44,9 +44,17 @@ func TestWhatThePromptWeighs(t *testing.T) {
 	if err != nil {
 		t.Fatalf("NewRegistry: %v", err)
 	}
+	// Without it the registry defers nothing and offers everything,
+	// which is not what a request carries. The server adds it the
+	// same way.
+	if err := registry.Add(tool.Describing(registry)); err != nil {
+		t.Fatalf("adding tool_describe: %v", err)
+	}
 
 	address := persona.AddressFor("")
-	offered := registry.For(chat.ChannelVoice)
+	// What is actually sent, not every tool the channel has. Most
+	// are named in the catalogue and described only when asked for.
+	offered := registry.Offered(chat.ChannelVoice, nil)
 	var schema, describe, biggest int
 	var worst string
 	type weighed struct {
@@ -77,9 +85,9 @@ func TestWhatThePromptWeighs(t *testing.T) {
 	fmt.Printf("  biggest single tool  %s, %d bytes (~%d tokens)\n", worst, biggest, biggest/4)
 	fmt.Printf("  system prompt        %d bytes  (~%d tokens)\n", len(system), len(system)/4)
 	fmt.Printf("  everything above     ~%d tokens\n", (schema+len(system))/4)
-	fmt.Printf("\n  the ten heaviest tools:\n")
-	for _, w := range all[:10] {
-		fmt.Printf("    %-22s %5d bytes (~%d tokens)\n", w.name, w.size, w.size/4)
+	fmt.Printf("\n  every tool, heaviest first:\n")
+	for _, w := range all {
+		fmt.Printf("    %-24s %5d\n", w.name, w.size)
 	}
 	fmt.Println()
 }

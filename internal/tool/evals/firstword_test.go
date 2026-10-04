@@ -74,6 +74,12 @@ func harness(t *testing.T) (*platformai.Environment, []environment.ToolSpec, con
 	if err != nil {
 		t.Fatalf("NewRegistry: %v", err)
 	}
+	// Without it the registry defers nothing and offers everything,
+	// which is not what a request carries. The server adds it the
+	// same way.
+	if err := registry.Add(tool.Describing(registry)); err != nil {
+		t.Fatalf("adding tool_describe: %v", err)
+	}
 
 	env, err := platformai.New(platformai.Config{
 		ClientID: cfg.PlatformAI.ClientID, ClientSecret: cfg.PlatformAI.ClientSecret,
@@ -90,7 +96,7 @@ func harness(t *testing.T) (*platformai.Environment, []environment.ToolSpec, con
 
 	address := persona.AddressFor(cfg.Assistant.Persona)
 	all := make([]environment.ToolSpec, 0)
-	for _, x := range registry.For(chat.ChannelVoice) {
+	for _, x := range registry.Offered(chat.ChannelVoice, nil) {
 		schema, err := tool.Narrated(x.Params, address).MarshalJSON()
 		if err != nil {
 			t.Fatalf("%s: %v", x.Name, err)
@@ -191,7 +197,7 @@ func oneModel(env *platformai.Environment, specs []environment.ToolSpec,
 	say, vendor, model string) (time.Duration, time.Duration, int, string, error) {
 	started := time.Now()
 	stream, err := env.Run(context.Background(), environment.Request{
-		Prompt: say, Tools: specs, Pieces: true, Vendor: vendor, Model: model,
+		Prompt: say, Tools: specs, Vendor: vendor, Model: model,
 	})
 	if err != nil {
 		return 0, 0, 0, "", err
@@ -227,7 +233,7 @@ func once(t *testing.T, env *platformai.Environment,
 
 	started := time.Now()
 	stream, err := env.Run(context.Background(), environment.Request{
-		Prompt: say, Tools: specs, Pieces: true,
+		Prompt: say, Tools: specs,
 	})
 	if err != nil {
 		t.Fatalf("run: %v", err)
@@ -243,4 +249,38 @@ func once(t *testing.T, env *platformai.Environment,
 		}
 	}
 	return first, time.Since(started), pieces
+}
+
+// TestWhereTheFloorIs : How much of the wait is the gateway and how
+// much is the model.
+//
+// A request the gateway refuses never reaches a model: it is
+// validated and rejected on the way in. Timing one of those gives
+// the round trip with the thinking taken out, and the difference
+// between that and a real trivial call is what the model costs.
+//
+// Not an assertion. It is a question about somebody else's service
+// and the answer changes without this repository changing.
+func TestWhereTheFloorIs(t *testing.T) {
+	env, _, cfg := harness(t)
+
+	const say = "say good evening and nothing else"
+	round := func(label, vendor, model string, specs []environment.ToolSpec) {
+		var best time.Duration
+		for i := 0; i < 3; i++ {
+			started := time.Now()
+			_, _, _, _, err := oneModel(env, specs, say, vendor, model)
+			took := time.Since(started)
+			if i == 0 || took < best {
+				best = took
+			}
+			_ = err
+		}
+		fmt.Printf("  %-34s %7.2fs\n", label, best.Seconds())
+	}
+
+	fmt.Printf("\n  %-34s %8s\n", "", "best of 3")
+	round("refused before any model runs", "anthropic", "no-such-model-at-all", nil)
+	round("the real model, no tools", cfg.PlatformAI.Vendor, cfg.PlatformAI.Model, nil)
+	fmt.Println()
 }
