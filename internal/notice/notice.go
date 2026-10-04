@@ -62,18 +62,28 @@ const (
 	Often Reason = "often"
 	// Novel : Nothing like it in the record.
 	Novel Reason = "novel"
-	// Told : The sender said this must be said.
+	// Immediate : The sender said this is to be said now.
 	//
-	// Not a judgement at all, which is the point. A battery at five
-	// per cent and a phone too hot to hold are not interesting
-	// because they are unusual; they are worth saying because of
-	// what they are, and a model weighing whether to mention them is
-	// a model that will one day decide not to.
-	Told Reason = "told"
+	// Not a judgement at all, which is the point, and not an
+	// unusual thing noticed -- a different kind of announcement
+	// that happens to come through the same door. A battery at five
+	// per cent is not interesting because it is rare; it is worth
+	// saying because of what it is.
+	//
+	// Owner, on the two being described together: *"it's not
+	// urgent, name it immediate announcement. Event arrives, check
+	// if present, announce. It's simple. This is separate and the
+	// other unasked is separate."*
+	Immediate Reason = "immediate"
 )
 
-// Urgent : The payload field a sender sets to say that something
-// must be said, whatever else is going on.
+// Immediately, Urgent : The payload fields a sender sets to say
+// that something is to be announced the moment it arrives.
+//
+// Two spellings because the phone already says one of them. The
+// word changed here when the idea was separated from the unasked
+// remarks, and a profile on a device is not worth editing for a
+// name.
 //
 // A convention rather than a list of kinds here, for the reason
 // everything else is: the senders describe themselves. Which battery
@@ -81,7 +91,10 @@ const (
 // belongs on the device that knows it, not in a threshold compiled
 // into this server. The phone decides it is urgent; this decides how
 // to say it.
-const Urgent = "urgent"
+const (
+	Immediately = "immediate"
+	Urgent      = "urgent"
+)
 
 // Candidate : Something that might be worth saying.
 //
@@ -100,12 +113,13 @@ type Candidate struct {
 	Before int
 	// At : When the latest of them happened.
 	At time.Time
-	// Urgent : Whether the sender said this must be said.
+	// Immediate : Whether the sender said to announce it at once.
 	//
-	// Bypasses the quiet between remarks and the once-a-day rule,
-	// and is never refused by the model. It does not bypass there
-	// being nobody to tell: it goes wherever they are instead.
-	Urgent bool
+	// Bypasses the quiet between remarks, the once-a-day rule and
+	// the model's refusal. It does not bypass there being nobody to
+	// tell: an announcement into an empty room is not an
+	// announcement.
+	Immediate bool
 	// Detail : Whatever else the sender said about it, which the
 	// label deliberately leaves out.
 	//
@@ -148,7 +162,7 @@ func Find(arrived, history []event.Event, now time.Time) []Candidate {
 	latest := map[string]time.Time{}
 	detail := map[string]string{}
 	state := map[string]bool{}
-	urgent := map[string]bool{}
+	immediate := map[string]bool{}
 	order := []string{}
 	for _, e := range arrived {
 		if skip(e) {
@@ -162,7 +176,7 @@ func Find(arrived, history []event.Event, now time.Time) []Candidate {
 			state[label] = true
 		}
 		if told(e.Payload) {
-			urgent[label] = true
+			immediate[label] = true
 		}
 		if e.OccurredAt.After(latest[label]) || detail[label] == "" {
 			latest[label] = e.OccurredAt
@@ -186,9 +200,9 @@ func Find(arrived, history []event.Event, now time.Time) []Candidate {
 		// Said because the sender said so, whether or not it is
 		// unusual. A battery at five per cent has been at five per
 		// cent before and is not news; it is still worth saying.
-		if urgent[label] {
+		if immediate[label] {
 			out = append(out, Candidate{
-				Label: label, Reason: Told, Urgent: true,
+				Label: label, Reason: Immediate, Immediate: true,
 				Times: lately[label], Before: seen[label] - lately[label],
 				At: latest[label], Detail: detail[label],
 			})
@@ -348,11 +362,17 @@ func told(payload json.RawMessage) bool {
 	if err := json.Unmarshal(payload, &fields); err != nil {
 		return false
 	}
-	switch v := fields[Urgent].(type) {
-	case bool:
-		return v
-	case string:
-		return strings.EqualFold(strings.TrimSpace(v), "true")
+	for _, name := range []string{Immediately, Urgent} {
+		switch v := fields[name].(type) {
+		case bool:
+			if v {
+				return true
+			}
+		case string:
+			if strings.EqualFold(strings.TrimSpace(v), "true") {
+				return true
+			}
+		}
 	}
 	return false
 }

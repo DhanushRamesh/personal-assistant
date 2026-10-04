@@ -53,10 +53,10 @@ type Ask func(ctx context.Context, userID, prompt string) (string, error)
 
 // Say : How a remark reaches the person.
 //
-// Told whether it is urgent, because that decides where it goes
+// Immediate whether it is urgent, because that decides where it goes
 // rather than only what it says: a remark is company and belongs in
 // the room, and a warning follows them out of it.
-type Say func(ctx context.Context, userID, text string, urgent bool) error
+type Say func(ctx context.Context, userID, text string, immediate bool) error
 
 // Watcher : Looks at what has arrived and occasionally says
 // something about it.
@@ -169,7 +169,7 @@ func (w *Watcher) Look(ctx context.Context, userID string) (string, error) {
 			w.note(ctx, userID, c, Declined, "", "")
 			return "", nil
 		}
-		if err := w.Say(ctx, userID, said, c.Urgent); err != nil {
+		if err := w.Say(ctx, userID, said, c.Immediate); err != nil {
 			w.note(ctx, userID, c, Failed, said, "could not say it: "+err.Error())
 			return "", err
 		}

@@ -98,7 +98,7 @@ func (g *Gate) Considered(c Candidate, now time.Time) bool {
 	defer g.mu.Unlock()
 
 	key := c.Label
-	if c.Urgent {
+	if c.Immediate {
 		key += "@" + c.At.UTC().Format(time.RFC3339Nano)
 	}
 
@@ -146,29 +146,30 @@ func (g *Gate) Allow(userID string, c Candidate, now time.Time) (bool, string) {
 	if g.Away == nil {
 		return false, "nothing is watching the room"
 	}
-	// Where they are decides how it is said, not whether. A warning
-	// follows them onto the phone; a remark is company and company
-	// belongs in the room.
-	if !c.Urgent {
-		if away, known := g.Away(userID); away {
-			return false, "they are not in the room"
-		} else if !known {
-			return false, "it cannot tell whether they are in the room"
-		}
+	// Everything is said to somebody who is there, immediate
+	// announcements included. Owner: *"event arrives, check if
+	// present, announce."* An announcement into an empty room is not
+	// an announcement, and the phone shows its own battery.
+	if away, known := g.Away(userID); away {
+		return false, "they are not in the room"
+	} else if !known {
+		return false, "it cannot tell whether they are in the room"
 	}
 
 	g.mu.Lock()
 	defer g.mu.Unlock()
 
-	// A warning is not held back for politeness. The quiet between
-	// remarks exists so company does not become a nuisance; a
-	// battery about to die is not company, and a person who is not
-	// told because something else was said four minutes ago is worse
-	// off than one who is interrupted twice.
+	// An immediate announcement is not held back for politeness. The
+	// quiet between remarks exists so company does not become a
+	// nuisance; a battery about to die is not company, and somebody
+	// not told because something else was said four minutes ago is
+	// worse off than somebody interrupted twice.
 	//
-	// The once-a-day rule goes with it: a battery reaching five per
-	// cent twice in a day is two warnings, not one and a silence.
-	if c.Urgent {
+	// The once-a-day rule goes with it. Owner: *"if a hundred is
+	// reached it announces, I plug out, it becomes 99 in five
+	// seconds, I plug back in and it becomes 100 in ten seconds --
+	// it has to announce again."*
+	if c.Immediate {
 		g.last = now
 		return true, ""
 	}

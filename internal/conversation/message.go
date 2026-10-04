@@ -89,12 +89,14 @@ const (
 	// the conversation back wants to know why it spoke.
 	Remark Kind = "remark"
 
-	// Warning : Something a device said the person needs to know now.
+	// Immediate : Something a device said to announce at once.
 	//
-	// Apart from Remark because the audience is different and the
-	// reason is not politeness. A remark is company and belongs in
-	// the room; a battery about to die follows them out of it.
-	Warning Kind = "warning"
+	// Apart from Remark because the rules are different, not the
+	// audience. A remark is the assistant noticing something and
+	// choosing to mention it; this is a device saying "tell them
+	// now", and nothing between here and the speaker may decide
+	// otherwise.
+	Immediate Kind = "immediate"
 
 	// Renaming : The assistant giving the conversation its name.
 	//
@@ -158,10 +160,11 @@ var announcements = map[Kind]Audience{
 	Remark: Asked,
 	// Wherever they are. A warning held back because they stepped
 	// into the next room is a warning that did not happen.
-	// Wherever they are. A warning held back because they stepped
-	// into the next room is a warning that did not happen.
-	Warning:  Everywhere,
-	Renaming: Asked,
+	// The room, like a remark. It is said at once rather than said
+	// anywhere: it is only made when somebody is there to hear it,
+	// and a phone reports its own battery without help.
+	Immediate: Asked,
+	Renaming:  Asked,
 }
 
 // Announcement : Whether this is the assistant having spoken unprompted.

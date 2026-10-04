@@ -3558,10 +3558,54 @@ The record is kept the same ten minutes, which is longer than the
 five an event can be found in, so nothing returns after it is
 forgotten.
 
-**That leaves a warning with nothing in its way.** Not the room, not
-the quiet between remarks, not the once-a-day rule, not the model's
-refusal. The only thing it still cannot do is be said twice for the
-same moment.
+**That leaves it with almost nothing in its way:** not the quiet
+between remarks, not the once-a-day rule, not the model's refusal.
+The room is the exception, and the next section says why.
+
+
+## An immediate announcement is its own mechanism
+
+Owner: *"I think we have to split the urgent ones and don't mix with
+it -- it's not urgent, name it like immediate announcement.
+Currently battery full, reaching 25, 20, 15, 10, 5 and overheating
+are immediate announcements. They should be told even though it's
+been said a few mins back too, provided presence is true. For eg if
+100 is reached, it announces, I plug out, it becomes 99 in 5 secs
+and I plug back in it becomes 100 in 10 secs -- it has to announce
+again. It's simple: **event arrives -> check if present ->
+announce.** This is separate, and other unasked is separate."*
+
+So the word changed and so did the shape. `notice.Told` is
+`notice.Immediate`; `Candidate.Urgent` is `Candidate.Immediate`;
+`conversation.Warning` is `conversation.Immediate`;
+`announcement.Writer.Warned` is `Writer.Announced`. The payload
+field accepts `immediate` and still accepts `urgent`, because
+`urgent` is already written into Tasker tasks on a phone this
+repository cannot edit, and a sender that goes quiet because a
+server renamed a key is a worse outcome than a second spelling.
+
+The two mechanisms share a gate and nothing else:
+
+| | unasked remark | immediate announcement |
+| --- | --- | --- |
+| who decides | the server, from what is unusual | the sender, by marking the event |
+| quiet between remarks | 20 minutes | none |
+| same thing again | once a day | every time |
+| weighed | once per label per 10 minutes | once per *arrival* |
+| the room | must be in it | must be in it |
+
+**The room applies to both, and that is a reversal.** It used to be
+that a warning followed the person out: "where they are decides how
+it is said, not whether." Three sentences into the owner's
+description is *provided presence is true*, and it is right. The
+phone already shows its own battery; a sentence spoken to an empty
+kitchen is not an announcement, it is the announcement being used
+up. `Gate.Allow` now refuses an absent or unknown room before it
+looks at anything else, immediate included, and skips only the quiet
+and the once-a-day count afterwards.
+
+`conversation.Immediate` is also now audience `Asked` rather than
+`Everywhere`, for the same reason.
 
 
 ## The narration was the wait it was covering

@@ -104,13 +104,12 @@ func (w *Writer) Remarked(ctx context.Context, userID, text string) {
 	w.said(ctx, userID, "", conversation.Remark, text)
 }
 
-// Warned : Notes something a device said they needed to know now.
+// Announced : Notes something a device said to say at once.
 //
-// Everywhere rather than the room, so it reaches them on the phone
-// when they are not there to hear it. Written into the conversation
-// like the rest, so "what was that?" has something to answer with.
-func (w *Writer) Warned(ctx context.Context, userID, text string) {
-	w.said(ctx, userID, "", conversation.Warning, text)
+// Written into the conversation like the rest, so "what was that?"
+// has something to answer with.
+func (w *Writer) Announced(ctx context.Context, userID, text string) {
+	w.said(ctx, userID, "", conversation.Immediate, text)
 }
 
 // Renamed : Notes the assistant having given a conversation its name.

@@ -237,6 +237,14 @@ func TestNothingIsSaidToAnEmptyRoom(t *testing.T) {
 	if ok, _ := nobodyWatching.Allow("usr_1", c, at); ok {
 		t.Error("spoke with nothing watching the room at all")
 	}
+	// An immediate announcement is exempt from the quiet and from
+	// the once-a-day count, but not from the room. Owner: "event
+	// arrives -> check if present -> announce." The phone shows its
+	// own battery; announcing it to nobody is not announcing.
+	now := notice.Candidate{Label: "battery.level 5", Reason: notice.Immediate, Immediate: true, At: at}
+	if ok, _ := out.Allow("usr_1", now, at); ok {
+		t.Error("an immediate announcement was made to an empty room")
+	}
 }
 
 // TestNotTwiceInAHurry : The failure that kills this is being a
@@ -454,7 +462,7 @@ func TestAFreshGateStillExplainsItself(t *testing.T) {
 
 // urgently : One thing a device marked as needing to be said.
 func urgently(kind, value string, more map[string]string) event.Event {
-	fields := map[string]string{"value": value, notice.Urgent: "true"}
+	fields := map[string]string{"value": value, notice.Immediately: "true"}
 	for k, v := range more {
 		fields[k] = v
 	}
@@ -484,8 +492,8 @@ func TestADeviceCanInsist(t *testing.T) {
 	if len(got) != 1 {
 		t.Fatalf("a device insisting was not heard: %+v", got)
 	}
-	if got[0].Reason != notice.Told || !got[0].Urgent {
-		t.Errorf("reason = %q urgent = %v, want told and urgent", got[0].Reason, got[0].Urgent)
+	if got[0].Reason != notice.Immediate || !got[0].Immediate {
+		t.Errorf("reason = %q urgent = %v, want told and urgent", got[0].Reason, got[0].Immediate)
 	}
 }
 
@@ -497,7 +505,7 @@ func TestADeviceCanInsist(t *testing.T) {
 func TestAWarningIsNotHeldForPoliteness(t *testing.T) {
 	g := &notice.Gate{Away: func(string) (bool, bool) { return false, true }}
 	ordinary := notice.Candidate{Label: "a", Reason: notice.Novel, At: at}
-	warning := notice.Candidate{Label: "battery.level 5", Reason: notice.Told, Urgent: true, At: at}
+	warning := notice.Candidate{Label: "battery.level 5", Reason: notice.Immediate, Immediate: true, At: at}
 
 	if ok, _ := g.Allow("usr_1", ordinary, at); !ok {
 		t.Fatal("the first remark was refused")
@@ -511,27 +519,43 @@ func TestAWarningIsNotHeldForPoliteness(t *testing.T) {
 	}
 }
 
-// TestAWarningFollowsThemOutOfTheRoom : Where they are decides how
-// it is said, not whether. A warning held back because they stepped
-// next door is a warning that did not happen.
-func TestAWarningFollowsThemOutOfTheRoom(t *testing.T) {
-	out := &notice.Gate{Away: func(string) (bool, bool) { return true, true }}
-	warning := notice.Candidate{Label: "battery.level 5", Reason: notice.Told, Urgent: true, At: at}
+// TestAnImmediateAnnouncementRepeatsItself : Owner: "if 100 is
+// reached, it announces, I plug out, it becomes 99 in 5 secs and I
+// plug back in it becomes 100 in 10 secs -- it has to announce
+// again." The same label at a different moment is a different
+// announcement.
+func TestAnImmediateAnnouncementRepeatsItself(t *testing.T) {
+	g := &notice.Gate{Away: func(string) (bool, bool) { return false, true }}
+	first := notice.Candidate{Label: "battery.level 100", Reason: notice.Immediate, Immediate: true, At: at}
+	again := first
+	again.At = at.Add(10 * time.Second)
 
-	if ok, why := out.Allow("usr_1", warning, at); !ok {
-		t.Errorf("a warning was refused because the room was empty: %s", why)
+	if g.Considered(first, at) {
+		t.Fatal("the first announcement was weighed before it arrived")
 	}
-	// But company still belongs in the room.
-	ordinary := notice.Candidate{Label: "a", Reason: notice.Novel, At: at}
-	if ok, _ := out.Allow("usr_1", ordinary, at); ok {
-		t.Error("an ordinary remark was made to an empty room")
+	if ok, why := g.Allow("usr_1", first, at); !ok {
+		t.Fatalf("the first announcement was refused: %s", why)
+	}
+	g.Spoke("the battery is full", at)
+
+	// The very same arrival, found again on the next tick, is one
+	// moment and is not said twice.
+	if !g.Considered(first, at.Add(30*time.Second)) {
+		t.Error("one arrival was weighed twice")
+	}
+	// Reaching it again ten seconds later is a second arrival.
+	if g.Considered(again, again.At) {
+		t.Error("the same level reached again was taken for the first")
+	}
+	if ok, why := g.Allow("usr_1", again, again.At); !ok {
+		t.Errorf("the same level reached again was refused: %s", why)
 	}
 }
 
 // TestTheModelMayNotDeclineAWarning : The refusal is the whole point
 // of asking a model, and it is exactly wrong here.
 func TestTheModelMayNotDeclineAWarning(t *testing.T) {
-	warning := notice.Candidate{Label: "battery.level 5", Reason: notice.Told, Urgent: true, At: at}
+	warning := notice.Candidate{Label: "battery.level 5", Reason: notice.Immediate, Immediate: true, At: at}
 	asked := notice.Remark(warning, at)
 
 	if !strings.Contains(asked, "has to be said") {
@@ -574,7 +598,7 @@ func TestAReadingIsNotNews(t *testing.T) {
 func TestAReadingCanStillInsist(t *testing.T) {
 	fresh := []event.Event{urgently("battery.level", "5", nil)}
 	got := notice.Find(fresh, fresh, at)
-	if len(got) != 1 || got[0].Reason != notice.Told {
+	if len(got) != 1 || got[0].Reason != notice.Immediate {
 		t.Fatalf("a device insisting about a reading was not heard: %+v", got)
 	}
 }
@@ -587,8 +611,8 @@ func TestAReadingCanStillInsist(t *testing.T) {
 // first makes the second less worth hearing.
 func TestTwoWarningsAreBothSaid(t *testing.T) {
 	g := &notice.Gate{Away: func(string) (bool, bool) { return false, true }}
-	first := notice.Candidate{Label: "battery.level 10", Reason: notice.Told, Urgent: true, At: at}
-	second := notice.Candidate{Label: "battery.level 5", Reason: notice.Told, Urgent: true, At: at.Add(time.Minute)}
+	first := notice.Candidate{Label: "battery.level 10", Reason: notice.Immediate, Immediate: true, At: at}
+	second := notice.Candidate{Label: "battery.level 5", Reason: notice.Immediate, Immediate: true, At: at.Add(time.Minute)}
 
 	if g.Considered(first, at) {
 		t.Fatal("the first warning was treated as a repeat")
@@ -597,7 +621,7 @@ func TestTwoWarningsAreBothSaid(t *testing.T) {
 		t.Error("a second warning a minute later was held back")
 	}
 	// Even the same warning again, if the device reports it afresh.
-	again := notice.Candidate{Label: "battery.level 5", Reason: notice.Told, Urgent: true, At: at.Add(2 * time.Minute)}
+	again := notice.Candidate{Label: "battery.level 5", Reason: notice.Immediate, Immediate: true, At: at.Add(2 * time.Minute)}
 	if g.Considered(again, at.Add(2*time.Minute)) {
 		t.Error("the same warning reported again was held back")
 	}
@@ -608,7 +632,7 @@ func TestTwoWarningsAreBothSaid(t *testing.T) {
 // found ten times and said ten times.
 func TestOneWarningIsNotSaidTenTimes(t *testing.T) {
 	g := &notice.Gate{Away: func(string) (bool, bool) { return false, true }}
-	warning := notice.Candidate{Label: "battery.level 5", Reason: notice.Told, Urgent: true, At: at}
+	warning := notice.Candidate{Label: "battery.level 5", Reason: notice.Immediate, Immediate: true, At: at}
 
 	if g.Considered(warning, at) {
 		t.Fatal("the first look was treated as a repeat")

@@ -78,7 +78,7 @@ func because(c Candidate) string {
 				c.Times, c.Before)
 		}
 		return fmt.Sprintf("%d times in the last few minutes, and never before that", c.Times)
-	case Told:
+	case Immediate:
 		return "the device that reported it marked it as something to be said, whatever else is going on"
 	case Novel:
 		return "nothing like it in the four weeks behind this: the first time it has been reported at all"
@@ -112,7 +112,7 @@ func beside(c Candidate) []string {
 // knows. The model is told it must speak and is left to work out
 // what about it matters, the same as everywhere else.
 func mustSay(c Candidate) string {
-	if !c.Urgent {
+	if !c.Immediate {
 		return ""
 	}
 	return prompt.Text(

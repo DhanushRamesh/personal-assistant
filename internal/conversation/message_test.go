@@ -308,7 +308,7 @@ func TestEveryAnnouncementHasAnAudience(t *testing.T) {
 		conversation.ReminderAnnouncement,
 		conversation.PresenceAnnouncement,
 		conversation.Remark,
-		conversation.Warning,
+		conversation.Immediate,
 		conversation.Renaming,
 	}
 	if got := conversation.Announcements(); got != len(kinds) {

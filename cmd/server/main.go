@@ -1230,10 +1230,10 @@ func noticing(
 				persona.Voice(cfg.Assistant.Persona, cfg.Assistant.Name),
 				environment.PurposeRemark, ask)
 		},
-		Say: func(ctx context.Context, userID, text string, urgent bool) error {
+		Say: func(ctx context.Context, userID, text string, immediate bool) error {
 			kind := conversation.Remark
-			if urgent {
-				kind = conversation.Warning
+			if immediate {
+				kind = conversation.Immediate
 			}
 			if err := announcement.Speak(ctx, speaker, kind, text); err != nil {
 				return err
@@ -1241,8 +1241,8 @@ func noticing(
 			// Written down after it was said, like every other
 			// announcement: they answer in the room, and the answer
 			// needs the remark to be there to make sense of.
-			if urgent {
-				announcements.Warned(ctx, userID, text)
+			if immediate {
+				announcements.Announced(ctx, userID, text)
 			} else {
 				announcements.Remarked(ctx, userID, text)
 			}
