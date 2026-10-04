@@ -2,6 +2,8 @@ package notice
 
 import (
 	"fmt"
+	"strconv"
+	"strings"
 	"sync"
 	"time"
 )
@@ -42,9 +44,68 @@ type Gate struct {
 	// must come back as "cannot tell", and the caller decides.
 	Away func(userID string) (away bool, known bool)
 
-	mu    sync.Mutex
-	last  time.Time
+	mu   sync.Mutex
+	last time.Time
+	// said : What the last remark actually was, so a refusal can name
+	// it. "Something was said four minutes ago" tells the person
+	// reading the page nothing they can act on; the sentence itself
+	// tells them whether the thing being held back was worth more
+	// than the thing that beat it to it.
+	said  string
 	spoke map[string]time.Time
+	// weighed : Everything considered lately, whatever came of it.
+	//
+	// Separate from spoke, which is only what was said and holds for
+	// a day. A candidate stays inside the watcher's look-back window
+	// for five minutes and the watcher ticks every thirty seconds, so
+	// without this one song produces ten identical rows saying it was
+	// held.
+	weighed map[string]time.Time
+}
+
+// Weighing : How long a candidate stays considered.
+//
+// Longer than the window it can be found in, so each thing is
+// weighed once and recorded once.
+const Weighing = 10 * time.Minute
+
+// Considered : Whether this has already been weighed lately, marking
+// it weighed if not.
+//
+// Asked before anything else is done with a candidate. A thing
+// weighed and refused a minute ago has not become interesting since,
+// and asking again writes a second row saying so.
+func (g *Gate) Considered(c Candidate, now time.Time) bool {
+	if g == nil {
+		return true
+	}
+	g.mu.Lock()
+	defer g.mu.Unlock()
+
+	if when, had := g.weighed[c.Label]; had && now.Sub(when) < Weighing {
+		return true
+	}
+	if g.weighed == nil {
+		g.weighed = map[string]time.Time{}
+	}
+	g.weighed[c.Label] = now
+	for label, when := range g.weighed {
+		if now.Sub(when) >= Weighing {
+			delete(g.weighed, label)
+		}
+	}
+	return false
+}
+
+// Spoke : Records what was said, so a later refusal can name it.
+func (g *Gate) Spoke(said string, now time.Time) {
+	if g == nil {
+		return
+	}
+	g.mu.Lock()
+	defer g.mu.Unlock()
+	g.said = said
+	g.last = now
 }
 
 // Allow : Whether this may be said now, and why not when it may not.
@@ -75,7 +136,7 @@ func (g *Gate) Allow(userID string, c Candidate, now time.Time) (bool, string) {
 	defer g.mu.Unlock()
 
 	if !g.last.IsZero() && now.Sub(g.last) < Quiet {
-		return false, "something was said " + spoken(now.Sub(g.last)) + " ago"
+		return false, quoted(g.said) + " was said " + spoken(now.Sub(g.last)) + " ago"
 	}
 	if when, said := g.spoke[c.Label]; said && now.Sub(when) < Over {
 		return false, "this was said " + spoken(now.Sub(when)) + " ago"
@@ -96,16 +157,38 @@ func (g *Gate) Allow(userID string, c Candidate, now time.Time) (bool, string) {
 	return true, ""
 }
 
+// quoted : The last remark, for a refusal to name.
+//
+// Falls back to saying that something was, for the gate that has
+// been handed a refusal before it has ever allowed anything -- which
+// happens after a restart, when the clock is fresh but the quiet is
+// not.
+func quoted(said string) string {
+	said = strings.TrimSpace(said)
+	if said == "" {
+		return "something"
+	}
+	return strconv.Quote(said)
+}
+
 // spoken : A duration as somebody would say it.
 func spoken(d time.Duration) string {
 	switch {
 	case d < time.Minute:
 		return "moments"
 	case d < time.Hour:
-		return fmt.Sprintf("%d minutes", int(d.Minutes()))
+		return count(int(d.Minutes()), "minute")
 	case d < 24*time.Hour:
-		return fmt.Sprintf("%d hours", int(d.Hours()))
+		return count(int(d.Hours()), "hour")
 	default:
-		return fmt.Sprintf("%d days", int(d.Hours()/24))
+		return count(int(d.Hours()/24), "day")
 	}
+}
+
+// count : A number and its noun, singular when it is one.
+func count(n int, noun string) string {
+	if n == 1 {
+		return "1 " + noun
+	}
+	return fmt.Sprintf("%d %ss", n, noun)
 }

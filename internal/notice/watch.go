@@ -132,6 +132,12 @@ func (w *Watcher) Look(ctx context.Context, userID string) (string, error) {
 	}
 
 	for _, c := range found {
+		// Weighed once. A candidate stays inside the look-back window
+		// for five minutes and this ticks every thirty seconds, so
+		// without this one song is recorded ten times over as held.
+		if w.Gate.Considered(c, now) {
+			continue
+		}
 		allowed, why := w.Gate.Allow(userID, c, now)
 		if !allowed {
 			if w.Logger != nil {
@@ -163,6 +169,9 @@ func (w *Watcher) Look(ctx context.Context, userID string) (string, error) {
 			w.note(ctx, userID, c, Failed, said, "could not say it: "+err.Error())
 			return "", err
 		}
+		// What it was, so the next refusal can name it rather than
+		// saying something was said.
+		w.Gate.Spoke(said, now)
 		w.note(ctx, userID, c, Said, said, "")
 		if w.Logger != nil {
 			w.Logger.InfoContext(ctx, "said something unasked",

@@ -392,3 +392,56 @@ func TestARefusalIsRecognisedHoweverItIsWritten(t *testing.T) {
 		}
 	}
 }
+
+// TestEachThingIsWeighedOnce : A candidate stays inside the
+// look-back window for five minutes and the watcher ticks every
+// thirty seconds, so one song was being recorded ten times over as
+// held.
+func TestEachThingIsWeighedOnce(t *testing.T) {
+	g := &notice.Gate{Away: func(string) (bool, bool) { return false, true }}
+	c := notice.Candidate{Label: "music.state Stevie Wonder", Reason: notice.Novel, At: at}
+
+	if g.Considered(c, at) {
+		t.Fatal("the first look was treated as a repeat")
+	}
+	for _, later := range []time.Duration{30 * time.Second, 2 * time.Minute, 5 * time.Minute} {
+		if !g.Considered(c, at.Add(later)) {
+			t.Errorf("weighed again after %s", later)
+		}
+	}
+	// But not for ever: the same thing tomorrow is news again.
+	if g.Considered(c, at.Add(notice.Weighing+time.Minute)) {
+		t.Error("still refusing to weigh it after the window had passed")
+	}
+}
+
+// TestARefusalNamesWhatBeatIt : Owner, reading the page: "I don't
+// want 'something was said', I want exactly what was said."
+//
+// "Something was said four minutes ago" tells the person nothing
+// they can act on. The sentence itself says whether the thing held
+// back was worth more than the thing that beat it to it.
+func TestARefusalNamesWhatBeatIt(t *testing.T) {
+	g := &notice.Gate{Away: func(string) (bool, bool) { return false, true }}
+	g.Spoke("That is the third call from that number, sir.", at)
+
+	_, why := g.Allow("usr_1", notice.Candidate{Label: "b", At: at}, at.Add(time.Minute))
+	if !strings.Contains(why, "third call from that number") {
+		t.Errorf("the refusal does not say what was said: %q", why)
+	}
+	// And one minute is one minute.
+	if strings.Contains(why, "1 minutes") {
+		t.Errorf("a single minute was pluralised: %q", why)
+	}
+}
+
+// TestAFreshGateStillExplainsItself : After a restart the clock is
+// fresh but nothing has been said through this gate, so there is no
+// sentence to name.
+func TestAFreshGateStillExplainsItself(t *testing.T) {
+	g := &notice.Gate{Away: func(string) (bool, bool) { return false, false }}
+	_, why := g.Allow("usr_1", notice.Candidate{Label: "a", At: at}, at)
+	if why == "" {
+		t.Error("a refusal gave no reason at all")
+	}
+}
