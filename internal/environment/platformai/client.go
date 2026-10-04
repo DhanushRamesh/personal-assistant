@@ -423,7 +423,7 @@ func (p *Environment) attemptChat(ctx context.Context, ask environment.Request, 
 		Messages: messages,
 		Tools:    tools,
 		Stream:   Streaming,
-		Thinking: p.cfg.Thinking,
+		Thinking: thinking(p.cfg.Thinking, ask.Purpose),
 	})
 	if err != nil {
 		return reply{}, 0, fmt.Errorf("platformai: building chat request: %w", err)
@@ -714,4 +714,65 @@ func excerpt(raw []byte, most int) string {
 		return text
 	}
 	return text[:most] + "…"
+}
+
+// Hard : The purposes worth letting the model reason over.
+//
+// Not the ones that take longest; the ones where the answer is a
+// judgement rather than a retrieval, and where nothing is waiting.
+// A description of somebody has to find what keeps being true out
+// of a week of talk and a month of events. It runs hourly in the
+// background and nobody is standing anywhere.
+//
+// **The greeting is not here, and it is the one that wanted it
+// most.** Measured on the same three evenings, it is visibly
+// better with reasoning -- it asks about the film by name, it says
+// "near Urapakkam" rather than naming a restaurant it was only
+// near, and asked about a dentist appointment miles from where
+// they were it correctly says nothing at all, which no amount of
+// prompt wording achieved. It also takes 29 to 46 seconds, against
+// a budget of five before the fixed text is said instead. Turning
+// it on would mean the considered greeting is written every time
+// and heard none of the time.
+//
+// What it needs is not permission but a head start: begun when
+// their geofence says they are home rather than when the room
+// sensor sees them, which is a minute of walking from the gate.
+// Until then it stays off, because a greeting nobody hears is
+// worse than a plain one they do.
+//
+// Everything else is left alone. Answering "what is the time" with
+// reasoning first is seconds spent on a question that had one
+// answer, and the turn has thirty.
+var Hard = map[environment.Purpose]string{
+	environment.PurposeProfile: "high",
+}
+
+// thinking : How much reasoning this call may do.
+//
+// Whatever is configured, unless the purpose asks for more. Never
+// less: somebody who set it globally meant it.
+func thinking(configured string, purpose environment.Purpose) string {
+	want, ok := Hard[purpose]
+	if !ok {
+		return configured
+	}
+	if rank(want) > rank(configured) {
+		return want
+	}
+	return configured
+}
+
+// rank : How much reasoning a setting asks for, for comparing two.
+func rank(effort string) int {
+	switch effort {
+	case "low":
+		return 1
+	case "medium":
+		return 2
+	case "high":
+		return 3
+	default:
+		return 0
+	}
 }

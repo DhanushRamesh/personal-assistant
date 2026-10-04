@@ -9124,6 +9124,99 @@ Still the model's judgement. Just made out of facts rather than
 out of a guess about Chennai.
 
 
+## Three things the greeting could not see, and one it must not invent
+
+Owner, on the greetings proposed for it: *"those are so
+inorganic."* Fair -- every one had the same shape: a statement, a
+dash, a question tacked on the end. Written down it reads well;
+spoken twice a day it is a tic, and he would notice inside a week.
+The prompt now names that shape and forbids it, and says to use
+the name of the thing rather than describe it: *"how was the film"*
+is worse than its title, and *"you were out a good while"* is worse
+than either.
+
+Measured, the greetings became **"How was Meesaya Murukku 2,
+sir?"** and **"How was dinner, sir?"** -- no preamble, the question
+standing on its own.
+
+### Silence
+
+Absence is the one thing nothing else in the prompt can show.
+Every other line is something that happened; ninety minutes of
+nothing reported is usually the largest thing in the window and
+appeared nowhere. `silent()` works the gaps out of the same events
+and says what they are: *"a gap is not an absence of anything
+happening; it is an absence of anything being reported."* A
+battery falling to nothing just before one explains it; where
+nothing does, it is told not to guess.
+
+### How sure a place name is
+
+The distance has been in the payload since this morning and
+nothing said what it meant. Twenty metres is inside the shop and
+may be said plainly; a hundred is across a road, and the name is
+whichever thing the map had nearest. At that distance: name the
+area, or ask. Measured, the greeting went from naming a restaurant
+he had never been in to **"near Urapakkam"**.
+
+### A missed call is told, not asked about -- and I made it invent one
+
+It is the one thing in a greeting that costs him something by
+waiting, so it wins over everything else. Written as a plain
+statement of fact -- *"one thing here is told rather than asked
+about: somebody tried to reach them"* -- the model read it as
+evidence that somebody had, and invented a missed call **six times
+out of six**, including on an evening with no calls at all.
+
+Rewritten as a condition -- *"if, and only if, something below
+shows that... where nothing below shows that, say nothing of the
+kind: they will ring somebody back who never called"* -- and it is
+clean six times out of six.
+
+A worked instruction, stated unconditionally, is read as a fact
+about the input. That is the third time this file records the same
+shape of mistake.
+
+## Reasoning is for the things nobody is waiting on
+
+Owner: *"use a high reasoning model for this."* It was already on
+the same model as everything else -- `fast_model` is empty, so the
+greeting falls through to `claude-sonnet-4-6`. What it did not
+have was permission to think: `reasoning_effort` is one global
+setting and it is unset.
+
+It is now per purpose, which is the right seam because the two
+requirements are opposite. The same three evenings, measured:
+
+| effort | film | dentist in Velachery, evening in Urapakkam | time |
+| --- | --- | --- | --- |
+| none | by name | *"how did the dentist go?"* | **2.2s** |
+| low | by name | *"a long evening near Vandalur"* | 12-17s |
+| medium | by name | *"how was Vandalur?"* | 23-27s |
+| **high** | by name | **says nothing at all** | **29-46s** |
+
+**Reasoning fixed the case that no wording could.** Told to be
+more careful, the model gave up the greeting that worked and
+turned the broken one into an accusation. Allowed to think, it
+worked out by itself that it could not tell, and stayed quiet.
+
+**And it cannot be switched on.** The budget at the door is five
+seconds before the fixed text is said instead, so a reasoned
+greeting would be written every time and heard none of the time.
+
+So `Hard` carries the description of the person and not the
+greeting. The description runs hourly in the background with
+nobody standing anywhere, and finding what keeps being true out of
+a week of talk is exactly the kind of judgement this buys.
+
+**What the greeting needs is not permission but a head start.**
+It is written when the room sensor sees him. His geofence says he
+is home a minute earlier -- the walk from the gate. Begun there,
+thirty seconds of reasoning finishes before he is through the
+door. That is the next piece, and it is worth more than anything
+else on this list.
+
+
 ## 12. Maintaining this file
 
 When the owner states a preference, makes a decision, or corrects something,

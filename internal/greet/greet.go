@@ -181,6 +181,12 @@ func Prompt(t Told) string {
 		),
 		reminders(t),
 		prompt.Text(
+			"If -- and only if -- something below shows that somebody tried to reach them while they were out and did not get through, that one is told rather than asked about.",
+			"They would want to know and would want to know now, and it is the only thing here that costs them something by waiting, so it wins over anything else worth saying.",
+			"A few words, without the number and without the count.",
+			"Where nothing below shows that, say nothing of the kind. An invented message that nobody left is the worst thing this could do: they will ring somebody back who never called.",
+		),
+		prompt.Text(
 			"It is said out loud in a room that may have other people in it.",
 			"Where mentioning something would mean saying aloud who called them or what they were doing, keep it to what they would not mind overheard,",
 			"and let them be the one to say the rest.",
@@ -194,7 +200,17 @@ func Prompt(t Told) string {
 			"Plain spoken sentences. No lists, no headings, no stage directions, and nothing they would have to read rather than hear.",
 			"Do not say you are an assistant and do not offer to help: they know, and they will ask.",
 		),
+		prompt.Text(
+			"Say it the way it would be said, not the way it would be written.",
+			"There is a shape that creeps in and it has to be resisted: a statement, a dash, and a question tacked on the end -- \"you were out a good while, sir -- was it a good dinner?\"",
+			"Written down that reads well. Spoken, every greeting sounds the same, and somebody hearing it twice a day notices within a week.",
+			"Vary it. Sometimes the question alone is the whole greeting and the fact behind it goes unsaid, because they already know where they were.",
+			"Sometimes there is nothing to ask and a sentence is simply said to them.",
+			"Where you have a name for the thing, use it rather than describing it: \"how was the film\" is worse than its title, and \"you were out a good while\" is worse than either.",
+			"Short. Somebody at a door has their hands full.",
+		),
 		planned(t),
+		silent(t),
 		profile(t),
 		coming(t),
 		happened(t),
@@ -383,6 +399,16 @@ func happened(t Told) string {
 		return prompt.Text("Their devices reported nothing in between.")
 	}
 
+	// What a distance beside a place means. The number is in the
+	// line either way; without this it reads as detail, when it is
+	// the difference between knowing where they were and guessing.
+	about := prompt.Text(
+		"Where a place has a distance beside it, that is how far the named thing was from where they actually stopped, and it is how sure the name is.",
+		"Twenty metres is inside it and may be said plainly.",
+		"A hundred is across a road, and the name is the nearest thing any map had rather than where they were -- a cinema inside a mall is recorded as whichever shop was closest.",
+		"At that distance name the area and not the place, or say nothing about which it was and ask instead.",
+		"Never repeat a name from that far away as though it were a fact: being told they were at a restaurant they have never been to is worse than being told nothing.")
+
 	evs := t.Events
 	if len(evs) > Most {
 		evs = evs[len(evs)-Most:]
@@ -420,6 +446,7 @@ func happened(t Told) string {
 			"what is worth remarking on is what is rare, or far more of something than there usually is.",
 			"A thing with no number beside it has not happened before, which is itself worth a look.",
 		),
+		about,
 		prompt.Lines(lines...),
 	)
 }
@@ -577,5 +604,80 @@ func spoken(d time.Duration) string {
 		return "a day"
 	default:
 		return fmt.Sprintf("%d days", int(d.Hours()/24))
+	}
+}
+
+// Dark : How long nothing may be reported before the silence is
+// itself worth knowing about.
+//
+// The phone reports a position every five minutes and something
+// else most of the time. Twenty minutes of nothing is a lull;
+// ninety is the phone off, flat, or out of signal, and that is
+// usually the largest thing that happened.
+const Dark = 90 * time.Minute
+
+// silent : The stretches where nothing was reported at all.
+//
+// Absence is the one thing nothing else in this prompt can show.
+// Every other line is something that happened; a gap is the shape
+// of the time between, and it is often the whole story -- a phone
+// that went flat at seven explains two hours of nothing far better
+// than any event in the window does.
+//
+// Worked out here rather than given, because it is a reading of the
+// same events and not another fact to fetch.
+func silent(t Told) string {
+	from := t.Since
+	if from.IsZero() {
+		if len(t.Events) == 0 {
+			return ""
+		}
+		from = t.Events[0].OccurredAt
+	}
+
+	type gap struct{ from, to time.Time }
+	var gaps []gap
+	last := from
+	for _, e := range t.Events {
+		if e.OccurredAt.Sub(last) >= Dark {
+			gaps = append(gaps, gap{last, e.OccurredAt})
+		}
+		if e.OccurredAt.After(last) {
+			last = e.OccurredAt
+		}
+	}
+	if t.Now.Sub(last) >= Dark {
+		gaps = append(gaps, gap{last, t.Now})
+	}
+	if len(gaps) == 0 {
+		return ""
+	}
+
+	lines := make([]string, 0, len(gaps)+5)
+	lines = append(lines, "Their devices reported nothing at all for these stretches:")
+	for _, g := range gaps {
+		lines = append(lines, fmt.Sprintf("- %s to %s, which is %s of nothing",
+			g.from.In(t.Now.Location()).Format("3:04 pm"),
+			g.to.In(t.Now.Location()).Format("3:04 pm"),
+			spell(g.to.Sub(g.from))))
+	}
+	lines = append(lines,
+		"A gap is not an absence of anything happening; it is an absence of anything being reported, which is a different thing and often the larger one.",
+		"The phone being off, flat, or without signal are the usual reasons, and what came just before says which: a battery falling to nothing, or a last position somewhere with no coverage.",
+		"Where the reason is plain, you may say it, because they will wonder why nothing was recorded and it is better said than discovered.",
+		"Where it is not plain, do not guess at it and do not ask them to account for the time.")
+	return prompt.Text(lines...)
+}
+
+// spell : A stretch of time as somebody would say it.
+func spell(d time.Duration) string {
+	mins := int(d.Round(time.Minute).Minutes())
+	switch {
+	case mins < 120:
+		return fmt.Sprintf("%d minutes", mins)
+	case mins%60 == 0:
+		return fmt.Sprintf("%d hours", mins/60)
+	default:
+		return fmt.Sprintf("%d hours %d minutes", mins/60, mins%60)
 	}
 }
