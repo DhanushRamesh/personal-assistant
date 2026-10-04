@@ -680,8 +680,20 @@ func mailboxOf(link *google.Link) mailtool.Mailbox {
 // on every call, and the honest answer on a server with no keys is
 // that it cannot reach the web.
 func searchingFast(cfg config.Config, logger *slog.Logger) search.Searcher {
-	quick := firecrawl.New(string(cfg.Search.Firecrawl), cfg.Search.Quick)
-	spare := tinyfish.New(string(cfg.Search.TinyFish), cfg.Search.Patient)
+	// TinyFish first, which is the opposite of how this was built.
+	// The published benchmark had Firecrawl at 510ms against 2.62s,
+	// and measured from this machine over nine real searches it is
+	// the other way round: TinyFish won seven of them, median 1.95s
+	// against 3.3s cold and 0.96s against 1.36s warm. The benchmark
+	// was almost certainly run from a US datacentre and this is
+	// Chennai.
+	//
+	// So the one with no monthly allowance is also the quick one,
+	// and asking Firecrawl first would spend a capped resource to
+	// be slower. It is the fallback instead: for TinyFish's thirty
+	// a minute, and for its being down.
+	quick := tinyfish.New(string(cfg.Search.TinyFish), cfg.Search.Quick)
+	spare := firecrawl.New(string(cfg.Search.Firecrawl), cfg.Search.Patient)
 
 	switch {
 	case quick == nil && spare == nil:

@@ -8653,9 +8653,38 @@ Measured at **88 of 88**, including the two guards that matter --
 "what did I do yesterday" still goes to their own events, and
 arithmetic still goes nowhere.
 
-**Neither key is set**, so there is no web search on this server
-yet. With neither, the tool says it cannot reach the web; with one,
-it is used for everything.
+### And the benchmark was wrong here, so the order is inverted
+
+Both keys in, nine real searches, same queries through both:
+
+| | firecrawl | tinyfish |
+| --- | --- | --- |
+| cold, median of four | 3.3 s | **1.95 s** |
+| warm, median of five | 1.36 s | **0.96 s** |
+| won | 2 of 9 | **7 of 9** |
+
+The published figures were 510 ms against 2.62 s. From this machine
+it is the other way round, and not marginally. The benchmark was
+almost certainly run from a US datacentre; this is Chennai, and
+whatever edge Firecrawl has does not reach here.
+
+**That removes the reason for the split.** Firecrawl was chosen to
+be asked first *because it was fast*, and it is not. Worse, it is
+the one with the 500-a-month allowance while TinyFish counts
+nothing -- so asking it first spends a capped resource in order to
+be slower, which loses on both axes at once.
+
+So TinyFish is the quick one and Firecrawl the fallback: for
+TinyFish's thirty a minute, and for its being down. The one
+argument for the old order survives and is worth recording -- the
+same benchmark gives Firecrawl 95.3% against 92.0%, and credits
+that expire unused each month cost nothing to spend. That is a
+reason to prefer it, but it is not the speed reason it was picked
+for.
+
+**The lesson is the one this file keeps relearning.** A published
+number is a measurement of somebody else's network. Four searches
+would have caught this before the design was written around it.
 
 
 ## 12. Maintaining this file
