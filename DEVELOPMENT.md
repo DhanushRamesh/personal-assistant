@@ -8834,6 +8834,73 @@ Firecrawl takes one at a time and ten a minute, which is why they
 are read in sequence rather than at once.
 
 
+## A name from a hundred metres away is a guess, and read like a fact
+
+Owner went to Seven Screen's Cinemas at Sky Hub Mall, Kilambakkam.
+The stay was recorded as **"Flavors non veg restaurant"**. Asked
+why, and then: *"if Flavors non veg restaurant, what is the full
+address with that coordinate?"*
+
+Geoapify, at that point, within 150 metres:
+
+    127m  Flavors non veg restaurant    catering.restaurant
+    133m  திருவசந்தம்                    catering.restaurant
+    166m  (unnamed)                     building,public_transport
+
+Widened to 600 metres and told to include `entertainment` it finds
+seven things -- all restaurants and clothes shops. **No cinema, no
+mall.** Nominatim at the same point says
+`Kilambakkam, Chengalpattu -- highway/residential`, no name at all.
+Both are OpenStreetMap underneath, and Sky Hub is a new build
+opposite the new bus terminus. The code did exactly what it was
+told: the nearest named place within Reach.
+
+**Two faults, and only one needs another map.**
+
+The mall being absent needs a provider with its own commercial
+venue data -- Google Places, Foursquare -- or a geofence drawn by
+hand, which is free and permanent and the right answer for anywhere
+visited often.
+
+**The other fault was ours.** `Reach` is 150 metres, chosen to
+match the distance that counts as one cluster of readings, and
+those are different questions: one is how much a phone's position
+wanders, the other is how close a business must be before somebody
+is inside it. At 127 metres you are across a trunk road. The record
+said "Flavors non veg restaurant" where it could have said "Grand
+Southern Trunk Road" -- vague, but not **wrong**, and wrong is the
+expensive one.
+
+**So the name now travels with the two things that can check it.**
+`place.stayed` carries `address` and `metres` beside the value:
+
+    {"value":"Flavors non veg restaurant","minutes":170,
+     "address":"Grand Southern Trunk Road, Urapakkam, Vandalur - 603210",
+     "metres":127}
+
+And `place_visits` reads them: beyond forty metres it says *"the
+name is the nearest place 127m away and may not be where they were,
+so offer it as a guess"*. Forty, because a shop somebody is inside
+is about twenty away. Under that the address is still given and the
+name is simply stated -- saying a true thing as a guess is its own
+kind of wrong.
+
+A place they named themselves says neither. They drew the fence;
+an address and a warning on every line of a day spent at home is
+noise.
+
+**It costs a second Geoapify credit on every named stay**, where
+before the reverse lookup was only made when no business was found.
+A test asserted the old behaviour and failing it was the right
+thing to happen. Three thousand credits a month against a handful
+of named stays a day leaves ample room, and the credit buys the
+only two facts that would have caught this.
+
+**The value field is untouched**, so none of the counting changes:
+the standing description still groups on the place rather than on
+the particular readings.
+
+
 ## 12. Maintaining this file
 
 When the owner states a preference, makes a decision, or corrects something,

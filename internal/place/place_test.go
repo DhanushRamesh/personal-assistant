@@ -32,8 +32,8 @@ func TestTheMostParticularNameWins(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if got != "Phoenix Marketcity" {
-		t.Errorf("called it %q, want the building's name", got)
+	if got.Name != "Phoenix Marketcity" {
+		t.Errorf("called it %q, want the building's name", got.Name)
 	}
 }
 
@@ -42,8 +42,8 @@ func TestItFallsBackThroughWhatItHas(t *testing.T) {
 	s, _ := answering(t, 200, `{"features":[{"properties":{"street":"Velachery Main Road","city":"Chennai"}}]}`)
 
 	got, _ := place.Geoapify{Key: "k", URL: s.URL}.Name(context.Background(), 12.9, 80.06)
-	if got != "Velachery Main Road" {
-		t.Errorf("called it %q, want the street", got)
+	if got.Name != "Velachery Main Road" {
+		t.Errorf("called it %q, want the street", got.Name)
 	}
 }
 
@@ -53,8 +53,8 @@ func TestNothingThereIsNotAFailure(t *testing.T) {
 	s, _ := answering(t, 200, `{"features":[]}`)
 
 	got, err := place.Geoapify{Key: "k", URL: s.URL}.Name(context.Background(), 0, 0)
-	if err != nil || got != "" {
-		t.Errorf("got %q, %v; want no name and no error", got, err)
+	if err != nil || got.Name != "" {
+		t.Errorf("got.Name %q, %v; want no name and no error", got.Name, err)
 	}
 }
 
@@ -64,8 +64,8 @@ func TestNoKeyAsksNobody(t *testing.T) {
 	s, asked := answering(t, 200, `{"features":[{"properties":{"name":"somewhere"}}]}`)
 
 	got, err := place.Geoapify{URL: s.URL}.Name(context.Background(), 12.9, 80.06)
-	if err != nil || got != "" {
-		t.Errorf("got %q, %v; want nothing", got, err)
+	if err != nil || got.Name != "" {
+		t.Errorf("got.Name %q, %v; want nothing", got.Name, err)
 	}
 	if len(*asked) != 0 {
 		t.Errorf("it asked anyway: %v", *asked)
@@ -116,22 +116,39 @@ func two(t *testing.T, places, reverse string) (p, r string, asked *map[string]i
 }
 
 // A business is what somebody would say they went to. The street is
-// how they got there.
-func TestABusinessBeatsTheStreet(t *testing.T) {
+// how they got there, and is now asked for either way.
+//
+// That is a second credit on every named stay, where before it was
+// one, and it was bought deliberately. A cinema was recorded as
+// "Flavors non veg restaurant" because the nearest named thing was
+// a hundred and twenty-seven metres away across a trunk road, and
+// nothing in the record said so. The address and the distance are
+// the only two things that would have shown it. Three thousand
+// credits a month against a handful of named stays a day leaves
+// room for both.
+func TestABusinessKeepsTheStreetBesideIt(t *testing.T) {
 	p, r, asked := two(t,
 		`{"features":[{"properties":{"name":"Phoenix Marketcity","distance":55}}]}`,
-		`{"features":[{"properties":{"street":"Velachery Main Road"}}]}`)
+		`{"features":[{"properties":{"name":"Phoenix Marketcity","street":"Velachery Main Road",`+
+			`"formatted":"Phoenix Marketcity, Velachery Main Road, Chennai - 600042"}}]}`)
 
 	got, err := place.Geoapify{Key: "k", Places: p, URL: r}.Name(context.Background(), 12.99, 80.21)
 	if err != nil {
 		t.Fatal(err)
 	}
-	if got != "Phoenix Marketcity" {
-		t.Errorf("called it %q, want the business", got)
+	if got.Name != "Phoenix Marketcity" {
+		t.Errorf("called it %q, want the business", got.Name)
 	}
-	// And the street was never asked for, so it cost one credit.
-	if (*asked)["reverse"] != 0 {
-		t.Errorf("the street was asked for anyway: %v", *asked)
+	if got.Metres != 55 {
+		t.Errorf("it kept %v metres, want 55", got.Metres)
+	}
+	// The name is not repeated inside the address; it is already the
+	// name.
+	if got.Address != "Velachery Main Road, Chennai - 600042" {
+		t.Errorf("the address is %q", got.Address)
+	}
+	if (*asked)["reverse"] != 1 {
+		t.Errorf("the address was not asked for: %v", *asked)
 	}
 }
 
@@ -142,8 +159,8 @@ func TestWithNoBusinessItFallsBackToTheStreet(t *testing.T) {
 		`{"features":[{"properties":{"street":"krishna nagar 9th street"}}]}`)
 
 	got, _ := place.Geoapify{Key: "k", Places: p, URL: r}.Name(context.Background(), 12.91, 80.06)
-	if got != "krishna nagar 9th street" {
-		t.Errorf("called it %q, want the street", got)
+	if got.Name != "krishna nagar 9th street" {
+		t.Errorf("called it %q, want the street", got.Name)
 	}
 	if (*asked)["places"] != 1 || (*asked)["reverse"] != 1 {
 		t.Errorf("want one of each, got %v", *asked)
@@ -158,8 +175,8 @@ func TestSomethingTooFarAwayIsNotWhereTheyWere(t *testing.T) {
 		`{"features":[{"properties":{"street":"krishna nagar 9th street"}}]}`)
 
 	got, _ := place.Geoapify{Key: "k", Places: p, URL: r}.Name(context.Background(), 12.91, 80.06)
-	if got != "krishna nagar 9th street" {
-		t.Errorf("called it %q: a place 707 m away was taken as where they were", got)
+	if got.Name != "krishna nagar 9th street" {
+		t.Errorf("called it %q: a place 707 m away was taken as where they were", got.Name)
 	}
 }
 
@@ -172,8 +189,8 @@ func TestTheNearestNamedPlaceWins(t *testing.T) {
 		`{"features":[{"properties":{"street":"somewhere"}}]}`)
 
 	got, _ := place.Geoapify{Key: "k", Places: p, URL: r}.Name(context.Background(), 12.99, 80.21)
-	if got != "Starbucks" {
-		t.Errorf("called it %q, want the nearest named one", got)
+	if got.Name != "Starbucks" {
+		t.Errorf("called it %q, want the nearest named one", got.Name)
 	}
 }
 
@@ -188,7 +205,40 @@ func TestAFailedPlacesSearchStillGetsTheStreet(t *testing.T) {
 	_, r, _ := two(t, `{}`, `{"features":[{"properties":{"street":"krishna nagar 9th street"}}]}`)
 
 	got, err := place.Geoapify{Key: "k", Places: broken.URL, URL: r}.Name(context.Background(), 12.91, 80.06)
-	if err != nil || got != "krishna nagar 9th street" {
-		t.Errorf("got %q, %v; want the street and no error", got, err)
+	if err != nil || got.Name != "krishna nagar 9th street" {
+		t.Errorf("got.Name %q, %v; want the street and no error", got.Name, err)
+	}
+}
+
+// TestTheAddressWouldHaveShownTheNameWasWrong : Owner went to a
+// cinema at Sky Hub Mall, Kilambakkam, and the stay was recorded as
+// "Flavors non veg restaurant". The mall is not in OpenStreetMap,
+// so the nearest named thing Geoapify had was a restaurant across
+// the trunk road.
+//
+// Nothing can invent the mall. What can be carried is the road and
+// the distance, and both say plainly that the name is a guess: a
+// shop somebody is inside is twenty metres away, not a hundred and
+// twenty-seven.
+func TestTheAddressWouldHaveShownTheNameWasWrong(t *testing.T) {
+	p, r, _ := two(t,
+		`{"features":[{"properties":{"name":"Flavors non veg restaurant","distance":126.95}}]}`,
+		`{"features":[{"properties":{"name":"Flavors non veg restaurant",`+
+			`"street":"Grand Southern Trunk Road","suburb":"Urapakkam","city":"Vandalur",`+
+			`"postcode":"603210","distance":126.95,`+
+			`"formatted":"Flavors non veg restaurant, Grand Southern Trunk Road, `+
+			`Urapakkam, Vandalur - 603210, TN, India"}}]}`)
+
+	got, err := place.Geoapify{Key: "k", Places: p, URL: r}.Name(context.Background(), 12.87382, 80.07728)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got.Metres < 100 {
+		t.Errorf("the distance was lost: %v", got.Metres)
+	}
+	for _, want := range []string{"Grand Southern Trunk Road", "Urapakkam", "603210"} {
+		if !strings.Contains(got.Address, want) {
+			t.Errorf("the address is missing %q: %q", want, got.Address)
+		}
 	}
 }

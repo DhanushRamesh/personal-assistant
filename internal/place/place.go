@@ -25,9 +25,34 @@ import (
 	"time"
 )
 
+// Named : What is at a position, and how sure that is.
+type Named struct {
+	// Name : What to call it. Empty when nothing could be found.
+	Name string
+	// Address : The rest of the address -- the road, the area, the
+	// town, the postcode -- with the name taken off the front, since
+	// Name already carries it.
+	//
+	// Kept because a name on its own can be wrong in a way nobody
+	// can see. "Flavors non veg restaurant" told the owner nothing
+	// about having been at a cinema; "Grand Southern Trunk Road,
+	// Urapakkam, Vandalur - 603210" would at least have been the
+	// right stretch of road.
+	Address string
+	// Metres : How far the named thing was from where they actually
+	// stopped. Zero when the name came from the address rather than
+	// from a business.
+	//
+	// The honesty of the whole answer is in this number. A shop you
+	// are inside is twenty metres away; one across a trunk road is a
+	// hundred and twenty-seven, and that is how a cinema came to be
+	// recorded as a restaurant.
+	Metres float64
+}
+
 // Namer : Somewhere to ask what is at a position.
 type Namer interface {
-	Name(ctx context.Context, lat, lon float64) (string, error)
+	Name(ctx context.Context, lat, lon float64) (Named, error)
 }
 
 // Categories : The kinds of place worth being at.
@@ -95,12 +120,15 @@ type Geoapify struct {
 type found struct {
 	Features []struct {
 		Properties struct {
-			Name          string `json:"name"`
-			Street        string `json:"street"`
-			Suburb        string `json:"suburb"`
-			District      string `json:"district"`
-			City          string `json:"city"`
-			Neighbourhood string `json:"neighbourhood"`
+			Name          string  `json:"name"`
+			Street        string  `json:"street"`
+			Suburb        string  `json:"suburb"`
+			District      string  `json:"district"`
+			City          string  `json:"city"`
+			Neighbourhood string  `json:"neighbourhood"`
+			Formatted     string  `json:"formatted"`
+			Postcode      string  `json:"postcode"`
+			Distance      float64 `json:"distance"`
 		} `json:"properties"`
 	} `json:"features"`
 }
@@ -116,33 +144,40 @@ type found struct {
 // asked for instead. Only ever for a stay that has ended and that no
 // geofence of theirs already names, so a handful a day against a free
 // allowance of three thousand.
-func (g Geoapify) Name(ctx context.Context, lat, lon float64) (string, error) {
+func (g Geoapify) Name(ctx context.Context, lat, lon float64) (Named, error) {
 	if strings.TrimSpace(g.Key) == "" {
-		return "", nil
+		return Named{}, nil
 	}
 
 	// A named business first. A failure here is not the end of it: the
 	// street is still worth having, and asking for it is another
 	// credit rather than another problem.
-	name, err := g.nearby(ctx, lat, lon)
-	if err == nil && name != "" {
-		return name, nil
+	near, err := g.nearby(ctx, lat, lon)
+
+	// The address either way. It costs the credit that was going to
+	// be spent on the street anyway when no business was found, and
+	// when one was it is what says which road that business is on --
+	// which is the only thing that would have shown the name was
+	// wrong.
+	where, whereErr := g.street(ctx, lat, lon)
+	if near.Name != "" {
+		near.Address = where.Address
+		return near, nil
 	}
-	street, streetErr := g.street(ctx, lat, lon)
-	if streetErr != nil {
+	if whereErr != nil {
 		if err != nil {
-			return "", err
+			return Named{}, err
 		}
-		return "", streetErr
+		return Named{}, whereErr
 	}
-	return street, nil
+	return where, nil
 }
 
 // nearby : The nearest named place worth being at, or empty.
-func (g Geoapify) nearby(ctx context.Context, lat, lon float64) (string, error) {
+func (g Geoapify) nearby(ctx context.Context, lat, lon float64) (Named, error) {
 	endpoint := strings.TrimSpace(g.Places)
 	if endpoint == "" {
-		return "", nil
+		return Named{}, nil
 	}
 
 	var got struct {
@@ -159,18 +194,19 @@ func (g Geoapify) nearby(ctx context.Context, lat, lon float64) (string, error) 
 		"bias":       {"proximity:" + six(lon) + "," + six(lat)},
 		"limit":      {strconv.Itoa(Most)},
 	}, &got); err != nil {
-		return "", err
+		return Named{}, err
 	}
 
 	// The nearest named one. They come back nearest first with the
 	// proximity bias, but that is their ordering and not a promise.
-	nearest, best := "", Reach
+	nearest := Named{}
+	best := Reach
 	for _, f := range got.Features {
 		name := strings.TrimSpace(f.Properties.Name)
 		if name == "" || f.Properties.Distance > best {
 			continue
 		}
-		nearest, best = name, f.Properties.Distance
+		nearest, best = Named{Name: name, Metres: f.Properties.Distance}, f.Properties.Distance
 	}
 	return nearest, nil
 }
@@ -181,10 +217,10 @@ func (g Geoapify) nearby(ctx context.Context, lat, lon float64) (string, error) 
 // street is worth having; a city is not, on its own, a place you went
 // -- but it is better than a pair of coordinates, and the person can
 // correct it later.
-func (g Geoapify) street(ctx context.Context, lat, lon float64) (string, error) {
+func (g Geoapify) street(ctx context.Context, lat, lon float64) (Named, error) {
 	endpoint := strings.TrimSpace(g.URL)
 	if endpoint == "" {
-		return "", fmt.Errorf("place: nowhere to ask")
+		return Named{}, fmt.Errorf("place: nowhere to ask")
 	}
 
 	var got found
@@ -193,21 +229,38 @@ func (g Geoapify) street(ctx context.Context, lat, lon float64) (string, error) 
 		"lon":    {six(lon)},
 		"format": {"geojson"},
 	}, &got); err != nil {
-		return "", err
+		return Named{}, err
 	}
 	if len(got.Features) == 0 {
 		// Nothing there, which the sea and a motorway both produce.
 		// Not a failure: there is genuinely no name for it.
-		return "", nil
+		return Named{}, nil
 	}
 
 	p := got.Features[0].Properties
+	out := Named{Address: rest(p.Formatted, p.Name), Metres: p.Distance}
 	for _, candidate := range []string{p.Name, p.Street, p.Neighbourhood, p.Suburb, p.District, p.City} {
 		if name := strings.TrimSpace(candidate); name != "" {
-			return name, nil
+			out.Name = name
+			break
 		}
 	}
-	return "", nil
+	return out, nil
+}
+
+// rest : The address with its leading name taken off.
+//
+// Geoapify puts the name at the front of what it formats, and the
+// name is already carried on its own. "Flavors non veg restaurant,
+// Grand Southern Trunk Road, Urapakkam" becomes the road onwards,
+// which is the part that says where rather than what.
+func rest(formatted, name string) string {
+	formatted = strings.TrimSpace(formatted)
+	name = strings.TrimSpace(name)
+	if name != "" && strings.HasPrefix(formatted, name+",") {
+		return strings.TrimSpace(formatted[len(name)+1:])
+	}
+	return formatted
 }
 
 // ask : One call, read into into.

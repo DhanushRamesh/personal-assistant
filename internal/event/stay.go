@@ -196,6 +196,19 @@ func (s Stay) Key() string {
 // and because what the description of somebody should group on is the
 // place rather than the particular readings.
 func (s Stay) Payload(called string) json.RawMessage {
+	return s.PayloadAt(Place{Name: called})
+}
+
+// PayloadAt : The same, with whatever else is known about the place.
+//
+// The address and the distance are kept beside the name because the
+// name alone cannot be checked. Owner, having been to a cinema and
+// found the stay called "Flavors non veg restaurant": *"if Flavors
+// non veg restaurant, what is the full address with that
+// coordinate?"* -- the road and the postcode were right the whole
+// time and nothing was carrying them.
+func (s Stay) PayloadAt(at Place) json.RawMessage {
+	called := at.Name
 	// The coordinates stay, and taking them out was a mistake.
 	//
 	// They were removed on 3 October 2026 on the grounds that nothing
@@ -216,9 +229,12 @@ func (s Stay) Payload(called string) json.RawMessage {
 		Value   string `json:"value"`
 		Minutes int    `json:"minutes"`
 		At      string `json:"at"`
+		Address string `json:"address,omitempty"`
+		Metres  int    `json:"metres,omitempty"`
 		Still   bool   `json:"still,omitempty"`
 	}{Value: called, Minutes: int(s.Long().Round(time.Minute).Minutes()),
-		At: s.Where(), Still: s.Open})
+		At: s.Where(), Address: strings.TrimSpace(at.Address),
+		Metres: int(at.Metres + 0.5), Still: s.Open})
 	if err != nil {
 		// Unreachable: three strings and an integer.
 		return json.RawMessage(`{"value":""}`)
@@ -440,6 +456,10 @@ type Named struct {
 	// drew, a place they have been named before, or whatever is there
 	// according to whoever is asked. Coordinates when nothing knows.
 	Called string
+	// Place : The rest of what is known about it, when anything is.
+	// Empty for a place they named themselves, which needs no
+	// address.
+	Place Place
 }
 
 // Merged : Consecutive stays in the same place, joined into one.
@@ -622,7 +642,24 @@ type Watching interface {
 // Naming : Somewhere to ask what is at a position, for a stay that no
 // geofence of theirs covers and that is nowhere they have been before.
 type Naming interface {
-	Name(ctx context.Context, lat, lon float64) (string, error)
+	Name(ctx context.Context, lat, lon float64) (Place, error)
+}
+
+// Place : What a naming service says is at a position.
+//
+// The same shape as place.Named, declared here so that this package
+// does not depend on that one. Three fields rather than a string,
+// because a name on its own can be wrong in a way nobody can see:
+// a cinema was recorded as "Flavors non veg restaurant", and the
+// road and the hundred and twenty-seven metres would both have said
+// so.
+type Place struct {
+	// Name : What to call it.
+	Name string
+	// Address : The road, area, town and postcode, without the name.
+	Address string
+	// Metres : How far the named thing was from where they stopped.
+	Metres float64
 }
 
 // Settler : Works out where somebody stopped, and writes it down.
@@ -690,7 +727,8 @@ func (st Settler) Settle(ctx context.Context, userID string, now time.Time) ([]N
 	// of not having to guess a radius that fits every place at once.
 	named := make([]Named, 0, len(stays))
 	for _, s := range stays {
-		named = append(named, Named{Stay: s, Called: st.called(ctx, s, fences, known)})
+		at := st.called(ctx, s, fences, known)
+		named = append(named, Named{Stay: s, Called: at.Name, Place: at})
 	}
 	// Never merged across a crossing they reported: leaving and
 	// coming back is a fact even when nothing was learned about
@@ -700,7 +738,7 @@ func (st Settler) Settle(ctx context.Context, userID string, now time.Time) ([]N
 	out := make([]*Event, 0, len(named))
 	for _, n := range named {
 		e, err := New(userID, "server", "", Stayed, n.From, now,
-			n.Payload(n.Called), n.Key())
+			n.PayloadAt(n.Place), n.Key())
 		if err != nil {
 			// Unreachable for a stay worked out here, and not worth
 			// losing the others over if it ever is.
@@ -750,15 +788,18 @@ func (st Settler) Settle(ctx context.Context, userID string, now time.Time) ([]N
 // that, whatever the naming service makes of it. And failing all of
 // those, the coordinates, which name nothing but group correctly and
 // can be corrected later.
-func (st Settler) called(ctx context.Context, s Stay, fences []Fence, known []Event) string {
+func (st Settler) called(ctx context.Context, s Stay, fences []Fence, known []Event) Place {
 	if name := Names(s, fences, known); name != "" {
-		return name
+		// A place they named themselves, or one they have been to
+		// before. No address: they know where it is, and asking
+		// would spend a credit to be told something they wrote.
+		return Place{Name: name}
 	}
 	if st.Naming == nil {
-		return s.Where()
+		return Place{Name: s.Where()}
 	}
 
-	name, err := st.Naming.Name(ctx, s.Lat, s.Lon)
+	at, err := st.Naming.Name(ctx, s.Lat, s.Lon)
 	if err != nil {
 		// Logged and stepped over. A stay with coordinates for a name
 		// is the whole of what is lost, and it can be named later.
@@ -766,12 +807,12 @@ func (st Settler) called(ctx context.Context, s Stay, fences []Fence, known []Ev
 			st.Logger.WarnContext(ctx, "could not find out what is at a place",
 				slog.String("where", s.Where()), slog.Any("error", err))
 		}
-		return s.Where()
+		return Place{Name: s.Where()}
 	}
-	if name = strings.TrimSpace(name); name != "" {
-		return name
+	if at.Name = strings.TrimSpace(at.Name); at.Name != "" {
+		return at
 	}
-	return s.Where()
+	return Place{Name: s.Where(), Address: at.Address}
 }
 
 // Names : What to call a stay, from the places the person drew and the

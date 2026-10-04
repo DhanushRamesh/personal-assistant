@@ -78,7 +78,23 @@ type visit struct {
 	// rather than not yet made. Said as such, because an invented
 	// leaving time is worse than admitting there is none.
 	unreported bool
+	// address : The road, area and postcode, when the place was
+	// named by a service rather than by them.
+	address string
+	// metres : How far the named thing was from where they actually
+	// stopped. Beyond Doubt it is said to be approximate, because a
+	// name taken from that far away is a guess and reads exactly
+	// like a fact.
+	metres int
 }
+
+// Doubt : How far a named place may be before the name is offered
+// as a guess rather than stated.
+//
+// Forty metres. A shop somebody is inside is twenty away; the one
+// that made this necessary was a hundred and twenty-seven, across a
+// trunk road from a cinema that no map had.
+const Doubt = 40
 
 // visits : Where the person has been.
 func visits(reader Reader, clock Clock) tool.Tool {
@@ -196,11 +212,14 @@ func gather(found []event.Event, now time.Time) []visit {
 		var into struct {
 			Value   string `json:"value"`
 			Minutes int    `json:"minutes"`
+			Address string `json:"address"`
+			Metres  int    `json:"metres"`
 		}
 		if err := json.Unmarshal(e.Payload, &into); err != nil || into.Value == "" {
 			continue
 		}
 		s := visit{
+			address: strings.TrimSpace(into.Address), metres: into.Metres,
 			where: into.Value,
 			from:  e.OccurredAt,
 			to:    e.OccurredAt.Add(time.Duration(into.Minutes) * time.Minute),
@@ -311,8 +330,29 @@ func line(v visit, where *time.Location) string {
 	if v.open {
 		return fmt.Sprintf("%s, from %s and still there", v.where, from)
 	}
-	return fmt.Sprintf("%s, %s to %s (%s)",
-		v.where, from, v.to.In(where).Format("15:04"), spoken(v.to.Sub(v.from)))
+	return fmt.Sprintf("%s, %s to %s (%s)%s",
+		v.where, from, v.to.In(where).Format("15:04"), spoken(v.to.Sub(v.from)), v.said())
+}
+
+// said : What to add about where the name came from.
+//
+// Nothing for a place they named themselves, which is most of them.
+// The address when a service named it, because a name alone cannot
+// be checked; and a plain warning when the named thing was far
+// enough away that it is probably not where they were.
+func (v visit) said() string {
+	switch {
+	case v.address == "" && v.metres <= Doubt:
+		return ""
+	case v.metres > Doubt && v.address != "":
+		return fmt.Sprintf(" -- on %s; the name is the nearest place %dm away and may not be "+
+			"where they were, so offer it as a guess", v.address, v.metres)
+	case v.metres > Doubt:
+		return fmt.Sprintf(" -- the name is the nearest place %dm away and may not be where "+
+			"they were, so offer it as a guess", v.metres)
+	default:
+		return " -- on " + v.address
+	}
 }
 
 // nothing : What to say when they went nowhere worth recording.

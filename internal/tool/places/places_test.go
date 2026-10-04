@@ -187,3 +187,58 @@ func TestBackToBackStaysAreNotAGap(t *testing.T) {
 		t.Errorf("two stays that meet were reported as a gap:\n%s", got.Content)
 	}
 }
+
+// stayedAt : A stay a service named, with the address and the
+// distance it came with.
+func stayedAt(place string, at time.Time, minutes int, address string, metres int) event.Event {
+	payload, _ := json.Marshal(map[string]any{
+		"value": place, "minutes": minutes, "at": "12.87382,80.07728",
+		"address": address, "metres": metres})
+	return event.Event{Kind: event.Stayed, Payload: payload, OccurredAt: at}
+}
+
+// TestADoubtfulNameIsOfferedAsAGuess : Owner went to a cinema at Sky
+// Hub Mall and the stay was recorded as "Flavors non veg
+// restaurant" -- the nearest thing any map had, a hundred and
+// twenty-seven metres away across a trunk road.
+//
+// Nothing here can invent the mall. What it can do is stop a guess
+// reading like a fact.
+func TestADoubtfulNameIsOfferedAsAGuess(t *testing.T) {
+	got := ask(t, []event.Event{
+		stayedAt("Flavors non veg restaurant", hhmm(18, 5), 170,
+			"Grand Southern Trunk Road, Urapakkam, Vandalur - 603210", 127),
+	}, `{"days":1}`)
+
+	for _, want := range []string{"Grand Southern Trunk Road", "127m", "may not be where they were"} {
+		if !strings.Contains(got.Content, want) {
+			t.Errorf("missing %q in:\n%s", want, got.Content)
+		}
+	}
+}
+
+// TestAPlaceTheyNamedSaysNothingExtra : Home is home. An address and
+// a warning on every line of a day spent at home is noise, and they
+// drew that fence themselves.
+func TestAPlaceTheyNamedSaysNothingExtra(t *testing.T) {
+	got := ask(t, []event.Event{stayed("home", hhmm(9, 0), 120)}, `{"days":1}`)
+	if strings.Contains(got.Content, "may not be where") || strings.Contains(got.Content, " -- on ") {
+		t.Errorf("a place they named was second-guessed:\n%s", got.Content)
+	}
+}
+
+// TestACloseNameIsStated : Eighteen metres is inside the shop. Saying
+// a true thing as a guess is its own kind of wrong.
+func TestACloseNameIsStated(t *testing.T) {
+	got := ask(t, []event.Event{
+		stayedAt("Muthu Supermarket", hhmm(11, 0), 10,
+			"Velachery Main Road, Chennai - 600042", 18),
+	}, `{"days":1}`)
+
+	if strings.Contains(got.Content, "may not be where they were") {
+		t.Errorf("a name from 18m was doubted:\n%s", got.Content)
+	}
+	if !strings.Contains(got.Content, "Velachery Main Road") {
+		t.Errorf("the address was dropped:\n%s", got.Content)
+	}
+}

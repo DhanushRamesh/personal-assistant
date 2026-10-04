@@ -606,12 +606,25 @@ func naming(cfg config.Config, logger *slog.Logger) event.Naming {
 		return nil
 	}
 	logger.Info("naming places through Geoapify", slog.String("url", cfg.Geoapify.URL))
-	return place.Geoapify{
+	return asking{place.Geoapify{
 		Key:     cfg.Geoapify.Key.Reveal(),
 		URL:     cfg.Geoapify.URL,
 		Places:  cfg.Geoapify.Places,
 		Timeout: cfg.Geoapify.Timeout,
-	}
+	}}
+}
+
+// asking : A place namer, as the settler wants one.
+//
+// Two identical structs and a line to copy between them, which is
+// the price of internal/event not importing internal/place. Worth
+// paying: the settler is about stays and knows nothing of whose
+// map it is.
+type asking struct{ namer place.Namer }
+
+func (a asking) Name(ctx context.Context, lat, lon float64) (event.Place, error) {
+	got, err := a.namer.Name(ctx, lat, lon)
+	return event.Place{Name: got.Name, Address: got.Address, Metres: got.Metres}, err
 }
 
 // announcer : Where the assistant says something without being asked.
