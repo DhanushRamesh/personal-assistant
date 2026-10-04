@@ -37,6 +37,7 @@ import (
 	"github.com/DhanushRamesh/personal-assistant/internal/memory"
 	"github.com/DhanushRamesh/personal-assistant/internal/memory/inmemory"
 	"github.com/DhanushRamesh/personal-assistant/internal/persona"
+	"github.com/DhanushRamesh/personal-assistant/internal/place"
 	"github.com/DhanushRamesh/personal-assistant/internal/prompt"
 	remindmemory "github.com/DhanushRamesh/personal-assistant/internal/remind/inmemory"
 	"github.com/DhanushRamesh/personal-assistant/internal/search"
@@ -46,6 +47,7 @@ import (
 	"github.com/DhanushRamesh/personal-assistant/internal/tool/conversations"
 	"github.com/DhanushRamesh/personal-assistant/internal/tool/events"
 	"github.com/DhanushRamesh/personal-assistant/internal/tool/mail"
+	mapstool "github.com/DhanushRamesh/personal-assistant/internal/tool/maps"
 	"github.com/DhanushRamesh/personal-assistant/internal/tool/memories"
 	"github.com/DhanushRamesh/personal-assistant/internal/tool/places"
 	"github.com/DhanushRamesh/personal-assistant/internal/tool/reminders"
@@ -213,7 +215,11 @@ var cases = []eval{
 	// the point: the description cannot list what arrives next, so it
 	// has to say that, and say never to answer from it that a tool is
 	// missing.
-	{Say: "how much battery do I have left", Tool: []string{"event_recent"}},
+	// event_kinds allowed for the same reason as its sibling below:
+	// prefetched in production, so its answer is already in the
+	// prompt, and only here is calling it a sensible first move.
+	{Say: "how much battery do I have left",
+		Tool: []string{"event_recent", "event_kinds"}},
 	// event_kinds is allowed here and this is a gap in the harness
 	// rather than generosity. In production it is prefetched, so its
 	// answer is already in the prompt and calling it is a wasted
@@ -238,6 +244,21 @@ var cases = []eval{
 	{Say: "what does the word laconic mean", Tool: nil},
 	{Say: "who is the chief minister of Tamil Nadu", Tool: []string{"web_search"}},
 	{Say: "how much is a litre of petrol", Tool: []string{"web_search"}},
+
+	// The four the owner asked for. Each is about the world, and
+	// three of the four are only worth asking because they start
+	// from where he is now.
+	{Say: "how far is the airport", Tool: []string{"place_distance", "place_find"}},
+	{Say: "how long will it take me to get to the office", Tool: []string{"place_distance"}},
+	{Say: "anywhere to eat near me", Tool: []string{"place_near"}},
+	{Say: "where is Phoenix Marketcity", Tool: []string{"place_find", "place_distance"}},
+
+	// And the over-reach. Somewhere he has been is his own history,
+	// not a map; and a distance between two cities does not change
+	// and needs no tool.
+	{Say: "where did I go yesterday",
+		Tool: []string{"place_visits", "event_recent", "event_kinds"}},
+	{Say: "what is the distance between Chennai and Hyderabad", Tool: nil},
 
 	// Reading a page needs a page first: the address comes from a
 	// search and cannot be invented.
@@ -382,6 +403,7 @@ func TestTheModelReachesForTheRightTool(t *testing.T) {
 		places.Tools(nil, places.Clock{Location: time.UTC}),
 		comingtool.Tools(nothingComing{}, comingtool.Clock{Location: time.UTC}),
 		webtool.Tools(quietWeb{}),
+		mapstool.Tools(flatEarth{}, eventmemory.New(), mapstool.Clock{Location: time.UTC}),
 	)...)
 	if err != nil {
 		t.Fatalf("NewRegistry: %v", err)
@@ -568,3 +590,17 @@ func (quietWeb) Search(context.Context, search.Ask) ([]search.Result, error) {
 	return nil, nil
 }
 func (quietWeb) Read(context.Context, []string) ([]search.Page, error) { return nil, nil }
+
+// flatEarth : A map that answers nothing. Which tool the model
+// reaches for is decided before anything runs.
+type flatEarth struct{}
+
+func (flatEarth) Find(context.Context, string, string, int) ([]place.Spot, error) {
+	return nil, nil
+}
+func (flatEarth) Near(context.Context, float64, float64, string, float64, int) ([]place.Spot, error) {
+	return nil, nil
+}
+func (flatEarth) Route(context.Context, float64, float64, float64, float64, string) (place.Journey, error) {
+	return place.Journey{}, nil
+}

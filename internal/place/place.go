@@ -129,6 +129,8 @@ type found struct {
 			Formatted     string  `json:"formatted"`
 			Postcode      string  `json:"postcode"`
 			Distance      float64 `json:"distance"`
+			Lat           float64 `json:"lat"`
+			Lon           float64 `json:"lon"`
 		} `json:"properties"`
 	} `json:"features"`
 }

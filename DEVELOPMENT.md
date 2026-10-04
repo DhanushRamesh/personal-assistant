@@ -8986,6 +8986,71 @@ the assistant is doing"* -- because the obvious failure is a
 profile that turns into a report card.
 
 
+## The map, in four questions
+
+Owner's own list: *"how far is the airport, what's near me, how
+long will it take to get there, where is this address -- we can
+have these."*
+
+Three endpoints answer them, **all on the Geoapify key already
+used to name stays**. No new account, no card.
+
+| tool | answers |
+| --- | --- |
+| `place_find` | where is this, and what is its address |
+| `place_near` | what is around them now |
+| `place_distance` | how far, and how long in today's traffic |
+
+### Traffic is not optional
+
+One journey across Chennai, measured both ways:
+
+    without traffic   16.1 km, 19 min
+    with traffic      18.0 km, 53 min
+
+**Nearly three times out.** A travel time that short is not a worse
+answer than none -- it is acted on, and the thing is missed. So
+driving always asks for `traffic=approximated`, and the answer says
+so: *"the time allows for today's traffic, so it is what it would
+take now and not a best case."*
+
+### What makes them worth having is "from here"
+
+A distance between two cities is a thing anybody knows -- asked
+once in the whole transcript, answered from memory as *"about 625
+kilometres"*, and right. What nothing else can say is how long it
+takes **from where they are standing, at this moment**.
+
+So the position comes from the last fix their phone reported, and
+is **refused when it is over twenty minutes old**. The phone
+reports every five minutes, so older than that means it has been
+off or out of signal, and "twenty minutes away" from an hour-old
+position is wrong in the one way that matters: it is believed.
+
+### An unknown sort is refused rather than passed through
+
+Geoapify answers an unknown category with an **empty list and no
+error**. A typed-through "unicorn" would come back as "nothing near
+you", which is a lie that looks like an answer. So the sorts are a
+list -- food, coffee, pharmacy, fuel, atm and the rest -- and
+anything else is refused with that list. None of accommodation,
+sport or tourism appears, for the reason recorded in October: each
+poisons the whole call, silently, even paired with one that works.
+
+### What was deliberately not built
+
+Turn-by-turn directions, which are useless read aloud and which the
+phone does properly. And nothing was moved off `web_search`: it
+found Sky Hub Mall when the map could not, so *what a place is like*
+and *when it opens* stay there.
+
+Measured live, first try: the airport found in 2.45s, 19.7 km and
+55 minutes from home in 2.28s, an unknown sort refused in
+milliseconds. The suite is **99 of 99**, including the two guards
+that matter -- "where did I go yesterday" still goes to his own
+history, and the distance between two cities still goes nowhere.
+
+
 ## 12. Maintaining this file
 
 When the owner states a preference, makes a decision, or corrects something,

@@ -63,6 +63,7 @@ import (
 	"github.com/DhanushRamesh/personal-assistant/internal/tool/conversations"
 	eventstool "github.com/DhanushRamesh/personal-assistant/internal/tool/events"
 	mailtool "github.com/DhanushRamesh/personal-assistant/internal/tool/mail"
+	mapstool "github.com/DhanushRamesh/personal-assistant/internal/tool/maps"
 	"github.com/DhanushRamesh/personal-assistant/internal/tool/memories"
 	placestool "github.com/DhanushRamesh/personal-assistant/internal/tool/places"
 	"github.com/DhanushRamesh/personal-assistant/internal/tool/reminders"
@@ -270,6 +271,9 @@ func run() error {
 			Now: cfg.Assistant.Now, Location: cfg.Assistant.Location,
 		}),
 		webtool.Tools(searchingFast(cfg, logger.Logger)),
+		mapstool.Tools(mapping(cfg), deviceEvents, mapstool.Clock{
+			Now: cfg.Assistant.Now, Location: cfg.Assistant.Location,
+		}),
 	)...)
 	if err != nil {
 		return err
@@ -613,6 +617,23 @@ func naming(cfg config.Config, logger *slog.Logger) event.Naming {
 		Places:  cfg.Geoapify.Places,
 		Timeout: cfg.Geoapify.Timeout,
 	}}
+}
+
+// mapping : The map, or nothing when there is no key.
+//
+// Untyped nil for the usual reason: a typed one satisfies the
+// interface and then fails on every call, and the honest answer on
+// a server with no key is that it cannot look at a map.
+func mapping(cfg config.Config) mapstool.Maps {
+	if !cfg.Geoapify.Configured() {
+		return nil
+	}
+	return place.Geoapify{
+		Key:     cfg.Geoapify.Key.Reveal(),
+		URL:     cfg.Geoapify.URL,
+		Places:  cfg.Geoapify.Places,
+		Timeout: cfg.Geoapify.Timeout,
+	}
 }
 
 // asking : A place namer, as the settler wants one.
