@@ -3535,6 +3535,35 @@ budget for a short turn, finally honest:
     0.2s    writing a short answer
 
 
+## A warning is weighed per event, not per spell of time
+
+Owner, on the last gate still holding one back: *"if it's urgent it
+should say every time, regardless of twenty minutes since the last
+and twice within ten minutes -- if an urgent event is captured, say
+it."*
+
+Right, and it could not simply be let through. The watcher re-reads
+the last five minutes every thirty seconds, which is why anything is
+weighed once at all: without it one song was recorded ten times as
+held. Removed for warnings, one warning would be *said* ten times.
+
+So the test changes rather than disappearing. An ordinary remark is
+weighed once per label per ten minutes -- the same thing twice in an
+afternoon is not twice as interesting. A warning is weighed once per
+*event*: the label and the moment it happened. Two warnings a minute
+apart are two events and both are said; the same one found again on
+the next tick is the same moment and is not.
+
+The record is kept the same ten minutes, which is longer than the
+five an event can be found in, so nothing returns after it is
+forgotten.
+
+**That leaves a warning with nothing in its way.** Not the room, not
+the quiet between remarks, not the once-a-day rule, not the model's
+refusal. The only thing it still cannot do is be said twice for the
+same moment.
+
+
 ## The narration was the wait it was covering
 
 Owner: *"calculate the full latency... I want ultra low latency."*

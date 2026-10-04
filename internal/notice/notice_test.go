@@ -578,3 +578,44 @@ func TestAReadingCanStillInsist(t *testing.T) {
 		t.Fatalf("a device insisting about a reading was not heard: %+v", got)
 	}
 }
+
+// TestTwoWarningsAreBothSaid : Owner: "if it's urgent it should say
+// every time, regardless of twenty minutes since the last and twice
+// within ten minutes -- if an urgent event is captured, say it."
+//
+// Two warnings a minute apart are two events. Nothing about the
+// first makes the second less worth hearing.
+func TestTwoWarningsAreBothSaid(t *testing.T) {
+	g := &notice.Gate{Away: func(string) (bool, bool) { return false, true }}
+	first := notice.Candidate{Label: "battery.level 10", Reason: notice.Told, Urgent: true, At: at}
+	second := notice.Candidate{Label: "battery.level 5", Reason: notice.Told, Urgent: true, At: at.Add(time.Minute)}
+
+	if g.Considered(first, at) {
+		t.Fatal("the first warning was treated as a repeat")
+	}
+	if g.Considered(second, at.Add(time.Minute)) {
+		t.Error("a second warning a minute later was held back")
+	}
+	// Even the same warning again, if the device reports it afresh.
+	again := notice.Candidate{Label: "battery.level 5", Reason: notice.Told, Urgent: true, At: at.Add(2 * time.Minute)}
+	if g.Considered(again, at.Add(2*time.Minute)) {
+		t.Error("the same warning reported again was held back")
+	}
+}
+
+// TestOneWarningIsNotSaidTenTimes : The watcher re-reads the last
+// five minutes every thirty seconds. Without this, one warning is
+// found ten times and said ten times.
+func TestOneWarningIsNotSaidTenTimes(t *testing.T) {
+	g := &notice.Gate{Away: func(string) (bool, bool) { return false, true }}
+	warning := notice.Candidate{Label: "battery.level 5", Reason: notice.Told, Urgent: true, At: at}
+
+	if g.Considered(warning, at) {
+		t.Fatal("the first look was treated as a repeat")
+	}
+	for _, later := range []time.Duration{30 * time.Second, 2 * time.Minute, 5 * time.Minute} {
+		if !g.Considered(warning, at.Add(later)) {
+			t.Errorf("the same moment was weighed again after %s", later)
+		}
+	}
+}

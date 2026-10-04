@@ -75,6 +75,21 @@ const Weighing = 10 * time.Minute
 // Asked before anything else is done with a candidate. A thing
 // weighed and refused a minute ago has not become interesting since,
 // and asking again writes a second row saying so.
+//
+// A warning is held to a different test, and this is the only thing
+// that still holds one at all. Owner: *"if it's urgent it should say
+// every time, regardless of twenty minutes since the last and twice
+// within ten minutes -- if an urgent event is captured, say it."*
+// Quite right, and it cannot simply be let through: the watcher
+// re-reads the last five minutes every thirty seconds, so one
+// warning would be found ten times and said ten times.
+//
+// So a warning is weighed once per *event* rather than once per
+// spell of time. Two warnings a minute apart are two events and both
+// are said; the same one found again on the next tick is the same
+// moment and is not. The record is kept the same length, which is
+// longer than the window an event can be found in, so nothing comes
+// back after it is forgotten.
 func (g *Gate) Considered(c Candidate, now time.Time) bool {
 	if g == nil {
 		return true
@@ -82,13 +97,18 @@ func (g *Gate) Considered(c Candidate, now time.Time) bool {
 	g.mu.Lock()
 	defer g.mu.Unlock()
 
-	if when, had := g.weighed[c.Label]; had && now.Sub(when) < Weighing {
+	key := c.Label
+	if c.Urgent {
+		key += "@" + c.At.UTC().Format(time.RFC3339Nano)
+	}
+
+	if when, had := g.weighed[key]; had && now.Sub(when) < Weighing {
 		return true
 	}
 	if g.weighed == nil {
 		g.weighed = map[string]time.Time{}
 	}
-	g.weighed[c.Label] = now
+	g.weighed[key] = now
 	for label, when := range g.weighed {
 		if now.Sub(when) >= Weighing {
 			delete(g.weighed, label)
