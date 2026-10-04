@@ -48,17 +48,32 @@ func at(t *testing.T, hour, minute int, kind, value string) *event.Event {
 
 func ask(t *testing.T, s *inmemory.Store, args string) tool.Result {
 	t.Helper()
+	return run(t, s, "event_recent", args)
+}
+
+// askKinds : What the listing says exists.
+func askKinds(t *testing.T, s *inmemory.Store) tool.Result {
+	t.Helper()
+	return run(t, s, "event_kinds", `{}`)
+}
+
+// run : One tool of this domain, by name.
+func run(t *testing.T, s *inmemory.Store, name, args string) tool.Result {
+	t.Helper()
 	tools := eventstool.Tools(s, eventstool.Clock{
 		Now:      func() time.Time { return noon.UTC() },
 		Location: kolkata,
 	})
-	if len(tools) != 1 {
-		t.Fatalf("expected one tool, got %d", len(tools))
+	for _, x := range tools {
+		if x.Name == name {
+			return x.Run(context.Background(), tool.Invocation{
+				Caller: tool.Caller{UserID: "usr_1"},
+				Args:   json.RawMessage(args),
+			})
+		}
 	}
-	return tools[0].Run(context.Background(), tool.Invocation{
-		Caller: tool.Caller{UserID: "usr_1"},
-		Args:   json.RawMessage(args),
-	})
+	t.Fatalf("%s is not registered", name)
+	return tool.Result{}
 }
 
 func TestTodaysEventsAreDescribedOldestFirst(t *testing.T) {
@@ -439,4 +454,49 @@ func TestAShortCallIsJustBrief(t *testing.T) {
 	if !strings.Contains(got.Content, "lasted=7 minutes") {
 		t.Errorf("a long call lost its length:\n%s", got.Content)
 	}
+}
+
+// TestTheKindsAreListedWithoutBeingAsked : Owner: *"make the model
+// well aware of the phone device events."* Asked whether his phone
+// was locked, the assistant answered that its tools covered "calls,
+// networks joined, music playing, battery level" and that the lock
+// state was not among them. Three of those four were guesses, and
+// screen.locked had been arriving all day.
+//
+// event_recent names no kinds on purpose, so the list has to come
+// from the data. Nothing here knows what a screen is.
+func TestTheKindsAreListedWithoutBeingAsked(t *testing.T) {
+	s := store(t,
+		at(t, 9, 0, "screen.unlocked", ""),
+		at(t, 9, 5, "call.received", "Amma"),
+		at(t, 9, 9, "call.received", "Amma"),
+	)
+	got := askKinds(t, s)
+
+	for _, want := range []string{"screen.unlocked", "call.received", "and nothing else"} {
+		if !strings.Contains(got.Content, want) {
+			t.Errorf("the listing is missing %q:\n%s", want, got.Content)
+		}
+	}
+	if got.Outcome == conversation.OutcomeFailed {
+		t.Errorf("listing the kinds failed: %s", got.Content)
+	}
+}
+
+// TestTheKindsGoFirst : It is useless unless the model is holding it
+// before it decides, which is what Prefetch means.
+func TestTheKindsGoFirst(t *testing.T) {
+	for _, x := range eventstool.Tools(store(t), eventstool.Clock{
+		Now: func() time.Time { return noon.UTC() }, Location: kolkata}) {
+		if x.Name == "event_kinds" {
+			if !x.Prefetch {
+				t.Error("the kinds are not fetched before the model is asked")
+			}
+			if len(x.Params.Properties) != 0 {
+				t.Error("a prefetched tool cannot take arguments; nobody is there to supply them")
+			}
+			return
+		}
+	}
+	t.Fatal("event_kinds is not registered")
 }

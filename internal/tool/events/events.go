@@ -98,7 +98,77 @@ func (c Clock) where() *time.Location {
 
 // Tools : Everything in this package.
 func Tools(reader Reader, clock Clock) []tool.Tool {
-	return []tool.Tool{recent(reader, clock)}
+	return []tool.Tool{kinds(reader, clock), recent(reader, clock)}
+}
+
+// kinds : What the person's devices report at all.
+//
+// Prefetched, and the reason is a failure this could not otherwise
+// avoid. event_recent's description deliberately lists no kinds,
+// because any device may invent one and a list goes stale the day it
+// is written. But a model given no list invents its own: asked
+// whether the phone was locked it answered that its tools covered
+// "calls, networks joined, music playing, battery level" and that
+// the lock state was not among them. Three of those four were
+// guesses and the lock state had been arriving all day.
+//
+// So the list comes from the data instead, every turn, for this
+// person. Nothing here knows what a battery or a screen is; it knows
+// what has turned up. A kind wired on the phone this morning is in
+// the prompt this afternoon with no change here.
+//
+// Cheap enough to do unasked: one grouped count, a line a kind, and
+// the whole of it is shorter than a single day of events.
+func kinds(reader Reader, clock Clock) tool.Tool {
+	return tool.Tool{
+		Name:     "event_kinds",
+		Domain:   "event",
+		Lists:    true,
+		Prefetch: true,
+		Purpose: "What the person's own devices report about them, as a list of the kinds that " +
+			"have actually arrived.",
+		UseWhen: "To know what is on offer before answering anything about their phone, watch, " +
+			"laptop or day. This is the whole of what is reported: a kind in this list can be " +
+			"read with event_recent by name, and a thing that is not in it is genuinely not " +
+			"reported. New kinds appear here as devices start sending them.",
+		Avoid: "Not for the events themselves, which is event_recent. This says only what exists, " +
+			"never what happened.",
+		WhenUnasked: "This is what their devices report, not a list of things to raise. Use it to " +
+			"decide what you can answer and what to ask event_recent for; say nothing about it " +
+			"unless the question is about it.",
+		Channels: []chat.Channel{chat.ChannelVoice, chat.ChannelDirect},
+		Params:   tool.Schema{Properties: map[string]tool.Property{}},
+		Run: func(ctx context.Context, in tool.Invocation) tool.Result {
+			if reader == nil {
+				return tool.Failed("Nothing on this server is collecting what your devices see.")
+			}
+			if in.Caller.UserID == "" {
+				return tool.Failed("This request did not come from a known person.")
+			}
+
+			found, err := reader.Kinds(ctx, in.Caller.UserID)
+			if err != nil {
+				return tool.Failed(err.Error())
+			}
+			if len(found) == 0 {
+				return tool.OK("Their devices have reported nothing at all yet.")
+			}
+
+			sort.Slice(found, func(i, j int) bool { return found[i].Kind < found[j].Kind })
+
+			where := clock.where()
+			var b strings.Builder
+			fmt.Fprintf(&b, "Their devices report these %d kinds, and nothing else. "+
+				"Read any of them with event_recent by name, or a whole family with its "+
+				"stem such as call. -- the newest of a kind is how that thing stands now.\n",
+				len(found))
+			for _, k := range found {
+				fmt.Fprintf(&b, "  %-22s %5d, last %s\n",
+					k.Kind, k.Count, k.Last.In(where).Format("2 Jan 15:04"))
+			}
+			return tool.OK(strings.TrimRight(b.String(), "\n"))
+		},
+	}
 }
 
 // recent : What the person's devices have reported.

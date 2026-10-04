@@ -8236,6 +8236,60 @@ It neither used what it was given nor said the input was unclear.
 That is a separate fault and still open.
 
 
+## The model is told what the devices report
+
+Owner: *"make the model well aware of the phone device events."*
+Asked whether his phone was locked:
+
+> *"I have no tool that reads your phone's lock status, sir. The
+> tools available to me cover your calendar, reminders, messages,
+> tasks, what you have asked me to remember, and what your devices
+> have reported about your activity and location -- calls, networks
+> joined, music playing, battery level. None of them includes the
+> phone's lock state."*
+
+`screen.locked` and `screen.unlocked` had been wired that morning.
+Three of the four kinds it named were guesses.
+
+**This is the cost of not enumerating, and the previous section is
+why we do not enumerate:** any device may invent a kind and a list
+written into a description is wrong the day after. But a model given
+no list makes one up, and then reasons confidently from it.
+
+So the list comes from the data. `event_kinds` is a second tool in
+the domain, prefetched, returning one line a kind: the name, how
+many, when the last one was. It says outright that this is the whole
+of what is reported, so a thing absent from it is genuinely absent
+rather than merely unlisted. Nothing in it knows what a battery or a
+screen is -- a kind wired on the phone in the morning is in the
+prompt that afternoon with no change here.
+
+**It is a second prefetch, and that changes a standing rule.** The
+rule was memory alone, because every other domain is large enough
+that loading it each turn would cost every turn for the sake of the
+few that ask. This is not that: it is one grouped count, twenty-two
+lines, shorter than a single day of events, and it is metadata
+rather than data -- what *can* be asked, not what happened. The
+prefetch mechanism needed no change; the tool sets `Prefetch` and
+that is all.
+
+**Not cached.** `Fresh` stays zero, so it is re-read every turn.
+Accuracy before latency, and the query is a grouped count.
+
+### What the live listing showed
+
+Two things, for free, the first time it ran against the real table:
+
+- `power.plugged` and `power.unplugged` have both fired -- 14:57 and
+  15:10 -- so the charging profile works end to end.
+- **`screen.locked` has never arrived.** `screen.unlocked` has six
+  and `screen.changed` stopped at 14:00, which was before the edit.
+  So the locked path produces nothing at all rather than producing
+  the old shape. Either the *Display Off* profile is not firing its
+  task or the edit to that caller did not take. Open, and needs the
+  phone back on the cable.
+
+
 ## 12. Maintaining this file
 
 When the owner states a preference, makes a decision, or corrects something,
