@@ -3298,6 +3298,46 @@ ago"*.
 did, which is what it is for.
 
 
+## Some things are said because of what they are
+
+Owner: *"there are some definitive unasked announcements -- if my
+battery goes below 25%, 10%, 5% it should say no matter what, and
+when the battery or phone is getting too hot it should say."*
+
+Everything built so far decides whether to speak by how unusual
+something is. A battery at five per cent has been at five per cent
+before and is not unusual at all; it is worth saying because of what
+it is. No amount of counting finds that.
+
+**The sender says so.** A payload field, `urgent`, true or the word
+true. Which level is worth a warning is the person's own preference
+and belongs on the device that knows it -- a threshold compiled into
+this server would be wrong for the next person and wrong for him in
+a year. The phone decides it is urgent; the server decides how to
+say it. Nothing here knows what a battery is, and the same mark
+works for heat, for a door, for anything a device is ever taught to
+insist about.
+
+**Three things it bypasses, each for a stated reason.**
+
+The quiet between remarks exists so company does not become a
+nuisance. A battery about to die is not company, and somebody not
+told because something else was said four minutes ago is worse off
+than somebody interrupted twice.
+
+The once-a-day rule goes with it: reaching five per cent twice in a
+day is two warnings, not one and a silence.
+
+And the model's refusal, which is the whole point of asking a model
+and is exactly wrong here. A model weighing whether a dying battery
+is worth mentioning is a model that will one day decide it is not.
+
+**What it does not bypass is there being nobody to tell** -- it
+changes where it goes instead. A remark is company and belongs in
+the room; a warning follows them onto the phone. Its own
+announcement kind, `warning`, audience `Everywhere`.
+
+
 ## The narration was the wait it was covering
 
 Owner: *"calculate the full latency... I want ultra low latency."*

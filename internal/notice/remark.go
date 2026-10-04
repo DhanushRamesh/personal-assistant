@@ -55,6 +55,7 @@ func Remark(c Candidate, now time.Time) string {
 			"Say the part they would not have noticed: that it is the third time, that it has not happened before, what it might mean.",
 			"If there is no such part, there is nothing to say.",
 		),
+		mustSay(c),
 		prompt.Text(
 			"Say nothing at all unless it is worth interrupting somebody for.",
 			"Nothing is the ordinary answer and the right one most of the time -- most of what a device reports is not news to the person it is about.",
@@ -77,6 +78,8 @@ func because(c Candidate) string {
 				c.Times, c.Before)
 		}
 		return fmt.Sprintf("%d times in the last few minutes, and never before that", c.Times)
+	case Told:
+		return "the device that reported it marked it as something to be said, whatever else is going on"
 	case Novel:
 		return "nothing like it in the four weeks behind this: the first time it has been reported at all"
 	default:
@@ -95,4 +98,25 @@ func beside(c Candidate) []string {
 		return nil
 	}
 	return []string{"- also reported: " + c.Detail}
+}
+
+// mustSay : What is added when the sender said this has to be said.
+//
+// The refusal below is the whole point of asking a model at all, and
+// it is exactly wrong here. A device marks something urgent because
+// of what it is, not because it is unusual, and a model weighing
+// whether a battery at five per cent is worth mentioning is a model
+// that will one day decide it is not.
+//
+// Nothing is said about what the thing is, because nothing here
+// knows. The model is told it must speak and is left to work out
+// what about it matters, the same as everywhere else.
+func mustSay(c Candidate) string {
+	if !c.Urgent {
+		return ""
+	}
+	return prompt.Text(
+		"This one has to be said. The device that reported it marked it as something the person needs to know now, and that is not a judgement you are being asked to review.",
+		"Say it plainly and say what they would want to do about it. Do not answer with "+Silence+" here, and do not soften it into a remark.",
+	)
 }

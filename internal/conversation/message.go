@@ -89,6 +89,13 @@ const (
 	// the conversation back wants to know why it spoke.
 	Remark Kind = "remark"
 
+	// Warning : Something a device said the person needs to know now.
+	//
+	// Apart from Remark because the audience is different and the
+	// reason is not politeness. A remark is company and belongs in
+	// the room; a battery about to die follows them out of it.
+	Warning Kind = "warning"
+
 	// Renaming : The assistant giving the conversation its name.
 	//
 	// An announcement although nothing is necessarily said aloud, because

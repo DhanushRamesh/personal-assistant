@@ -1230,14 +1230,22 @@ func noticing(
 				persona.Voice(cfg.Assistant.Persona, cfg.Assistant.Name),
 				environment.PurposeRemark, ask)
 		},
-		Say: func(ctx context.Context, userID, text string) error {
-			if err := announcement.Speak(ctx, speaker, conversation.Remark, text); err != nil {
+		Say: func(ctx context.Context, userID, text string, urgent bool) error {
+			kind := conversation.Remark
+			if urgent {
+				kind = conversation.Warning
+			}
+			if err := announcement.Speak(ctx, speaker, kind, text); err != nil {
 				return err
 			}
 			// Written down after it was said, like every other
 			// announcement: they answer in the room, and the answer
 			// needs the remark to be there to make sense of.
-			announcements.Remarked(ctx, userID, text)
+			if urgent {
+				announcements.Warned(ctx, userID, text)
+			} else {
+				announcements.Remarked(ctx, userID, text)
+			}
 			return nil
 		},
 		Notes:  remarked,

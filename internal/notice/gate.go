@@ -126,14 +126,32 @@ func (g *Gate) Allow(userID string, c Candidate, now time.Time) (bool, string) {
 	if g.Away == nil {
 		return false, "nothing is watching the room"
 	}
-	if away, known := g.Away(userID); away {
-		return false, "they are not in the room"
-	} else if !known {
-		return false, "it cannot tell whether they are in the room"
+	// Where they are decides how it is said, not whether. A warning
+	// follows them onto the phone; a remark is company and company
+	// belongs in the room.
+	if !c.Urgent {
+		if away, known := g.Away(userID); away {
+			return false, "they are not in the room"
+		} else if !known {
+			return false, "it cannot tell whether they are in the room"
+		}
 	}
 
 	g.mu.Lock()
 	defer g.mu.Unlock()
+
+	// A warning is not held back for politeness. The quiet between
+	// remarks exists so company does not become a nuisance; a
+	// battery about to die is not company, and a person who is not
+	// told because something else was said four minutes ago is worse
+	// off than one who is interrupted twice.
+	//
+	// The once-a-day rule goes with it: a battery reaching five per
+	// cent twice in a day is two warnings, not one and a silence.
+	if c.Urgent {
+		g.last = now
+		return true, ""
+	}
 
 	if !g.last.IsZero() && now.Sub(g.last) < Quiet {
 		return false, quoted(g.said) + " was said " + spoken(now.Sub(g.last)) + " ago"

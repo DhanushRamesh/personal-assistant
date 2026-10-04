@@ -61,7 +61,26 @@ const (
 	Often Reason = "often"
 	// Novel : Nothing like it in the record.
 	Novel Reason = "novel"
+	// Told : The sender said this must be said.
+	//
+	// Not a judgement at all, which is the point. A battery at five
+	// per cent and a phone too hot to hold are not interesting
+	// because they are unusual; they are worth saying because of
+	// what they are, and a model weighing whether to mention them is
+	// a model that will one day decide not to.
+	Told Reason = "told"
 )
+
+// Urgent : The payload field a sender sets to say that something
+// must be said, whatever else is going on.
+//
+// A convention rather than a list of kinds here, for the reason
+// everything else is: the senders describe themselves. Which battery
+// level is worth a warning is the person's own preference and it
+// belongs on the device that knows it, not in a threshold compiled
+// into this server. The phone decides it is urgent; this decides how
+// to say it.
+const Urgent = "urgent"
 
 // Candidate : Something that might be worth saying.
 //
@@ -80,6 +99,12 @@ type Candidate struct {
 	Before int
 	// At : When the latest of them happened.
 	At time.Time
+	// Urgent : Whether the sender said this must be said.
+	//
+	// Bypasses the quiet between remarks and the once-a-day rule,
+	// and is never refused by the model. It does not bypass there
+	// being nobody to tell: it goes wherever they are instead.
+	Urgent bool
 	// Detail : Whatever else the sender said about it, which the
 	// label deliberately leaves out.
 	//
@@ -122,6 +147,7 @@ func Find(arrived, history []event.Event, now time.Time) []Candidate {
 	latest := map[string]time.Time{}
 	detail := map[string]string{}
 	state := map[string]bool{}
+	urgent := map[string]bool{}
 	order := []string{}
 	for _, e := range arrived {
 		if skip(e) {
@@ -133,6 +159,9 @@ func Find(arrived, history []event.Event, now time.Time) []Candidate {
 		}
 		if Toggling(e.Payload) {
 			state[label] = true
+		}
+		if told(e.Payload) {
+			urgent[label] = true
 		}
 		if e.OccurredAt.After(latest[label]) || detail[label] == "" {
 			latest[label] = e.OccurredAt
@@ -153,6 +182,17 @@ func Find(arrived, history []event.Event, now time.Time) []Candidate {
 
 	out := make([]Candidate, 0, len(order))
 	for _, label := range order {
+		// Said because the sender said so, whether or not it is
+		// unusual. A battery at five per cent has been at five per
+		// cent before and is not news; it is still worth saying.
+		if urgent[label] {
+			out = append(out, Candidate{
+				Label: label, Reason: Told, Urgent: true,
+				Times: lately[label], Before: seen[label] - lately[label],
+				At: latest[label], Detail: detail[label],
+			})
+			continue
+		}
 		switch {
 		case lately[label] >= Insistent && !state[label]:
 			out = append(out, Candidate{
@@ -290,4 +330,28 @@ func Beside(payload json.RawMessage) string {
 		parts = append(parts, k+": "+said)
 	}
 	return strings.Join(parts, ", ")
+}
+
+// told : Whether a sender marked this as something that must be
+// said.
+//
+// True or the word true, so a device that sends booleans and one
+// that sends strings are both understood -- the same latitude
+// Toggling allows, and for the same reason: nobody is going to read
+// this server's source before writing a profile on a phone.
+func told(payload json.RawMessage) bool {
+	if len(payload) == 0 {
+		return false
+	}
+	var fields map[string]any
+	if err := json.Unmarshal(payload, &fields); err != nil {
+		return false
+	}
+	switch v := fields[Urgent].(type) {
+	case bool:
+		return v
+	case string:
+		return strings.EqualFold(strings.TrimSpace(v), "true")
+	}
+	return false
 }

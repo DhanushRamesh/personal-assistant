@@ -292,8 +292,11 @@ func TestTheModelMayAnswerWithNothing(t *testing.T) {
 		Events: recorded{held: []event.Event{happened("music.started", "a new song", 0)}},
 		Gate:   &notice.Gate{Away: func(string) (bool, bool) { return false, true }},
 		Ask:    func(context.Context, string, string) (string, error) { return notice.Silence, nil },
-		Say:    func(_ context.Context, _, text string) error { spoke = append(spoke, text); return nil },
-		Now:    func() time.Time { return at },
+		Say: func(_ context.Context, _, text string, _ bool) error {
+			spoke = append(spoke, text)
+			return nil
+		},
+		Now: func() time.Time { return at },
 	}
 
 	said, err := w.Look(context.Background(), "usr_1")
@@ -315,7 +318,10 @@ func TestARemarkIsSpoken(t *testing.T) {
 		Ask: func(context.Context, string, string) (string, error) {
 			return "That is a new one, sir.", nil
 		},
-		Say: func(_ context.Context, _, text string) error { spoke = append(spoke, text); return nil },
+		Say: func(_ context.Context, _, text string, _ bool) error {
+			spoke = append(spoke, text)
+			return nil
+		},
 		Now: func() time.Time { return at },
 	}
 
@@ -342,7 +348,7 @@ func TestOneRemarkPerLook(t *testing.T) {
 			asked++
 			return "Something, sir.", nil
 		},
-		Say: func(context.Context, string, string) error { return nil },
+		Say: func(context.Context, string, string, bool) error { return nil },
 		Now: func() time.Time { return at },
 	}
 
@@ -365,7 +371,7 @@ func TestNothingArrivedCostsNothing(t *testing.T) {
 			asked++
 			return "Something, sir.", nil
 		},
-		Say: func(context.Context, string, string) error { return nil },
+		Say: func(context.Context, string, string, bool) error { return nil },
 		Now: func() time.Time { return at },
 	}
 
@@ -443,5 +449,100 @@ func TestAFreshGateStillExplainsItself(t *testing.T) {
 	_, why := g.Allow("usr_1", notice.Candidate{Label: "a", At: at}, at)
 	if why == "" {
 		t.Error("a refusal gave no reason at all")
+	}
+}
+
+// urgently : One thing a device marked as needing to be said.
+func urgently(kind, value string, more map[string]string) event.Event {
+	fields := map[string]string{"value": value, notice.Urgent: "true"}
+	for k, v := range more {
+		fields[k] = v
+	}
+	payload, _ := json.Marshal(fields)
+	return event.Event{Kind: kind, Payload: payload, OccurredAt: at}
+}
+
+// TestADeviceCanInsist : Owner: "there are some definitive unasked
+// announcements -- if my battery goes below 25, 10, 5 per cent it
+// should say no matter what, and when the phone is getting too hot
+// it should say."
+//
+// Which level is worth a warning is the person's own preference and
+// belongs on the device that knows it. The sender marks the event;
+// nothing here knows what a battery is.
+func TestADeviceCanInsist(t *testing.T) {
+	// Familiar, frequent, and in no way unusual: without the mark it
+	// would never be a candidate at all.
+	var history []event.Event
+	for i := 0; i < 30; i++ {
+		history = append(history, happened("battery.level", "25", time.Duration(i)*6*time.Hour))
+	}
+	arrived := []event.Event{urgently("battery.level", "25", nil)}
+	history = append(history, arrived...)
+
+	got := notice.Find(arrived, history, at)
+	if len(got) != 1 {
+		t.Fatalf("a device insisting was not heard: %+v", got)
+	}
+	if got[0].Reason != notice.Told || !got[0].Urgent {
+		t.Errorf("reason = %q urgent = %v, want told and urgent", got[0].Reason, got[0].Urgent)
+	}
+}
+
+// TestAWarningIsNotHeldForPoliteness : The quiet between remarks
+// exists so that company does not become a nuisance. A battery about
+// to die is not company, and somebody who is not told because
+// something else was said four minutes ago is worse off than
+// somebody interrupted twice.
+func TestAWarningIsNotHeldForPoliteness(t *testing.T) {
+	g := &notice.Gate{Away: func(string) (bool, bool) { return false, true }}
+	ordinary := notice.Candidate{Label: "a", Reason: notice.Novel, At: at}
+	warning := notice.Candidate{Label: "battery.level 5", Reason: notice.Told, Urgent: true, At: at}
+
+	if ok, _ := g.Allow("usr_1", ordinary, at); !ok {
+		t.Fatal("the first remark was refused")
+	}
+	if ok, why := g.Allow("usr_1", warning, at.Add(time.Minute)); !ok {
+		t.Errorf("a warning was held back for politeness: %s", why)
+	}
+	// And twice in a day is two warnings, not one and a silence.
+	if ok, why := g.Allow("usr_1", warning, at.Add(2*time.Minute)); !ok {
+		t.Errorf("the same warning an hour later was refused: %s", why)
+	}
+}
+
+// TestAWarningFollowsThemOutOfTheRoom : Where they are decides how
+// it is said, not whether. A warning held back because they stepped
+// next door is a warning that did not happen.
+func TestAWarningFollowsThemOutOfTheRoom(t *testing.T) {
+	out := &notice.Gate{Away: func(string) (bool, bool) { return true, true }}
+	warning := notice.Candidate{Label: "battery.level 5", Reason: notice.Told, Urgent: true, At: at}
+
+	if ok, why := out.Allow("usr_1", warning, at); !ok {
+		t.Errorf("a warning was refused because the room was empty: %s", why)
+	}
+	// But company still belongs in the room.
+	ordinary := notice.Candidate{Label: "a", Reason: notice.Novel, At: at}
+	if ok, _ := out.Allow("usr_1", ordinary, at); ok {
+		t.Error("an ordinary remark was made to an empty room")
+	}
+}
+
+// TestTheModelMayNotDeclineAWarning : The refusal is the whole point
+// of asking a model, and it is exactly wrong here.
+func TestTheModelMayNotDeclineAWarning(t *testing.T) {
+	warning := notice.Candidate{Label: "battery.level 5", Reason: notice.Told, Urgent: true, At: at}
+	asked := notice.Remark(warning, at)
+
+	if !strings.Contains(asked, "has to be said") {
+		t.Error("the prompt does not say a warning must be said")
+	}
+	if !strings.Contains(asked, "Do not answer with "+notice.Silence) {
+		t.Error("the prompt still offers the refusal")
+	}
+	// And an ordinary remark is still free to decline.
+	ordinary := notice.Remark(notice.Candidate{Label: "a", Reason: notice.Novel, At: at}, at)
+	if strings.Contains(ordinary, "has to be said") {
+		t.Error("an ordinary remark was told it must be said")
 	}
 }
