@@ -155,7 +155,12 @@ var announcements = map[Kind]Audience{
 	// company, which is a thing that belongs where the person is
 	// standing; followed onto a phone in a meeting it is an
 	// interruption from something that was not asked a question.
-	Remark:   Asked,
+	Remark: Asked,
+	// Wherever they are. A warning held back because they stepped
+	// into the next room is a warning that did not happen.
+	// Wherever they are. A warning held back because they stepped
+	// into the next room is a warning that did not happen.
+	Warning:  Everywhere,
 	Renaming: Asked,
 }
 
@@ -164,6 +169,13 @@ func (k Kind) Announcement() bool {
 	_, ok := announcements[k]
 	return ok
 }
+
+// Announcements : How many kinds are spoken without being asked.
+//
+// For the test that every one of them has an audience. A kind added
+// to the table and nowhere else is a kind that fails at the moment
+// it is first needed, which is in a room rather than in a build.
+func Announcements() int { return len(announcements) }
 
 // Audience : Who this announcement is for, and whether it is one at all.
 //

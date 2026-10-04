@@ -294,11 +294,28 @@ func TestAnInterruptionSaysWhatStoppedIt(t *testing.T) {
 // TestEveryAnnouncementHasAnAudience : The table is the rule. A kind that
 // is an announcement without one is a kind nothing knows where to send.
 func TestEveryAnnouncementHasAnAudience(t *testing.T) {
-	for _, k := range []conversation.Kind{
+	// Every kind the assistant speaks without being asked. Warning
+	// was added and its audience was not, and this list was not
+	// grown either -- so nothing noticed until a phone reached a
+	// full charge, the model wrote the sentence, the gate allowed
+	// it, and speaking failed with "not something said unasked".
+	// The whole path worked except the table.
+	//
+	// The count below is what stops that happening twice: a kind
+	// added to the table and not to this list fails here rather
+	// than in a room.
+	kinds := []conversation.Kind{
 		conversation.ReminderAnnouncement,
 		conversation.PresenceAnnouncement,
+		conversation.Remark,
+		conversation.Warning,
 		conversation.Renaming,
-	} {
+	}
+	if got := conversation.Announcements(); got != len(kinds) {
+		t.Errorf("the table holds %d kinds and this test knows %d of them: "+
+			"one was added without an audience or without a test", got, len(kinds))
+	}
+	for _, k := range kinds {
 		if !k.Announcement() {
 			t.Errorf("%s should be an announcement", k)
 		}
