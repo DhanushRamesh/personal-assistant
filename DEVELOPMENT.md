@@ -9317,6 +9317,59 @@ possible.** And the thing it loses is from the one class of
 announcement that exists because waiting costs something.
 
 
+## A warning about a battery is a warning about running out
+
+Owner, on the twenty-five percent announcement: *"it should not say
+it when plugged in."*
+
+It had been saying it on the way up. The thresholds are a regex over
+`%BATT` -- `^(5|10|15|20|25|100)$` -- and a regex cannot tell which
+way the number is travelling. Plug in at twenty-three and the phone
+passes twenty-five a minute later; the announcement that means
+*find a charger* arrives while holding one.
+
+**Nothing in the server can fix this, and that is the point.** The
+server does not know what a battery is: the phone sends
+`battery.level` with `urgent` already decided, because the device
+describes itself. So the fix is on the phone, in the condition that
+decides urgency.
+
+Tasker has no built-in charging variable -- the documented list has
+`%BATT` and nothing else about power -- but the state profile built
+last week already brackets exactly the interval we need. `*Power
+Any` runs *Power Plugged* on entering and *Power Unplugged* on
+leaving, so each now also sets a global:
+
+    Power Plugged     Variable Set %CHARGING = 1
+    Power Unplugged   Variable Set %CHARGING = 0
+
+and *Battery Changed* action 2 became three conditions:
+
+    %BATT ~R ^(5|10|15|20|25)$   AND
+    %CHARGING !~ 1               OR
+    %BATT ~ 100
+
+Tasker evaluates left to right with no precedence -- the plain
+`And`/`Or`, not the `High Precedence` variants it also offers -- so
+this reads `(low AND not charging) OR full`.
+
+**`!~ 1` rather than `~ 0`, deliberately.** An unset or cleared
+`%CHARGING` does not match `1`, so the default is to announce. The
+failure this guards against is the silent one: a variable that went
+missing should cost a redundant warning, never a missed one.
+
+**One hundred keeps its own arm** because it can only be reached
+while charging, and it is the one battery announcement that is good
+news rather than a warning. It left the regex so that the regex
+means one thing -- the thresholds on the way down.
+
+Verified: `A OK ID67.2 Power Plugged.Var Set, %CHARGING=1` in the
+run log, and the variable reads `1` in VARS with the cable in. The
+suppression itself is only observable the next time the phone
+discharges past a threshold, and the hundred arm on the next full
+charge.
+
+
 ## 12. Maintaining this file
 
 When the owner states a preference, makes a decision, or corrects something,
