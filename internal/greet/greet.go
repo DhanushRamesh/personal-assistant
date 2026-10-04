@@ -86,6 +86,20 @@ type Told struct {
 	// tomorrow, soonest first. Empty when there is nothing, or when
 	// it could not be read in time.
 	Diary []Appointment
+	// Were : What was in the diary while they were away.
+	//
+	// The half this never had. Owner: *"it knows I go to a movie in
+	// the calendar, then it knows my location. When I come back it
+	// should cross-check whether I went there, and ask me how was
+	// the movie."*
+	//
+	// It could not, and not for want of thinking: it was shown
+	// where they had been and never what they had planned, so there
+	// was nothing to check against. Nothing here does the checking
+	// -- the stays carry their addresses now, the appointments
+	// carry their places, and whether the two are the same thing is
+	// a judgement rather than a rule.
+	Were []Appointment
 	// Chores : What is still to be done and is due by the end of
 	// tomorrow or was due already, and how many others are open.
 	Chores Chores
@@ -180,10 +194,56 @@ func Prompt(t Told) string {
 			"Plain spoken sentences. No lists, no headings, no stage directions, and nothing they would have to read rather than hear.",
 			"Do not say you are an assistant and do not offer to help: they know, and they will ask.",
 		),
+		planned(t),
 		profile(t),
 		coming(t),
 		happened(t),
 	)
+}
+
+// planned : What they had meant to do while they were out, and what
+// to make of it.
+//
+// The instruction is to compare rather than to report. A place the
+// phone recorded and a place the diary named are two accounts of the
+// same afternoon, and which parts agree is the whole of what makes a
+// greeting worth hearing: "how was the film" is a question only
+// somebody who had both could ask.
+//
+// Deliberately not a rule about matching. The names will rarely be
+// the same -- a cinema inside a mall is recorded as whatever shop
+// the map had nearest, 127 metres away, on a road the address gives
+// in full. Deciding that those are one place is the sort of thing a
+// person does without effort and no amount of string comparison
+// does at all.
+func planned(t Told) string {
+	if len(t.Were) == 0 {
+		return ""
+	}
+
+	lines := make([]string, 0, len(t.Were)+8)
+	lines = append(lines,
+		"This was in their diary for the time they were away:")
+	for _, a := range t.Were {
+		when := a.When.In(t.Now.Location()).Format("3:04 pm")
+		if a.AllDay {
+			when = "all day"
+		}
+		line := "- " + strings.TrimSpace(a.What) + ", " + when
+		if w := strings.TrimSpace(a.Where); w != "" {
+			line += ", at " + w
+		}
+		lines = append(lines, line)
+	}
+	lines = append(lines,
+		"Compare it with where they actually were.",
+		"The two will almost never use the same words. A cinema sits inside a mall and is recorded as whichever shop the map had nearest, sometimes a hundred metres away; the address beside the stay is what says whether that is the same place as the one in the diary -- the same road, the same part of town, at the same hour, for about the length of the thing.",
+		"Judge it as a person would, on all of that together, and do not require the names to match.",
+		"Where they plainly did it, that is the thing to say: ask how it was, by name, as somebody who knew they were going would.",
+		"A thing being in the diary is not evidence that it happened; it is evidence that it was meant to. What makes it likely is the rest lining up -- the hour, the length, and a place that could be the same place.",
+		"Where none of that lines up, say nothing about it at all: plans change, and being asked to account for one is not a greeting.",
+		"This beats anything else here. Something they planned and did is the one thing in front of you that you know they care about, because they wrote it down.")
+	return prompt.Text(lines...)
 }
 
 // coming : What is in the diary and what is still to be done.

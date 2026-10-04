@@ -9051,6 +9051,79 @@ that matter -- "where did I go yesterday" still goes to his own
 history, and the distance between two cities still goes nowhere.
 
 
+## The greeting could not cross-check, because it was never shown the plan
+
+Owner: *"it knows I go to a movie in the calendar, then it knows my
+location. When I come back it should cross-check whether I went
+there, and ask how was the movie. I can't just hardcode this
+situation -- I want a human-like greeting, an actually meaningful
+question. It has everything, my every tracking, web search and
+maps. It can ask better."*
+
+He is right that it has everything, and it had everything except
+the one thing that mattered. `Told.Diary` is documented as *"what
+is in the diary between now and the end of tomorrow"*, and the
+appointments that had already started were **dropped on the way
+in** -- "what has already started is not what is coming". So the
+greeting saw where he had been and never what he had meant to do.
+It was not failing to reason. It was reasoning over half the
+evidence.
+
+`Told.Were` is the other half: what was in the diary between the
+assistant last speaking and now. The data was already being
+fetched -- the read starts at midnight -- and was being thrown
+away four lines later.
+
+**Nothing in the server does the matching**, which was the whole
+point of the request. The stays carry their addresses and their
+distances as of this morning; the appointments carry their places;
+whether "Flavors non veg restaurant, Grand Southern Trunk Road,
+Urapakkam" and "Seven Screen's Cinemas, Kilambakkam" are the same
+afternoon is a judgement, and the prompt says so: *"the two will
+almost never use the same words... judge it as a person would, and
+do not require the names to match."*
+
+Measured live against the real model, the real prompt and that
+real evening:
+
+> **"Good evening, sir. How was Meesaya Murukku 2?"**
+
+Two times out of two, from a stay recorded under a restaurant's
+name 127 metres away.
+
+### What it still gets wrong, and why wording cannot fix it
+
+Given a dentist appointment in Velachery and an evening spent in
+Urapakkam, it asks how the dentist went. He was nowhere near it.
+
+The obvious response is to write more caution into the prompt, and
+that was tried and **measured worse**:
+
+| wording | film | dentist |
+| --- | --- | --- |
+| as written | **asked by name, 2/2** | assumes he went |
+| "silence is the default", "a plan is not evidence" | *lost the film* -- "was there a change of plan?" | "how did the dentist end up being skipped?" |
+
+The second is worse on both counts: it gave up the case that works
+and turned the case that does not into an accusation. Reverted.
+
+**The reason is not caution, it is geography.** The model does not
+know whether Velachery is near Urapakkam, and no amount of telling
+it to be careful teaches it. What would is the distance, as a fact
+-- and that is now a thing this server can compute.
+
+The way to give it is not at the door: geocoding a place costs 2.4
+seconds and the greeting has five before it falls back to fixed
+text. It belongs in the look-ahead, which already judges every
+diary entry hours in advance and keeps the answer. Geocode the
+place then, keep the coordinates beside the judgement, and the
+greeting gets "the diary said Apollo Clinic, Velachery, and the
+nearest he came to it was fourteen kilometres" for nothing.
+
+Still the model's judgement. Just made out of facts rather than
+out of a guess about Chennai.
+
+
 ## 12. Maintaining this file
 
 When the owner states a preference, makes a decision, or corrects something,

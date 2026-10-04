@@ -271,7 +271,7 @@ func (h *Handler) compose(ctx context.Context, user string, owed []string) (stri
 	told.Events, told.Usual = h.happened(ctx, user, from)
 
 	fetched := time.Now()
-	told.Diary, told.Chores = h.coming(ctx, user, now)
+	told.Diary, told.Were, told.Chores = h.coming(ctx, user, now, told.Since)
 	reading := time.Since(fetched)
 
 	thinking := time.Now()
@@ -287,6 +287,7 @@ func (h *Handler) compose(ctx context.Context, user string, owed []string) (stri
 		slog.Duration("thinking", time.Since(thinking).Round(time.Millisecond)),
 		slog.Int("events", len(told.Events)),
 		slog.Int("diary", len(told.Diary)),
+		slog.Int("were", len(told.Were)),
 		slog.Int("due", len(told.Chores.Due)))
 	return said, written
 }
@@ -381,9 +382,9 @@ func (h *Handler) happened(ctx context.Context, user string, from time.Time) ([]
 // and the person is standing in a doorway. Whichever does not answer
 // in time is left out: a greeting without tomorrow's meeting in it is
 // still a greeting.
-func (h *Handler) coming(ctx context.Context, user string, now time.Time) ([]greet.Appointment, greet.Chores) {
+func (h *Handler) coming(ctx context.Context, user string, now, since time.Time) ([]greet.Appointment, []greet.Appointment, greet.Chores) {
 	if h.diary == nil && h.chores == nil {
-		return nil, greet.Chores{}
+		return nil, nil, greet.Chores{}
 	}
 
 	ask, done := context.WithTimeout(ctx, Fetching)
@@ -392,6 +393,7 @@ func (h *Handler) coming(ctx context.Context, user string, now time.Time) ([]gre
 	var (
 		wg    sync.WaitGroup
 		diary []greet.Appointment
+		were  []greet.Appointment
 		list  greet.Chores
 	)
 	// To the end of tomorrow, from midnight today: an event earlier
@@ -411,16 +413,27 @@ func (h *Handler) coming(ctx context.Context, user string, now time.Time) ([]gre
 				return
 			}
 			for _, e := range found {
-				// What has already started is not what is coming.
+				a := greet.Appointment{
+					What: e.Title, When: e.Starts, AllDay: e.AllDay, Where: e.Where,
+				}
+				// What has already started is not what is coming --
+				// but it is what they have just been doing, which is
+				// the only thing the greeting can check where they
+				// were against. It used to be dropped, and with it
+				// went any chance of asking how the film was.
 				if !e.AllDay && e.Starts.Before(now) {
+					if since.IsZero() || !e.Starts.Before(since) {
+						were = append(were, a)
+					}
 					continue
 				}
-				diary = append(diary, greet.Appointment{
-					What: e.Title, When: e.Starts, AllDay: e.AllDay, Where: e.Where,
-				})
+				diary = append(diary, a)
 			}
 			sort.SliceStable(diary, func(i, j int) bool {
 				return diary[i].When.Before(diary[j].When)
+			})
+			sort.SliceStable(were, func(i, j int) bool {
+				return were[i].When.Before(were[j].When)
 			})
 		}()
 	}
@@ -461,7 +474,7 @@ func (h *Handler) coming(ctx context.Context, user string, now time.Time) ([]gre
 	}
 
 	wg.Wait()
-	return diary, list
+	return diary, were, list
 }
 
 // stayed : Where they have been, worked out from the readings now.

@@ -419,3 +419,50 @@ func TestAnAllDayThingIsNotGivenAnHour(t *testing.T) {
 		t.Error("midnight was read out")
 	}
 }
+
+// TestItIsToldWhatTheyHadPlanned : Owner: *"it knows I go to a
+// movie in the calendar, then it knows my location. When I come
+// back it should cross-check whether I went there, and ask me how
+// was the movie."*
+//
+// It could not, and not for want of thinking: the diary it was
+// given ran from now forwards, so it saw where they had been and
+// never what they had meant to do. Nothing here does the checking.
+func TestItIsToldWhatTheyHadPlanned(t *testing.T) {
+	ist := time.FixedZone("IST", 5*3600+1800)
+	now := time.Date(2026, 10, 4, 21, 10, 0, 0, ist)
+
+	got := greet.Prompt(greet.Told{
+		Now: now, Since: now.Add(-5 * time.Hour),
+		Were: []greet.Appointment{{
+			What: "Meesaya Murukku 2 Movie", When: now.Add(-3 * time.Hour),
+			Where: "Seven Screen's Cinemas, Kilambakkam"}},
+	})
+
+	for _, want := range []string{
+		"Meesaya Murukku 2 Movie", "Seven Screen's Cinemas",
+		"Compare it with where they actually were",
+		"do not require the names to match",
+	} {
+		if !strings.Contains(got, want) {
+			t.Errorf("missing %q", want)
+		}
+	}
+	// A plan is not proof it happened. Measured live: with this line
+	// the film is asked about by name two times out of two, and
+	// without the surrounding caution a dentist appointment in
+	// Velachery was asked about while they sat in Urapakkam.
+	if !strings.Contains(got, "not evidence that it happened") {
+		t.Error("a plan may be read as a thing that happened")
+	}
+}
+
+// TestNothingPlannedAddsNothing : Most evenings there is nothing in
+// the diary, and an empty heading is a question the model will try
+// to answer.
+func TestNothingPlannedAddsNothing(t *testing.T) {
+	got := greet.Prompt(greet.Told{Now: time.Now(), Were: nil})
+	if strings.Contains(got, "was in their diary for the time they were away") {
+		t.Error("an empty section was written anyway")
+	}
+}
