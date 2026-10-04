@@ -8900,6 +8900,38 @@ only two facts that would have caught this.
 the standing description still groups on the place rather than on
 the particular readings.
 
+### And the stays already written
+
+`deployments/fill-stay-addresses.py`, beside the backup and rename
+scripts, because this is an operation rather than a feature. Dry
+run by default; `--write` applies it.
+
+Three rules in it, each the reason it is a script and not a
+one-line `UPDATE`:
+
+- **It never touches the name.** Everything counts on that field,
+  and a backfill that renamed places would quietly rewrite the
+  description of somebody's life.
+- **It skips places they fenced themselves** -- read from
+  `place.entered`/`place.exited` rather than listed, so it stays
+  true when another fence is drawn. 271 of the 274 rows were home
+  or office, and asking would have spent credits to be told
+  something they wrote.
+- **One lookup a place, not a row**, grouped on the coordinate
+  rounded to four decimals. Two hundred and seventy stays at home
+  are one coordinate.
+
+Three places, six credits. And the distances it found are the
+argument for the forty-metre line, better than any reasoning:
+
+| place | away | |
+| --- | --- | --- |
+| Muthu Supermarket | **11 m** | inside it |
+| Ammaniammal School | 69 m | borderline, offered as a guess |
+| Flavors non veg restaurant | 125 m | plainly a guess |
+
+One of those three was where he actually was.
+
 
 ## 12. Maintaining this file
 
