@@ -230,6 +230,15 @@ var cases = []eval{
 	{Say: "what time does Phoenix Marketcity close today", Tool: []string{"web_search"}},
 	{Say: "is it going to rain in Chennai tomorrow", Tool: []string{"web_search"}},
 
+	// The boundary, both ways. The test is not whether it knows the
+	// answer but whether the answer can have changed: a capital does
+	// not, a chief minister does, and being out of date on the second
+	// sounds exactly like being wrong.
+	{Say: "what is the capital of France", Tool: nil},
+	{Say: "what does the word laconic mean", Tool: nil},
+	{Say: "who is the chief minister of Tamil Nadu", Tool: []string{"web_search"}},
+	{Say: "how much is a litre of petrol", Tool: []string{"web_search"}},
+
 	// And the over-reach it could buy. Everything above is about the
 	// world; everything here is about him, and the web knows none of
 	// it.

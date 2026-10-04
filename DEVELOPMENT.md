@@ -8732,6 +8732,53 @@ makes every "what happened today" question answerable, and those
 are most of what a search is for.
 
 
+## When to search is a question about volatility, not about knowing
+
+Owner: *"is the AI instructed to use the search tool only when it's
+beyond its knowledge, or when it wants the latest info about it?"*
+
+Both, and the description says so in two sentences that contradict
+each other:
+
+> **UseWhen:** If you find yourself about to answer from memory
+> about the world, search instead -- being out of date sounds
+> exactly like being wrong, and they cannot tell which you are.
+>
+> **Avoid:** Not for arithmetic, for what a word means, or for
+> anything you can simply answer -- searching to confirm what you
+> already know spends seconds they are waiting through.
+
+One says *about to answer from memory → search*. The other says
+*can simply answer → do not*. Taken literally they cover the same
+ground and point opposite ways.
+
+**The rule the model is actually applying is neither.** It is not
+"do I know this" but "**can what I know have changed**". A capital
+city cannot; a chief minister can. Being out of date about the
+second is indistinguishable from being wrong about it, and the cost
+is not symmetric: a needless search spends a second, a stale answer
+is believed.
+
+Measured, all four of these land correctly on the wording as it
+stands:
+
+| | |
+| --- | --- |
+| what is the capital of France | no tool |
+| what does laconic mean | no tool |
+| who is the chief minister of Tamil Nadu | `web_search` |
+| how much is a litre of petrol | `web_search` |
+
+**So the wording is left alone.** It reads badly and it measures
+right, and rewriting prose that already works is how a line like
+the persona one earlier today gets added on no evidence. What was
+missing is not better sentences but a record of where the boundary
+is -- so it is four eval cases instead, two either side. The
+contract is the cases; the prose is only how it is explained.
+
+The suite is **92 of 92**.
+
+
 ## 12. Maintaining this file
 
 When the owner states a preference, makes a decision, or corrects something,
