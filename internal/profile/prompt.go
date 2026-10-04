@@ -56,6 +56,8 @@ func Prompt(said []conversation.Message, rhythm, asking, was string) string {
 			"The first and last thing on each day is the shape of that day.",
 			"Something that used to repeat and has stopped is worth more than anything still happening.",
 			"Something missing that you would expect to be there is also a fact.",
+			"A long stretch where nothing is reported at all, falling at the same hour again and again, is the largest thing they do that day and nothing will ever report it directly.",
+			"Read it from when it starts, how long it lasts, and what it is they were doing either side of it.",
 			"Expect sorts of thing you have never seen before, and do not ask what they are: what an unfamiliar one means is what it coincides with, what it recurs beside, and when it happens.",
 			"One you still cannot make sense of is reported as unexplained, not guessed at and not dropped.",
 		),

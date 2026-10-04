@@ -3213,6 +3213,56 @@ waiting on code: post the kind with a value naming the device and
 first time it arrives.
 
 
+## The largest thing in a day is the part nothing reports
+
+Owner, on why the phone's locking was worth sending at all: *"it can
+understand the pattern that at night the screen will be locked around
+1 am and will be opened again by 9 am... next day it will be around
+11 pm and open by 8 am... it can understand like I'm sleeping. I want
+the model to think like a detective."*
+
+It could not. Everything in the evidence counts things that happened,
+and what tends to follow what is looked for inside ninety minutes, so
+an eight hour silence was invisible to every part of it. Not a gap in
+the data -- the largest thing in the day.
+
+Silences over four hours are now listed. Three was tried first and
+caught the ordinary sparseness of an afternoon; four is long enough
+that something has actually stopped.
+
+**And then the owner asked the right question: *"why are you writing
+code, the prompt should be able to do it."***
+
+Half right, and the half that matters. The model never sees the raw
+events -- it sees counts, and there is no gap to find in *"wifi.joined
+home: 51 times, usually around 9am"*. Sending the events instead does
+not scale: three days is 11,400 tokens and a month is around 300,000.
+So something has to make a silence visible at all.
+
+But the first version grouped the silences by hour, took medians and
+ranked them, which is the pattern-finding the model should be doing.
+It also destroyed what it was meant to show: a median hides that
+weekends differ, that the hour has been drifting later, that one week
+was nothing like the others.
+
+So they are listed, dated, one line each, and nothing else:
+
+    - Tue 1 Sep 1:00 am to Tue 1 Sep 9:00 am, 8 hours
+
+The prompt says which questions to ask of them -- what hour they
+begin, how long they run, whether they fall on the same days, whether
+they have been moving -- and says plainly that what they are is not
+for the evidence to decide: the same shape at night and in the
+afternoon are not the same thing, and somebody who works nights would
+be described wrongly by anything that assumed.
+
+**A test went with it.** It asserted that a single long gap produced
+nothing, which was this package deciding what counted as a routine.
+That is the model's job and the rule is already in the prompt -- two
+occurrences are a coincidence. The test now checks the opposite: one
+silence is listed, and the listing draws no conclusion.
+
+
 ## The narration was the wait it was covering
 
 Owner: *"calculate the full latency... I want ultra low latency."*

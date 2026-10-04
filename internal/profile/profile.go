@@ -299,7 +299,10 @@ func (b *Builder) rhythm(ctx context.Context, userID string) string {
 	// The counts, then what is different about them. Both from the
 	// same read: the change is a property of the four weeks, not a
 	// fifth thing to go and fetch.
-	return prompt.Block(Rhythm(did, b.Where), Changed(did, b.Where, b.clock()))
+	return prompt.Block(
+		Rhythm(did, b.Where),
+		Quiet(did, b.Where),
+		Changed(did, b.Where, b.clock()))
 }
 
 // asking : What the assistant ran for them over the same four weeks.
