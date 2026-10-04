@@ -39,11 +39,23 @@ import (
 // off most attempts, which is how this number came to be measured
 // rather than chosen.
 //
-// Five, so a slow one still lands. The ceiling is not Home Assistant --
-// it gives up on the request at ten seconds and the greeting outlives
-// that on purpose -- it is somebody standing in a doorway waiting to be
-// spoken to, and the reminders still have to be read out after this.
-const Within = 5 * time.Second
+// Six, which the owner set: *"it's ok to wait 6 seconds."* The
+// ceiling is not Home Assistant -- it gives up on the request at ten
+// seconds and the greeting outlives that on purpose -- it is somebody
+// standing in a doorway waiting to be spoken to, and the reminders
+// still have to be read out after this.
+//
+// Measured over the last six real greetings the model took 1.7 to
+// 4.4 seconds, so five left almost nothing in hand for the slow end.
+// None of them actually overran; the four failures in the log say
+// "the provider said nothing", which is a different fault and was
+// fixed.
+//
+// It buys headroom and nothing else. Reasoning costs 29 to 46
+// seconds, so no budget anybody would stand in a doorway for reaches
+// it -- see internal/environment/platformai on why that is a head
+// start problem rather than a timeout one.
+const Within = 6 * time.Second
 
 // Recent : How far back events are read when the assistant has never
 // spoken to them before.

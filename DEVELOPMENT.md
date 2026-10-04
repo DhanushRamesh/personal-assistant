@@ -9217,6 +9217,61 @@ door. That is the next piece, and it is worth more than anything
 else on this list.
 
 
+## The head start does not exist, measured
+
+The plan was to begin the greeting when they are known to be home
+and speak it when they reach the room, so that reasoning has time
+to finish. The automation looked made for it: it triggers when the
+watch is first heard at -85 dBm, then **waits** for -65 before
+telling the server, and the comment beside that wait describes
+somebody still walking in.
+
+Measured over seven arrivals, how long that wait actually is:
+
+    0.1 s     0.2 s     1.2 s     2.4 s     14.5 s
+    997 s     1775 s
+
+Five of seven under fifteen seconds, four of them under three.
+**There is no walk from the door**: the laptop is in the room they
+arrive into, so the watch crosses both thresholds at once. The two
+long ones are not walking either -- they are the watch audible
+faintly from elsewhere in the house for twenty minutes before
+coming near.
+
+So the wait is not a head start and never was.
+
+**What does fire early is the phone joining wifi**, and it answers
+both of the owner's objections: *"I'll have my laptop in my office
+too"* and *"what if there is no geofence"*. It is the same
+mechanism in both places and needs no fence:
+
+    Zoho-Guest      22 s before an office arrival
+    Dhanush_EXT     731 s, 989 s, 1598 s before home ones
+
+But twenty-two seconds is not enough for reasoning and twenty-six
+minutes is stale, so it is a head start of wildly unreliable
+length. Taking it means composing on a guess about when they will
+walk in, and sometimes composing twice.
+
+### And the budget itself
+
+Owner: *"it's ok to wait 6 seconds."* So `Within` is six.
+
+The last six real greetings, from the production log:
+
+    reading_google 1.7-2.5 s     thinking 1.7-4.4 s
+
+Five was leaving almost nothing in hand at the slow end. **Nothing
+was actually overrunning** -- I said four in ten were timing out
+and that was wrong: the four failures in the log say *"the provider
+said nothing"*, a different fault, all on 2 October, and every
+attempt since has succeeded. I had read a count of restarts as a
+count of attempts.
+
+Six buys headroom and nothing else. Reasoning costs 29 to 46
+seconds; no budget anybody would stand in a doorway for reaches it.
+
+
 ## 12. Maintaining this file
 
 When the owner states a preference, makes a decision, or corrects something,
