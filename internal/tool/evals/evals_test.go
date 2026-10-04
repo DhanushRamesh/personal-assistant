@@ -64,6 +64,15 @@ type eval struct {
 	Args []string
 	// Channel : How it arrived. Voice cannot reach everything.
 	Channel chat.Channel
+	// Never : Fragments the reply must not contain, whatever it does.
+	//
+	// The rest of this measures which tool is chosen, which is almost
+	// always the thing that decides whether an answer is any good. It
+	// is not always: asked to add some numbers the model chose no tool,
+	// correctly, and then opened with "I have no tool that calculates a
+	// sum, sir." Nothing about the choice was wrong and the answer was
+	// still poor, so there has to be a way to say what must not be said.
+	Never []string
 }
 
 // cases : What the assistant is expected to do.
@@ -186,6 +195,19 @@ var cases = []eval{
 	{Say: "do you know what my battery is right now", Tool: []string{"event_recent"}},
 	{Say: "is my phone charged", Tool: []string{"event_recent"}},
 
+	// Things that are simply answered. No tool is right, and so is
+	// saying nothing about tools: asked to add some numbers it opened
+	// with "I have no tool that calculates a sum, sir", then added them
+	// up and got it wrong. Asked about its own battery it recited the
+	// whole toolbox before declining. The choice was right both times.
+	{Say: "Just add up these things. Okay? What is 80 plus 20 plus 30 plus 70? " +
+		"Plus... 10 plus 90 plus 50 plus 50 plus fifty fifty plus plus 50 plus 25.",
+		Never: []string{"no tool", "not have a tool", "tools available"}},
+	{Say: "add up 15, 40 and 7 for me",
+		Never: []string{"no tool", "not have a tool", "tools available"}},
+	{Say: "what does laconic mean",
+		Never: []string{"no tool", "not have a tool", "tools available"}},
+
 	// Lists. Every write needs an identifier that only a read can give,
 	// so reading first is as right an answer as writing.
 	{Say: "what is on my to-do list", Tool: []string{"task_list", "task_lists"}},
@@ -286,14 +308,34 @@ func TestTheModelReachesForTheRightTool(t *testing.T) {
 		t.Fatalf("platformai.New: %v", err)
 	}
 
+	// EVAL_ONLY=text runs just the cases whose sentence contains it, so a
+	// single wording can be measured both ways without paying for all of
+	// them. Empty runs everything, which is what make evals does.
+	only := strings.ToLower(os.Getenv("EVAL_ONLY"))
+
 	var right, wrong int
 	for _, c := range cases {
+		if only != "" && !strings.Contains(strings.ToLower(c.Say), only) {
+			continue
+		}
 		channel := c.Channel
 		if channel == "" {
 			channel = chat.ChannelVoice
 		}
 
-		called, args := ask(t, env, registry, channel, c.Say)
+		called, args, said := ask(t, env, registry, channel, c.Say)
+
+		var blurted []string
+		for _, never := range c.Never {
+			if strings.Contains(strings.ToLower(said), strings.ToLower(never)) {
+				blurted = append(blurted, never)
+			}
+		}
+		if len(blurted) > 0 {
+			wrong++
+			t.Errorf("%-45q said %v: %s", c.Say, blurted, said)
+			continue
+		}
 
 		switch {
 		case len(c.Tool) == 0 && called != "":
@@ -328,7 +370,7 @@ func TestTheModelReachesForTheRightTool(t *testing.T) {
 //
 // One call, not the whole loop: what is being measured is the choice, and the
 // choice is made before anything runs.
-func ask(t *testing.T, env *platformai.Environment, registry *tool.Registry, channel chat.Channel, say string) (string, string) {
+func ask(t *testing.T, env *platformai.Environment, registry *tool.Registry, channel chat.Channel, say string) (string, string, string) {
 	t.Helper()
 
 	reachable := registry.For(channel)
@@ -371,9 +413,9 @@ func ask(t *testing.T, env *platformai.Environment, registry *tool.Registry, cha
 		t.Fatalf("%q failed: %s", say, final.Detail)
 	}
 	if len(final.ToolCalls) == 0 {
-		return "", ""
+		return "", "", final.Text
 	}
-	return final.ToolCalls[0].Name, final.ToolCalls[0].Arguments
+	return final.ToolCalls[0].Name, final.ToolCalls[0].Arguments, final.Text
 }
 
 // among : Whether the tool called is one of those that would be right.

@@ -8188,6 +8188,54 @@ the wrong row of a picker. Build the task to completion before
 backing out of anything, and read the screen between every tap.
 
 
+## Announcing a missing tool for something that needs none
+
+Asked to add up a list of numbers, the answer opened:
+
+> *"I have no tool that calculates a sum, sir. I can work through it
+> for you."*
+
+and then worked through it. Owner: *"its saying no tool, but why,
+its not a proper response."* Three of these in one day -- the same
+for a battery reading, and for a question about a song, where it
+went further and recited the whole toolbox before declining.
+
+**The persona asked for it.** The honesty block said *"where there
+is no tool for what is being asked, say plainly that you cannot do
+it and what you can do instead"* -- a good rule for the world, where
+a claim to have set a reminder must be backed by a tool that set
+one, and a bad one for arithmetic, which needs no tool and never
+did. The block never drew the line, so the model drew it nowhere.
+
+Now it does: the rule is about *doing, changing and looking up*,
+and adding numbers, what a word means, how to put something, and
+thinking a problem through are answered in its own voice with
+nothing said about tools. Reciting the toolbox is forbidden
+outright -- nobody asked for an inventory.
+
+**The suite can now say what must not be said.** A case may carry
+`Never`, fragments the reply must not contain. Everything here
+measured which tool was chosen, and here the choice was right both
+times and the answer was still poor. `ask` returns the reply text
+alongside, and `EVAL_ONLY=text` runs just the matching cases so one
+wording can be measured both ways without paying for seventy-seven.
+
+**And it is not reproducible in the harness.** The exact sentence,
+with the old wording, with and without the look-first block
+production sends, answers cleanly every time. So this change is
+*unmeasured*: the suite is 77 of 77 either way, which says only that
+nothing broke. Production has something the harness does not -- the
+standing profile, recalled memories, the conversation behind the
+question -- and until that is reproduced here the fix rests on the
+wording being right rather than on a measurement.
+
+**The sum was also wrong**, which nothing above addresses. The
+speech came through as twelve numbers including five fifties; the
+answer used three of them and gave 475 where the words add to 575.
+It neither used what it was given nor said the input was unclear.
+That is a separate fault and still open.
+
+
 ## 12. Maintaining this file
 
 When the owner states a preference, makes a decision, or corrects something,
