@@ -383,7 +383,7 @@ class AssistantApi {
     await _send(
       'GET',
       '/v1/remarks',
-      query: {if (limit != null) 'limit': '\$limit'},
+      query: {if (limit != null) 'limit': '$limit'},
     ),
   );
 
