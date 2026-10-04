@@ -42,6 +42,7 @@ import (
 	"github.com/DhanushRamesh/personal-assistant/internal/memory"
 	memorymysql "github.com/DhanushRamesh/personal-assistant/internal/memory/mysql"
 	"github.com/DhanushRamesh/personal-assistant/internal/notice"
+	noticemysql "github.com/DhanushRamesh/personal-assistant/internal/notice/mysql"
 	"github.com/DhanushRamesh/personal-assistant/internal/persona"
 	"github.com/DhanushRamesh/personal-assistant/internal/place"
 	"github.com/DhanushRamesh/personal-assistant/internal/profile"
@@ -364,6 +365,9 @@ func run() error {
 		slog.Duration("grace", remind.DefaultGrace))
 
 	names := vocabularymysql.New(db)
+	// What the assistant considered saying unasked, so that a watcher
+	// which is working and one which has stopped do not look alike.
+	remarked := noticemysql.New(db.DB)
 
 	// A standing description of the person, rewritten from what they have
 	// actually said. The memories are facts they gave once and none of
@@ -465,7 +469,7 @@ func run() error {
 	go func() {
 		defer watching.Done()
 		noticing(remindCtx, cfg, deviceEvents, chats, answerer, speaker,
-			announcements, logger.Logger)
+			announcements, remarked, logger.Logger)
 	}()
 
 	handler := api.New(api.Options{
@@ -499,6 +503,7 @@ func run() error {
 		Persona:        manner,
 		Cut:            cutOff,
 		DeviceEvents:   deviceEvents,
+		Remarks:        remarked,
 		Naming:         naming(cfg, logger.Logger),
 		Tools:          tools,
 		RequestTimeout: cfg.Server.RequestTimeout,
@@ -1196,6 +1201,7 @@ func noticing(
 	answerer environment.Environment,
 	speaker announce.Announcer,
 	announcements *announcement.Writer,
+	remarked notice.Notes,
 	logger *slog.Logger,
 ) {
 	// Nothing to say it with, or nothing watching the room: the
@@ -1234,6 +1240,7 @@ func noticing(
 			announcements.Remarked(ctx, userID, text)
 			return nil
 		},
+		Notes:  remarked,
 		Now:    cfg.Assistant.Now,
 		Logger: logger,
 	}

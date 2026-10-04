@@ -374,6 +374,19 @@ class AssistantApi {
   Future<Abilities> listTools() async =>
       Abilities.fromJson(await _send('GET', '/v1/tools'));
 
+  /// listRemarks : What the assistant considered saying unasked.
+  ///
+  /// Newest first, and mostly things it decided not to say. That is
+  /// the point of the page: silence has four causes and they are
+  /// indistinguishable from outside.
+  Future<Remarks> listRemarks({int? limit}) async => Remarks.fromJson(
+    await _send(
+      'GET',
+      '/v1/remarks',
+      query: {if (limit != null) 'limit': '\$limit'},
+    ),
+  );
+
   /// vocabulary : The proper nouns speech recognition expects.
   Future<Vocabulary> vocabulary() async =>
       Vocabulary.fromJson(await _send('GET', '/v1/vocabulary'));

@@ -26,7 +26,8 @@ enum KnowsSection {
   memories('Memories'),
   events('Events'),
   tools('Abilities'),
-  vocabulary('Vocabulary');
+  vocabulary('Vocabulary'),
+  remarks('Unasked');
 
   const KnowsSection(this.title);
   final String title;
@@ -129,6 +130,8 @@ class _KnowsModuleState extends State<KnowsModule> {
         widget.state.loadAbilities();
       case KnowsSection.vocabulary:
         widget.state.loadVocabulary();
+      case KnowsSection.remarks:
+        widget.state.loadRemarks();
     }
   }
 
@@ -199,6 +202,10 @@ class _KnowsModuleState extends State<KnowsModule> {
                 search: _search,
               ),
               KnowsSection.vocabulary => _Words(
+                state: widget.state,
+                search: _search,
+              ),
+              KnowsSection.remarks => _Unasked(
                 state: widget.state,
                 search: _search,
               ),
@@ -482,6 +489,69 @@ class _Words extends StatelessWidget {
       ),
       rows: [
         for (final t in terms) [_cell(context, t, width: 360)],
+      ],
+    );
+  }
+}
+
+/// _Unasked : What the assistant considered saying without being
+/// asked, and what came of it.
+///
+/// Mostly things it decided not to say, which is the point. The
+/// ordinary output of the whole feature is silence, and silence has
+/// four causes -- nothing unusual arrived, the moment was refused,
+/// the model declined, or the watcher has stopped running. From
+/// outside they are identical, and the last one is the one worth
+/// knowing about.
+class _Unasked extends StatelessWidget {
+  const _Unasked({required this.state, required this.search});
+
+  final AppState state;
+  final String search;
+
+  @override
+  Widget build(BuildContext context) {
+    final r = state.remarks;
+    if (r == null) return const SizedBox.shrink();
+
+    final rows = r.remarks
+        .where(
+          (x) =>
+              search.isEmpty ||
+              x.label.toLowerCase().contains(search) ||
+              x.said.toLowerCase().contains(search) ||
+              x.outcome.toLowerCase().contains(search),
+        )
+        .toList();
+
+    final spoke = r.remarks.where((x) => x.outcome == 'said').length;
+
+    return _Table(
+      summary: [
+        '${rows.length} considered',
+        '$spoke said aloud',
+      ].join(' · '),
+      columns: const ['When', 'About', 'Why', 'Outcome', 'What happened'],
+      empty: const AppEmptyState(
+        icon: Icons.hearing_outlined,
+        title: 'Nothing considered yet',
+        body:
+            'A row appears whenever something unusual arrives — whether or '
+            'not it was worth saying out loud.',
+      ),
+      rows: [
+        for (final x in rows)
+          [
+            _cell(context, _when(x.at), width: 110),
+            _cell(context, x.label, width: 240),
+            _cell(context, x.reason, width: 90),
+            _cell(context, x.outcome, width: 100),
+            _cell(
+              context,
+              x.said.isNotEmpty ? x.said : x.because,
+              width: 420,
+            ),
+          ],
       ],
     );
   }

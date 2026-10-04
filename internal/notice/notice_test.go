@@ -226,15 +226,15 @@ func TestNothingIsSaidToAnEmptyRoom(t *testing.T) {
 	c := notice.Candidate{Label: "x", Reason: notice.Novel, At: at}
 
 	out := &notice.Gate{Away: func(string) (bool, bool) { return true, true }}
-	if out.Allow("usr_1", c, at) {
+	if ok, _ := out.Allow("usr_1", c, at); ok {
 		t.Error("spoke to somebody who is out")
 	}
 	unknown := &notice.Gate{Away: func(string) (bool, bool) { return false, false }}
-	if unknown.Allow("usr_1", c, at) {
+	if ok, _ := unknown.Allow("usr_1", c, at); ok {
 		t.Error("spoke when it could not tell whether anybody was there")
 	}
 	nobodyWatching := &notice.Gate{}
-	if nobodyWatching.Allow("usr_1", c, at) {
+	if ok, _ := nobodyWatching.Allow("usr_1", c, at); ok {
 		t.Error("spoke with nothing watching the room at all")
 	}
 }
@@ -246,13 +246,13 @@ func TestNotTwiceInAHurry(t *testing.T) {
 	first := notice.Candidate{Label: "a", Reason: notice.Novel, At: at}
 	second := notice.Candidate{Label: "b", Reason: notice.Novel, At: at}
 
-	if !g.Allow("usr_1", first, at) {
+	if ok, _ := g.Allow("usr_1", first, at); !ok {
 		t.Fatal("the first remark was refused")
 	}
-	if g.Allow("usr_1", second, at.Add(time.Minute)) {
+	if ok, _ := g.Allow("usr_1", second, at.Add(time.Minute)); ok {
 		t.Error("two remarks a minute apart")
 	}
-	if !g.Allow("usr_1", second, at.Add(notice.Quiet+time.Second)) {
+	if ok, _ := g.Allow("usr_1", second, at.Add(notice.Quiet+time.Second)); !ok {
 		t.Error("still silent after the quiet had passed")
 	}
 }
@@ -264,14 +264,14 @@ func TestNotTwiceAboutTheSameThing(t *testing.T) {
 	g := &notice.Gate{Away: func(string) (bool, bool) { return false, true }}
 	c := notice.Candidate{Label: "a", Reason: notice.Often, At: at}
 
-	if !g.Allow("usr_1", c, at) {
+	if ok, _ := g.Allow("usr_1", c, at); !ok {
 		t.Fatal("the first remark was refused")
 	}
 	later := at.Add(notice.Quiet * 2)
-	if g.Allow("usr_1", c, later) {
+	if ok, _ := g.Allow("usr_1", c, later); ok {
 		t.Error("said the same thing twice in a day")
 	}
-	if !g.Allow("usr_1", c, at.Add(notice.Over+time.Minute)) {
+	if ok, _ := g.Allow("usr_1", c, at.Add(notice.Over+time.Minute)); !ok {
 		t.Error("the same thing a month later is still news, and was refused")
 	}
 }

@@ -32,6 +32,7 @@ import (
 	"github.com/DhanushRamesh/personal-assistant/internal/api/middleware"
 	"github.com/DhanushRamesh/personal-assistant/internal/api/presence"
 	profileapi "github.com/DhanushRamesh/personal-assistant/internal/api/profile"
+	remarksapi "github.com/DhanushRamesh/personal-assistant/internal/api/remarks"
 	"github.com/DhanushRamesh/personal-assistant/internal/api/reminders"
 	speechapi "github.com/DhanushRamesh/personal-assistant/internal/api/speech"
 	toolsapi "github.com/DhanushRamesh/personal-assistant/internal/api/tools"
@@ -132,6 +133,10 @@ type Options struct {
 	// Tools : Everything the assistant can do, for the screen that shows
 	// it. Nil lists nothing.
 	Tools *tool.Registry
+	// Remarks : What the assistant considered saying unasked. Nil
+	// serves an empty list, which is what a server with nothing
+	// watching the room should show.
+	Remarks remarksapi.Store
 
 	// DeviceEvents : Where the person's own devices report what happened
 	// to them, which is what lets the assistant say something first.
@@ -207,6 +212,7 @@ type Server struct {
 	events        *events.Handler
 	memories      *memories.Handler
 	tools         *toolsapi.Handler
+	remarks       *remarksapi.Handler
 }
 
 // New : Builds a Server from opts and registers its routes.
@@ -239,6 +245,7 @@ func New(opts Options) *Server {
 		events:     events.New(opts.Logger, opts.DeviceEvents, opts.Now).Naming(opts.Naming),
 		memories:   memories.New(opts.Logger, opts.Memories),
 		tools:      toolsapi.New(opts.Logger, opts.Tools),
+		remarks:    remarksapi.New(opts.Logger, opts.Remarks),
 	}
 	s.routes()
 	return s
@@ -292,5 +299,6 @@ func (s *Server) routes() {
 		s.events.Mount(r)
 		s.memories.Mount(r)
 		s.tools.Mount(r)
+		s.remarks.Mount(r)
 	})
 }

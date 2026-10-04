@@ -3263,6 +3263,41 @@ occurrences are a coincidence. The test now checks the opposite: one
 silence is listed, and the listing draws no conclusion.
 
 
+## Silence has four causes and they look identical
+
+Owner: *"the automatic speaking by Jarvis -- I should see in UI when
+it triggered, why it didn't speak, if spoken what it spoke."*
+
+The ordinary output of the whole feature is nothing, and nothing can
+mean four things: nothing unusual arrived, the moment was refused,
+the model decided it was not worth saying, or the watcher has stopped
+running. The fourth is the one worth knowing about and it is
+invisible beside the other three.
+
+So every candidate that gets as far as being considered is written
+down: `chats.remarks`, migration 00033, read at `/v1/remarks` and
+shown as a fifth section of the Knows page -- **Unasked**. When,
+about what, why it was interesting, what came of it, and either what
+was said or why it was not.
+
+**Only the considered ones.** A tick that finds nothing writes
+nothing, or this would be two and a half thousand rows a day
+recording that nothing happened. At the gate's current settings it
+is perhaps fifty rows a day, most of them refusals, twenty thousand
+a year.
+
+**The gate had to learn to say why.** It returned a bare yes or no,
+and asking it afterwards would have given a different answer: the
+clock moves, and a gate that refused because something was said
+thirty seconds ago refuses for another reason a minute later. It
+returns the reason with the refusal now -- *"they are not in the
+room"*, *"something was said 4 minutes ago"*, *"this was said 3 hours
+ago"*.
+
+**A route table test caught the new endpoint** before anything else
+did, which is what it is for.
+
+
 ## The narration was the wait it was covering
 
 Owner: *"calculate the full latency... I want ultra low latency."*

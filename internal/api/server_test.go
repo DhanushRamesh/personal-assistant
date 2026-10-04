@@ -64,6 +64,7 @@ func TestRouteTableIsComplete(t *testing.T) {
 		"GET /v1/chats":                         true,
 		"GET /v1/chats/{id}":                    true,
 		"GET /v1/chats/{id}/steps":              true,
+		"GET /v1/remarks":                       true,
 		"POST /v1/chats/{id}/cancel":            true,
 		"GET /v1/reminders":                     true,
 		"POST /v1/reminders/{id}/snooze":        true,

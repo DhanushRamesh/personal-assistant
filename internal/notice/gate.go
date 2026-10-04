@@ -1,6 +1,7 @@
 package notice
 
 import (
+	"fmt"
 	"sync"
 	"time"
 )
@@ -46,31 +47,38 @@ type Gate struct {
 	spoke map[string]time.Time
 }
 
-// Allow : Whether this may be said now.
+// Allow : Whether this may be said now, and why not when it may not.
 //
-// Records that it was, when it says yes. A caller that asks and then
-// does not speak has used up the quiet, which is the safe way round:
-// asking is cheap and the cost of being wrong is one remark missed,
-// not two remarks together.
-func (g *Gate) Allow(userID string, c Candidate, now time.Time) bool {
+// The reason is returned rather than asked for afterwards, because
+// asking twice would be two different answers: the clock moves, and
+// a gate that said no because something was said thirty seconds ago
+// will say no for a different reason a minute later.
+//
+// Records that it was allowed, when it says yes. A caller that asks
+// and then does not speak has used up the quiet, which is the safe
+// way round: asking is cheap, and the cost of being wrong is one
+// remark missed rather than two remarks together.
+func (g *Gate) Allow(userID string, c Candidate, now time.Time) (bool, string) {
 	if g == nil {
-		return false
+		return false, "there is no gate"
 	}
 	if g.Away == nil {
-		return false
+		return false, "nothing is watching the room"
 	}
-	if away, known := g.Away(userID); away || !known {
-		return false
+	if away, known := g.Away(userID); away {
+		return false, "they are not in the room"
+	} else if !known {
+		return false, "it cannot tell whether they are in the room"
 	}
 
 	g.mu.Lock()
 	defer g.mu.Unlock()
 
 	if !g.last.IsZero() && now.Sub(g.last) < Quiet {
-		return false
+		return false, "something was said " + spoken(now.Sub(g.last)) + " ago"
 	}
 	if when, said := g.spoke[c.Label]; said && now.Sub(when) < Over {
-		return false
+		return false, "this was said " + spoken(now.Sub(when)) + " ago"
 	}
 
 	if g.spoke == nil {
@@ -85,5 +93,19 @@ func (g *Gate) Allow(userID string, c Candidate, now time.Time) bool {
 			delete(g.spoke, label)
 		}
 	}
-	return true
+	return true, ""
+}
+
+// spoken : A duration as somebody would say it.
+func spoken(d time.Duration) string {
+	switch {
+	case d < time.Minute:
+		return "moments"
+	case d < time.Hour:
+		return fmt.Sprintf("%d minutes", int(d.Minutes()))
+	case d < 24*time.Hour:
+		return fmt.Sprintf("%d hours", int(d.Hours()))
+	default:
+		return fmt.Sprintf("%d days", int(d.Hours()/24))
+	}
 }

@@ -1161,6 +1161,67 @@ class Abilities {
 
 /// Vocabulary : The proper nouns speech recognition has been told to
 /// expect.
+/// Remark : One thing the assistant considered saying unasked.
+///
+/// Most of these were never spoken, and that is what they are for.
+/// The feature's ordinary output is silence, and silence has four
+/// causes; from outside they look identical, and so does a watcher
+/// that has stopped running.
+class Remark {
+  const Remark({
+    required this.at,
+    this.label = '',
+    this.reason = '',
+    this.outcome = '',
+    this.said = '',
+    this.because = '',
+  });
+
+  /// at : When the thing it was about happened, not when the row was
+  /// written. A remark held back and the event that prompted it are
+  /// the same moment to somebody reading it back.
+  final DateTime at;
+
+  /// label : The thing, as its own sender described it.
+  final String label;
+
+  /// reason : What made it worth looking at: often, novel.
+  final String reason;
+
+  /// outcome : said, held, declined, failed.
+  final String outcome;
+
+  /// said : What was spoken. Empty unless the outcome was said.
+  final String said;
+
+  /// because : Why it came to nothing, where the outcome alone does
+  /// not say enough.
+  final String because;
+
+  factory Remark.fromJson(Map<String, dynamic> json) => Remark(
+    at: DateTime.tryParse((json['at'] as String?) ?? '')?.toLocal() ??
+        DateTime.fromMillisecondsSinceEpoch(0),
+    label: (json['label'] as String?) ?? '',
+    reason: (json['reason'] as String?) ?? '',
+    outcome: (json['outcome'] as String?) ?? '',
+    said: (json['said'] as String?) ?? '',
+    because: (json['because'] as String?) ?? '',
+  );
+}
+
+/// Remarks : What it has considered saying, newest first.
+class Remarks {
+  const Remarks({this.remarks = const []});
+
+  final List<Remark> remarks;
+
+  factory Remarks.fromJson(Map<String, dynamic> json) => Remarks(
+    remarks: ((json['remarks'] as List?) ?? const [])
+        .map((r) => Remark.fromJson(r as Map<String, dynamic>))
+        .toList(),
+  );
+}
+
 class Vocabulary {
   const Vocabulary({this.terms = const [], this.count = 0, this.writtenAt});
 

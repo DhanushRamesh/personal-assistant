@@ -526,6 +526,9 @@ class AppState extends ChangeNotifier {
   Vocabulary? get vocabulary => _vocabulary;
   Vocabulary? _vocabulary;
 
+  Remarks? get remarks => _remarks;
+  Remarks? _remarks;
+
   /// loadMemories : Reads what has been remembered.
   Future<void> loadMemories() async {
     _set(busy: true, error: null);
@@ -566,6 +569,17 @@ class AppState extends ChangeNotifier {
     _set(busy: true, error: null);
     try {
       _vocabulary = await api.vocabulary();
+    } on Object catch (e) {
+      _error = _explain(e);
+    }
+    _set(busy: false);
+  }
+
+  /// loadRemarks : Reads what the assistant considered saying unasked.
+  Future<void> loadRemarks() async {
+    _set(busy: true, error: null);
+    try {
+      _remarks = await api.listRemarks(limit: 200);
     } on Object catch (e) {
       _error = _explain(e);
     }

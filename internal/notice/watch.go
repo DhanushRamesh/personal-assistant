@@ -66,6 +66,11 @@ type Watcher struct {
 	Ask Ask
 	// Say : Where the remark goes. Required.
 	Say Say
+	// Notes : Where what it considered saying is kept, so that a
+	// watcher which is working and one which has stopped do not look
+	// the same. Optional: nil records nothing and changes nothing
+	// else.
+	Notes Notes
 	// Now : The clock, replaceable in tests.
 	Now func() time.Time
 	// Logger : Where failures go. Nil is silent.
@@ -127,11 +132,13 @@ func (w *Watcher) Look(ctx context.Context, userID string) (string, error) {
 	}
 
 	for _, c := range found {
-		if !w.Gate.Allow(userID, c, now) {
+		allowed, why := w.Gate.Allow(userID, c, now)
+		if !allowed {
 			if w.Logger != nil {
 				w.Logger.InfoContext(ctx, "not the moment to say it",
-					slog.String("about", c.Label))
+					slog.String("about", c.Label), slog.String("because", why))
 			}
+			w.note(ctx, userID, c, Held, "", why)
 			continue
 		}
 		// One at a time. Two things worth saying in the same moment
@@ -139,6 +146,7 @@ func (w *Watcher) Look(ctx context.Context, userID string) (string, error) {
 		// in twenty minutes if it was worth saying now.
 		said, err := w.Ask(ctx, userID, Remark(c, now))
 		if err != nil {
+			w.note(ctx, userID, c, Failed, "", "could not ask: "+err.Error())
 			return "", err
 		}
 		said = strings.TrimSpace(said)
@@ -148,11 +156,14 @@ func (w *Watcher) Look(ctx context.Context, userID string) (string, error) {
 				w.Logger.InfoContext(ctx, "decided it was not worth saying",
 					slog.String("about", c.Label))
 			}
+			w.note(ctx, userID, c, Declined, "", "")
 			return "", nil
 		}
 		if err := w.Say(ctx, userID, said); err != nil {
+			w.note(ctx, userID, c, Failed, said, "could not say it: "+err.Error())
 			return "", err
 		}
+		w.note(ctx, userID, c, Said, said, "")
 		if w.Logger != nil {
 			w.Logger.InfoContext(ctx, "said something unasked",
 				slog.String("user_id", userID),
@@ -209,4 +220,23 @@ func (w *Watcher) clock() time.Time {
 		return time.Now()
 	}
 	return w.Now()
+}
+
+// note : Records what came of one candidate.
+//
+// Never an error the caller has to handle. The remark has already
+// been said or already not been, and failing to write the row costs
+// one line of a page nobody is waiting on.
+func (w *Watcher) note(ctx context.Context, userID string, c Candidate,
+	outcome Outcome, said, because string) {
+	if w.Notes == nil {
+		return
+	}
+	if err := w.Notes.Note(ctx, Noted{
+		UserID: userID, At: c.At, Label: c.Label, Reason: c.Reason,
+		Outcome: outcome, Said: said, Because: because,
+	}); err != nil && w.Logger != nil {
+		w.Logger.WarnContext(ctx, "cannot write down what it considered saying",
+			slog.Any("error", err))
+	}
 }
