@@ -1425,6 +1425,12 @@ func noticing(
 		slog.Duration("every", notice.Every),
 		slog.Duration("quiet", notice.Quiet))
 
+	// The watcher catches up over this wait on its first look, so
+	// tell it how long the wait was. Without that the two windows
+	// meet exactly and anything arriving during the hold is lost --
+	// which it was, on 5 October, for a battery at 25 per cent.
+	notice.Waited = noticeFirst
+
 	select {
 	case <-ctx.Done():
 		return

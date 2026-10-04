@@ -88,6 +88,40 @@ type Watcher struct {
 // contain nothing worth interrupting somebody for, and a watcher
 // that says so is working.
 func (w *Watcher) Look(ctx context.Context, userID string) (string, error) {
+	return w.look(ctx, userID, Behind)
+}
+
+// Catching : How far the first look after starting reaches back.
+//
+// Longer than Behind, and that is the whole of it. The watcher
+// sleeps for a while before its first look, so that a restart in
+// the middle of an evening does not remark on whatever happened to
+// be arriving; then it looks back exactly as far as it normally
+// does. The two are the same length, so the window opens precisely
+// where the silence ends and nothing arriving during the wait is
+// ever seen.
+//
+// It cost a real one. A battery at 25 per cent, marked by the phone
+// to be said at once, arrived at 01:39:14 between two restarts
+// thirty-six seconds apart; the first look came at 01:44:42 and
+// reached back to 01:39:42. The event was **twenty-six seconds**
+// outside it, and nothing anywhere recorded that it had been
+// missed -- it simply never became a candidate.
+//
+// Safe to widen because repeating is prevented elsewhere: the gate
+// weighs each thing once per label, and an immediate one once per
+// arrival. The worst a wide first look can do is weigh something
+// that was already weighed, which it then declines.
+func (w *Watcher) Catching() time.Duration { return noticeFirst() + Behind }
+
+// First : One look that reaches back over the silence after
+// starting, for the pass that happens before the ticker has ever
+// fired.
+func (w *Watcher) First(ctx context.Context, userID string) (string, error) {
+	return w.look(ctx, userID, w.Catching())
+}
+
+func (w *Watcher) look(ctx context.Context, userID string, behind time.Duration) (string, error) {
 	if w == nil || w.Events == nil || w.Gate == nil || w.Ask == nil || w.Say == nil {
 		return "", nil
 	}
@@ -109,7 +143,7 @@ func (w *Watcher) Look(ctx context.Context, userID string) (string, error) {
 	}
 
 	arrived := make([]event.Event, 0, 8)
-	from := now.Add(-Behind)
+	from := now.Add(-behind)
 	for _, e := range history {
 		if e.OccurredAt.After(from) && !e.OccurredAt.After(now) {
 			arrived = append(arrived, e)
@@ -201,11 +235,17 @@ func (w *Watcher) Run(ctx context.Context, who func(context.Context) ([]string, 
 	ticker := time.NewTicker(Every)
 	defer ticker.Stop()
 
+	// The first pass reaches back over the wait before it, so that
+	// nothing arriving while the watcher was holding off is lost.
+	first := true
+
 	for {
-		select {
-		case <-ctx.Done():
-			return
-		case <-ticker.C:
+		if !first {
+			select {
+			case <-ctx.Done():
+				return
+			case <-ticker.C:
+			}
 		}
 
 		pass, cancel := context.WithTimeout(ctx, Within)
@@ -218,11 +258,16 @@ func (w *Watcher) Run(ctx context.Context, who func(context.Context) ([]string, 
 			continue
 		}
 		for _, userID := range people {
-			if _, err := w.Look(pass, userID); err != nil && w.Logger != nil {
+			look := w.Look
+			if first {
+				look = w.First
+			}
+			if _, err := look(pass, userID); err != nil && w.Logger != nil {
 				w.Logger.WarnContext(pass, "cannot look at what arrived",
 					slog.String("user_id", userID), slog.Any("error", err))
 			}
 		}
+		first = false
 		cancel()
 	}
 }
@@ -252,4 +297,19 @@ func (w *Watcher) note(ctx context.Context, userID string, c Candidate,
 		w.Logger.WarnContext(ctx, "cannot write down what it considered saying",
 			slog.Any("error", err))
 	}
+}
+
+// Waited : How long whoever runs this holds off before the first
+// look, so that Catching can reach back over it.
+//
+// Set by the caller rather than read from it, because the wait is
+// the server's decision and how far to catch up is this package's.
+// Zero leaves the default, which is what the server uses.
+var Waited = 5 * time.Minute
+
+func noticeFirst() time.Duration {
+	if Waited > 0 {
+		return Waited
+	}
+	return 5 * time.Minute
 }

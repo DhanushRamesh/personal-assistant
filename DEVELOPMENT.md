@@ -9282,6 +9282,41 @@ time. Nothing was relying on the wrong number, but it was the
 reason ten looked like a ceiling rather than a choice.
 
 
+## The first look opened exactly where the silence ended
+
+A battery at 25 per cent, marked by the phone to be said at once,
+was never said. Owner: *"why it didn't say for 25%."*
+
+    01:38:06   server restarted
+    01:39:14   the 25 per cent arrived
+    01:39:42   server restarted again
+    01:44:42   the watcher's first look, reaching back to 01:39:42
+
+**Twenty-six seconds outside the window.** It never became a
+candidate, so nothing appears in `remarks` either -- the table that
+exists to explain silence could not explain this one, because the
+event was never weighed at all.
+
+The cause is two constants that happen to be equal. The watcher
+holds off `noticeFirst` (five minutes) after starting, so that a
+restart mid-evening does not remark on whatever is arriving at the
+time; then it looks back `Behind` (five minutes). The window opens
+precisely where the silence ends, with **no margin whatever**, so
+anything arriving during the hold is lost and any restart during it
+loses more.
+
+The first look now reaches back over the wait as well -- `Waited +
+Behind` -- and only the first. Safe to widen because repeating is
+prevented elsewhere: the gate weighs each label once per ten
+minutes and an immediate one once per arrival, so the worst a wide
+first look can do is weigh something already weighed, which it
+declines.
+
+**Fifteen restarts today made this likely; one crash makes it
+possible.** And the thing it loses is from the one class of
+announcement that exists because waiting costs something.
+
+
 ## 12. Maintaining this file
 
 When the owner states a preference, makes a decision, or corrects something,
