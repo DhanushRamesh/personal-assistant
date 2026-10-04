@@ -162,10 +162,18 @@ func (s *store) Keep(_ context.Context, j coming.Judged) error {
 	s.held = append(s.held, j)
 	return nil
 }
-func (s *store) Spoke(_ context.Context, _, eventID string, said int) error {
+func (s *store) Spoke(_ context.Context, _, eventID string, said int, at time.Time) error {
 	for i := range s.held {
 		if s.held[i].EventID == eventID {
-			s.held[i].Said = said
+			s.held[i].Said, s.held[i].Spoke = said, at
+		}
+	}
+	return nil
+}
+func (s *store) Settle(_ context.Context, _, eventID string, at time.Time) error {
+	for i := range s.held {
+		if s.held[i].EventID == eventID {
+			s.held[i].Settled = at
 		}
 	}
 	return nil
@@ -327,5 +335,27 @@ func TestADayAboutSomebodyElseEarnsWarning(t *testing.T) {
 	// every birthday came out silent.
 	if !strings.Contains(strings.ToLower(coming.Asking), "not be missed") {
 		t.Error("the question no longer separates a date written down from an appointment")
+	}
+}
+
+// TestSettledStopsTheSecondWarning : Owner: *"'ok got it' means no
+// need of that reminder any more, because I'm already on it."* A
+// wedding warned about three days out, answered, must not warn
+// again on the day.
+func TestSettledStopsTheSecondWarning(t *testing.T) {
+	j := coming.Judged{
+		Starts: at.Add(48 * time.Hour),
+		Leads:  []coming.Lead{{Before: 72 * time.Hour}, {Before: 2 * time.Hour}},
+		Said:   1,
+	}
+	if j.Over(at) {
+		t.Fatal("the second warning was already gone before anybody said anything")
+	}
+	j.Settled = at
+	if !j.Over(at) {
+		t.Error("they said they were on it and it still had something to say")
+	}
+	if _, due := j.Due(at.Add(47 * time.Hour)); !due {
+		t.Error("Due is meant to say only what the clock says; Over is what settles it")
 	}
 }

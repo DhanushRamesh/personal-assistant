@@ -8419,6 +8419,70 @@ Two hours for a film and three days for a birthday, both chosen by
 the model, with nothing in the server naming either.
 
 
+## Answering a warning puts it out
+
+Owner: *"the server adds this announcement in the conversation,
+right? If I acknowledge it, it should act accordingly. 'Ok got it'
+means no need of that reminder any more, because I'm already on it.
+Or 'cancel that' and that reminder should go."*
+
+Quite right, and without it the feature turns on itself: a wedding
+warned about three days out says itself again on the day, to
+somebody who bought the present the first time they were told.
+Saying it twice to a person who has already acted is the whole of
+what makes this sort of thing tiresome.
+
+**Which words mean that is the model's to decide.** "Ok got it",
+"done", "already bought it", "stop telling me", and the same in any
+other language, all land on one tool, `coming_settled`. Nothing in
+the server matches a phrase.
+
+**It is keyed on what they called it, not on an identifier.** The
+obvious design -- the model passes the Google event id -- cannot
+work: the diary listing shows an id only for entries on the
+person's own calendar, and the first thing this ever warned about
+properly was a birthday from Google Contacts, which has none. So
+the tool takes what they said, or nothing at all, and matches
+against the handful of warnings actually outstanding:
+
+- Named nothing, it is the one most recently spoken. That is what
+  an answer answers.
+- Named something, matched by likeness, because what reaches here
+  came through speech and "the wedding" has to find "Attending
+  Vignesh's wedding". Nothing under four letters matches alone, or
+  "wed" would find "Wednesday standup".
+- Two things it could mean, it settles neither and says so.
+- Nothing spoken about lately, it settles nothing: acting on a
+  warning nobody heard is not acting on anything.
+
+`settled_at` survives a re-judgement. Re-judging happens when the
+entry is renamed or moved, or when the question put to the model is
+reworded, and none of those un-does somebody having said they were
+dealing with it.
+
+### Two mistakes worth recording
+
+**The harness, not the model.** Three eval cases failed and I
+changed the tool's description twice and the persona once to chase
+them. `coming_settled` was never in the eval registry. The model had
+been asked to call a tool it was not given, and every conclusion
+drawn from those runs was worthless. The persona line added on that
+evidence was reverted: measured with the tool actually present, it
+does not earn its place.
+
+This is the second time a measurement here has been wrong in the
+same way -- the first was reporting a tool-deferral saving that did
+not exist, from a registry missing `tool_describe`. **Before
+believing an eval failure, check the tool is in the eval's
+registry**, which is built separately from the server's.
+
+**A case that needs context cannot be measured without it.** "Ok got
+it" with nothing in front of it means nothing, and a model that
+called a tool for it would be guessing. The suite now carries
+`After`: one assistant turn said just before, so an answer has
+something to answer.
+
+
 ## 12. Maintaining this file
 
 When the owner states a preference, makes a decision, or corrects something,

@@ -56,6 +56,7 @@ import (
 	"github.com/DhanushRamesh/personal-assistant/internal/tasks"
 	"github.com/DhanushRamesh/personal-assistant/internal/tool"
 	calendartool "github.com/DhanushRamesh/personal-assistant/internal/tool/calendar"
+	comingtool "github.com/DhanushRamesh/personal-assistant/internal/tool/coming"
 	"github.com/DhanushRamesh/personal-assistant/internal/tool/conversations"
 	eventstool "github.com/DhanushRamesh/personal-assistant/internal/tool/events"
 	mailtool "github.com/DhanushRamesh/personal-assistant/internal/tool/mail"
@@ -259,6 +260,9 @@ func run() error {
 			Now: cfg.Assistant.Now, Location: cfg.Assistant.Location,
 		}),
 		placestool.Tools(deviceEvents, placestool.Clock{
+			Now: cfg.Assistant.Now, Location: cfg.Assistant.Location,
+		}),
+		comingtool.Tools(comingmysql.New(db.DB), comingtool.Clock{
 			Now: cfg.Assistant.Now, Location: cfg.Assistant.Location,
 		}),
 	)...)

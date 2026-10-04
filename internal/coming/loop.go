@@ -26,7 +26,10 @@ type Store interface {
 	// Keep : Writes a judgement, replacing any for the same entry.
 	Keep(ctx context.Context, j Judged) error
 	// Spoke : Records that one more of an entry's leads was said.
-	Spoke(ctx context.Context, userID, eventID string, said int) error
+	Spoke(ctx context.Context, userID, eventID string, said int, at time.Time) error
+	// Settle : Records that they said they are on top of something,
+	// so nothing more is said about it.
+	Settle(ctx context.Context, userID, eventID string, at time.Time) error
 	// Drop : Forgets judgements for entries no longer in the diary.
 	Drop(ctx context.Context, userID string, keep []string) error
 }
@@ -221,7 +224,7 @@ func (l *Loop) judge(ctx context.Context, userID string, e calendar.Event, now t
 func (l *Loop) speak(ctx context.Context, j Judged, i int, now time.Time, pass *Pass) {
 	said := j.Sentence(i, now, l.where())
 
-	if err := l.Store.Spoke(ctx, j.UserID, j.EventID, i+1); err != nil {
+	if err := l.Store.Spoke(ctx, j.UserID, j.EventID, i+1, now); err != nil {
 		pass.Failed++
 		l.log(ctx, "cannot record a warning", err, slog.String("title", j.Title))
 		return

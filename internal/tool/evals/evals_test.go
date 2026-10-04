@@ -28,6 +28,7 @@ import (
 	"time"
 
 	"github.com/DhanushRamesh/personal-assistant/internal/chat"
+	"github.com/DhanushRamesh/personal-assistant/internal/coming"
 	"github.com/DhanushRamesh/personal-assistant/internal/config"
 	"github.com/DhanushRamesh/personal-assistant/internal/embed"
 	"github.com/DhanushRamesh/personal-assistant/internal/environment"
@@ -40,6 +41,7 @@ import (
 	remindmemory "github.com/DhanushRamesh/personal-assistant/internal/remind/inmemory"
 	"github.com/DhanushRamesh/personal-assistant/internal/tool"
 	"github.com/DhanushRamesh/personal-assistant/internal/tool/calendar"
+	comingtool "github.com/DhanushRamesh/personal-assistant/internal/tool/coming"
 	"github.com/DhanushRamesh/personal-assistant/internal/tool/conversations"
 	"github.com/DhanushRamesh/personal-assistant/internal/tool/events"
 	"github.com/DhanushRamesh/personal-assistant/internal/tool/mail"
@@ -64,6 +66,15 @@ type eval struct {
 	Args []string
 	// Channel : How it arrived. Voice cannot reach everything.
 	Channel chat.Channel
+	// After : What the assistant said just before, when the case only
+	// makes sense as an answer to something.
+	//
+	// "Ok got it" with nothing in front of it means nothing, and a
+	// model that called a tool for it would be guessing. Three cases
+	// about answering a warning failed here for exactly that reason
+	// before the harness could carry a turn of history: the model was
+	// right and the test was not.
+	After string
 	// Never : Fragments the reply must not contain, whatever it does.
 	//
 	// The rest of this measures which tool is chosen, which is almost
@@ -195,6 +206,27 @@ var cases = []eval{
 	{Say: "do you know what my battery is right now", Tool: []string{"event_recent"}},
 	{Say: "is my phone charged", Tool: []string{"event_recent"}},
 
+	// Answering a warning the assistant gave about the diary. The
+	// second word, nearer the time, is right for somebody who forgot
+	// and wrong for somebody who answered the first one.
+	{Say: "ok got it, thanks", Tool: []string{"coming_settled"},
+		After: "Attending Vignesh's wedding is in 3 days, at Tuesday, 6:30 pm. " +
+			"A present to buy and something to wear."},
+	{Say: "cancel that, I don't need telling again", Tool: []string{"coming_settled"},
+		After: "Attending Vignesh's wedding is in 3 days, at Tuesday, 6:30 pm. " +
+			"A present to buy and something to wear."},
+	{Say: "I have already bought the present", Tool: []string{"coming_settled"},
+		After: "Attending Vignesh's wedding is in 3 days, at Tuesday, 6:30 pm. " +
+			"A present to buy and something to wear."},
+
+	// And the over-reach it could buy. Dropping a warning is not
+	// taking the thing out of the diary, and it is not a reminder
+	// they set themselves.
+	{Say: "take the wedding out of my diary",
+		Tool: []string{"calendar_events", "calendar_cancel"}},
+	{Say: "cancel my 4pm water reminder",
+		Tool: []string{"reminder_list", "reminder_cancel"}},
+
 	// Things that are simply answered. No tool is right, and so is
 	// saying nothing about tools: asked to add some numbers it opened
 	// with "I have no tool that calculates a sum, sir", then added them
@@ -282,6 +314,7 @@ func TestTheModelReachesForTheRightTool(t *testing.T) {
 		tasks.All(nil, tasks.Clock{Location: time.UTC}),
 		mail.All(nil, mail.Clock{Location: time.UTC}),
 		places.Tools(nil, places.Clock{Location: time.UTC}),
+		comingtool.Tools(nothingComing{}, comingtool.Clock{Location: time.UTC}),
 	)...)
 	if err != nil {
 		t.Fatalf("NewRegistry: %v", err)
@@ -323,7 +356,7 @@ func TestTheModelReachesForTheRightTool(t *testing.T) {
 			channel = chat.ChannelVoice
 		}
 
-		called, args, said := ask(t, env, registry, channel, c.Say)
+		called, args, said := ask(t, env, registry, channel, c.Say, c.After)
 
 		var blurted []string
 		for _, never := range c.Never {
@@ -370,7 +403,7 @@ func TestTheModelReachesForTheRightTool(t *testing.T) {
 //
 // One call, not the whole loop: what is being measured is the choice, and the
 // choice is made before anything runs.
-func ask(t *testing.T, env *platformai.Environment, registry *tool.Registry, channel chat.Channel, say string) (string, string, string) {
+func ask(t *testing.T, env *platformai.Environment, registry *tool.Registry, channel chat.Channel, say, after string) (string, string, string) {
 	t.Helper()
 
 	reachable := registry.For(channel)
@@ -394,7 +427,11 @@ func ask(t *testing.T, env *platformai.Environment, registry *tool.Registry, cha
 	if os.Getenv("EVAL_LOOK_FIRST") == "1" {
 		say = prompt.Block(say, lookFirstDraft)
 	}
-	stream, err := env.Run(ctx, environment.Request{Prompt: say, Tools: specs})
+	req := environment.Request{Prompt: say, Tools: specs}
+	if after != "" {
+		req.History = []environment.Turn{{Role: environment.RoleAssistant, Text: after}}
+	}
+	stream, err := env.Run(ctx, req)
 	if err != nil {
 		t.Fatalf("Run: %v", err)
 	}
@@ -427,3 +464,14 @@ func among(called string, right []string) bool {
 	}
 	return len(right) == 0 && called == ""
 }
+
+// nothingComing : A look-ahead with nothing outstanding.
+//
+// What is measured here is which tool the model reaches for, and
+// that is decided before anything runs.
+type nothingComing struct{}
+
+func (nothingComing) Held(context.Context, string, time.Time) ([]coming.Judged, error) {
+	return nil, nil
+}
+func (nothingComing) Settle(context.Context, string, string, time.Time) error { return nil }

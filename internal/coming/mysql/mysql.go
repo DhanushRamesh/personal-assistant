@@ -19,15 +19,17 @@ const Prefix = "cmg_"
 
 // row : The coming table, as GORM sees it.
 type row struct {
-	ID      string    `gorm:"column:id;primaryKey"`
-	UserID  string    `gorm:"column:user_id"`
-	EventID string    `gorm:"column:event_id"`
-	Shape   string    `gorm:"column:shape"`
-	Title   string    `gorm:"column:title"`
-	Starts  time.Time `gorm:"column:starts"`
-	Leads   string    `gorm:"column:leads"`
-	Said    int       `gorm:"column:said"`
-	At      time.Time `gorm:"column:at"`
+	ID      string     `gorm:"column:id;primaryKey"`
+	UserID  string     `gorm:"column:user_id"`
+	EventID string     `gorm:"column:event_id"`
+	Shape   string     `gorm:"column:shape"`
+	Title   string     `gorm:"column:title"`
+	Starts  time.Time  `gorm:"column:starts"`
+	Leads   string     `gorm:"column:leads"`
+	Said    int        `gorm:"column:said"`
+	Spoke   *time.Time `gorm:"column:spoke_at"`
+	Settled *time.Time `gorm:"column:settled_at"`
+	At      time.Time  `gorm:"column:at"`
 }
 
 // TableName : Names the table this row maps to.
@@ -95,7 +97,11 @@ func (s *Store) Keep(ctx context.Context, j coming.Judged) error {
 		Leads: string(encoded), Said: j.Said, At: at.UTC(),
 	}
 	if err := s.db.WithContext(ctx).Clauses(clause.OnConflict{
-		Columns:   []clause.Column{{Name: "user_id"}, {Name: "event_id"}},
+		Columns: []clause.Column{{Name: "user_id"}, {Name: "event_id"}},
+		// Not settled_at: re-judging happens when the entry is
+		// renamed or moved, or when the question is reworded, and
+		// none of those un-does somebody having said they were
+		// dealing with it.
 		DoUpdates: clause.AssignmentColumns([]string{"shape", "title", "starts", "leads", "said", "at"}),
 	}).Create(&r).Error; err != nil {
 		return fmt.Errorf("coming: keeping a judgement: %w", err)
@@ -104,11 +110,21 @@ func (s *Store) Keep(ctx context.Context, j coming.Judged) error {
 }
 
 // Spoke : Records that one more of an entry's moments was said.
-func (s *Store) Spoke(ctx context.Context, userID, eventID string, said int) error {
+func (s *Store) Spoke(ctx context.Context, userID, eventID string, said int, at time.Time) error {
 	if err := s.db.WithContext(ctx).Model(&row{}).
 		Where("user_id = ? AND event_id = ?", userID, eventID).
-		Update("said", said).Error; err != nil {
+		Updates(map[string]any{"said": said, "spoke_at": at.UTC()}).Error; err != nil {
 		return fmt.Errorf("coming: recording a warning: %w", err)
+	}
+	return nil
+}
+
+// Settle : Records that they said they are on top of something.
+func (s *Store) Settle(ctx context.Context, userID, eventID string, at time.Time) error {
+	if err := s.db.WithContext(ctx).Model(&row{}).
+		Where("user_id = ? AND event_id = ?", userID, eventID).
+		Update("settled_at", at.UTC()).Error; err != nil {
+		return fmt.Errorf("coming: settling a warning: %w", err)
 	}
 	return nil
 }
@@ -144,9 +160,16 @@ func (r row) judged() (coming.Judged, error) {
 			Before: time.Duration(l.Seconds) * time.Second, Why: l.Why,
 		})
 	}
-	return coming.Judged{
+	j := coming.Judged{
 		UserID: r.UserID, EventID: r.EventID, Shape: r.Shape,
 		Title: r.Title, Starts: r.Starts.UTC(), Leads: leads,
 		Said: r.Said, At: r.At.UTC(),
-	}, nil
+	}
+	if r.Spoke != nil {
+		j.Spoke = r.Spoke.UTC()
+	}
+	if r.Settled != nil {
+		j.Settled = r.Settled.UTC()
+	}
+	return j, nil
 }

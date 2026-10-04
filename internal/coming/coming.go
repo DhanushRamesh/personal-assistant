@@ -107,6 +107,15 @@ type Judged struct {
 	// A count rather than a set, because they are spoken in order and
 	// a count cannot disagree with itself.
 	Said int
+	// Spoke : When the last warning about this was said. Zero until
+	// one is, which is most of them.
+	Spoke time.Time
+	// Settled : When they said they were on top of it.
+	//
+	// Owner: *"'ok got it' means no need of that reminder any more,
+	// because I'm already on it."* A warning given three days out
+	// and acted on should not say itself again on the day.
+	Settled time.Time
 	// At : When the judgement was made.
 	At time.Time
 }
@@ -162,12 +171,13 @@ func (j Judged) Due(now time.Time) (int, bool) {
 
 // Over : Whether an entry has nothing left to say.
 //
-// Either everything was said, or it has started. A thing already
-// under way is not something to give warning of, and an entry that
-// was never judged in time has missed its moment rather than earned
-// a late one.
+// Everything was said, or it has started, or they have said they are
+// dealing with it. A thing already under way is not something to
+// give warning of, an entry never judged in time has missed its
+// moment rather than earned a late one, and somebody who answered
+// the first warning does not need the second.
 func (j Judged) Over(now time.Time) bool {
-	return j.Said >= len(j.Leads) || !now.Before(j.Starts)
+	return j.Said >= len(j.Leads) || !j.Settled.IsZero() || !now.Before(j.Starts)
 }
 
 // Sentence : What the person is told.
