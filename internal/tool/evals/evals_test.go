@@ -225,6 +225,14 @@ var cases = []eval{
 		After: "Attending Vignesh's wedding is in 3 days, at Tuesday, 6:30 pm. " +
 			"A present to buy and something to wear."},
 
+	// Half of it done. The warning stays and asks only for the rest,
+	// so what the tool is given must be the shirt and not the
+	// present.
+	{Say: "I have already bought the present", Tool: []string{"coming_settled"},
+		Args: []string{"wear"},
+		After: "Attending Vignesh's wedding is in 3 days, at Tuesday, 6:30 pm. " +
+			"A present to buy and something to wear."},
+
 	// And the over-reach it could buy. Dropping a warning is not
 	// taking the thing out of the diary, and it is not a reminder
 	// they set themselves.
@@ -481,3 +489,6 @@ func (nothingComing) Held(context.Context, string, time.Time) ([]coming.Judged, 
 	return nil, nil
 }
 func (nothingComing) Settle(context.Context, string, string, time.Time) error { return nil }
+func (nothingComing) Trim(context.Context, string, string, string, time.Time) error {
+	return nil
+}

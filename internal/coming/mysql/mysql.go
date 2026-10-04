@@ -29,6 +29,7 @@ type row struct {
 	Said    int        `gorm:"column:said"`
 	Spoke   *time.Time `gorm:"column:spoke_at"`
 	Settled *time.Time `gorm:"column:settled_at"`
+	Still   *string    `gorm:"column:still"`
 	At      time.Time  `gorm:"column:at"`
 }
 
@@ -119,6 +120,16 @@ func (s *Store) Spoke(ctx context.Context, userID, eventID string, said int, at 
 	return nil
 }
 
+// Trim : Records what is left to do, once part of it is done.
+func (s *Store) Trim(ctx context.Context, userID, eventID, still string, at time.Time) error {
+	if err := s.db.WithContext(ctx).Model(&row{}).
+		Where("user_id = ? AND event_id = ?", userID, eventID).
+		Update("still", still).Error; err != nil {
+		return fmt.Errorf("coming: recording what is left: %w", err)
+	}
+	return nil
+}
+
 // Settle : Records that they said they are on top of something.
 func (s *Store) Settle(ctx context.Context, userID, eventID string, at time.Time) error {
 	if err := s.db.WithContext(ctx).Model(&row{}).
@@ -170,6 +181,9 @@ func (r row) judged() (coming.Judged, error) {
 	}
 	if r.Settled != nil {
 		j.Settled = r.Settled.UTC()
+	}
+	if r.Still != nil {
+		j.Still = *r.Still
 	}
 	return j, nil
 }

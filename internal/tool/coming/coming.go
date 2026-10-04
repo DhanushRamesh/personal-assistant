@@ -32,6 +32,8 @@ type Warnings interface {
 	Held(ctx context.Context, userID string, from time.Time) ([]coming.Judged, error)
 	// Settle : Records that nothing more is to be said about one.
 	Settle(ctx context.Context, userID, eventID string, at time.Time) error
+	// Trim : Records what is left to do, once part of it is done.
+	Trim(ctx context.Context, userID, eventID, still string, at time.Time) error
 }
 
 // Clock : What this needs to know about time.
@@ -74,6 +76,11 @@ func settled(warnings Warnings, clock Clock) tool.Tool {
 			"They have done it, they are doing it, they already knew, or they want you to " +
 			"stop. Any words that mean that, in any language: ok, got it, fine, noted, done, " +
 			"already bought it, stop telling me, cancel that, leave it. " +
+			"Then ask one thing before you call it: have they dealt with ALL of what your " +
+			"warning asked for, or only part of it? " +
+			"All of it, and you call this with nothing and the warning is dropped. " +
+			"Part of it, and the rest goes in left: the warning stays and asks only for that. " +
+			"A warning that named two things and an answer that mentions one is part of it. " +
 			"Look at what you said last before deciding; if it was one of those warnings, a " +
 			"short acknowledgement is almost always this and almost never anything else. " +
 			"Do not look the thing up first -- you have just said what it is, and the warning " +
@@ -89,6 +96,12 @@ func settled(warnings Warnings, clock Clock) tool.Tool {
 			"than that they are on top of it.",
 		Channels: []chat.Channel{chat.ChannelVoice, chat.ChannelDirect},
 		Params: tool.Schema{
+			// left is required, and that is the point of it. Asked
+			// for only when it applied, it was skipped two times in
+			// three and a warning naming two things was dropped on
+			// an answer about one of them. Made unskippable, the
+			// decision is taken every time.
+			Required: []string{"left"},
 			Properties: map[string]tool.Property{
 				"about": {
 					Type: "string",
@@ -96,16 +109,28 @@ func settled(warnings Warnings, clock Clock) tool.Tool {
 						"when they are plainly answering the warning you just gave and have " +
 						"named nothing, which is the usual case.",
 				},
+				"left": {
+					Type: "string",
+					Description: "What is STILL to do after what they have just said. Always " +
+						"answer this. Take your own warning, strike out the part they have " +
+						"dealt with, and write what remains, the way you would say it aloud " +
+						"and under a dozen words. Warned about \"a present to buy and " +
+						"something to wear\" and told the present is bought, this is " +
+						"\"Something to wear.\" Write " + coming.Silence + " when nothing " +
+						"remains, which drops the warning altogether.",
+				},
 			},
 		},
 		Examples: []tool.Example{
 			{Ask: "ok got it", Args: `{"saying":"noted"}`},
 			{Ask: "cancel that reminder", Args: `{"saying":"dropping it"}`},
-			{Ask: "I've already bought the present", Args: `{"about":"wedding"}`},
+			{Ask: "I've already bought the present",
+				Args: `{"left":"Something to wear.","saying":"noted"}`},
 		},
 		Run: func(ctx context.Context, in tool.Invocation) tool.Result {
 			var args struct {
 				About string `json:"about"`
+				Left  string `json:"left"`
 			}
 			_ = json.Unmarshal(in.Args, &args)
 
@@ -139,6 +164,17 @@ func settled(warnings Warnings, clock Clock) tool.Tool {
 			chosen, trouble := pick(open, strings.TrimSpace(args.About), clock.where())
 			if trouble != "" {
 				return tool.OK(trouble)
+			}
+
+			// Part of it done is not all of it done. The warning
+			// stays and says only what is left, because dropping it
+			// would silence the shirt along with the present.
+			if left := remaining(args.Left); left != "" {
+				if err := warnings.Trim(ctx, in.Caller.UserID, chosen.EventID, left, now); err != nil {
+					return tool.Failed(err.Error())
+				}
+				return tool.OK(fmt.Sprintf("Noted against %q. The warning nearer the time "+
+					"will ask only for: %s", chosen.Title, left))
 			}
 
 			if err := warnings.Settle(ctx, in.Caller.UserID, chosen.EventID, now); err != nil {
@@ -227,4 +263,17 @@ func listing(open []coming.Judged, where *time.Location) string {
 			j.Title, j.Starts.In(where).Format("Monday 2 January")))
 	}
 	return strings.Join(parts, "; ")
+}
+
+// remaining : What is still to do, or empty when nothing is.
+//
+// The model is made to answer every time, so the answer has to
+// carry "nothing" as well as a list. Anything that is only the word
+// for nothing, however it is punctuated, is nothing.
+func remaining(left string) string {
+	trimmed := strings.TrimSpace(left)
+	if strings.EqualFold(strings.Trim(trimmed, ".!\"' "), coming.Silence) {
+		return ""
+	}
+	return trimmed
 }

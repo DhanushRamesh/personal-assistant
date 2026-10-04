@@ -30,6 +30,9 @@ type Store interface {
 	// Settle : Records that they said they are on top of something,
 	// so nothing more is said about it.
 	Settle(ctx context.Context, userID, eventID string, at time.Time) error
+	// Trim : Records what is left to do, once part of it is done, so
+	// the warnings not yet given say that instead.
+	Trim(ctx context.Context, userID, eventID, still string, at time.Time) error
 	// Drop : Forgets judgements for entries no longer in the diary.
 	Drop(ctx context.Context, userID string, keep []string) error
 }

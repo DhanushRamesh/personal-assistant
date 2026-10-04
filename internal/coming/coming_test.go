@@ -178,6 +178,14 @@ func (s *store) Settle(_ context.Context, _, eventID string, at time.Time) error
 	}
 	return nil
 }
+func (s *store) Trim(_ context.Context, _, eventID, still string, _ time.Time) error {
+	for i := range s.held {
+		if s.held[i].EventID == eventID {
+			s.held[i].Still = still
+		}
+	}
+	return nil
+}
 func (s *store) Drop(context.Context, string, []string) error { return nil }
 
 // TestItSpeaksBeforeTheThingArrives : The whole point. A wedding in
@@ -357,5 +365,49 @@ func TestSettledStopsTheSecondWarning(t *testing.T) {
 	}
 	if _, due := j.Due(at.Add(47 * time.Hour)); !due {
 		t.Error("Due is meant to say only what the clock says; Over is what settles it")
+	}
+}
+
+// TestWhatIsLeftReplacesTheReason : Owner picked this over dropping
+// the whole warning. A warning says "a present to buy and something
+// to wear"; told the present is bought, the one nearer the time has
+// to ask only for the shirt, and must not ask again for the
+// present.
+func TestWhatIsLeftReplacesTheReason(t *testing.T) {
+	j := coming.Judged{
+		Title: "Attending Vignesh's wedding", Starts: at.Add(2 * time.Hour),
+		Leads: []coming.Lead{{Before: 2 * time.Hour, Why: "A present to buy and something to wear."}},
+	}
+
+	was := j.Sentence(0, at, kolkata)
+	if !strings.Contains(was, "present to buy") {
+		t.Fatalf("the first warning lost its reason: %q", was)
+	}
+
+	j.Still = "Something to wear."
+	now := j.Sentence(0, at, kolkata)
+	if strings.Contains(now, "present") {
+		t.Errorf("it asked again for the present: %q", now)
+	}
+	if !strings.Contains(now, "Something to wear") {
+		t.Errorf("it lost what is left: %q", now)
+	}
+	// Still part of the same thing: the title and the hour do not
+	// change because half of it is done.
+	if !strings.Contains(now, "Attending Vignesh's wedding") {
+		t.Errorf("the sentence stopped saying what it is about: %q", now)
+	}
+}
+
+// TestPartOfItDoneIsNotAllOfItDone : Trimming must not silence the
+// warning; that is what settling is for.
+func TestPartOfItDoneIsNotAllOfItDone(t *testing.T) {
+	j := coming.Judged{
+		Starts: at.Add(2 * time.Hour),
+		Leads:  []coming.Lead{{Before: 2 * time.Hour}},
+		Still:  "Something to wear.",
+	}
+	if j.Over(at) {
+		t.Error("saying half of it was done dropped the whole warning")
 	}
 }

@@ -21,6 +21,7 @@ var (
 type warnings struct {
 	held    []coming.Judged
 	settled []string
+	trimmed []string
 }
 
 func (w *warnings) Held(context.Context, string, time.Time) ([]coming.Judged, error) {
@@ -28,6 +29,10 @@ func (w *warnings) Held(context.Context, string, time.Time) ([]coming.Judged, er
 }
 func (w *warnings) Settle(_ context.Context, _, eventID string, _ time.Time) error {
 	w.settled = append(w.settled, eventID)
+	return nil
+}
+func (w *warnings) Trim(_ context.Context, _, eventID, still string, _ time.Time) error {
+	w.trimmed = append(w.trimmed, eventID+": "+still)
 	return nil
 }
 
@@ -126,5 +131,41 @@ func TestShortWordsDoNotMatch(t *testing.T) {
 	w := &warnings{held: []coming.Judged{warned("evt_1", "Wednesday standup", time.Hour)}}
 	if got := ask(t, w, `{"about":"wed"}`); len(w.settled) != 0 {
 		t.Errorf("a fragment matched a different thing: %s", got.Content)
+	}
+}
+
+// TestHalfAnAcknowledgementTrimsRatherThanDrops : Owner chose this
+// over dropping the lot. "I have bought the present" against a
+// warning asking for a present and a shirt must leave the warning
+// standing and asking only for the shirt.
+func TestHalfAnAcknowledgementTrimsRatherThanDrops(t *testing.T) {
+	w := &warnings{held: []coming.Judged{
+		warned("evt_1", "Attending Vignesh's wedding", time.Minute),
+	}}
+
+	got := ask(t, w, `{"left":"Something to wear."}`)
+	if len(w.settled) != 0 {
+		t.Errorf("half an acknowledgement dropped the whole warning: %v", w.settled)
+	}
+	if len(w.trimmed) != 1 || !strings.Contains(w.trimmed[0], "Something to wear") {
+		t.Fatalf("what is left was not recorded: %v", w.trimmed)
+	}
+	if !strings.Contains(got.Content, "Something to wear") {
+		t.Errorf("the answer does not say what is left: %s", got.Content)
+	}
+}
+
+// TestNothingLeftStillDrops : The model is made to answer "what is
+// left" every time, so the answer has to carry nothing as well as a
+// list. However it writes nothing, the warning goes.
+func TestNothingLeftStillDrops(t *testing.T) {
+	for _, nothing := range []string{`{"left":"   "}`, `{}`,
+		`{"left":"NOTHING"}`, `{"left":"Nothing."}`} {
+		w := &warnings{held: []coming.Judged{warned("evt_1", "Something", time.Minute)}}
+		ask(t, w, nothing)
+		if len(w.settled) != 1 || len(w.trimmed) != 0 {
+			t.Errorf("%s settled %v trimmed %v, want it dropped outright",
+				nothing, w.settled, w.trimmed)
+		}
 	}
 }

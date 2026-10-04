@@ -110,6 +110,15 @@ type Judged struct {
 	// Spoke : When the last warning about this was said. Zero until
 	// one is, which is most of them.
 	Spoke time.Time
+	// Still : What is left to do, once they have said part of it is
+	// done.
+	//
+	// A warning says the doing it is about -- "a present to buy and
+	// something to wear" -- and answering half of that used to
+	// change nothing, so the warning nearer the time still asked for
+	// both. The model writes what is left and the later warnings say
+	// that instead. Empty is the ordinary case.
+	Still string
 	// Settled : When they said they were on top of it.
 	//
 	// Owner: *"'ok got it' means no need of that reminder any more,
@@ -200,7 +209,13 @@ func (j Judged) Sentence(i int, now time.Time, where *time.Location) string {
 	}
 
 	out := fmt.Sprintf("%s is %s, at %s.", strings.TrimSpace(j.Title), when, at)
-	if why := strings.TrimSpace(j.Leads[i].Why); why != "" {
+	// What is left to do, when they have said part of it is done,
+	// and otherwise what was judged in the first place.
+	why := strings.TrimSpace(j.Still)
+	if why == "" {
+		why = strings.TrimSpace(j.Leads[i].Why)
+	}
+	if why != "" {
 		out += " " + why
 	}
 	return out

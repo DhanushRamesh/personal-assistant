@@ -8500,6 +8500,56 @@ about, one step smaller.
 The suite is **82 of 82**.
 
 
+## The mic re-opened in silence
+
+Owner, having asked for something and been cut off mid-sentence:
+
+    16:16:47  "Can you send me the"
+    16:16:51  "Your question was cut short, sir. Send you what?"
+    16:16:58  "Hey, Jarvis."
+    16:17:00  "Sir."
+
+*"I experienced something here. It asked 'send you what?', then I
+said hey Jarvis to wake it up thinking it had stopped listening, but
+it was already listening."*
+
+The satellite log says the rest of it:
+
+    continue_conversation: '1'   "Your question was cut short, sir. Send you what?"
+    Continued conversation started
+    continue_conversation: '0'   "Sir."
+
+Three faults in seven seconds, and they are worth separating.
+
+**The mic re-opened with no sound.** A wake word plays
+`wakeup_sound`; a continued conversation played nothing. The
+`LISTENING` event is emitted, but that drives LEDs and peripheral
+clients -- there is nothing to hear. So the only cue that it was his
+turn was the absence of one. Fixed in the satellite: the continued
+branch now plays the same chime, through the same two paths the wake
+word uses, so `listen_during_wake_sound` still decides whether the
+mic opens during it or after.
+
+**The wake word became the answer.** Nothing was wrong with hearing
+it -- the mic was open and he spoke. What was wrong is what was done
+with it: "Sir." is a fine reply to being addressed and a terrible
+one to a question still waiting. The question was lost and the thing
+he wanted sending was never heard of again.
+
+Now a rule in the persona, which is where a thing that crosses every
+tool belongs: *a turn that is nothing but your name is not an answer
+to anything. They are checking you are there, which they do when
+they cannot tell whether you are still listening, and it happens
+most often straight after you have asked them something. Say you
+are, and ask your question again in the same breath.* The name comes
+from configuration, so this holds when it is not Jarvis.
+
+**And the speech was cut at four words.** *"Can you send me the"* is
+where the recogniser stopped, which is a third thing and not yet
+looked at. The follow-up question was the right answer to it;
+needing to ask was not.
+
+
 ## 12. Maintaining this file
 
 When the owner states a preference, makes a decision, or corrects something,
