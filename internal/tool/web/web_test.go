@@ -19,11 +19,13 @@ type searcher struct {
 	err   error
 	query string
 	limit int
+	days  int
+	news  bool
 }
 
 func (s *searcher) Where() string { return "test" }
-func (s *searcher) Search(_ context.Context, query string, limit int) ([]search.Result, error) {
-	s.query, s.limit = query, limit
+func (s *searcher) Search(_ context.Context, ask search.Ask) ([]search.Result, error) {
+	s.query, s.limit, s.days, s.news = ask.Query, ask.Limit, ask.Days, ask.News
 	return s.found, s.err
 }
 
@@ -103,5 +105,32 @@ func TestTooManyResultsAreTrimmed(t *testing.T) {
 	ask(t, s, `{"query":"x","limit":500}`)
 	if s.limit != webtool.Most {
 		t.Errorf("asked for %d, want it capped at %d", s.limit, webtool.Most)
+	}
+}
+
+// TestFreshnessReachesTheService : Asked what was trending today,
+// the search returned a Pinterest board called "510 Tamil memes
+// ideas in 2026" and a Play Store listing, because an index ranks
+// an evergreen page above a fresh one and nothing had told it the
+// question was about now. Both services offer the filter; neither
+// was being given it.
+func TestFreshnessReachesTheService(t *testing.T) {
+	s := &searcher{}
+	ask(t, s, `{"query":"Tamil trending","days":1,"news":true}`)
+	if s.days != 1 {
+		t.Errorf("days reached the service as %d, want 1", s.days)
+	}
+	if !s.news {
+		t.Error("news did not reach the service")
+	}
+}
+
+// TestNoFreshnessIsAnyTime : Most questions are not about now, and
+// a filter nobody asked for hides the answer to them.
+func TestNoFreshnessIsAnyTime(t *testing.T) {
+	s := &searcher{}
+	ask(t, s, `{"query":"what is a transformer"}`)
+	if s.days != 0 || s.news {
+		t.Errorf("an ordinary question was narrowed: days=%d news=%v", s.days, s.news)
 	}
 }

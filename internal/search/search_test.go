@@ -22,7 +22,7 @@ type fake struct {
 }
 
 func (f *fake) Where() string { return f.where }
-func (f *fake) Search(ctx context.Context, _ string, _ int) ([]search.Result, error) {
+func (f *fake) Search(ctx context.Context, _ search.Ask) ([]search.Result, error) {
 	f.asked++
 	if f.slow > 0 {
 		select {
@@ -47,7 +47,7 @@ func one(where string) *fake {
 // reason there are two.
 func TestTheQuickOneAnswersWhenItCan(t *testing.T) {
 	quick, spare := one("firecrawl"), one("tinyfish")
-	if _, err := pair(quick, spare).Search(context.Background(), "q", 3); err != nil {
+	if _, err := pair(quick, spare).Search(context.Background(), search.Ask{Query: "q", Limit: 3}); err != nil {
 		t.Fatalf("searching: %v", err)
 	}
 	if quick.asked != 1 || spare.asked != 0 {
@@ -61,7 +61,7 @@ func TestItFallsBackWhenTheQuickOneCannot(t *testing.T) {
 	for _, err := range []error{errors.New("down"), search.ErrSpent} {
 		quick := &fake{where: "firecrawl", err: err}
 		spare := one("tinyfish")
-		got, gotErr := pair(quick, spare).Search(context.Background(), "q", 3)
+		got, gotErr := pair(quick, spare).Search(context.Background(), search.Ask{Query: "q", Limit: 3})
 		if gotErr != nil {
 			t.Fatalf("%v: the fallback did not answer: %v", err, gotErr)
 		}
@@ -81,7 +81,7 @@ func TestASpentServiceIsLeftAlone(t *testing.T) {
 	p := pair(quick, spare)
 
 	for i := 0; i < 5; i++ {
-		if _, err := p.Search(context.Background(), "q", 3); err != nil {
+		if _, err := p.Search(context.Background(), search.Ask{Query: "q", Limit: 3}); err != nil {
 			t.Fatalf("search %d: %v", i, err)
 		}
 	}
@@ -103,9 +103,9 @@ func TestItTriesAgainOnceRested(t *testing.T) {
 	p := &search.Pair{Quick: quick, Spare: spare, Rested: time.Hour,
 		Now: func() time.Time { return now }}
 
-	p.Search(context.Background(), "q", 3)
+	p.Search(context.Background(), search.Ask{Query: "q", Limit: 3})
 	now = at.Add(2 * time.Hour)
-	p.Search(context.Background(), "q", 3)
+	p.Search(context.Background(), search.Ask{Query: "q", Limit: 3})
 
 	if quick.asked != 2 {
 		t.Errorf("the quick one was asked %d times, want 2", quick.asked)
@@ -123,7 +123,7 @@ func TestAHangingQuickOneDoesNotEatTheTurn(t *testing.T) {
 		Now: func() time.Time { return at }}
 
 	began := time.Now()
-	got, err := p.Search(context.Background(), "q", 3)
+	got, err := p.Search(context.Background(), search.Ask{Query: "q", Limit: 3})
 	if err != nil || len(got) != 1 {
 		t.Fatalf("the fallback did not answer: %v", err)
 	}
@@ -140,7 +140,7 @@ func TestTheTurnEndingIsNotTheServiceFailing(t *testing.T) {
 	ctx, stop := context.WithTimeout(context.Background(), 20*time.Millisecond)
 	defer stop()
 
-	if _, err := pair(quick, spare).Search(ctx, "q", 3); err == nil {
+	if _, err := pair(quick, spare).Search(ctx, search.Ask{Query: "q", Limit: 3}); err == nil {
 		t.Error("a turn that ended was reported as a search that worked")
 	}
 	if spare.asked != 0 {

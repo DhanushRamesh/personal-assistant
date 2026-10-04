@@ -16,6 +16,7 @@ import (
 	"fmt"
 	"net/http"
 	"net/url"
+	"strconv"
 	"strings"
 	"time"
 
@@ -65,17 +66,24 @@ type answer struct {
 // The service takes a purpose as well as a query, and giving it one
 // is free: it is the difference between ranking for the words and
 // ranking for the question behind them.
-func (c *Client) Search(ctx context.Context, query string, limit int) ([]search.Result, error) {
+func (c *Client) Search(ctx context.Context, ask search.Ask) ([]search.Result, error) {
 	if c == nil {
 		return nil, fmt.Errorf("tinyfish: no key")
 	}
+	limit := ask.Limit
 	if limit <= 0 {
 		limit = 5
 	}
 
 	q := url.Values{}
-	q.Set("query", query)
+	q.Set("query", ask.Query)
 	q.Set("domain_type", "web")
+	if ask.News {
+		q.Set("domain_type", "news")
+	}
+	if ask.Days > 0 {
+		q.Set("recency_minutes", strconv.Itoa(ask.Days*24*60))
+	}
 
 	req, err := http.NewRequestWithContext(ctx, http.MethodGet, URL+"/?"+q.Encode(), nil)
 	if err != nil {

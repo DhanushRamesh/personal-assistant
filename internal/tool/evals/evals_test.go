@@ -543,6 +543,6 @@ func (nothingComing) Trim(context.Context, string, string, string, time.Time) er
 type quietWeb struct{}
 
 func (quietWeb) Where() string { return "test" }
-func (quietWeb) Search(context.Context, string, int) ([]search.Result, error) {
+func (quietWeb) Search(context.Context, search.Ask) ([]search.Result, error) {
 	return nil, nil
 }

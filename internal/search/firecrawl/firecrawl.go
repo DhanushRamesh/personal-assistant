@@ -67,10 +67,11 @@ type found struct {
 }
 
 // Search : What the web says about this.
-func (c *Client) Search(ctx context.Context, query string, limit int) ([]search.Result, error) {
+func (c *Client) Search(ctx context.Context, ask search.Ask) ([]search.Result, error) {
 	if c == nil {
 		return nil, fmt.Errorf("firecrawl: no key")
 	}
+	limit := ask.Limit
 	if limit <= 0 {
 		limit = 5
 	}
@@ -78,7 +79,16 @@ func (c *Client) Search(ctx context.Context, query string, limit int) ([]search.
 	// No scrapeOptions. Snippets answer most questions, a page costs
 	// a credit each and seconds each, and reading one is a separate
 	// act somebody should choose rather than pay for by default.
-	body, err := json.Marshal(map[string]any{"query": query, "limit": limit})
+	sending := map[string]any{"query": ask.Query, "limit": limit}
+	if ask.News {
+		sending["sources"] = []string{"news"}
+	}
+	// Google's own time filter, which is what this service passes
+	// through: a day, a week, a month, a year, nearest above.
+	if since := within(ask.Days); since != "" {
+		sending["tbs"] = since
+	}
+	body, err := json.Marshal(sending)
 	if err != nil {
 		return nil, fmt.Errorf("firecrawl: writing the request: %w", err)
 	}
@@ -155,4 +165,24 @@ func site(raw string) string {
 		s = s[:i]
 	}
 	return s
+}
+
+// within : A number of days as the time filter this service takes.
+//
+// Rounded up to the next bracket it understands rather than down,
+// because a filter tighter than asked for hides things that should
+// have been found, and one looser only lets a little extra through.
+func within(days int) string {
+	switch {
+	case days <= 0:
+		return ""
+	case days <= 1:
+		return "qdr:d"
+	case days <= 7:
+		return "qdr:w"
+	case days <= 31:
+		return "qdr:m"
+	default:
+		return "qdr:y"
+	}
 }

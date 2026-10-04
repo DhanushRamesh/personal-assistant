@@ -8687,6 +8687,51 @@ number is a measurement of somebody else's network. Four searches
 would have caught this before the design was written around it.
 
 
+## A search about now has to say so
+
+Asked what was trending in Tamil today, the search came back in
+1.3s with a Pinterest board called *"510 Tamil memes ideas in
+2026"*, a WAStickers listing and a Giphy page. Owner: *"why
+nothing."*
+
+Two reasons, and only one of them was ours.
+
+**What is trending on social media today is not a web page.** No
+index holds it, so an index returns what it does hold: evergreen
+SEO. The answer given -- that Instagram and YouTube Shorts would
+show it far better -- was the right one and better than inventing
+something.
+
+**But the freshness controls were being thrown away.** TinyFish
+offers `recency_minutes`, `after_date` and
+`domain_type: web|news|research_paper`; this was passing
+`domain_type=web` and nothing else. Firecrawl offers the same
+through `tbs` and that was ignored too. So a question containing
+"today" was ranked exactly like a question about history, and a
+page written three years ago outranked one written this morning.
+
+The tool now takes `days` and `news`, and the model decides both --
+it is the only thing that knows whether a question is about *now*
+or about *how things are*. Firecrawl's `tbs` takes Google's
+brackets, so days are rounded **up** to the next one: a filter
+tighter than asked for hides things that should have been found,
+one looser lets a little extra through.
+
+Measured on the same query:
+
+| without | with `days=1, news=true` |
+| --- | --- |
+| Trending Now Tamil -- *no date* | CBI arrests DGCA deputy director -- **3 hours ago** |
+| Tamil Trending -- *no date* | Gold Rate Today in Tamil Nadu -- **3 hours ago** |
+| Trending Tamil, 1.1M reels -- *no date* | Silver Rate Today -- **3 hours ago** |
+| Latest Tamil News, News18 -- *no date* | Man attacks nurse over delay -- **9 hours ago** |
+
+Undated evergreen becomes stories from this afternoon. It does not
+make the meme question answerable -- memes are not news -- but it
+makes every "what happened today" question answerable, and those
+are most of what a search is for.
+
+
 ## 12. Maintaining this file
 
 When the owner states a preference, makes a decision, or corrects something,

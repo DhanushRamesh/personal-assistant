@@ -40,10 +40,31 @@ type Result struct {
 	When string
 }
 
+// Ask : One search, and how to narrow it.
+type Ask struct {
+	// Query : What to search for.
+	Query string
+	// Limit : How many results.
+	Limit int
+	// Days : Only things published in the last this many days. Zero
+	// is any time.
+	//
+	// Not a nicety. Asked what was trending today, the search
+	// returned a Pinterest board called "510 Tamil memes ideas in
+	// 2026" and a Play Store listing, because an index ranks an
+	// evergreen page above a fresh one and nothing had told it the
+	// question was about now. Both services offer this and neither
+	// was being given it.
+	Days int
+	// News : Whether to search news rather than the web at large.
+	// For something that happened rather than something that is.
+	News bool
+}
+
 // Searcher : Something that can look the web up.
 type Searcher interface {
 	// Search : What the web says about this, best first.
-	Search(ctx context.Context, query string, limit int) ([]Result, error)
+	Search(ctx context.Context, ask Ask) ([]Result, error)
 	// Where : Which service this is, for the log and for a refusal
 	// that has to name what failed.
 	Where() string
@@ -102,12 +123,12 @@ func (p *Pair) Where() string {
 }
 
 // Search : The quick one if it can, the spare if it cannot.
-func (p *Pair) Search(ctx context.Context, query string, limit int) ([]Result, error) {
+func (p *Pair) Search(ctx context.Context, ask Ask) ([]Result, error) {
 	if p == nil || p.Spare == nil {
 		return nil, errors.New("search: nothing is configured to look things up")
 	}
 	if p.Quick == nil || p.resting() {
-		return p.Spare.Search(ctx, query, limit)
+		return p.Spare.Search(ctx, ask)
 	}
 
 	quick := ctx
@@ -117,7 +138,7 @@ func (p *Pair) Search(ctx context.Context, query string, limit int) ([]Result, e
 		defer stop()
 	}
 
-	found, err := p.Quick.Search(quick, query, limit)
+	found, err := p.Quick.Search(quick, ask)
 	if err == nil {
 		return found, nil
 	}
@@ -136,7 +157,7 @@ func (p *Pair) Search(ctx context.Context, query string, limit int) ([]Result, e
 		slog.Bool("spent", errors.Is(err, ErrSpent)),
 		slog.Any("error", err))
 
-	return p.Spare.Search(ctx, query, limit)
+	return p.Spare.Search(ctx, ask)
 }
 
 // resting : Whether the quick one is being left alone.

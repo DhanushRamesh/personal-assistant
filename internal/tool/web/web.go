@@ -74,20 +74,42 @@ func lookUp(searcher search.Searcher) tool.Tool {
 						"fact, more only for something being compared.",
 					Default: Default,
 				},
+				"days": {
+					Type: "integer",
+					Description: "Only things published in the last this many days. " +
+						"Give it whenever the question is about now rather than about how " +
+						"things are: today, this week, latest, currently, what is on, who is " +
+						"winning, what it costs. 1 for today, 7 for this week, 30 for this " +
+						"month. " +
+						"Leave it out for anything that does not change -- what a place is, " +
+						"how something works, who somebody was. " +
+						"Without it an index ranks a page written three years ago above one " +
+						"written this morning, and the answer looks current and is not.",
+				},
+				"news": {
+					Type: "boolean",
+					Description: "Search news rather than the web at large. For something " +
+						"that happened rather than something that is: a result, a decision, " +
+						"an announcement, an accident. Not for opening hours or prices.",
+				},
 			},
 		},
 		Examples: []tool.Example{
 			{Ask: "who won the match last night",
-				Args: `{"query":"cricket result last night","saying":"looking it up"}`},
+				Args: `{"query":"cricket result","days":1,"news":true,"saying":"looking it up"}`},
 			{Ask: "what time does Phoenix Mall close",
 				Args: `{"query":"Phoenix Marketcity Chennai opening hours","limit":3}`},
 			{Ask: "is it going to rain tomorrow",
-				Args: `{"query":"Chennai weather forecast tomorrow","limit":3}`},
+				Args: `{"query":"Chennai weather forecast tomorrow","days":1,"limit":3}`},
+			{Ask: "what is trending on Tamil social media today",
+				Args: `{"query":"Tamil trending today","days":1,"news":true}`},
 		},
 		Run: func(ctx context.Context, in tool.Invocation) tool.Result {
 			var args struct {
 				Query string `json:"query"`
 				Limit int    `json:"limit"`
+				Days  int    `json:"days"`
+				News  bool   `json:"news"`
 			}
 			_ = json.Unmarshal(in.Args, &args)
 
@@ -107,7 +129,9 @@ func lookUp(searcher search.Searcher) tool.Tool {
 				limit = Most
 			}
 
-			found, err := searcher.Search(ctx, query, limit)
+			found, err := searcher.Search(ctx, search.Ask{
+				Query: query, Limit: limit, Days: args.Days, News: args.News,
+			})
 			if err != nil {
 				return tool.Failed(err.Error())
 			}
