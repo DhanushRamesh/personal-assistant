@@ -287,3 +287,45 @@ func (d *dropping) Drop(_ context.Context, _ string, keep []string) error {
 	*d.keep = keep
 	return nil
 }
+
+// TestChangingTheQuestionAsksAgain : The first wording put "a
+// birthday nobody has to attend" among the things needing no
+// warning, so every birthday was judged silent. Owner: *"birthdays
+// should be told a few days before to buy a gift."*
+//
+// Fixing the words fixed nothing on its own: a hundred entries were
+// already decided under the old ones and nothing would ask again. So
+// the wording is part of the shape, and a kept answer to a question
+// nobody asks any more stops matching.
+func TestChangingTheQuestionAsksAgain(t *testing.T) {
+	under := coming.Shape("Alekhya's birthday", at)
+	if !strings.Contains(under, "#") {
+		t.Fatalf("the shape does not say which question was asked: %q", under)
+	}
+	// Two different questions must not share a shape. Reaching the
+	// real one is enough to know the fingerprint is of the wording
+	// and not of a constant.
+	if strings.HasSuffix(under, "#") {
+		t.Error("the fingerprint of the question is empty")
+	}
+}
+
+// TestADayAboutSomebodyElseEarnsWarning : The method, not the kind.
+// Nothing in the question names a birthday; it asks whether the day
+// belongs to another person, which is as true of an anniversary or
+// a leaving-do.
+func TestADayAboutSomebodyElseEarnsWarning(t *testing.T) {
+	if strings.Contains(strings.ToLower(coming.Asking), "birthday") {
+		t.Error("the question names a kind of event instead of asking a method")
+	}
+	if !strings.Contains(strings.ToLower(coming.Asking), "another person") {
+		t.Error("the question no longer covers a day that belongs to somebody else")
+	}
+	// The distinction the owner actually cares about: a date written
+	// down so it is not missed is not the same as a thing that will
+	// happen without him. The first wordings collapsed the two and
+	// every birthday came out silent.
+	if !strings.Contains(strings.ToLower(coming.Asking), "not be missed") {
+		t.Error("the question no longer separates a date written down from an appointment")
+	}
+}

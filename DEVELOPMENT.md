@@ -8373,6 +8373,51 @@ were judged silent. The seventh was his own example, unprompted:
 One lead, two hours, and a reason it read out of the guest list. The
 wedding case is untested until there is a wedding.
 
+### A birthday is not a thing that happens to you
+
+Owner: *"birthdays should be told a few days before to buy a gift."*
+The first pass judged one silent, and the fault was in the question,
+not the model. Two phrases did it: *"a birthday nobody has to
+attend"* sat in the list of things needing no warning, and *"a thing
+that happens whether or not they prepare"* is true of a birthday and
+of almost everything else.
+
+The question now draws the line the owner actually cares about:
+
+> Not everything in a diary is an appointment. Some entries are a
+> date somebody wrote down so that it would not be missed: nothing
+> is scheduled, nobody has to go anywhere, and that is exactly why
+> the warning is the whole of the point, because on the day itself
+> there is no time left to do the thing the date was written down
+> for. A day that belongs to another person is nearly always like
+> that.
+>
+> Do not reason that a thing will happen whether or not they prepare
+> -- that is true of almost everything, and the question is whether
+> they will wish they had.
+
+Still a method: it names no kind, and it covers an anniversary, a
+renewal date and a deadline as well as a birthday.
+
+**Changing the question had to re-judge what it had decided**, and
+at first it did not: a hundred entries were already settled under
+the old words and nothing would ask again. So a fingerprint of the
+question is now part of `Shape`. Change the wording and every
+judgement made under the old one stops matching and is made afresh,
+which is the only behaviour ever right -- a kept answer to a
+question nobody asks any more is worse than no answer.
+
+Measured on the real diary, same seven entries, three wordings:
+
+| | first | second | third |
+| --- | --- | --- | --- |
+| Meesaya Murukku 2 Movie | 2 hours | 2 hours | 2 hours |
+| six holidays and festivals | silent | silent | silent |
+| Happy birthday! | silent | silent | **3 days** -- *"A present to buy and something to say."* |
+
+Two hours for a film and three days for a birthday, both chosen by
+the model, with nothing in the server naming either.
+
 
 ## 12. Maintaining this file
 

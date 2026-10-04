@@ -20,6 +20,8 @@
 package coming
 
 import (
+	"crypto/sha256"
+	"encoding/hex"
 	"fmt"
 	"strings"
 	"time"
@@ -117,10 +119,30 @@ type Judged struct {
 // across town does not change that it is a dinner, and re-asking the
 // model every time somebody tidies a description would cost a call a
 // tick for no decision.
+//
+// And which question was asked. A judgement is only as good as the
+// wording that produced it, and the first wording was wrong: it put
+// "a birthday nobody has to attend" among the things needing no
+// warning, so every birthday was judged silent. Owner: *"birthdays
+// should be told a few days before to buy a gift."* Fixing the words
+// fixed nothing, because a hundred entries were already decided
+// under the old ones and nothing would ask again.
+//
+// So the wording is part of the shape. Change the question and every
+// judgement made under the old one stops matching and is made again,
+// which is the only behaviour that is ever right: a kept answer to a
+// question nobody asks any more is worse than no answer.
 func Shape(title string, starts time.Time) string {
 	return strings.TrimSpace(strings.ToLower(title)) + "@" +
-		starts.UTC().Format(time.RFC3339)
+		starts.UTC().Format(time.RFC3339) + "#" + asked
 }
+
+// asked : A short fingerprint of the question, so that changing it
+// invalidates what it decided.
+var asked = func() string {
+	sum := sha256.Sum256([]byte(Asking))
+	return hex.EncodeToString(sum[:4])
+}()
 
 // Due : Which lead, if any, is owed now.
 //
