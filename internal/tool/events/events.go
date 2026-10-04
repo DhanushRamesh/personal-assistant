@@ -193,12 +193,27 @@ func recent(reader Reader, clock Clock) tool.Tool {
 			where := clock.where()
 			q := event.Query{Contains: strings.TrimSpace(args.Contains)}
 
-			// A kind ending in a dot is a family rather than a name.
+			// A kind with no dot in it is a family, and so is one
+			// ending in a dot. Only a full dotted name is matched
+			// exactly.
+			//
 			// "wifi." covers joining and leaving without the caller
-			// having to know which kinds exist, which it cannot, because
-			// any device may invent one.
+			// having to know which kinds exist, which it cannot,
+			// because any device may invent one. But the dot was
+			// required, and a model asking for "call" -- which is how
+			// a person says it -- was told nothing of kind call was
+			// reported today, in a sentence that went on to list
+			// call.received (13) among the kinds that exist.
+			//
+			// The owner read that answer: *"I got a call from Kliffy,
+			// why is it not saying that."* He had had five calls that
+			// morning and was told twice that he had had none.
+			//
+			// Matched as a prefix rather than by appending a dot, so a
+			// sender that one day reports a bare "call" is found by
+			// the same question.
 			kind := strings.TrimSpace(args.Kind)
-			if strings.HasSuffix(kind, ".") {
+			if strings.HasSuffix(kind, ".") || !strings.Contains(kind, ".") {
 				q.Prefix = kind
 			} else {
 				q.Kind = kind

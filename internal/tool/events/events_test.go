@@ -356,3 +356,54 @@ func TestMusicIsLeftOutUntilItIsAskedFor(t *testing.T) {
 		t.Error("position readings should count as working material")
 	}
 }
+
+// TestAFamilyIsFoundWithoutTheDot : The bug this exists for.
+//
+// Asked who had called, the model called event_recent with kind
+// "call", which is how a person says it. Only a kind ending in a dot
+// counted as a family, so it matched nothing -- and the answer said
+// so in a sentence that went on to list call.received among the
+// kinds that exist.
+//
+// The owner had had five calls that morning and was told twice that
+// he had had none.
+func TestAFamilyIsFoundWithoutTheDot(t *testing.T) {
+	s := store(t,
+		at(t, 10, 33, "call.received", "Amma"),
+		at(t, 10, 45, "call.made", "Kliffy"),
+		at(t, 11, 3, "call.received", "Kliffy"),
+		at(t, 9, 2, "wifi.joined", "home"),
+	)
+
+	for _, asked := range []string{`{"kind":"call"}`, `{"kind":"call."}`} {
+		got := ask(t, s, asked)
+		if got.Outcome == conversation.OutcomeFailed {
+			t.Fatalf("%s failed: %s", asked, got.Content)
+		}
+		for _, want := range []string{"Amma", "Kliffy"} {
+			if !strings.Contains(got.Content, want) {
+				t.Errorf("%s did not find %s:\n%s", asked, want, got.Content)
+			}
+		}
+		// And it must not drag in everything else.
+		if strings.Contains(got.Content, "wifi.joined") {
+			t.Errorf("%s matched a different family:\n%s", asked, got.Content)
+		}
+	}
+}
+
+// TestAFullNameIsStillExact : "call.received" means that one, not
+// the family. Widening the dotless case must not widen this.
+func TestAFullNameIsStillExact(t *testing.T) {
+	s := store(t,
+		at(t, 10, 33, "call.received", "Amma"),
+		at(t, 10, 45, "call.made", "Kliffy"),
+	)
+	got := ask(t, s, `{"kind":"call.received"}`)
+	if !strings.Contains(got.Content, "Amma") {
+		t.Errorf("the exact kind was not found:\n%s", got.Content)
+	}
+	if strings.Contains(got.Content, "call.made") {
+		t.Errorf("an exact kind matched its sibling:\n%s", got.Content)
+	}
+}

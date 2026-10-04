@@ -3338,6 +3338,45 @@ the room; a warning follows them onto the phone. Its own
 announcement kind, `warning`, audience `Everywhere`.
 
 
+## Told twice that he had had no calls, having had five
+
+Owner: *"I got a call from Kliffy, why is it not saying that."* Then,
+in the transcript: *"I didn't get a call from anyone today."* --
+*"That is correct, sir. You have not received any calls today."* He
+had had five that morning. Told to look again, it repeated itself
+word for word.
+
+The tool did exactly what it was told. The model asked for kind
+`call`, which is how a person says it, and only a kind ending in a
+dot counted as a family. `call` matched nothing, because what is
+stored is `call.received` and `call.made`.
+
+**The answer contradicted itself and nobody noticed:**
+
+    Nothing of kind call was reported today. The kinds that do
+    exist, with how many of each altogether, are: ... call.received
+    (13), call.made (6) ...
+
+The sentence says there are none and then counts nineteen. The model
+read the first half and believed it, which is the right thing to do
+with a tool result: the whole design rests on a tool being believed
+over what the model remembers.
+
+**A kind with no dot in it is a family now**, matched as a prefix
+rather than by appending one, so a sender that one day reports a bare
+`call` is found by the same question. A full dotted name is still
+exact, and there is a test for each half -- widening the first must
+not widen the second.
+
+**What makes this the worst kind of failure.** Not that it was
+wrong, but that it was confidently wrong about the person's own day,
+twice, and the evidence to correct it was inside the sentence it was
+reading. Everything else here is built on the assistant looking
+things up rather than remembering: *"saying a thing does not exist is
+a claim about what they have, and it needs a tool to have just run."*
+A tool that runs and returns nothing is worse than no tool at all.
+
+
 ## The narration was the wait it was covering
 
 Owner: *"calculate the full latency... I want ultra low latency."*
