@@ -172,6 +172,20 @@ var cases = []eval{
 	{Say: "what have I been up to today", Tool: []string{"event_recent"}},
 	{Say: "have I been out at all today", Tool: []string{"place_visits", "event_recent"}},
 
+	// How something of theirs stands now. The devices report a reading
+	// whenever it changes, so the newest one is the present value --
+	// but the description was written about the past, and asked what
+	// his battery was the assistant said it had no tool for it. It had
+	// twenty-two readings from that morning.
+	//
+	// The same failure as the call log above, one kind later. Which is
+	// the point: the description cannot list what arrives next, so it
+	// has to say that, and say never to answer from it that a tool is
+	// missing.
+	{Say: "how much battery do I have left", Tool: []string{"event_recent"}},
+	{Say: "do you know what my battery is right now", Tool: []string{"event_recent"}},
+	{Say: "is my phone charged", Tool: []string{"event_recent"}},
+
 	// Lists. Every write needs an identifier that only a read can give,
 	// so reading first is as right an answer as writing.
 	{Say: "what is on my to-do list", Tool: []string{"task_list", "task_lists"}},

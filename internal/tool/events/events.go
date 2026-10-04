@@ -107,17 +107,22 @@ func recent(reader Reader, clock Clock) tool.Tool {
 		Name:   "event_recent",
 		Domain: "event",
 		Lists:  true,
-		Purpose: "Read what the person's own devices reported about them: who called, where they " +
-			"were, what they connected to.",
+		Purpose: "Read what the person's own devices report about them: who called, where they " +
+			"were, what they connected to, and how anything of theirs stands right now.",
 		UseWhen: "A question about what the person has actually been doing rather than what they have " +
 			"told you: who they spoke to or missed a call from, what their day looked like, what " +
 			"else has been going on, when something last happened. Where they were and how long " +
 			"for is place_visits, which reads the same days more plainly; come here for everything " +
 			"else, and for the day as a whole even when part of the answer is places. " +
-			"Their phone, their watch and their laptop report here and more kinds " +
-			"arrive without this description changing, so when you are unsure whether something " +
-			"about their own day was reported, call this once without a kind and read what it lists " +
-			"rather than telling them there is no record of it. Also when you are about to remark " +
+			"Also a question in the present tense about something of theirs -- how much is left, " +
+			"what it is doing, what it is connected to, whether it is on. A device reports a " +
+			"reading whenever it changes, so the newest event of that kind is how it stands now: " +
+			"ask for that kind with a limit of 1. " +
+			"Their phone, their watch and their laptop report here and new kinds " +
+			"arrive without this description changing, so you cannot know from this text what is " +
+			"in here. Never answer that you have no tool for something about their own phone, " +
+			"watch, laptop or day: call this once without a kind, read the kinds it lists, and " +
+			"ask again by name. Also when you are about to remark " +
 			"on their day unprompted and need to know what it was.",
 		Avoid: "Not for things they asked you to remember, which are memories, and not for what is " +
 			"coming, which is the calendar and the reminders. Do not answer from the conversation: " +
@@ -134,10 +139,11 @@ func recent(reader Reader, clock Clock) tool.Tool {
 						"know which kinds exist: the answer lists them. A few kinds are too " +
 						"many to hand over unasked -- a row a song, a position every five " +
 						"minutes -- and are left out until you name one, so ask for the kind " +
-						"by name when the question is about what is in it. What is playing now " +
-						"is music.state with a limit of 1: the newest one says which track and " +
-						"whether it is playing, and a newest one that is not playing means " +
-						"nothing is.",
+						"by name when the question is about what is in it. A limit of 1 with " +
+						"a kind gives how that thing stands now, because a device reports it " +
+						"again whenever it changes. What is playing now is music.state that " +
+						"way: the newest one says which track and whether it is playing, and a " +
+						"newest one that is not playing means nothing is.",
 				},
 				"days": {
 					Type: "integer",
@@ -172,6 +178,7 @@ func recent(reader Reader, clock Clock) tool.Tool {
 			{Ask: "what was I listening to this afternoon",
 				Args: `{"kind":"music.state","saying":"looking at what you played"}`},
 			{Ask: "when did I last leave the office", Args: `{"kind":"wifi.left","days":30}`},
+			{Ask: "what is my phone on now", Args: `{"saying":"checking what your phone says"}`},
 		},
 		Run: func(ctx context.Context, in tool.Invocation) tool.Result {
 			var args struct {
