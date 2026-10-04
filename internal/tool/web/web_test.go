@@ -21,15 +21,23 @@ type searcher struct {
 	limit int
 	days  int
 	news  bool
+	read  []string
 }
 
 func (s *searcher) Where() string { return "test" }
+func (s *searcher) Read(_ context.Context, urls []string) ([]search.Page, error) {
+	s.read = urls
+	if s.err != nil {
+		return nil, s.err
+	}
+	return []search.Page{{URL: urls[0], Title: "A page", Text: "what it says"}}, nil
+}
 func (s *searcher) Search(_ context.Context, ask search.Ask) ([]search.Result, error) {
 	s.query, s.limit, s.days, s.news = ask.Query, ask.Limit, ask.Days, ask.News
 	return s.found, s.err
 }
 
-func ask(t *testing.T, s search.Searcher, args string) tool.Result {
+func ask(t *testing.T, s search.Service, args string) tool.Result {
 	t.Helper()
 	return webtool.Tools(s)[0].Run(context.Background(), tool.Invocation{
 		Caller: tool.Caller{UserID: "usr_1"},
@@ -132,5 +140,57 @@ func TestNoFreshnessIsAnyTime(t *testing.T) {
 	ask(t, s, `{"query":"what is a transformer"}`)
 	if s.days != 0 || s.news {
 		t.Errorf("an ordinary question was narrowed: days=%d news=%v", s.days, s.news)
+	}
+}
+
+// read : The reading tool rather than the searching one.
+func read(t *testing.T, s search.Service, args string) tool.Result {
+	t.Helper()
+	for _, x := range webtool.Tools(s) {
+		if x.Name == "web_read" {
+			return x.Run(context.Background(), tool.Invocation{
+				Caller: tool.Caller{UserID: "usr_1"},
+				Args:   json.RawMessage(args),
+			})
+		}
+	}
+	t.Fatal("web_read is not registered")
+	return tool.Result{}
+}
+
+// TestItReadsWhatItWasGiven : The addresses come from a search, and
+// go through as they came.
+func TestItReadsWhatItWasGiven(t *testing.T) {
+	s := &searcher{}
+	got := read(t, s, `{"urls":["https://x.test/a"]}`)
+	if len(s.read) != 1 || s.read[0] != "https://x.test/a" {
+		t.Fatalf("read %v", s.read)
+	}
+	if !strings.Contains(got.Content, "what it says") {
+		t.Errorf("the page did not reach the model: %s", got.Content)
+	}
+}
+
+// TestItWillNotReadAnInventedAddress : Anything that is not a URL a
+// search can have given is the model having made one up, and
+// fetching an invented address is a round trip to nowhere.
+func TestItWillNotReadAnInventedAddress(t *testing.T) {
+	s := &searcher{}
+	got := read(t, s, `{"urls":["the BBC article about it","example.com"]}`)
+	if len(s.read) != 0 {
+		t.Errorf("an invented address was fetched: %v", s.read)
+	}
+	if got.Outcome != conversation.OutcomeFailed {
+		t.Errorf("it pretended to read: %s", got.Content)
+	}
+}
+
+// TestOnlyAFewPagesAreRead : Reading is the dear act -- seconds
+// each, and a credit each on the service that counts them.
+func TestOnlyAFewPagesAreRead(t *testing.T) {
+	s := &searcher{}
+	read(t, s, `{"urls":["https://x.test/1","https://x.test/2","https://x.test/3","https://x.test/4","https://x.test/5"]}`)
+	if len(s.read) != webtool.Pages {
+		t.Errorf("read %d pages, want at most %d", len(s.read), webtool.Pages)
 	}
 }

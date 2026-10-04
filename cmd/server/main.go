@@ -679,7 +679,7 @@ func mailboxOf(link *google.Link) mailtool.Mailbox {
 // about Google: a typed nil satisfies the interface and then fails
 // on every call, and the honest answer on a server with no keys is
 // that it cannot reach the web.
-func searchingFast(cfg config.Config, logger *slog.Logger) search.Searcher {
+func searchingFast(cfg config.Config, logger *slog.Logger) search.Service {
 	// TinyFish first, which is the opposite of how this was built.
 	// The published benchmark had Firecrawl at 510ms against 2.62s,
 	// and measured from this machine over nine real searches it is

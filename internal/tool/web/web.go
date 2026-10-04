@@ -25,11 +25,26 @@ import (
 const (
 	Default = 5
 	Most    = 10
+
+	// Pages, Longest : How many pages may be read at once, and how
+	// much of each reaches the model.
+	//
+	// Three, because reading is the dear act -- seconds each, and a
+	// credit each on the service that counts them -- and because an
+	// answer built from three sources is already better founded than
+	// most. Six thousand characters is perhaps a thousand words: the
+	// part of a page that answers something is almost always near
+	// the top, and the rest spends a turn nobody has.
+	Pages   = 3
+	Longest = 6000
 )
 
-// Tools : What the assistant can look up.
-func Tools(searcher search.Searcher) []tool.Tool {
-	return []tool.Tool{lookUp(searcher)}
+// Tools : What the assistant can look up, and read.
+func Tools(service search.Service) []tool.Tool {
+	if service == nil {
+		return []tool.Tool{lookUp(nil), readPage(nil)}
+	}
+	return []tool.Tool{lookUp(service), readPage(service)}
 }
 
 // lookUp : Search the web.
@@ -136,6 +151,77 @@ func lookUp(searcher search.Searcher) tool.Tool {
 				return tool.Failed(err.Error())
 			}
 			return tool.OK(search.Describe(query, found))
+		},
+	}
+}
+
+// readPage : Read what is actually on a page.
+func readPage(reader search.Reader) tool.Tool {
+	return tool.Tool{
+		Name:   "web_read",
+		Domain: "web",
+		Purpose: "Read what is actually on a web page, when the summary from a search was not " +
+			"enough to answer with.",
+		UseWhen: "A search gave you a result that plainly has the answer and a summary too short " +
+			"to take it from: a figure, a time, a list, a step, the wording of something. " +
+			"Read the page rather than guess what the summary was abbreviating. " +
+			"Also when they give you a link and ask what it says.",
+		Avoid: "Not instead of searching -- you need a result before you have anything to read, " +
+			"and you cannot invent a URL. " +
+			"Not when the summaries already answered it: reading costs several seconds each " +
+			"and they are waiting through all of them. " +
+			"Not to check something you have already answered, and not on every result of a " +
+			"search as a matter of course -- one or two that look right, not the page.",
+		Channels: []chat.Channel{chat.ChannelVoice, chat.ChannelDirect},
+		Params: tool.Schema{
+			Required: []string{"urls"},
+			Properties: map[string]tool.Property{
+				"urls": {
+					Type:  "array",
+					Items: &tool.Property{Type: "string"},
+					Description: "The addresses to read, exactly as a search gave them. " +
+						"One or two is usually right and three is the most that will be " +
+						"read; the rest are dropped.",
+				},
+			},
+		},
+		Examples: []tool.Example{
+			{Ask: "what does that article actually say",
+				Args: `{"urls":["https://example.com/a"],"saying":"reading it"}`},
+		},
+		Run: func(ctx context.Context, in tool.Invocation) tool.Result {
+			var args struct {
+				URLs []string `json:"urls"`
+			}
+			_ = json.Unmarshal(in.Args, &args)
+
+			if reader == nil {
+				return tool.Failed("Nothing on this server can reach the web.")
+			}
+
+			wanted := make([]string, 0, Pages)
+			for _, u := range args.URLs {
+				u = strings.TrimSpace(u)
+				// Only what a search can have given: anything else is
+				// the model having made a URL up, and fetching an
+				// invented address is a round trip to nowhere.
+				if !strings.HasPrefix(u, "http://") && !strings.HasPrefix(u, "https://") {
+					continue
+				}
+				wanted = append(wanted, u)
+				if len(wanted) >= Pages {
+					break
+				}
+			}
+			if len(wanted) == 0 {
+				return tool.Failed("Reading a page needs its address, as a search gave it.")
+			}
+
+			pages, err := reader.Read(ctx, wanted)
+			if err != nil {
+				return tool.Failed(err.Error())
+			}
+			return tool.OK(search.Said(pages, Longest))
 		},
 	}
 }

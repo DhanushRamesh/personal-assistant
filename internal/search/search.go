@@ -1,4 +1,5 @@
-// Package search : Looks things up on the web.
+// Package search : Reaches the web -- looking things up, and
+// reading what was found.
 //
 // Two services rather than one, because the two things this is for
 // want opposite trades. Owner: *"Firecrawl if I ask a question in
@@ -61,6 +62,23 @@ type Ask struct {
 	News bool
 }
 
+// Page : One page, read.
+type Page struct {
+	// URL : Where it was asked for, and where it ended up after any
+	// redirect. Both, because a search result that redirects to a
+	// paywall or a login is worth being able to see.
+	URL   string
+	Final string
+	// Title : What the page calls itself.
+	Title string
+	// Text : The readable part, with the navigation and the adverts
+	// taken out by whichever service read it.
+	Text string
+	// Trouble : Why this one could not be read, when it could not.
+	// One page failing must not lose the others.
+	Trouble string
+}
+
 // Searcher : Something that can look the web up.
 type Searcher interface {
 	// Search : What the web says about this, best first.
@@ -68,6 +86,20 @@ type Searcher interface {
 	// Where : Which service this is, for the log and for a refusal
 	// that has to name what failed.
 	Where() string
+}
+
+// Reader : Something that can read a page.
+type Reader interface {
+	// Read : What these pages say.
+	Read(ctx context.Context, urls []string) ([]Page, error)
+	// Where : Which service this is.
+	Where() string
+}
+
+// Service : Something that can do both, which both of ours can.
+type Service interface {
+	Searcher
+	Reader
 }
 
 // ErrSpent : The service will not answer again until its allowance
@@ -90,9 +122,9 @@ const DefaultRested = time.Hour
 // an allowance that something waiting on an answer may need.
 type Pair struct {
 	// Quick : Asked first. Nil leaves only Spare.
-	Quick Searcher
+	Quick Service
 	// Spare : Asked when the quick one cannot answer. Required.
-	Spare Searcher
+	Spare Service
 	// Within : How long the quick one gets before the spare is asked
 	// instead. Zero gives it everything, which is wrong in a turn:
 	// a quick service that hangs would spend the whole budget and
@@ -124,11 +156,31 @@ func (p *Pair) Where() string {
 
 // Search : The quick one if it can, the spare if it cannot.
 func (p *Pair) Search(ctx context.Context, ask Ask) ([]Result, error) {
+	return fall(p, ctx, func(ctx context.Context, s Service) ([]Result, error) {
+		return s.Search(ctx, ask)
+	})
+}
+
+// Read : The same, for pages.
+func (p *Pair) Read(ctx context.Context, urls []string) ([]Page, error) {
+	return fall(p, ctx, func(ctx context.Context, s Service) ([]Page, error) {
+		return s.Read(ctx, urls)
+	})
+}
+
+// fall : One thing asked of the quick service, and of the spare
+// when the quick one cannot.
+//
+// Generic so that searching and reading share it. The four things
+// it does are each the result of something that went wrong without
+// them, and none of them is worth writing twice.
+func fall[T any](p *Pair, ctx context.Context, do func(context.Context, Service) (T, error)) (T, error) {
+	var none T
 	if p == nil || p.Spare == nil {
-		return nil, errors.New("search: nothing is configured to look things up")
+		return none, errors.New("search: nothing is configured to reach the web")
 	}
 	if p.Quick == nil || p.resting() {
-		return p.Spare.Search(ctx, ask)
+		return do(ctx, p.Spare)
 	}
 
 	quick := ctx
@@ -138,26 +190,26 @@ func (p *Pair) Search(ctx context.Context, ask Ask) ([]Result, error) {
 		defer stop()
 	}
 
-	found, err := p.Quick.Search(quick, ask)
+	got, err := do(quick, p.Quick)
 	if err == nil {
-		return found, nil
+		return got, nil
 	}
 	// The turn itself ending is not the quick one failing, and
 	// asking the spare would only fail again more slowly.
 	if ctx.Err() != nil {
-		return nil, err
+		return none, err
 	}
 
 	if errors.Is(err, ErrSpent) {
 		p.rest()
 	}
-	p.note(ctx, "falling back to the other search service",
+	p.note(ctx, "falling back to the other web service",
 		slog.String("quick", p.Quick.Where()),
 		slog.String("spare", p.Spare.Where()),
 		slog.Bool("spent", errors.Is(err, ErrSpent)),
 		slog.Any("error", err))
 
-	return p.Spare.Search(ctx, ask)
+	return do(ctx, p.Spare)
 }
 
 // resting : Whether the quick one is being left alone.
@@ -220,6 +272,50 @@ func Describe(query string, found []Result) string {
 			where += ", " + when
 		}
 		b.WriteString("   -- " + where + "\n")
+	}
+	return strings.TrimRight(b.String(), "\n")
+}
+
+// Said : What a page says, as the model reads it.
+//
+// Truncated, and loudly. A page can be a hundred thousand words and
+// a turn has thirty seconds; handing the whole of one over spends
+// the budget on text nobody asked for and buries the part that
+// answered the question. Where it was cut is said, so the model
+// knows it is reading part of something rather than all of it.
+func Said(pages []Page, most int) string {
+	if len(pages) == 0 {
+		return "Nothing could be read."
+	}
+	if most <= 0 {
+		most = 6000
+	}
+
+	var b strings.Builder
+	for i, p := range pages {
+		if i > 0 {
+			b.WriteString("\n")
+		}
+		where := strings.TrimSpace(p.Final)
+		if where == "" {
+			where = strings.TrimSpace(p.URL)
+		}
+		if trouble := strings.TrimSpace(p.Trouble); trouble != "" {
+			fmt.Fprintf(&b, "%s could not be read: %s\n", where, trouble)
+			continue
+		}
+
+		fmt.Fprintf(&b, "%s -- %s\n", strings.TrimSpace(p.Title), where)
+		text := strings.TrimSpace(p.Text)
+		if text == "" {
+			b.WriteString("(the page had no readable text)\n")
+			continue
+		}
+		if len([]rune(text)) > most {
+			text = string([]rune(text)[:most]) +
+				"\n[cut here: the page goes on, and this is the first part of it]"
+		}
+		b.WriteString(text + "\n")
 	}
 	return strings.TrimRight(b.String(), "\n")
 }

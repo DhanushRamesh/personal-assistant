@@ -8779,6 +8779,46 @@ contract is the cases; the prose is only how it is explained.
 The suite is **92 of 92**.
 
 
+## Reading a page is a second tool, and a dearer one
+
+Searching gives summaries; sometimes the answer is a figure, a
+time, a list or the wording of something, and the summary was
+abbreviating exactly that. So `web_read` takes addresses a search
+gave and returns what the pages say.
+
+**One fallback, not two.** `Pair` now serves both, through a
+generic `fall`. The four things it does -- rest a spent service,
+give the quick one a slice of the turn rather than all of it, treat
+the turn ending as not a failure, and log every fallback -- are
+each the result of something that went wrong, and none is worth
+writing twice.
+
+**Three pages, six thousand characters each.** Reading is the dear
+act: seconds a page, and on Firecrawl a credit a page. Three
+sources is already better founded than most answers, and the part
+of a page that answers something is almost always near the top. A
+page that is cut **says it was cut**, or the model reads half a
+sentence as the whole of something.
+
+**An address that no search produced is not fetched.** Anything
+without `http://` or `https://` is the model having invented a URL,
+and fetching an invented address is a round trip to nowhere.
+
+**One page failing does not lose the others.** Firecrawl reads one
+URL per request, so a login wall on the second would otherwise take
+the first and third with it; it is carried as trouble beside the
+pages that worked. A spent allowance is the exception -- that is
+about the account rather than the page, so it stops the lot and
+lets the caller fall back.
+
+Measured end to end against the real services: BBC Weather read in
+**2.74s**, 2,654 characters of text with the navigation stripped.
+TinyFish takes all the URLs in one request and allows a hundred and
+fifty a minute, so reading three results of a search is one call;
+Firecrawl takes one at a time and ten a minute, which is why they
+are read in sequence rather than at once.
+
+
 ## 12. Maintaining this file
 
 When the owner states a preference, makes a decision, or corrects something,

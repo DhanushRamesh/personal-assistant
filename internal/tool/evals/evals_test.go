@@ -239,6 +239,12 @@ var cases = []eval{
 	{Say: "who is the chief minister of Tamil Nadu", Tool: []string{"web_search"}},
 	{Say: "how much is a litre of petrol", Tool: []string{"web_search"}},
 
+	// Reading a page needs a page first: the address comes from a
+	// search and cannot be invented.
+	{Say: "what does that article actually say", Tool: []string{"web_read"},
+		After: "The BBC has a piece on it: https://www.bbc.com/news/example -- " +
+			"the summary says the decision was taken on Tuesday."},
+
 	// And the over-reach it could buy. Everything above is about the
 	// world; everything here is about him, and the web knows none of
 	// it.
@@ -555,3 +561,4 @@ func (quietWeb) Where() string { return "test" }
 func (quietWeb) Search(context.Context, search.Ask) ([]search.Result, error) {
 	return nil, nil
 }
+func (quietWeb) Read(context.Context, []string) ([]search.Page, error) { return nil, nil }

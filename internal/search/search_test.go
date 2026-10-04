@@ -22,6 +22,20 @@ type fake struct {
 }
 
 func (f *fake) Where() string { return f.where }
+func (f *fake) Read(ctx context.Context, urls []string) ([]search.Page, error) {
+	f.asked++
+	if f.slow > 0 {
+		select {
+		case <-ctx.Done():
+			return nil, ctx.Err()
+		case <-time.After(f.slow):
+		}
+	}
+	if f.err != nil {
+		return nil, f.err
+	}
+	return []search.Page{{URL: urls[0], Title: "a", Text: "some words"}}, nil
+}
 func (f *fake) Search(ctx context.Context, _ search.Ask) ([]search.Result, error) {
 	f.asked++
 	if f.slow > 0 {
@@ -174,5 +188,58 @@ func TestWhatIsFoundSaysWhereItCameFrom(t *testing.T) {
 	}
 	if !strings.Contains(said, "do not read a URL aloud") {
 		t.Error("nothing warns against reading a URL out")
+	}
+}
+
+// TestReadingFallsBackTheSameWay : The fallback is one piece of
+// code for both, because the four things it does -- resting a spent
+// service, giving the quick one a slice, not mistaking the turn
+// ending for a failure, and saying when it fell back -- are each
+// the result of something going wrong, and none is worth writing
+// twice.
+func TestReadingFallsBackTheSameWay(t *testing.T) {
+	quick := &fake{where: "firecrawl", err: search.ErrSpent}
+	spare := one("tinyfish")
+	p := pair(quick, spare)
+
+	got, err := p.Read(context.Background(), []string{"https://x.test/a"})
+	if err != nil || len(got) != 1 {
+		t.Fatalf("the fallback did not read: %v", err)
+	}
+	// And the spent one is left alone for reading as for searching.
+	p.Search(context.Background(), search.Ask{Query: "q", Limit: 3})
+	if quick.asked != 1 {
+		t.Errorf("the spent service was asked %d times, want 1", quick.asked)
+	}
+}
+
+// TestAPageIsCutAndSaidToBeCut : A page can be a hundred thousand
+// words and a turn is thirty seconds. Handing the whole of one over
+// spends the budget on text nobody asked for; cutting it silently
+// lets the model read half a sentence as the whole of something.
+func TestAPageIsCutAndSaidToBeCut(t *testing.T) {
+	long := strings.Repeat("word ", 4000)
+	said := search.Said([]search.Page{{URL: "https://x.test/a", Title: "A", Text: long}}, 100)
+	if len([]rune(said)) > 400 {
+		t.Errorf("the page was not cut: %d characters", len([]rune(said)))
+	}
+	if !strings.Contains(said, "cut here") {
+		t.Errorf("it was cut without saying so: %q", said[len(said)-80:])
+	}
+}
+
+// TestOnePageFailingDoesNotLoseTheOthers : Two of three working is
+// an answer. Losing all three because one was behind a login is
+// not.
+func TestOnePageFailingDoesNotLoseTheOthers(t *testing.T) {
+	said := search.Said([]search.Page{
+		{URL: "https://x.test/a", Title: "A", Text: "it says this"},
+		{URL: "https://x.test/b", Trouble: "behind a login"},
+	}, 1000)
+	if !strings.Contains(said, "it says this") {
+		t.Error("the page that worked was lost")
+	}
+	if !strings.Contains(said, "behind a login") {
+		t.Error("the page that failed was not explained")
 	}
 }

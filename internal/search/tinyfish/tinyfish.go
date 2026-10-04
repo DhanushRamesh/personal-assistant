@@ -11,6 +11,7 @@
 package tinyfish
 
 import (
+	"bytes"
 	"context"
 	"encoding/json"
 	"fmt"
@@ -140,3 +141,77 @@ func (c *Client) Search(ctx context.Context, ask search.Ask) ([]search.Result, e
 // at two seconds on a service measured at 2.62 never searches at
 // all.
 const Within = 30 * time.Second
+
+// FetchURL : Where pages are read.
+const FetchURL = "https://api.fetch.tinyfish.ai"
+
+// page : What the fetch endpoint sends back for one URL.
+type page struct {
+	URL      string `json:"url"`
+	FinalURL string `json:"final_url"`
+	Title    string `json:"title"`
+	Text     string `json:"text"`
+	Error    string `json:"error"`
+}
+
+// Read : What these pages say.
+//
+// All of them in one call, which is what the endpoint takes and why
+// it allows a hundred and fifty a minute: reading three results of
+// a search is one request rather than three.
+func (c *Client) Read(ctx context.Context, urls []string) ([]search.Page, error) {
+	if c == nil {
+		return nil, fmt.Errorf("tinyfish: no key")
+	}
+	if len(urls) == 0 {
+		return nil, fmt.Errorf("tinyfish: nothing to read")
+	}
+
+	body, err := json.Marshal(map[string]any{"urls": urls})
+	if err != nil {
+		return nil, fmt.Errorf("tinyfish: writing the request: %w", err)
+	}
+
+	req, err := http.NewRequestWithContext(ctx, http.MethodPost, FetchURL, bytes.NewReader(body))
+	if err != nil {
+		return nil, fmt.Errorf("tinyfish: building the request: %w", err)
+	}
+	req.Header.Set("X-API-Key", c.key)
+	req.Header.Set("Content-Type", "application/json")
+
+	resp, err := c.http.Do(req)
+	if err != nil {
+		return nil, fmt.Errorf("tinyfish: reading the pages: %w", err)
+	}
+	defer resp.Body.Close()
+
+	switch resp.StatusCode {
+	case http.StatusOK:
+	case http.StatusTooManyRequests:
+		return nil, fmt.Errorf("tinyfish: a hundred and fifty pages a minute was exceeded (HTTP 429)")
+	default:
+		return nil, fmt.Errorf("tinyfish: the pages were refused (HTTP %d)", resp.StatusCode)
+	}
+
+	var said struct {
+		Results []page `json:"results"`
+		Error   *struct {
+			Message string `json:"message"`
+		} `json:"error"`
+	}
+	if err := json.NewDecoder(resp.Body).Decode(&said); err != nil {
+		return nil, fmt.Errorf("tinyfish: reading the answer: %w", err)
+	}
+	if said.Error != nil {
+		return nil, fmt.Errorf("tinyfish: %s", said.Error.Message)
+	}
+
+	out := make([]search.Page, 0, len(said.Results))
+	for _, p := range said.Results {
+		out = append(out, search.Page{
+			URL: p.URL, Final: p.FinalURL, Title: p.Title,
+			Text: p.Text, Trouble: strings.TrimSpace(p.Error),
+		})
+	}
+	return out, nil
+}

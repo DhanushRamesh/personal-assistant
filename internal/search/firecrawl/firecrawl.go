@@ -10,6 +10,7 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"net/http"
 	"strings"
@@ -185,4 +186,96 @@ func within(days int) string {
 	default:
 		return "qdr:y"
 	}
+}
+
+// ScrapeURL : Where one page is read.
+const ScrapeURL = "https://api.firecrawl.dev/v2/scrape"
+
+// Read : What these pages say.
+//
+// One request per page, because that is what this endpoint takes,
+// and one credit per page with it. Sequential rather than at once:
+// the free tier allows ten a minute and nothing here is reading
+// more than a handful, so parallelism would buy a rate-limit
+// refusal rather than speed.
+//
+// A page that cannot be read is carried as trouble rather than
+// returned as an error. Two of three working is an answer; losing
+// all three because one was behind a login is not.
+func (c *Client) Read(ctx context.Context, urls []string) ([]search.Page, error) {
+	if c == nil {
+		return nil, fmt.Errorf("firecrawl: no key")
+	}
+	if len(urls) == 0 {
+		return nil, fmt.Errorf("firecrawl: nothing to read")
+	}
+
+	out := make([]search.Page, 0, len(urls))
+	for _, u := range urls {
+		got, err := c.one(ctx, u)
+		if err != nil {
+			// A spent allowance is about the account, not this page,
+			// so it stops the lot and lets the caller fall back.
+			if errors.Is(err, search.ErrSpent) || ctx.Err() != nil {
+				return nil, err
+			}
+			out = append(out, search.Page{URL: u, Trouble: err.Error()})
+			continue
+		}
+		out = append(out, got)
+	}
+	return out, nil
+}
+
+// one : A single page.
+func (c *Client) one(ctx context.Context, url string) (search.Page, error) {
+	body, err := json.Marshal(map[string]any{"url": url, "formats": []string{"markdown"}})
+	if err != nil {
+		return search.Page{}, fmt.Errorf("firecrawl: writing the request: %w", err)
+	}
+
+	req, err := http.NewRequestWithContext(ctx, http.MethodPost, ScrapeURL, bytes.NewReader(body))
+	if err != nil {
+		return search.Page{}, fmt.Errorf("firecrawl: building the request: %w", err)
+	}
+	req.Header.Set("Authorization", "Bearer "+c.key)
+	req.Header.Set("Content-Type", "application/json")
+
+	resp, err := c.http.Do(req)
+	if err != nil {
+		return search.Page{}, fmt.Errorf("firecrawl: reading the page: %w", err)
+	}
+	defer resp.Body.Close()
+
+	switch resp.StatusCode {
+	case http.StatusOK:
+	case http.StatusPaymentRequired:
+		return search.Page{}, fmt.Errorf("firecrawl: %w (HTTP 402)", search.ErrSpent)
+	default:
+		return search.Page{}, fmt.Errorf("the page was refused (HTTP %d)", resp.StatusCode)
+	}
+
+	var said struct {
+		Success bool   `json:"success"`
+		Error   string `json:"error"`
+		Data    struct {
+			Markdown string `json:"markdown"`
+			Metadata struct {
+				Title      string `json:"title"`
+				SourceURL  string `json:"sourceURL"`
+				StatusCode int    `json:"statusCode"`
+			} `json:"metadata"`
+		} `json:"data"`
+	}
+	if err := json.NewDecoder(resp.Body).Decode(&said); err != nil {
+		return search.Page{}, fmt.Errorf("firecrawl: reading the answer: %w", err)
+	}
+	if said.Error != "" {
+		return search.Page{}, fmt.Errorf("firecrawl: %s", said.Error)
+	}
+
+	return search.Page{
+		URL: url, Final: said.Data.Metadata.SourceURL,
+		Title: said.Data.Metadata.Title, Text: said.Data.Markdown,
+	}, nil
 }
