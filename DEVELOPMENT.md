@@ -3332,10 +3332,11 @@ And the model's refusal, which is the whole point of asking a model
 and is exactly wrong here. A model weighing whether a dying battery
 is worth mentioning is a model that will one day decide it is not.
 
-**What it does not bypass is there being nobody to tell** -- it
-changes where it goes instead. A remark is company and belongs in
-the room; a warning follows them onto the phone. Its own
-announcement kind, `warning`, audience `Everywhere`.
+**What it does not bypass is there being nobody to tell.** It used
+to: a remark was company and belonged in the room, while a warning
+followed them onto the phone. That was reversed later the same week
+-- see *An immediate announcement is its own mechanism* -- and the
+kind is now `immediate`, audience `Asked`.
 
 
 ## Told twice that he had had no calls, having had five
@@ -8070,6 +8071,52 @@ battery do I have left"*; the new wording 74 of 74. Only one of the
 three new cases failed before, which is the usual shape of these: the
 wording was not hopeless, it was unreliable, and unreliable is what
 produces one flat denial in the middle of a day that worked.
+
+
+## The phone had to be told what a hundred means
+
+The battery reached a hundred per cent and nothing was said. Two
+causes, found together.
+
+The first was the audience bug fixed an hour earlier: `battery.full`
+*was* found at 12:28 and allowed, and then refused on the last step
+-- `announcement: not something said unasked: warning`. It was
+re-found every thirty seconds for five minutes and failed
+identically each time.
+
+The second was on the phone. The *Battery Changed* task marks an
+event urgent from `If %BATT ~R ^(5|10|15|20|25)$` -- the low
+thresholds only. The high end was left to Android's *Battery Full*
+broadcast, **which fires once per charge cycle**. It fired at 12:28
+and did not fire again when the level touched a hundred at 13:37,
+because the phone had never dropped far enough to re-arm it.
+
+So the owner's own example could not have worked: *"if 100 is
+reached it announces, I plug out, it becomes 99 in five seconds, I
+plug back in and it becomes 100 in ten seconds -- it has to announce
+again."* Only the level reading re-fires on that.
+
+**Two edits on the phone, both where the knowledge belongs.** The
+regex gained `|100`, so the level reaching a hundred is marked. And
+*Battery Full*'s payload went to `"urgent":"false"` -- it still
+arrives and is still history, it just no longer insists, because
+otherwise one charge produces two announcements eighteen minutes
+apart. Nothing in the server learned what a battery is.
+
+Verified end to end by running the task against a real hundred per
+cent:
+
+    14:14:23  events taken from a device  stored=1
+    14:14:34  something might be worth saying  first="battery.level 100"  because=immediate
+    said      "Your phone is fully charged, sir -- you may want to unplug it."
+
+**One thing to watch.** Running the task by hand left its line in
+`jarvis-sending.jsonl` undelivered until the next flush -- the move
+to the sending file succeeded and the post did not. It recovered on
+its own when the flush ran again, which is what the pending check at
+the top of *Jarvis Flush* is for, so this is the design working
+rather than a fault. Worth remembering when a hand-run event seems
+to vanish.
 
 
 ## 12. Maintaining this file
