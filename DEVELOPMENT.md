@@ -8811,6 +8811,21 @@ pages that worked. A spent allowance is the exception -- that is
 about the account rather than the page, so it stops the lot and
 lets the caller fall back.
 
+**And the eval case was wrong three times before the tool was.**
+The first put the answer inside the summary -- *"the decision was
+taken on Tuesday"* -- and then asked what the article said, which a
+model reasonably treats as already answered. Posed so the summary
+*cannot* answer it (a link to a timetable, asked for the timings),
+it passes three times out of three.
+
+That is the third case in this file whose right answer was
+arguable, after "ok got it" with nothing in front of it and "I have
+already bought the present" against a warning naming two things.
+The pattern is the same each time: **a case that tests a judgement
+has to make the judgement forced**, or it measures the model's
+guess about an ambiguous situation rather than the thing being
+built. A failing case is a question about the case first.
+
 Measured end to end against the real services: BBC Weather read in
 **2.74s**, 2,654 characters of text with the navigation stripped.
 TinyFish takes all the URLs in one request and allows a hundred and

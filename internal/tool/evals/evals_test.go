@@ -241,9 +241,15 @@ var cases = []eval{
 
 	// Reading a page needs a page first: the address comes from a
 	// search and cannot be invented.
-	{Say: "what does that article actually say", Tool: []string{"web_read"},
-		After: "The BBC has a piece on it: https://www.bbc.com/news/example -- " +
-			"the summary says the decision was taken on Tuesday."},
+	//
+	// Posed so the summary cannot answer it. The first attempt put
+	// the answer in the summary -- "the decision was taken on
+	// Tuesday" -- and then asked what the article said, which a
+	// model reasonably takes as already answered. That was the
+	// case being wrong, not the tool.
+	{Say: "what are the actual timings on that page", Tool: []string{"web_read"},
+		After: "The metro's own page has the full timetable: " +
+			"https://chennaimetrorail.org/train-timings/"},
 
 	// And the over-reach it could buy. Everything above is about the
 	// world; everything here is about him, and the web knows none of
