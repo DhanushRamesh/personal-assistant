@@ -215,7 +215,13 @@ var cases = []eval{
 	{Say: "cancel that, I don't need telling again", Tool: []string{"coming_settled"},
 		After: "Attending Vignesh's wedding is in 3 days, at Tuesday, 6:30 pm. " +
 			"A present to buy and something to wear."},
-	{Say: "I have already bought the present", Tool: []string{"coming_settled"},
+	// A whole acknowledgement, not half of one. "I have already
+	// bought the present" was tried here and dropped: the warning
+	// named two things to do, so settling the lot on one of them
+	// would silence the shirt as well. Reaching for the diary there
+	// is not obviously wrong, and a case whose right answer is
+	// arguable measures nothing.
+	{Say: "I have sorted all that out already", Tool: []string{"coming_settled"},
 		After: "Attending Vignesh's wedding is in 3 days, at Tuesday, 6:30 pm. " +
 			"A present to buy and something to wear."},
 

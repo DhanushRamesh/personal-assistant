@@ -8482,6 +8482,23 @@ called a tool for it would be guessing. The suite now carries
 `After`: one assistant turn said just before, so an answer has
 something to answer.
 
+**And a third case was simply wrong.** *"I have already bought the
+present"* was failing against a warning that said *"a present to buy
+and something to wear"*. It is half an acknowledgement: settling the
+whole warning on it would silence the shirt as well, and reaching
+for the diary instead is not obviously the wrong move. A case whose
+right answer is arguable measures nothing, so it was replaced with
+*"I have sorted all that out already"*, which passes three times out
+of three.
+
+That leaves a real question open rather than closed: **what should
+half an acknowledgement do?** Today it does nothing, and the warning
+comes again on the day with both things in it. Telling somebody to
+buy a present they have bought is the fault this whole section is
+about, one step smaller.
+
+The suite is **82 of 82**.
+
 
 ## 12. Maintaining this file
 
