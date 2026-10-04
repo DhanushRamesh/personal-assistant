@@ -313,7 +313,7 @@ func TestMergedJoinsOnePlaceBrokenByDistance(t *testing.T) {
 		// The far end of the same building, five minutes later.
 		named("Phoenix Marketcity", start.Add(45*time.Minute), start.Add(80*time.Minute), 12.9940, 80.2210),
 	}
-	got := event.Merged(in)
+	got := event.Merged(in, nil)
 	if len(got) != 1 {
 		t.Fatalf("expected one visit, got %d", len(got))
 	}
@@ -337,7 +337,7 @@ func TestMergedKeepsTwoVisitsApart(t *testing.T) {
 		named("the office", start, start.Add(3*time.Hour), 12.99, 80.21),
 		named("the office", start.Add(8*time.Hour), start.Add(11*time.Hour), 12.99, 80.21),
 	}
-	if got := event.Merged(in); len(got) != 2 {
+	if got := event.Merged(in, nil); len(got) != 2 {
 		t.Fatalf("a five hour gap is two visits, got %d", len(got))
 	}
 }
@@ -351,7 +351,7 @@ func TestMergedLeavesDifferentPlacesAlone(t *testing.T) {
 		named("the cafe next door", start.Add(32*time.Minute), start.Add(60*time.Minute), 12.991, 80.211),
 		named("the mall", start.Add(62*time.Minute), start.Add(90*time.Minute), 12.99, 80.21),
 	}
-	if got := event.Merged(in); len(got) != 3 {
+	if got := event.Merged(in, nil); len(got) != 3 {
 		t.Fatalf("three different stays, got %d", len(got))
 	}
 }
@@ -364,7 +364,7 @@ func TestMergedIsTransitive(t *testing.T) {
 		at := start.Add(time.Duration(i) * 30 * time.Minute)
 		in = append(in, named("the airport", at, at.Add(25*time.Minute), 12.99, 80.21))
 	}
-	got := event.Merged(in)
+	got := event.Merged(in, nil)
 	if len(got) != 1 {
 		t.Fatalf("expected one, got %d", len(got))
 	}
@@ -375,11 +375,11 @@ func TestMergedIsTransitive(t *testing.T) {
 
 // TestMergedHandlesNothing : Nought and one stay are returned as they are.
 func TestMergedHandlesNothing(t *testing.T) {
-	if got := event.Merged(nil); got != nil {
+	if got := event.Merged(nil, nil); got != nil {
 		t.Errorf("expected nil, got %v", got)
 	}
 	one := []event.Named{named("home", time.Now(), time.Now(), 1, 2)}
-	if got := event.Merged(one); len(got) != 1 {
+	if got := event.Merged(one, nil); len(got) != 1 {
 		t.Errorf("expected the one, got %d", len(got))
 	}
 }
@@ -594,5 +594,67 @@ func TestNamesIsTheOnlyPlaceAStayIsNamed(t *testing.T) {
 		From: away.From, To: away.To}
 	if got := event.Names(athome, open, known); got != "home" {
 		t.Errorf("Names at home = %q, want home", got)
+	}
+}
+
+// crossing : A report that they entered or left somewhere.
+func crossing(kind, name string, at time.Time) event.Event {
+	payload, _ := json.Marshal(map[string]string{"value": name})
+	return event.Event{Kind: kind, Payload: payload, OccurredAt: at}
+}
+
+// TestLeavingAndComingBackIsTwoStays : The bug this exists for.
+//
+// He left home at half past ten and was back by quarter to eleven.
+// The readings away bracketed five minutes, under Settled, so they
+// were dropped as a wobble -- and the two halves of home then merged
+// across the fifteen minute gap into one stay of fourteen hours.
+// Asked where he had been, the assistant said he had been at home
+// all day.
+//
+// Owner: "I exited home, right -- we have to take that fact. It just
+// doesn't know where I stayed, but me leaving the house and coming
+// again is a fact."
+func TestLeavingAndComingBackIsTwoStays(t *testing.T) {
+	day := time.Date(2026, 10, 4, 0, 0, 0, 0, time.UTC)
+	at := func(h, m int) time.Time { return day.Add(time.Duration(h)*time.Hour + time.Duration(m)*time.Minute) }
+
+	in := []event.Named{
+		{Stay: event.Stay{Lat: 12.911, Lon: 80.062, From: at(8, 0), To: at(10, 25)}, Called: "home"},
+		{Stay: event.Stay{Lat: 12.911, Lon: 80.062, From: at(10, 40), To: at(12, 0)}, Called: "home"},
+	}
+
+	// Without the crossing it is one place all morning, which is the
+	// behaviour that protects a stay from a wobble and must survive.
+	if got := event.Merged(in, nil); len(got) != 1 {
+		t.Errorf("a fifteen minute gap at the same place became %d stays, want 1", len(got))
+	}
+
+	// With it, two.
+	left := []event.Event{crossing(event.Exited, "home", at(10, 30))}
+	got := event.Merged(in, left)
+	if len(got) != 2 {
+		t.Fatalf("leaving and coming back became %d stays, want 2", len(got))
+	}
+	if !got[0].To.Equal(at(10, 25)) || !got[1].From.Equal(at(10, 40)) {
+		t.Errorf("the halves were not left as they were: %v to %v, then %v",
+			got[0].From, got[0].To, got[1].From)
+	}
+}
+
+// TestACrossingElsewhereDoesNotSplitThem : The gap is what matters,
+// not the day. A crossing hours earlier says nothing about whether
+// these two halves are one stay.
+func TestACrossingElsewhereDoesNotSplitThem(t *testing.T) {
+	day := time.Date(2026, 10, 4, 0, 0, 0, 0, time.UTC)
+	at := func(h, m int) time.Time { return day.Add(time.Duration(h)*time.Hour + time.Duration(m)*time.Minute) }
+
+	in := []event.Named{
+		{Stay: event.Stay{Lat: 12.911, Lon: 80.062, From: at(8, 0), To: at(10, 25)}, Called: "home"},
+		{Stay: event.Stay{Lat: 12.911, Lon: 80.062, From: at(10, 40), To: at(12, 0)}, Called: "home"},
+	}
+	elsewhere := []event.Event{crossing(event.Entered, "office", at(6, 0))}
+	if got := event.Merged(in, elsewhere); len(got) != 1 {
+		t.Errorf("a crossing four hours earlier split the morning into %d", len(got))
 	}
 }

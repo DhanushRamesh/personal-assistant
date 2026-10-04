@@ -470,7 +470,23 @@ type Named struct {
 // inside it at the other -- and then nothing here can tell they are the
 // same place. A geofence drawn round it always can, which is the
 // argument for drawing one.
-func Merged(in []Named) []Named {
+//
+// Never across a crossing they reported. The owner left home at half
+// past ten and was back by quarter to eleven; the readings away
+// bracketed five minutes, under Settled, so they were dropped as a
+// wobble, and the two halves of home merged across a fifteen minute
+// gap into one stay of fourteen hours. Asked where he had been, the
+// assistant said he had been at home all day. Owner: *"I exited home,
+// right -- we have to take that fact. It just doesn't know where I
+// stayed, but me leaving the house and coming again is a fact."*
+//
+// So a crossing in the gap keeps the halves apart. It is the right
+// thing to break on because it is the only positive evidence here: a
+// phone saying it crossed a line somebody drew, rather than a
+// distance inferred from readings five minutes apart. A wobble never
+// produces one, which is exactly why the protection this merging
+// gives is left intact.
+func Merged(in []Named, crossings []Event) []Named {
 	if len(in) < 2 {
 		return in
 	}
@@ -478,13 +494,32 @@ func Merged(in []Named) []Named {
 	out = append(out, in[0])
 	for _, next := range in[1:] {
 		last := &out[len(out)-1]
-		if next.Called != last.Called || next.From.Sub(last.To) > Adrift {
+		if next.Called != last.Called || next.From.Sub(last.To) > Adrift ||
+			crossed(crossings, last.To, next.From) {
 			out = append(out, next)
 			continue
 		}
 		*last = join(*last, next)
 	}
 	return out
+}
+
+// crossed : Whether they reported entering or leaving anywhere
+// between these two moments.
+//
+// The ends are open. A crossing at the instant a stay ended is the
+// report of that ending, and a stay that ended because of it should
+// not be rejoined to what follows.
+func crossed(crossings []Event, from, to time.Time) bool {
+	for _, e := range crossings {
+		if e.Kind != Entered && e.Kind != Exited {
+			continue
+		}
+		if !e.OccurredAt.Before(from) && !e.OccurredAt.After(to) {
+			return true
+		}
+	}
+	return false
 }
 
 // join : Two stays in one place, as one stay.
@@ -657,7 +692,10 @@ func (st Settler) Settle(ctx context.Context, userID string, now time.Time) ([]N
 	for _, s := range stays {
 		named = append(named, Named{Stay: s, Called: st.called(ctx, s, fences, known)})
 	}
-	named = Merged(named)
+	// Never merged across a crossing they reported: leaving and
+	// coming back is a fact even when nothing was learned about
+	// where they went.
+	named = Merged(named, crossings)
 
 	out := make([]*Event, 0, len(named))
 	for _, n := range named {
