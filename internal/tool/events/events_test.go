@@ -3,6 +3,7 @@ package events_test
 import (
 	"context"
 	"encoding/json"
+	"fmt"
 	"strings"
 	"testing"
 	"time"
@@ -405,5 +406,37 @@ func TestAFullNameIsStillExact(t *testing.T) {
 	}
 	if strings.Contains(got.Content, "call.made") {
 		t.Errorf("an exact kind matched its sibling:\n%s", got.Content)
+	}
+}
+
+// lasting : One event carrying how long it ran.
+func lasting(t *testing.T, hour, minute int, kind, value string, seconds int) *event.Event {
+	t.Helper()
+	e := at(t, hour, minute, kind, value)
+	e.Payload = json.RawMessage(fmt.Sprintf(
+		`{"value":%q,"seconds":%d}`, value, seconds))
+	return e
+}
+
+// TestAShortCallIsJustBrief : Owner: *"don't need to say exact 19
+// secs, 23 secs -- those are unwanted."* Handed the number, the
+// model reads it out, and four calls recited to the second is the
+// call log rather than an answer about the morning.
+func TestAShortCallIsJustBrief(t *testing.T) {
+	s := store(t,
+		lasting(t, 10, 33, "call.received", "Amma", 19),
+		lasting(t, 11, 3, "call.received", "Kliffy", 438),
+	)
+	got := ask(t, s, `{"kind":"call."}`)
+	for _, gone := range []string{"19", "438", "seconds="} {
+		if strings.Contains(got.Content, gone) {
+			t.Errorf("a count of seconds survived (%q):\n%s", gone, got.Content)
+		}
+	}
+	if !strings.Contains(got.Content, "lasted=brief") {
+		t.Errorf("a short call was not simply brief:\n%s", got.Content)
+	}
+	if !strings.Contains(got.Content, "lasted=7 minutes") {
+		t.Errorf("a long call lost its length:\n%s", got.Content)
 	}
 }

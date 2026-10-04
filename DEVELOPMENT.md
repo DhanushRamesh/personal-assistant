@@ -8004,6 +8004,37 @@ Two things that bit while writing it, both worth knowing:
   backup was declared corrupt by its own verification. Counting reads the
   whole stream and cannot do that.
 
+## A short call is brief, and that is the whole of it
+
+Asked what calls there had been, the answer came back: *"Your mother
+called at 10:33 am for nineteen seconds and again at 10:43 am for
+twenty-three seconds. Kliffy called at 10:45 am for fourteen
+seconds..."* Owner: *"don't need to say exact 19 secs, 23 secs,
+those are unwanted."*
+
+Quite right. Handed a 19, a model says nineteen, and four calls
+recited to the second is a reading of the call log rather than an
+answer about the morning.
+
+Fixed where the number is rendered rather than in the prompt, per
+the standing order. A payload field named `seconds` is now shown as
+somebody would say it: under a minute is `lasted=brief` and nothing
+more, past that the minutes are the fact -- `lasted=7 minutes`. The
+exact count never reaches the model, so there is nothing for it to
+recite.
+
+**Naming `seconds` here does not break the rule that the event
+describes itself.** That rule forbids the server knowing what a
+*kind* of event is; nothing here knows what a call is. `seconds` is
+a unit, it means the same whoever sent it, and a sender writing that
+field has said it is reporting a span.
+
+A side effect worth having: two short calls from the same person now
+collapse into one run, because their rendered values match. *"Amma,
+brief (2 times, last at 10:43)"* is the shape of the morning, which
+is what this tool is for.
+
+
 ## 12. Maintaining this file
 
 When the owner states a preference, makes a decision, or corrects something,

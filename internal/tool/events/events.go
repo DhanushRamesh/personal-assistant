@@ -454,9 +454,55 @@ func value(payload json.RawMessage) string {
 	sort.Strings(keys)
 	parts := make([]string, 0, len(keys))
 	for _, k := range keys {
+		if k == Seconds {
+			if n, ok := into[k].(float64); ok {
+				parts = append(parts, "lasted="+span(n))
+				continue
+			}
+		}
 		parts = append(parts, fmt.Sprintf("%s=%v", k, into[k]))
 	}
 	return strings.Join(parts, " ")
+}
+
+// Seconds : The field a sender uses for how long something ran.
+//
+// A unit rather than a kind of event, which is why naming it here
+// does not break the rule that the event describes itself: seconds
+// mean the same whoever sent them, and a sender that writes this
+// field has said it is reporting a span.
+const Seconds = "seconds"
+
+// span : A number of seconds as somebody would say it.
+//
+// Owner: *"don't need to say exact 19 secs, 23 secs -- those are
+// unwanted."* A model handed 19 says nineteen, and four calls
+// recited to the second is a reading of the call log rather than an
+// answer about the morning. Anything under a minute is brief and
+// nothing more; past that the minutes are the fact and the seconds
+// are not.
+func span(seconds float64) string {
+	d := time.Duration(seconds * float64(time.Second))
+	switch {
+	case d < time.Minute:
+		return "brief"
+	case d < time.Hour:
+		return plural(int(d.Round(time.Minute).Minutes()), "minute")
+	case d.Round(time.Minute)%time.Hour == 0:
+		return plural(int(d.Round(time.Minute).Hours()), "hour")
+	default:
+		d = d.Round(time.Minute)
+		return plural(int(d.Hours()), "hour") + " " +
+			plural(int(d.Minutes())%60, "minute")
+	}
+}
+
+// plural : A number and its noun, singular when it is one.
+func plural(n int, noun string) string {
+	if n == 1 {
+		return "1 " + noun
+	}
+	return fmt.Sprintf("%d %ss", n, noun)
 }
 
 // sameDay : Whether two local moments are the same date.
