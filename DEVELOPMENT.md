@@ -3377,6 +3377,49 @@ a claim about what they have, and it needs a tool to have just run."*
 A tool that runs and returns nothing is worse than no tool at all.
 
 
+## The caution cannot be moved to the front
+
+Owner, on the send-back costing a greeting four seconds: *"we can
+take the guard off for now, just enforce that guard in the prompt
+itself so that the model is well cautious on the first round."*
+
+Tried twice, measured both times, worse both times.
+
+| | score |
+| --- | --- |
+| guard only, nothing in the prompt | 71 of 71 |
+| first wording, two runs | 70, then 69 |
+| second wording | 68 |
+
+The first wording asked whether *"the answer turns on anything about
+them"* and closed with *"plenty of questions need no tool"*. It lost
+two statements -- a flight landing, a form due Friday -- which have
+no answer to turn on anything and which the closing permission waved
+through.
+
+The second named the failure instead of describing a category, and
+added a line for exactly those two: *"if they have said something is
+happening, or told you something to keep, that is a thing to put
+somewhere."* It still lost the flight, and gained two over-reaches
+it had not had before -- `memory_remember` for *"I had dosa for
+breakfast"* and for *"it is raining here today"*.
+
+**Why it cannot work, which is clear in hindsight.** The send-back
+fires on an observation that cannot be made in advance: the model has
+already answered, and answered without touching a tool. Said before
+the fact the same words are a guess about what the turn will need,
+and a guess applied to every turn moves cases in both directions.
+Three runs, three different sets of damage.
+
+**So the guard stays.** It is right a quarter of the time -- 90 of
+363 -- and the other three quarters cost three to five seconds. The
+fix is not to delete it or to rephrase it but to stop paying for it
+serially: a streamed first round shows text before it shows a tool
+call, so the moment text appears the second round can start
+alongside. That is work rather than wording, and it is what this
+note exists to point at.
+
+
 ## The narration was the wait it was covering
 
 Owner: *"calculate the full latency... I want ultra low latency."*

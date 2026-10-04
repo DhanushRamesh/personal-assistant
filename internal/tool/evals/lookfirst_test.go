@@ -28,11 +28,11 @@ import (
 // What is being measured is whether saying it to every turn makes the
 // model reach for a tool when none is needed.
 var lookFirstDraft = prompt.Text(
-	"Before you answer: if the answer turns on anything about them -- what they have, what they did, what is in their day --",
-	"then a tool must have run this turn to say so, and what you remember is not that tool.",
-	"The ones listed as not yet described are usable: call tool_describe with the name and then call it.",
-	"If none of them fits, answer as you were going to. Plenty of questions need no tool.",
-)
+	"One check before you answer.",
+	"If any part of what you are about to say is that something does not exist, that they have none of something, or that you cannot do a thing, then it is a claim about what they have and only a tool that ran this turn can support it. What you remember cannot.",
+	"The tools named but not yet described are usable: call tool_describe with the name and then call it. A tool you have not been handed the arguments for is not a tool you do not have.",
+	"And if they have said something is happening, or told you something to keep, that is a thing to put somewhere rather than a remark to pass over -- whether or not they asked you to.",
+	"Otherwise answer as you were going to.")
 
 // mustNotReach : The eval cases that are right to answer with no tool.
 // They are what over-reach would break, so they are what a change
