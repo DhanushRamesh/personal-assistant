@@ -66,6 +66,7 @@ type Config struct {
 	Geoapify      Geoapify
 	Provider      Provider
 	PlatformAI    PlatformAI
+	Search        Search
 
 	// Source : The path of the file the configuration was read from, or
 	// empty if no file was read.
@@ -150,6 +151,35 @@ func (a Assistant) Now() time.Time {
 // theirs already names, which is a handful of calls a day. The key is
 // the owner's and the free allowance is thousands, so nothing here
 // needs a budget.
+// Search : Configures looking things up on the web.
+//
+// Two services, because the two things this is for want opposite
+// trades. Owner: *"Firecrawl if I ask a question in conversation.
+// TinyFish for announcements and research where speed is not
+// important. In conversation, if Firecrawl doesn't work or credit
+// is over, use TinyFish as fallback."*
+//
+// Either key may be empty. With neither, there is no web search and
+// the tool says so; with one, it is used for everything.
+type Search struct {
+	// Firecrawl : The quick one, asked while somebody is waiting.
+	// Measured at 510ms, and five hundred searches a month.
+	Firecrawl logging.Secret
+	// TinyFish : The one that never runs out, asked when nothing is
+	// waiting and when the quick one cannot answer. 2.62s, and no
+	// monthly count at all.
+	TinyFish logging.Secret
+	// Quick : How long the quick one gets before the other is asked
+	// instead. Short: a turn is cut at thirty seconds and a service
+	// that hangs must cost its slice and no more.
+	Quick time.Duration
+	// Patient : How long a search may take when nothing is waiting.
+	Patient time.Duration
+	// Rested : How long a service that has spent its allowance is
+	// left alone before being tried again.
+	Rested time.Duration
+}
+
 type Geoapify struct {
 	// Key : The API key. Empty leaves a stay called by its
 	// coordinates, which is what it was called before this existed.
@@ -554,6 +584,13 @@ func Load(path string, lookup Lookup) (Config, error) {
 		},
 		Provider: Provider{
 			Name: ProviderName(l.str("provider", "name", string(ProviderStub))),
+		},
+		Search: Search{
+			Firecrawl: logging.Secret(l.str("search", "firecrawl_key", "")),
+			TinyFish:  logging.Secret(l.str("search", "tinyfish_key", "")),
+			Quick:     l.duration("search", "quick_timeout", 6*time.Second),
+			Patient:   l.duration("search", "patient_timeout", 30*time.Second),
+			Rested:    l.duration("search", "rested", time.Hour),
 		},
 		PlatformAI: PlatformAI{
 			ClientID:           l.str("platformai", "client_id", ""),

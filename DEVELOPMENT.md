@@ -8587,6 +8587,77 @@ slower test for no information; the pause is cheaper than the
 refusal.
 
 
+## Two search services, because they want opposite things
+
+Owner: *"Let's have both. Firecrawl if I ask a question in
+conversation. TinyFish for announcements and research where speed
+is not important. In conversation, if Firecrawl doesn't work or
+credit is over, use TinyFish as fallback."*
+
+The numbers behind that, independently benchmarked:
+
+| | free allowance | card | latency | accuracy |
+| --- | --- | --- | --- | --- |
+| **Firecrawl** | 1,000 credits/month = **500 searches** | no | **510 ms** | 95.3% |
+| **TinyFish** | **none** -- 30/min, 500/hour, uncounted | no | 2.62 s | 92.0% |
+| Brave | $5/month ≈ 1,000 | **yes** | 601 ms | 94.0% |
+| Tavily | 1,000 credits/month | no | 1.88 s / **4.29 s** | 87.7% / 93.0% |
+| SearXNG | unlimited, self-hosted | no | ~1-3 s | upstream |
+
+**Tavily is what every tutorial recommends and was never a
+candidate.** 4.29 s advanced does not survive a turn the caller cuts
+at thirty seconds, in a week spent taking the greeting from 7.5 s to
+2.8 s. **Brave's free tier is gone** -- it now keeps a card on file,
+which happened between the model's training and today and is exactly
+why this was looked up rather than recalled.
+
+Sixteen searches a day was the owner's objection to Firecrawl alone,
+and it is a fair one. Hence both.
+
+**`search.Pair` is the whole of the fallback.** It asks the quick
+one; on any failure it asks the other. Four things it does that a
+plain try-then-try would not:
+
+- **A spent allowance is remembered.** 402 is "Insufficient
+  credits", and the service says itself it is not retryable. Asking
+  it again on every search for the rest of the month is a wasted
+  round trip every time, in the one place where the entire point was
+  speed. It is left alone for an hour -- not the month its allowance
+  actually takes, because the cost of guessing wrong is one wasted
+  trip an hour and the cost of not guessing is one per search.
+- **The quick one gets a slice, not the turn.** A service that stops
+  answering must not spend the budget the one that would have
+  answered needed.
+- **The turn ending is not the service failing.** Asking the spare
+  after the person has gone is a second failure, more slowly.
+- **A fallback is logged.** A silent one is how a dead key goes
+  unnoticed for a month.
+
+**The patient half has no caller yet, deliberately.** The split is
+that loops nobody waits on use TinyFish directly and never spend an
+allowance a conversation may need -- but no loop asks the web
+anything today, and a function with no caller is a guess about what
+the next one will want. When one exists it is `tinyfish.New` and
+nothing else.
+
+**Snippets, not pages.** `scrapeOptions` would return page markdown
+in the same call, which is tempting and wrong by default: a page
+costs a credit each and seconds each, and most questions are
+answered by the summary. Reading one should be a thing somebody
+chooses.
+
+The tool's description is about the world against their life, and
+carries the reason the whole thing exists: *being out of date sounds
+exactly like being wrong, and they cannot tell which you are.*
+Measured at **88 of 88**, including the two guards that matter --
+"what did I do yesterday" still goes to their own events, and
+arithmetic still goes nowhere.
+
+**Neither key is set**, so there is no web search on this server
+yet. With neither, the tool says it cannot reach the web; with one,
+it is used for everything.
+
+
 ## 12. Maintaining this file
 
 When the owner states a preference, makes a decision, or corrects something,

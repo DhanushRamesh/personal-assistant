@@ -51,6 +51,9 @@ import (
 	"github.com/DhanushRamesh/personal-assistant/internal/remind"
 	remindmysql "github.com/DhanushRamesh/personal-assistant/internal/remind/mysql"
 	"github.com/DhanushRamesh/personal-assistant/internal/runner"
+	"github.com/DhanushRamesh/personal-assistant/internal/search"
+	"github.com/DhanushRamesh/personal-assistant/internal/search/firecrawl"
+	"github.com/DhanushRamesh/personal-assistant/internal/search/tinyfish"
 	"github.com/DhanushRamesh/personal-assistant/internal/speech"
 	"github.com/DhanushRamesh/personal-assistant/internal/storage"
 	"github.com/DhanushRamesh/personal-assistant/internal/tasks"
@@ -64,6 +67,7 @@ import (
 	placestool "github.com/DhanushRamesh/personal-assistant/internal/tool/places"
 	"github.com/DhanushRamesh/personal-assistant/internal/tool/reminders"
 	taskstool "github.com/DhanushRamesh/personal-assistant/internal/tool/tasks"
+	webtool "github.com/DhanushRamesh/personal-assistant/internal/tool/web"
 	"github.com/DhanushRamesh/personal-assistant/internal/vocabulary"
 	vocabularymysql "github.com/DhanushRamesh/personal-assistant/internal/vocabulary/mysql"
 )
@@ -265,6 +269,7 @@ func run() error {
 		comingtool.Tools(comingmysql.New(db.DB), comingtool.Clock{
 			Now: cfg.Assistant.Now, Location: cfg.Assistant.Location,
 		}),
+		webtool.Tools(searchingFast(cfg, logger.Logger)),
 	)...)
 	if err != nil {
 		return err
@@ -658,6 +663,41 @@ func mailboxOf(link *google.Link) mailtool.Mailbox {
 		return nil
 	}
 	return mail.New(link)
+}
+
+// searchingFast : How the web is looked up for somebody who is
+// waiting -- the quick service, falling back to the patient one.
+//
+// There is no searchingPatient yet, and deliberately. The owner's
+// split is that the loops nobody waits on use TinyFish directly, so
+// they never spend an allowance a conversation may need; but no
+// loop asks the web anything today, and a function with no caller
+// is a guess about what the next one will want. When one exists it
+// is tinyfish.New and nothing else.
+//
+// Untyped nil when neither key is set, for the reason given below
+// about Google: a typed nil satisfies the interface and then fails
+// on every call, and the honest answer on a server with no keys is
+// that it cannot reach the web.
+func searchingFast(cfg config.Config, logger *slog.Logger) search.Searcher {
+	quick := firecrawl.New(string(cfg.Search.Firecrawl), cfg.Search.Quick)
+	spare := tinyfish.New(string(cfg.Search.TinyFish), cfg.Search.Patient)
+
+	switch {
+	case quick == nil && spare == nil:
+		return nil
+	case spare == nil:
+		// Nothing to fall back to, so nothing is held back from it
+		// either: the quick one answers or the search fails.
+		return quick
+	case quick == nil:
+		return spare
+	}
+	return &search.Pair{
+		Quick: quick, Spare: spare,
+		Within: cfg.Search.Quick, Rested: cfg.Search.Rested,
+		Now: cfg.Assistant.Now, Logger: logger,
+	}
 }
 
 // comingDiary : The diary as the look-ahead wants it, or nothing when

@@ -39,6 +39,7 @@ import (
 	"github.com/DhanushRamesh/personal-assistant/internal/persona"
 	"github.com/DhanushRamesh/personal-assistant/internal/prompt"
 	remindmemory "github.com/DhanushRamesh/personal-assistant/internal/remind/inmemory"
+	"github.com/DhanushRamesh/personal-assistant/internal/search"
 	"github.com/DhanushRamesh/personal-assistant/internal/tool"
 	"github.com/DhanushRamesh/personal-assistant/internal/tool/calendar"
 	comingtool "github.com/DhanushRamesh/personal-assistant/internal/tool/coming"
@@ -49,6 +50,7 @@ import (
 	"github.com/DhanushRamesh/personal-assistant/internal/tool/places"
 	"github.com/DhanushRamesh/personal-assistant/internal/tool/reminders"
 	"github.com/DhanushRamesh/personal-assistant/internal/tool/tasks"
+	webtool "github.com/DhanushRamesh/personal-assistant/internal/tool/web"
 )
 
 // eval : One thing a person might say, and what should happen.
@@ -212,8 +214,28 @@ var cases = []eval{
 	// has to say that, and say never to answer from it that a tool is
 	// missing.
 	{Say: "how much battery do I have left", Tool: []string{"event_recent"}},
-	{Say: "do you know what my battery is right now", Tool: []string{"event_recent"}},
+	// event_kinds is allowed here and this is a gap in the harness
+	// rather than generosity. In production it is prefetched, so its
+	// answer is already in the prompt and calling it is a wasted
+	// round; here nothing prefetches, so reaching for the listing
+	// first is exactly what its own description asks for. Until the
+	// suite runs the prefetch too, both are right.
+	{Say: "do you know what my battery is right now",
+		Tool: []string{"event_recent", "event_kinds"}},
 	{Say: "is my phone charged", Tool: []string{"event_recent"}},
+
+	// The world rather than their life. Being out of date sounds
+	// exactly like being wrong, and they cannot tell which it is.
+	{Say: "who won the cricket last night", Tool: []string{"web_search"}},
+	{Say: "what time does Phoenix Marketcity close today", Tool: []string{"web_search"}},
+	{Say: "is it going to rain in Chennai tomorrow", Tool: []string{"web_search"}},
+
+	// And the over-reach it could buy. Everything above is about the
+	// world; everything here is about him, and the web knows none of
+	// it.
+	{Say: "what did I do yesterday", Tool: []string{"event_recent", "place_visits", "event_kinds"}},
+	{Say: "what is eighty plus twenty plus thirty",
+		Never: []string{"no tool", "not have a tool", "tools available"}},
 
 	// Answering a warning the assistant gave about the diary. The
 	// second word, nearer the time, is right for somebody who forgot
@@ -338,6 +360,7 @@ func TestTheModelReachesForTheRightTool(t *testing.T) {
 		mail.All(nil, mail.Clock{Location: time.UTC}),
 		places.Tools(nil, places.Clock{Location: time.UTC}),
 		comingtool.Tools(nothingComing{}, comingtool.Clock{Location: time.UTC}),
+		webtool.Tools(quietWeb{}),
 	)...)
 	if err != nil {
 		t.Fatalf("NewRegistry: %v", err)
@@ -512,4 +535,14 @@ func (nothingComing) Held(context.Context, string, time.Time) ([]coming.Judged, 
 func (nothingComing) Settle(context.Context, string, string, time.Time) error { return nil }
 func (nothingComing) Trim(context.Context, string, string, string, time.Time) error {
 	return nil
+}
+
+// quietWeb : A web that answers nothing. What is measured here is
+// which tool the model reaches for, which is decided before
+// anything runs.
+type quietWeb struct{}
+
+func (quietWeb) Where() string { return "test" }
+func (quietWeb) Search(context.Context, string, int) ([]search.Result, error) {
+	return nil, nil
 }
