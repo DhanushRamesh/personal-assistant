@@ -197,9 +197,15 @@ func recent(reader Reader, clock Clock) tool.Tool {
 			"And a question about a person -- whether you know them, who they are, when they " +
 			"last came up -- is half answered here and nowhere else: somebody they rang, or " +
 			"who rang them, is in here under their name even when nothing else has heard of " +
-			"them. Put the name in contains. Asked who somebody is, look here as well as " +
+			"them. Put the name in contains, leave kind out, and set days wide: which way " +
+			"round it went is exactly what you are looking for, and the last time somebody " +
+			"came up is rarely today. Asked who somebody is, look here as well as " +
 			"wherever else you look, and never answer that what you found elsewhere is all " +
-			"there is without having looked here too.",
+			"there is without having looked here too. " +
+			"Having looked, answer with what is there rather than with what is not: asked " +
+			"when somebody called and finding that they were called instead, say that. " +
+			"Reporting the absence of the narrower thing while holding the wider one is " +
+			"true and useless.",
 		Avoid: "Not for things they asked you to remember, which are memories, and not for what is " +
 			"coming, which is the calendar and the reminders. Do not answer from the conversation: " +
 			"what you said earlier about their day was true when you said it. And nothing here is " +
@@ -212,7 +218,14 @@ func recent(reader Reader, clock Clock) tool.Tool {
 					Type: "string",
 					Description: "Only this kind of event, as a dotted name such as wifi.joined. " +
 						"Leave it out for everything. Call once without it first if you do not " +
-						"know which kinds exist: the answer lists them. A few kinds are too " +
+						"know which kinds exist: the answer lists them. " +
+						"Never guess one from the words of the question. A family holds the " +
+						"same thing happening several ways and the question names only one of " +
+						"them: asked when somebody called, the answer may be that they were " +
+						"called instead, and a kind taken from the phrasing turns a thing " +
+						"plainly there into nothing at all. Where the question is about a " +
+						"person or a named thing, use contains on its own and read every kind " +
+						"that comes back. A few kinds are too " +
 						"many to hand over unasked -- a row a song, a position every five " +
 						"minutes -- and are left out until you name one, so ask for the kind " +
 						"by name when the question is about what is in it. A limit of 1 with " +
