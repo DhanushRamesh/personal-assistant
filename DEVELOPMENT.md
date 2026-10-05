@@ -10156,3 +10156,20 @@ lost gets reversed by the next person who thinks they know better.
 
 Delete entries that become wrong. A stale instruction is followed just as
 faithfully as a correct one.
+
+## 13. Maintaining the map
+
+[`FEATURES.md`](FEATURES.md) is the map of what exists: the ways in,
+the tools, the six watchers that speak unasked, the quiet daily work,
+and the limits that are known.
+
+**It is changed in the same turn as the thing it describes.** A tool
+added or removed, a watcher wired in, a flow rerouted, a limit found
+or fixed -- the map moves with it. This file says *why*; that one says
+*what*, and a map that lies about what exists is worse than no map at
+all, because it is believed.
+
+Two habits keep it honest. Take the tool list from the server's own
+`tools registered` line rather than from grep, which picks up
+fixtures out of test files. And count rather than estimate: the
+first draft of the map said 51 tools when there were 52.
