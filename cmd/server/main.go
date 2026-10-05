@@ -58,6 +58,7 @@ import (
 	"github.com/DhanushRamesh/personal-assistant/internal/search"
 	"github.com/DhanushRamesh/personal-assistant/internal/search/firecrawl"
 	"github.com/DhanushRamesh/personal-assistant/internal/search/tinyfish"
+	"github.com/DhanushRamesh/personal-assistant/internal/situation"
 	"github.com/DhanushRamesh/personal-assistant/internal/speech"
 	"github.com/DhanushRamesh/personal-assistant/internal/storage"
 	"github.com/DhanushRamesh/personal-assistant/internal/tasks"
@@ -507,6 +508,15 @@ func run() error {
 		defer watching.Done()
 		settingOff(remindCtx, cfg, comingDiary(googleLink, cfg), mapping(cfg),
 			deviceEvents, chats, speaker, announcements, logger.Logger)
+	}()
+
+	// And what several of them together mean, which no single one
+	// of them does.
+	watching.Add(1)
+	go func() {
+		defer watching.Done()
+		watchingFor(remindCtx, cfg, deviceEvents, chats, speaker,
+			announcements, logger.Logger)
 	}()
 
 	handler := api.New(api.Options{
@@ -1353,6 +1363,68 @@ func lookingAhead(
 		slog.Duration("ahead", coming.Ahead))
 
 	ahead.Run(ctx, func(ctx context.Context) ([]string, error) {
+		return talkers.Talkers(ctx, cfg.Assistant.Now().Add(-notice.Since))
+	})
+}
+
+// watchingFor : Says what several facts together mean.
+//
+// The third kind of thing said unasked. Everything that decides
+// lives in internal/situation; this is the wiring, and the list of
+// checks, which is the only part worth reading.
+func watchingFor(
+	ctx context.Context,
+	cfg config.Config,
+	reported situation.Events,
+	talkers interface {
+		Talkers(ctx context.Context, since time.Time) ([]string, error)
+	},
+	speaker announce.Announcer,
+	announcements *announcement.Writer,
+	logger *slog.Logger,
+) {
+	here, err := hass.NewPresence(hass.PresenceConfig{
+		URL:    cfg.HomeAssistant.URL,
+		Token:  cfg.HomeAssistant.Token,
+		Entity: cfg.HomeAssistant.PresenceEntity,
+	})
+	if err != nil || speaker == nil || !speaker.Available() {
+		logger.Info("saying nothing about what things add up to, " +
+			"with nothing watching the room or nowhere to say it")
+		return
+	}
+
+	watch := &situation.Watcher{
+		Events: reported,
+		Checks: []situation.Check{
+			// Somebody who needs something, before the greeting
+			// would have got round to it.
+			situation.Trying,
+			// A charger doing nothing, while the cable is still an
+			// arm's length away.
+			situation.NotCharging,
+		},
+		Say: func(ctx context.Context, userID, text string) error {
+			if err := announcement.Speak(ctx, speaker, conversation.Immediate, text); err != nil {
+				return err
+			}
+			announcements.Announced(ctx, userID, text)
+			return nil
+		},
+		Here: func(userID string) (bool, bool) {
+			present, known := here.Here(ctx, userID)
+			return present, known
+		},
+		Now:    cfg.Assistant.Now,
+		Logger: logger,
+	}
+
+	logger.Info("saying what things add up to",
+		slog.Int("checks", len(watch.Checks)),
+		slog.Duration("every", situation.Every),
+		slog.Duration("behind", situation.Behind))
+
+	watch.Run(ctx, func(ctx context.Context) ([]string, error) {
 		return talkers.Talkers(ctx, cfg.Assistant.Now().Add(-notice.Since))
 	})
 }

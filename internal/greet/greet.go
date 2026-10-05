@@ -349,40 +349,15 @@ func opening(t Told) string {
 // after are not; an evening of answered calls holds nothing
 // outstanding at all.
 func Outstanding(t Told) []string {
-	type attempt struct {
-		who  string
-		when time.Time
-	}
-	open := map[string]attempt{}
-	for _, e := range t.Events {
-		into := fields(e)
-		if _, reaching := into[Number]; !reaching {
-			continue
-		}
-		who := value(e)
-		if n, had := number(into[Seconds]); had && n > 0 {
-			// It got through. Anything left hanging with this
-			// person is hanging no longer.
-			delete(open, who)
-			continue
-		}
-		open[who] = attempt{who: who, when: e.OccurredAt}
-	}
-	if len(open) == 0 {
-		return nil
-	}
-
+	open, _ := event.Reaching(t.Events)
 	out := make([]string, 0, len(open))
-	for _, a := range open {
-		who := strings.TrimSpace(a.who)
-		if who == "" || who == event.Unknown || event.Number(who) {
-			who = "somebody the phone could not name"
-		} else {
-			who = event.Readable(who)
+	for _, r := range open {
+		said := r.Named() + ", at " + r.When.In(t.Now.Location()).Format("3:04 pm")
+		if r.Tries > 1 {
+			said += ", and again after that"
 		}
-		out = append(out, who+", at "+a.when.In(t.Now.Location()).Format("3:04 pm"))
+		out = append(out, said)
 	}
-	sort.Strings(out)
 	return out
 }
 
@@ -436,37 +411,10 @@ func reached(t Told) string {
 // argument, and it is easier to make about a named call at a named
 // hour than about a window.
 func Settled(t Told) []string {
-	type got struct {
-		who  string
-		when time.Time
-	}
-	last := map[string]got{}
-	order := []string{}
-	for _, e := range t.Events {
-		into := fields(e)
-		if _, reaching := into[Number]; !reaching {
-			continue
-		}
-		n, had := number(into[Seconds])
-		if !had || n <= 0 {
-			continue
-		}
-		who := value(e)
-		if _, seen := last[who]; !seen {
-			order = append(order, who)
-		}
-		last[who] = got{who: who, when: e.OccurredAt}
-	}
-	out := make([]string, 0, len(order))
-	for _, who := range order {
-		g := last[who]
-		name := strings.TrimSpace(g.who)
-		if name == "" || name == event.Unknown || event.Number(name) {
-			name = "somebody the phone could not name"
-		} else {
-			name = event.Readable(name)
-		}
-		out = append(out, name+", last at "+g.when.In(t.Now.Location()).Format("3:04 pm"))
+	_, got := event.Reaching(t.Events)
+	out := make([]string, 0, len(got))
+	for _, r := range got {
+		out = append(out, r.Named()+", last at "+r.When.In(t.Now.Location()).Format("3:04 pm"))
 	}
 	return out
 }
@@ -1062,15 +1010,10 @@ func value(e event.Event) string {
 }
 
 // Seconds : The field a sender uses for how long something ran.
-const Seconds = "seconds"
-
-// Number : The field a sender uses for the way somebody was reached.
 //
-// A unit of a sort, like Seconds, and not a kind: a sender writing
-// one has said this event was an attempt to get hold of a person.
-// What it contains is never read out and never counted -- only that
-// it is there.
-const Number = "number"
+// Named in internal/event, beside the rest of what a payload may
+// say about itself.
+const Seconds = event.Seconds
 
 // span : A number of seconds as somebody would say it.
 //
