@@ -193,7 +193,13 @@ func recent(reader Reader, clock Clock) tool.Tool {
 			"in here. Never answer that you have no tool for something about their own phone, " +
 			"watch, laptop or day: call this once without a kind, read the kinds it lists, and " +
 			"ask again by name. Also when you are about to remark " +
-			"on their day unprompted and need to know what it was.",
+			"on their day unprompted and need to know what it was. " +
+			"And a question about a person -- whether you know them, who they are, when they " +
+			"last came up -- is half answered here and nowhere else: somebody they rang, or " +
+			"who rang them, is in here under their name even when nothing else has heard of " +
+			"them. Put the name in contains. Asked who somebody is, look here as well as " +
+			"wherever else you look, and never answer that what you found elsewhere is all " +
+			"there is without having looked here too.",
 		Avoid: "Not for things they asked you to remember, which are memories, and not for what is " +
 			"coming, which is the calendar and the reminders. Do not answer from the conversation: " +
 			"what you said earlier about their day was true when you said it. And nothing here is " +

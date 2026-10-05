@@ -9799,6 +9799,70 @@ thousand. The flag is not stored: it decides how long the body may
 be and nothing else.
 
 
+## Looking in one place and calling it everywhere
+
+Asked *"do you know anyone called Gunalan?"* it answered:
+
+> *"I have a record that Gunalan's birthday is on 5 February, sir.
+> That is all I know about them -- you marked their birthday in your
+> calendar and confirmed the spelling... Beyond that, I have no other
+> information about who Gunalan is."*
+
+He had rung Gunalan at 19:12 that evening. The event was in the
+table while the sentence was being written.
+
+Owner: *"it looked only calendar, the events tool which is the
+powerful information tool about me, but it didn't search it. If I
+ask something check if it's in my sources -- calendar, task, events,
+reminders -- else check its own memory, else do a web search. It
+should never say I don't know."*
+
+**The tool was not at fault and neither was its description.**
+`event_recent` takes a `contains` and says a person is one of the
+things to put in it. What it does not say is that a question about
+*who somebody is* belongs there, because the whole description is
+framed around what the person has been **doing**. A name is not a
+doing, so the question routed to the calendar and the memories and
+stopped at the first source that answered.
+
+Two changes, and the division between them is the standing one: a
+rule that spans tools goes in the persona, and a rule about when to
+reach for one goes on that tool.
+
+**In the persona.** Asked about a person, a place or anything of
+theirs, look everywhere that could hold it before deciding what you
+have is all there is -- what they asked you to remember, the diary,
+what is still to be done, what is due, and everything their devices
+reported. *Finding it in one of those is not a reason to stop: the
+diary knows a birthday and the devices know they rang the person
+this afternoon, and the second is the half worth having.*
+
+**On `event_recent`.** That a question about a person is half
+answered here and nowhere else -- somebody they rang, or who rang
+them, is in here under their name even when nothing else has heard
+of them.
+
+### "Never say I don't know" is not quite the rule
+
+Not knowing is no failure and the persona already insists it be said
+plainly. What is false is *"that is all I know"* after one source
+out of five. So the line written is that distinction rather than the
+instruction as given:
+
+> Not knowing is no failure and is to be said plainly. Saying that
+> is all you know, when you have looked in one place out of five, is
+> a different thing and it is false.
+
+### And the web is not the fallback for this
+
+`web_search` already says *"not for anything about them"*, which is
+right twice over. A search for Gunalan returns nothing about this
+Gunalan, and it sends the name of a private contact to a third
+party to find that out. The persona now says where the fallback does
+apply -- a fact about the world -- and where it does not: *their own
+life is never looked up out there.*
+
+
 ## 12. Maintaining this file
 
 When the owner states a preference, makes a decision, or corrects something,
