@@ -3,6 +3,7 @@ package notice_test
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"strings"
 	"testing"
 	"time"
@@ -385,5 +386,58 @@ func TestOneWarningIsNotSaidTenTimes(t *testing.T) {
 		if !g.Considered(warning, at.Add(later)) {
 			t.Errorf("the same moment was weighed again after %s", later)
 		}
+	}
+}
+
+// TestAProviderHiccupDoesNotSwallowAWarning : At five past midnight
+// on 6 October a battery at twenty per cent, marked by the phone to
+// be said at once, was found, allowed, and lost: the ask failed
+// because the provider was busy, and the gate had already marked the
+// arrival weighed. It was never tried again, and the window it could
+// be found in is shorter than the mark lasts.
+//
+// The one class of announcement that exists because waiting costs
+// something must not be lost to a hiccup lasting seconds.
+func TestAProviderHiccupDoesNotSwallowAWarning(t *testing.T) {
+	var asked int
+	var spoke []string
+	w := &notice.Watcher{
+		Events: recorded{held: []event.Event{marked("battery.level", "20", 0)}},
+		Gate:   &notice.Gate{Away: func(string) (bool, bool) { return false, true }},
+		Ask: func(context.Context, string, string) (string, error) {
+			asked++
+			if asked == 1 {
+				return "", errors.New("the provider is busy")
+			}
+			return "Twenty per cent, sir.", nil
+		},
+		Say: func(_ context.Context, _, text string, _ bool) error {
+			spoke = append(spoke, text)
+			return nil
+		},
+		Now: func() time.Time { return at },
+	}
+
+	if _, err := w.Look(context.Background(), "usr_1"); err == nil {
+		t.Fatal("a failed ask was reported as a success")
+	}
+	if len(spoke) != 0 {
+		t.Fatalf("said something despite the failure: %v", spoke)
+	}
+
+	// The next look, thirty seconds later, inside the same window.
+	if _, err := w.Look(context.Background(), "usr_1"); err != nil {
+		t.Fatalf("second look: %v", err)
+	}
+	if len(spoke) != 1 {
+		t.Errorf("the warning was lost: asked %d times, said %v", asked, spoke)
+	}
+
+	// And it is still said only once.
+	if _, err := w.Look(context.Background(), "usr_1"); err != nil {
+		t.Fatalf("third look: %v", err)
+	}
+	if len(spoke) != 1 {
+		t.Errorf("said it %d times: %v", len(spoke), spoke)
 	}
 }

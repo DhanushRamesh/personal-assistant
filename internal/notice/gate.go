@@ -67,21 +67,43 @@ func (g *Gate) Considered(c Candidate, now time.Time) bool {
 	g.mu.Lock()
 	defer g.mu.Unlock()
 
-	key := c.Label + "@" + c.At.UTC().Format(time.RFC3339Nano)
-
-	if when, had := g.weighed[key]; had && now.Sub(when) < Weighing {
+	k := key(c)
+	if when, had := g.weighed[k]; had && now.Sub(when) < Weighing {
 		return true
 	}
 	if g.weighed == nil {
 		g.weighed = map[string]time.Time{}
 	}
-	g.weighed[key] = now
+	g.weighed[k] = now
 	for label, when := range g.weighed {
 		if now.Sub(when) >= Weighing {
 			delete(g.weighed, label)
 		}
 	}
 	return false
+}
+
+// Forget : Unmarks a candidate, so the next look weighs it again.
+//
+// For the one case where weighing it was wasted: the model could not
+// be reached. Nothing was decided and nothing was said, so the mark
+// records an attempt rather than a judgement, and leaving it there
+// loses the thing entirely -- the arrival falls out of the look-back
+// window long before the ten minutes are up.
+//
+// Measured, at five past midnight on 6 October. A battery at twenty
+// per cent, marked by the phone to be said at once, was found,
+// allowed, and the ask failed because the provider was busy. It was
+// never tried again. The one class of announcement that exists
+// because waiting costs something was lost to a hiccup lasting
+// seconds.
+func (g *Gate) Forget(c Candidate) {
+	if g == nil {
+		return
+	}
+	g.mu.Lock()
+	defer g.mu.Unlock()
+	delete(g.weighed, key(c))
 }
 
 // Allow : Whether this may be said now, and why not when it may not.
@@ -112,4 +134,12 @@ func (g *Gate) Allow(userID string) (bool, string) {
 	}
 
 	return true, ""
+}
+
+// key : How one arrival is told from the next.
+//
+// The thing and the moment it happened. Two warnings a minute apart
+// are two arrivals; the same one found again on the next tick is one.
+func key(c Candidate) string {
+	return c.Label + "@" + c.At.UTC().Format(time.RFC3339Nano)
 }

@@ -196,6 +196,11 @@ func (w *Watcher) look(ctx context.Context, userID string, behind time.Duration)
 		// the next tick thirty seconds later.
 		said, err := w.Ask(ctx, userID, Remark(c, now))
 		if err != nil {
+			// Weighed but not judged, so the mark comes off and the
+			// next look tries again. Thirty seconds later, inside a
+			// window five minutes wide, is nine more chances at
+			// something that has to be said.
+			w.Gate.Forget(c)
 			w.note(ctx, userID, c, Failed, "", "could not ask: "+err.Error())
 			return "", err
 		}
