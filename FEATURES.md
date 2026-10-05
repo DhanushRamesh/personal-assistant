@@ -18,30 +18,39 @@ for one is fixed for both.
 
 ```mermaid
 flowchart TB
-    SAT["Voice<br/>satellite in the room"]
-    PHONE["Phone<br/>Tasker"]
-    WEB["Web client<br/>and HTTP API"]
+    subgraph IN["Ways in"]
+        direction LR
+        SAT["Voice<br/>satellite in the room"]
+        WEB["Web client<br/>and HTTP API"]
+        PHONE["Phone<br/>Tasker"]
+    end
 
-    HA["Home Assistant<br/>wake word, speech to text, text to speech"]
+    HA["Home Assistant<br/>wake word, speech to text,<br/>text to speech"]
     EVENTS["/v1/events<br/>what the phone noticed"]
+
+    SAT --> HA
+    PHONE --> EVENTS
+    PHONE -. "presence" .-> HA
+    HA --> CORE
+    WEB --> CORE
 
     CORE["The core<br/>persona, memory, tool loop"]
     MODEL["Model<br/>PlatformAI"]
+    TOOLS["52 tools<br/>section 2"]
     DB[("MySQL<br/>reminders, memories, events,<br/>conversations, places, profile")]
 
-    SAT --> HA --> CORE
-    WEB --> CORE
-    PHONE --> EVENTS --> DB
-    PHONE -. "presence" .-> HA
-
     CORE <--> MODEL
+    CORE --> TOOLS
     CORE <--> DB
-    CORE --> TOOLS["52 tools<br/>see section 2"]
-
+    EVENTS --> DB
     CORE -- "an answer" --> HA
-    UNASKED["Speaking unasked<br/>see section 3"] --> HA
-    UNASKED --> PUSH["The phone<br/>alarms over the tailnet"]
+
+    UNASKED["Speaking unasked<br/>section 3"]
+    ALARMS["The phone<br/>alarms over the tailnet"]
+
     DB --> UNASKED
+    UNASKED --> HA
+    UNASKED --> ALARMS
 ```
 
 ---
