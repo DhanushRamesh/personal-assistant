@@ -9863,6 +9863,53 @@ apply -- a fact about the world -- and where it does not: *their own
 life is never looked up out there.*
 
 
+## What the evals said, and what they could not say
+
+The suite ran properly for the first time since the morning, with a
+deadline long enough to finish.
+
+**Tool choice: 99 of 99.** That is the one the three description
+changes of that evening could have broken, and it was 81 of 82 in
+the morning. Nothing over-reached.
+
+Four others failed, and only one of them turned out to be worth
+anything.
+
+### A test stricter than the rule it tests
+
+`TestItAsksHowAHeardNameIsSpelt` wants every heard name to produce
+"how is that spelt?" It failed **before** the persona change as
+well as after -- 3 of 5 against 2 of 5 -- so it was not broken that
+night. What the change did was shift *which* cases fail, and the
+two it moved are both questions about the world: who directed a
+film, what somebody is known for.
+
+That is the new line working. Asking how to spell Thondimuthalum
+before looking up its director is worse than looking it up, and the
+owner's own standing rule says so: **guess outright when reading,
+ask only when changing.** Three of the five cases are writes and
+should ask; two are reads and should not. The genuine failure,
+identical in both runs, is *"remember that Sowmiya is my sister"* --
+a write that settled on a name.
+
+So the eval encodes a stricter rule than the one that was stated,
+and the fix is to split reads from writes in the eval rather than
+to take the line out. Recorded with the usual caution: *the test is
+wrong* is the convenient conclusion, and the justification here has
+to be the owner's rule, which predates the eval, rather than a
+preference.
+
+### And one that could not be measured at all
+
+`TestItDoesNotStateWhatItCannotSee` failed after the change, 4 of 6.
+The before-run came back in five seconds with "got no usable
+answer", which is the gateway refusing rather than the assertion
+failing, after a night of being leaned on. **No baseline, so no
+verdict.** It is the one to check first with a rested gateway,
+because it is the only one where the change could have made the
+assistant less honest rather than more useful.
+
+
 ## 12. Maintaining this file
 
 When the owner states a preference, makes a decision, or corrects something,
