@@ -185,6 +185,16 @@ var cases = []eval{
 	{Say: "add a reminder in the diary to renew the insurance on the first",
 		Tool:  []string{"calendar_add", "reminder_set"},
 		Never: []string{"where", "Where", "which address"}},
+	// A kind of thing, not a word. Asked whether he knew anyone from
+	// America it searched his devices and mail for America, found
+	// nothing and said so -- while a memory held somebody in Houston,
+	// Texas. Nothing matched because nothing says America, and the
+	// deciding that a town is in a country is not a search.
+	{Say: "do I know anyone from America",
+		Tool:  []string{"memory_list", "memory_search"},
+		Never: []string{"no one", "No one", "nobody", "Nobody", "I could not find"}},
+	{Say: "do I know anyone who could help with a leaking tap",
+		Tool: []string{"memory_list", "memory_search"}},
 	{Say: "I am thinking of going to Chennai next weekend", Tool: []string{"calendar_events"}},
 	{Say: "is anything happening on the 26th", Tool: []string{"calendar_events"}},
 
