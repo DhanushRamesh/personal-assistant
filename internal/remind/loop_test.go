@@ -8,6 +8,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/DhanushRamesh/personal-assistant/internal/alarm"
 	"github.com/DhanushRamesh/personal-assistant/internal/remind"
 	"github.com/DhanushRamesh/personal-assistant/internal/remind/inmemory"
 )
@@ -552,5 +553,74 @@ func TestWithoutAPastTenseWordingItFallsBack(t *testing.T) {
 		if !strings.Contains(got, want) {
 			t.Errorf("Spoken = %q, missing %q", got, want)
 		}
+	}
+}
+
+// clockface : An alarm sink that keeps what it was handed.
+type clockface struct {
+	mu   sync.Mutex
+	kept []alarm.Alarm
+}
+
+func (c *clockface) Set(_ context.Context, a alarm.Alarm) error {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	c.kept = append(c.kept, a)
+	return nil
+}
+
+func (c *clockface) last() (alarm.Alarm, bool) {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	if len(c.kept) == 0 {
+		return alarm.Alarm{}, false
+	}
+	return c.kept[len(c.kept)-1], true
+}
+
+// The phone cannot hold a repeat set from outside, so each firing
+// of a repeating reminder sets the next alarm. Without this a daily
+// reminder has an alarm on the first morning and none after.
+func TestARepeatingReminderArmsTheNextAlarm(t *testing.T) {
+	six := time.Date(2026, 10, 6, 6, 5, 0, 0, india)
+	l, store, _ := loop(t, six)
+	phone := &clockface{}
+	l.Alarm = phone
+	put(t, store, six, remind.Daily)
+
+	l.Once(context.Background())
+
+	got, ok := phone.last()
+	if !ok {
+		t.Fatal("a daily reminder fired and armed no alarm for tomorrow")
+	}
+	// The wall clock, not the instant: only the hour and the minute
+	// reach the phone, so the right instant in the wrong zone still
+	// rings at 1:42 in the morning.
+	if h, m := got.At.Hour(), got.At.Minute(); h != 6 || m != 5 {
+		t.Errorf("tomorrow's alarm is for %02d:%02d, not 06:05", h, m)
+	}
+	if got.At.Day() != 7 {
+		t.Errorf("the alarm is for day %d, not tomorrow", got.At.Day())
+	}
+	if got.Key == "" {
+		t.Error("the alarm is not tied to the reminder, so a retry cannot know which it is")
+	}
+}
+
+// A one-off had its alarm set when it was made and does not want
+// another; arming one here would put a second alarm on the phone
+// for a reminder that has just gone off.
+func TestAOneOffArmsNothingFurther(t *testing.T) {
+	six := time.Date(2026, 10, 6, 6, 5, 0, 0, india)
+	l, store, _ := loop(t, six)
+	phone := &clockface{}
+	l.Alarm = phone
+	put(t, store, six, remind.Once)
+
+	l.Once(context.Background())
+
+	if _, ok := phone.last(); ok {
+		t.Error("a one-off reminder armed another alarm after firing")
 	}
 }

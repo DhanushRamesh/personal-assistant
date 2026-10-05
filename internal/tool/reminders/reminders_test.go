@@ -903,8 +903,11 @@ func TestSettingAReminderAsksThePhoneForAnAlarm(t *testing.T) {
 	if p.asked != 1 {
 		t.Fatalf("the phone was asked %d times", p.asked)
 	}
-	if !p.got.At.Equal(time.Date(2026, 9, 27, 6, 5, 0, 0, india)) {
-		t.Errorf("the alarm is at %s, not the reminder's time", p.got.At)
+	// The wall clock, not the instant. Only the hour and the minute
+	// reach the phone, so an alarm carrying the right instant in the
+	// wrong zone passes time.Equal and still rings at 1:42 am.
+	if h, m := p.got.At.Hour(), p.got.At.Minute(); h != 6 || m != 5 {
+		t.Errorf("the phone was asked for %02d:%02d, not the 06:05 they asked for", h, m)
 	}
 	if p.got.Label != "take the tablets" {
 		t.Errorf("the alarm would show %q", p.got.Label)

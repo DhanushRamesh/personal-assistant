@@ -705,7 +705,7 @@ func set(store remind.Store, clock Clock, phone alarm.Setter) tool.Tool {
 				"happen, in their words rather than as a date.%s",
 				stored.Title, spell(stored.DueAt, clock.where()), repeating(stored.Repeats), stored.ID,
 				wasWere(before), before, wasWere(before+1), count(ctx, store, in.Caller.UserID),
-				alarmed(ctx, phone, stored)))
+				alarmed(ctx, phone, stored, clock.where())))
 		},
 	}
 }
@@ -1041,12 +1041,17 @@ func repeatWords() []string {
 // What is claimed is exactly what is known. Home Assistant
 // accepting the message is not the phone having set anything, so
 // the words are that it was asked for.
-func alarmed(ctx context.Context, phone alarm.Setter, r *remind.Reminder) string {
+func alarmed(ctx context.Context, phone alarm.Setter, r *remind.Reminder, where *time.Location) string {
 	if phone == nil {
 		return " There is no way to reach their phone from here, so no alarm was set: say so."
 	}
-	if err := phone.Set(ctx, alarm.Alarm{At: r.DueAt, Label: r.Title, Key: r.ID}); err != nil {
-		slog.Warn("the phone would not take an alarm", "at", r.DueAt, "error", err)
+	// In their zone, not the one it is stored in. An alarm clock
+	// holds a wall clock, so a reminder kept as UTC and handed over
+	// unconverted rings five and a half hours early and nothing
+	// anywhere disagrees with it.
+	at := r.DueAt.In(where)
+	if err := phone.Set(ctx, alarm.Alarm{At: at, Label: r.Title, Key: r.ID}); err != nil {
+		slog.Warn("the phone would not take an alarm", "at", at, "error", err)
 		return " Their phone could not be reached, so the alarm is not set yet, though it will " +
 			"keep being tried until the time comes. Tell them that plainly, in one clause, " +
 			"without the reason unless they ask: they may want to set it themselves."

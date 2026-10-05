@@ -10017,6 +10017,29 @@ Keyed by reminder id, so one amended three times is owed one alarm.
 Held in memory: a restart loses outstanding retries, which is
 accepted rather than given a table, because the window is minutes.
 
+### The alarm was set in the wrong zone
+
+Owner, 6 October 2026, after the first real reminder: *"i think the
+time is set wrong in alarm."* It was. A reminder for 7:12 am set an
+alarm for 1:42 am.
+
+`remind.New` stores `DueAt` as **UTC**. The spoken answer converted
+it -- `spell(stored.DueAt, clock.where())` -- and the alarm did not.
+An alarm clock holds a wall clock, so handing it a UTC instant sets
+it five and a half hours out.
+
+**The test passed throughout.** It asserted
+`p.got.At.Equal(time.Date(..., 6, 5, ..., india))`, and `time.Equal`
+compares *instants*: 00:35 UTC and 06:05 IST are the same moment, so
+the wrong zone sailed through. Only the hour and the minute ever
+reach the phone. The assertion is now on `.Hour()` and `.Minute()`,
+which fails loudly on the old code, and the same assertion guards
+`remind.Loop.rearm`, which had the conversion right but was untested.
+
+The general shape, worth carrying: **assert what crosses the
+boundary.** A test that checks a richer value than the wire carries
+will keep passing after the wire starts lying.
+
 ### The signature
 
 Owner: *"always add a stamp like 'by J.A.R.V.I.S'. If Jarvis is the
