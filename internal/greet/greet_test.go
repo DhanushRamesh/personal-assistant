@@ -80,7 +80,7 @@ func TestEventsAreGivenPlainlyAndNotInterpreted(t *testing.T) {
 			happened("call.missed", "Priya", evening.Add(-30*time.Minute)),
 		},
 	})
-	for _, want := range []string{"place.exited office", "call.missed Priya", "5:50 pm", "6:00 pm"} {
+	for _, want := range []string{"place exited: office", "call missed: Priya", "5:50 pm", "6:00 pm"} {
 		if !strings.Contains(got, want) {
 			t.Errorf("missing %q from:\n%s", want, got)
 		}
@@ -183,13 +183,13 @@ func TestRepeatsAreFoldedWithTheirCount(t *testing.T) {
 	}
 	got := greet.Prompt(greet.Told{Now: evening, Since: evening.Add(-3 * time.Hour), Events: evs})
 
-	if n := strings.Count(got, "call.missed Priya"); n != 1 {
+	if n := strings.Count(got, "call missed: Priya"); n != 1 {
 		t.Errorf("three calls should be one line, got %d", n)
 	}
 	if !strings.Contains(got, "(3 times, the last at") {
 		t.Errorf("the count is missing:\n%s", got)
 	}
-	if n := strings.Count(got, "network.joined Dhanush_EXT"); n != 1 {
+	if n := strings.Count(got, "network joined: Dhanush_EXT"); n != 1 {
 		t.Errorf("six reconnections should be one line, got %d", n)
 	}
 	if !strings.Contains(got, "(6 times, the last at") {
@@ -220,8 +220,8 @@ func TestAFoldedRunKeepsItsPlaceInTheSequence(t *testing.T) {
 			happened("place.entered", "home", evening.Add(-5*time.Minute)),
 		},
 	})
-	left := strings.Index(got, "place.exited office")
-	home := strings.Index(got, "place.entered home")
+	left := strings.Index(got, "place exited: office")
+	home := strings.Index(got, "place entered: home")
 	if left < 0 || home < 0 || left > home {
 		t.Errorf("leaving should come before arriving:\n%s", got)
 	}
@@ -277,8 +277,15 @@ func TestLabelMatchesTheLine(t *testing.T) {
 	e := happened("call.missed", "Priya", evening.Add(-time.Hour))
 	got := greet.Prompt(greet.Told{Now: evening, Events: []event.Event{e},
 		Usual: map[string]int{greet.Label(e): 7}})
-	if !strings.Contains(got, greet.Label(e)+"  [7 in the past four weeks]") {
+	// Keyed on the label, printed in the readable form. The two
+	// spellings have to stay in step: a count keyed on one and a
+	// line printed in the other never meet, which fails silently and
+	// reads as everything being unprecedented.
+	if !strings.Contains(got, "call missed: Priya  [7 in the past four weeks]") {
 		t.Errorf("the count did not land on its line:\n%s", got)
+	}
+	if greet.Label(e) != "call.missed Priya" {
+		t.Errorf("the counting key changed with the wording: %q", greet.Label(e))
 	}
 }
 
@@ -299,7 +306,7 @@ func TestThePayloadCarriesMoreThanItsValue(t *testing.T) {
 		// A stay is a span now rather than a line of fields, because
 		// it re-reports itself every five minutes while it is open.
 		"stayed at the office, reported as 8 hours",
-		"call.ended Priya  (minutes 42)",
+		"call ended: Priya  (minutes 42)",
 	} {
 		if !strings.Contains(got, want) {
 			t.Errorf("missing %q from:\n%s", want, got)
@@ -328,10 +335,10 @@ func TestAStrangerIsCountedByNumberAndNeverReadOut(t *testing.T) {
 	if strings.Contains(got, "9876543210") {
 		t.Errorf("the number was read out:\n%s", got)
 	}
-	if !strings.Contains(got, "call.missed an unknown number  (4 times") {
+	if !strings.Contains(got, "call missed: an unknown number  (4 times") {
 		t.Errorf("four calls from one stranger should be one line with a count:\n%s", got)
 	}
-	if !strings.Contains(got, "call.missed Priya") {
+	if !strings.Contains(got, "call missed: Priya") {
 		t.Error("a known caller should still be named")
 	}
 	// And the count is still keyed on the number, so two strangers stay
@@ -355,11 +362,16 @@ func TestANumberDoesNotLeakThroughAnotherField(t *testing.T) {
 	if strings.Contains(got, "9182053794") {
 		t.Errorf("the number reached the prompt:\n%s", got)
 	}
-	if !strings.Contains(got, "call.made Alekhya Chintada") {
+	if !strings.Contains(got, "call made: Alekhya Chintada") {
 		t.Error("the name should still be there")
 	}
-	if !strings.Contains(got, "seconds 21") {
-		t.Error("the duration should still be there")
+	// As words. A sender writing seconds has said it is a span, and
+	// twenty-one of them is brief and nothing more.
+	if strings.Contains(got, "21") {
+		t.Errorf("the exact count of seconds reached the prompt:\n%s", got)
+	}
+	if !strings.Contains(got, "brief") {
+		t.Error("the duration should still be there, in words")
 	}
 }
 

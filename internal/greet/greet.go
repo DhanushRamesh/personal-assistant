@@ -283,6 +283,7 @@ func Prompt(t Told) string {
 			"Where you have a name for the thing, use it rather than describing it: \"how was the film\" is worse than its title, and \"you were out a good while\" is worse than either.",
 			"Short. Somebody at a door has their hands full.",
 			"Every sentence must be one. \"There was a call came in\" is not, and neither is a clause hung on the end that cannot stand by itself.",
+			"Whatever you write is spoken exactly as it stands. There is no second go they do not hear, so never work anything out in it and never correct yourself inside it: decide first, then write the one sentence.",
 			"A length of time is a count like any other, and is no more said than a count is. A long call, or one that went on a while; never an hour and a half.",
 		),
 		planned(t),
@@ -657,6 +658,8 @@ func happened(t Told) string {
 			"What their devices reported in between.",
 			"The same thing happening more than once is one line saying how many:",
 			"how many times is the thing worth noticing, and reading it out ten times is not.",
+			"A line is the hour, then what the device called it, then what it was about, then anything else it said, then how often it has happened before.",
+			"What the device called it is two words: the family of thing, and what happened to it, written from this person's side -- so one of them made a call and another was made to them, and the second word is what tells them apart. It is the device's wording and is never yours: do not say it back.",
 			"The number in brackets is how often that same thing has happened over the past four weeks.",
 			"It is there to tell you what is ordinary for them. Something that happens dozens of times a month is the texture of their life and not news, however much of it is in this window.",
 			"More of it is still it. A count higher than usual is the same thing more often, and the mechanics of a day -- what a device did because they were somewhere, or moving, or awake -- are never the subject whatever the number says. Nobody has ever been glad to be told about them.",
@@ -875,10 +878,44 @@ func Label(e event.Event) string {
 // digits nobody asked to hear. The count stays on the number; only
 // the words change.
 func shown(e event.Event) string {
-	if v := value(e); v != "" {
-		return e.Kind + " " + event.Readable(v)
+	what := Readable(e.Kind)
+	v := value(e)
+	if v == "" || v == event.Unknown {
+		// Nothing to name. The word "unknown" was being printed in
+		// its place, which reads as an unknown something rather than
+		// as a thing with nothing to name -- a screen locking does
+		// not have a subject, and "screen.locked unknown" invited
+		// the model to wonder what was unknown about it.
+		return what
 	}
-	return e.Kind
+	return what + ": " + event.Readable(v)
+}
+
+// Readable : A kind as words, without knowing what any kind is.
+//
+// Exported so a test can check that a count lands on the line it
+// belongs to. Two spellings of one event is a count that never
+// matches, which fails silently and reads as everything being
+// unprecedented.
+//
+// The dot becomes a space and nothing else moves. Senders write a
+// kind as a family and what happened to it, so "call missed" and
+// "wifi joined" fall out for free.
+//
+// Putting the verb first was tried and is worse: it reads well for
+// the kinds that end in one and badly for the kinds that do not,
+// and "level battery: 44" is not an improvement on anything.
+//
+// Generic on purpose. A table turning call.made into "an outgoing
+// call to" would read better today and would be wrong the morning a
+// new sender appears -- three were added on the phone last week with
+// no change here, and each read correctly the same afternoon.
+func Readable(kind string) string {
+	family, happened, ok := strings.Cut(kind, ".")
+	if !ok || happened == "" {
+		return kind
+	}
+	return family + " " + happened
 }
 
 // value : The one field every device writes, or nothing.
@@ -890,6 +927,63 @@ func value(e event.Event) string {
 		return ""
 	}
 	return strings.TrimSpace(into.Value)
+}
+
+// Seconds : The field a sender uses for how long something ran.
+const Seconds = "seconds"
+
+// span : A number of seconds as somebody would say it.
+//
+// Nothing under a minute is worth a number: it is brief, and that is
+// the whole of what anybody would say about it. A zero is not even
+// that -- a call recorded as lasting no time is a call that did not
+// happen, and saying so invited "it may not have connected
+// properly", which nothing had reported.
+func span(seconds float64) string {
+	d := time.Duration(seconds * float64(time.Second))
+	switch {
+	case d <= 0:
+		return ""
+	case d < time.Minute:
+		return "brief"
+	case d < time.Hour:
+		return spell(d.Round(time.Minute))
+	default:
+		return spell(d.Round(time.Minute))
+	}
+}
+
+// number : A JSON number however the sender wrote it.
+func number(v any) (float64, bool) {
+	switch n := v.(type) {
+	case float64:
+		return n, true
+	case string:
+		f, err := strconv.ParseFloat(strings.TrimSpace(n), 64)
+		return f, err == nil
+	}
+	return 0, false
+}
+
+// unwrapped : A value that is itself a payload, as its own fields.
+func unwrapped(v string) ([]string, bool) {
+	if !strings.HasPrefix(v, "{") || !strings.HasSuffix(v, "}") {
+		return nil, false
+	}
+	var into map[string]any
+	if json.Unmarshal([]byte(v), &into) != nil {
+		return nil, false
+	}
+	names := make([]string, 0, len(into))
+	for name := range into {
+		names = append(names, name)
+	}
+	sort.Strings(names)
+	out := make([]string, 0, len(names))
+	for _, name := range names {
+		out = append(out, fmt.Sprintf("%s %v", name, into[name]))
+	}
+	return out, len(out) > 0
 }
 
 // rest : Everything else the payload carries, as "name value" pairs.
@@ -920,6 +1014,21 @@ func rest(e event.Event) string {
 
 	out := make([]string, 0, len(names))
 	for _, name := range names {
+		// How long a thing ran, in words. A sender writing a field
+		// called seconds has said it is reporting a span, which is a
+		// unit and not a kind of event, so naming it here breaks
+		// nothing. Owner: "don't need to say exact 19 secs, 23 secs,
+		// those are unwanted." internal/tool/events has done this
+		// since that was said; the one renderer that is read aloud
+		// had been left out of it.
+		if name == Seconds {
+			if n, ok := number(into[name]); ok {
+				if said := span(n); said != "" {
+					out = append(out, said)
+				}
+				continue
+			}
+		}
 		switch v := into[name].(type) {
 		case string:
 			// Not a telephone number, in any field.
@@ -931,7 +1040,23 @@ func rest(e event.Event) string {
 			// the field the masking does not look at, and get read
 			// out in a room. Nothing is lost -- when the number is
 			// the only identity there is, it is already the value.
-			if v = strings.TrimSpace(v); v != "" && !event.Number(v) && !event.Position(v) {
+			v = strings.TrimSpace(v)
+			// A payload inside a payload. One sender double-encodes
+			// its own, and the braces and quotes were reaching a
+			// prompt that is read out loud.
+			if inner, ok := unwrapped(v); ok {
+				out = append(out, inner...)
+				continue
+			}
+			// A field saying false is the absence of a thing, and
+			// printing it says there is one. The boolean case below
+			// has always dropped these; a sender that writes them as
+			// words got "urgent false" and "playing false" onto a
+			// line that is read aloud.
+			if strings.EqualFold(v, "false") {
+				continue
+			}
+			if v != "" && v != event.Unknown && !event.Number(v) && !event.Position(v) {
 				out = append(out, name+" "+v)
 			}
 		case float64:
