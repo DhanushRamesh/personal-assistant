@@ -117,7 +117,12 @@ evals-greeting: ## Greet real arrivals sampled from the last four weeks (costs A
 
 .PHONY: evals
 evals: ## Ask a real model whether the tool descriptions work (costs API calls)
-	@go test ./internal/tool/evals/... ./internal/embed/evals/... ./internal/memory/evals/... ./internal/persona/evals/... ./internal/conversation/evals/... ./internal/remind/evals/... -tags evals -count=1 -v
+	@# Longer than go test's own ten minutes. Eighty-two cases paced
+	@# at a second and a half, plus whatever the gateway is taking
+	@# today, was always close to it and crossed it on 5 October: the
+	@# suite panicked at 600s having reported nothing at all, which
+	@# reads like a verdict and is not one.
+	@go test ./internal/tool/evals/... ./internal/embed/evals/... ./internal/memory/evals/... ./internal/persona/evals/... ./internal/conversation/evals/... ./internal/remind/evals/... -tags evals -count=1 -v -timeout 45m
 
 .PHONY: check
 check: ## Everything that must pass before committing
