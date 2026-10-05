@@ -909,8 +909,8 @@ func TestSettingAReminderAsksThePhoneForAnAlarm(t *testing.T) {
 	if p.got.Label != "take the tablets" {
 		t.Errorf("the alarm would show %q", p.got.Label)
 	}
-	if len(p.got.Days) != 0 {
-		t.Errorf("a one-off reminder set a repeating alarm: %v", p.got.Days)
+	if p.got.Key == "" {
+		t.Error("the alarm is not tied to the reminder, so a retry cannot know which it is")
 	}
 	if !strings.Contains(out.Content, "alarm") {
 		t.Errorf("the model is never told an alarm was asked for: %s", out.Content)
@@ -930,8 +930,11 @@ func TestAPhoneThatRefusesIsSaidOutLoud(t *testing.T) {
 	if out.Outcome != conversation.OutcomeOK {
 		t.Fatalf("a refused alarm lost the reminder: %s", out.Content)
 	}
-	if !strings.Contains(out.Content, "could not be set") {
+	if !strings.Contains(out.Content, "could not be reached") {
 		t.Errorf("the failure never reaches the words: %s", out.Content)
+	}
+	if !strings.Contains(out.Content, "keep being tried") {
+		t.Errorf("the retry is not promised, so the failure reads as final: %s", out.Content)
 	}
 	if strings.Contains(out.Content, "401") {
 		t.Errorf("the raw reason is being handed to the model: %s", out.Content)
@@ -955,37 +958,5 @@ func TestNoPhoneAtAllIsSaidToo(t *testing.T) {
 	}
 	if !strings.Contains(out.Content, "no alarm was set") {
 		t.Errorf("silence about the alarm, which reads as success: %s", out.Content)
-	}
-}
-
-// A reminder that comes back every day should be an alarm that
-// comes back every day, rather than a fresh one set each morning.
-// The phone's own repeat still rings on a day this server is down,
-// which is the reason for putting it on the phone at all.
-func TestARepeatingReminderRepeatsOnThePhone(t *testing.T) {
-	for _, c := range []struct {
-		repeats string
-		days    int
-	}{
-		{"daily", 7},
-		{"weekdays", 5},
-		{"weekly", 1},
-		{"monthly", 0},
-	} {
-		t.Run(c.repeats, func(t *testing.T) {
-			p := &phone{}
-			out := call(t, withPhone(t, p), "reminder_set",
-				`{"title":"take the tablets","say":"Take the tablets.",`+
-					`"say_if_late":"You should have taken them","at":"2026-09-27 06:05",`+
-					`"repeats":"`+c.repeats+`"}`)
-
-			if out.Outcome != conversation.OutcomeOK {
-				t.Fatalf("reminder_set: %s", out.Content)
-			}
-			if len(p.got.Days) != c.days {
-				t.Errorf("%s repeats on %d days, wanted %d: %v",
-					c.repeats, len(p.got.Days), c.days, p.got.Days)
-			}
-		})
 	}
 }

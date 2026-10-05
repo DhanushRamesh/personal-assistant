@@ -9925,71 +9925,114 @@ real alarm at the same moment, under the same words.
 
 **Both outcomes are said, and neither is silent.** Somebody who
 believes an alarm is set and finds at six that it was not has been
-worse served than somebody told plainly that it was not. Three
-sentences, decided in Go and handed to the model as an instruction
-rather than left to its judgement:
+worse served than somebody told plainly that it was not.
 
 | state | what the model is told |
 |---|---|
-| asked for | an alarm was asked for -- say so in passing, not as a second sentence |
-| refused | it could not be set -- say so plainly, in one clause |
-| no phone configured | there is no way to reach their phone, so no alarm was set |
+| set | an alarm was asked for -- say so in passing, not as a second sentence |
+| unreachable | it is not set *yet*, and will keep being tried |
+| no address configured | there is no way to reach their phone, so no alarm was set |
 
-The claim is exactly what is known. Home Assistant accepting the
-message is not the phone having set anything, so the words are that
-the alarm was **asked for**. The raw reason never reaches the model;
-it goes to the log, and is given only if asked.
+The raw reason never reaches the model; it goes to the log, and is
+given only if asked.
 
-**`alarm_phone`, not `notify`.** They are the same Pixel today, and
-reusing the list would still have been wrong twice over. `notify` is
-an *audience* -- everything in it hears an announcement -- where an
-alarm is one device doing one thing; add a tablet and every reminder
-would set two alarms, one beside nobody. And `notify` is switched
-**off** on purpose (2 October 2026, announcements kept in the house),
-so alarms would have been off with it and the reason would have been
-invisible.
+### Straight to the phone, not through Google
 
-### No Tasker in the path
+The first build went out through Home Assistant's companion app with
+`command_activity`. It worked, and it was measured working. It was
+still the wrong route, for a reason the owner spotted: **the
+reminder's title goes to Google and back.** "Call Gunalan: the
+invoice" is the person's own business, and this project already
+treats words leaving the house as a cost -- `notify` is switched off
+on those grounds.
 
-The first build broadcast `jarvis.SET_ALARM` for a Tasker profile to
-catch. Measured against the phone, that turned out to be an
-unnecessary hop: Home Assistant's companion app can start the clock's
-own activity directly with `command_activity`, so there is nothing to
-set up on the phone and nothing to be broken later by a reinstall or
-a half-edited profile.
+The phone is on the tailnet (`100.76.164.70`, Tailscale 1.102.3), so
+there is a stable address reachable from any network. The server
+POSTs straight to it. Nothing leaves the tailnet and Home Assistant
+drops out of the path entirely.
 
-The owner raised Tasker's built-in HTTP server as an alternative. It
-is a worse fit for this one, for a reason that has already bitten
-this project elsewhere: it only works on the local network. A
-reminder gets set from wherever the person is, the phone's local
-address moves with DHCP, and the laptop is often not on the same
-network as the phone. The companion-app route is handed to Google
-and arrives on mobile data and on somebody else's wifi -- the same
-property that makes `notify` reach the phone at all.
+Rejected on the way: an earlier note here claimed Tasker's HTTP
+server was unusable because it is local-network-only and DHCP moves
+the address. **That was wrong** -- Tailscale answers both -- and it
+is recorded because the reasoning, not the conclusion, is what
+misled.
 
-**What the extras have to look like**, measured rather than assumed:
+### What Tasker can and cannot do, measured
 
-| extra | encoding | what happens otherwise |
-|---|---|---|
-| `HOUR`, `MINUTES` | `:int` | |
-| `MESSAGE` | `:String.urlencoded` | a title with a comma or colon is read as more extras |
-| `SKIP_UI` | `:true:boolean` | the clock app opens and waits to be tapped |
-| `DAYS` | `:int[]`, semicolons | **silently dropped** as `String[]` or untyped |
+- `Set Alarm` takes **Hours, Minutes, Label, Sound, Vibrate,
+  Confirm**. No repeat days.
+- `Send Intent` extras take a **Java object**, not a typed literal,
+  so `AlarmClock.EXTRA_DAYS` (an `ArrayList<Integer>`) needs a Java
+  Function action and a loop to build -- 8-10 brittle actions.
 
-That last row is the one worth keeping. `String[]` and a bare value
-both return HTTP 200 and set the alarm -- as a one-off, with nothing
-anywhere saying the repeat was discarded. `int[]` and
-`ArrayList<Integer>` both work; `int[]` is the one in the code.
+So the phone sets **one-off alarms only**, and a repeating reminder
+has its next alarm set by the server each time it fires
+(`remind.Loop.rearm`). The cost, stated plainly: a server down
+*across a firing* does not set the next one. The alarm already on
+the phone still rings, so this degrades by one occurrence rather
+than going quiet for good. Monthly works here where it could not
+before, because nothing has to express "the fourteenth" to an alarm
+clock any more.
 
-Verified end to end through `alarm.Through` against the real phone on
-6 October 2026: Mon/Wed/Fri at 6:21 labelled "end to end: tablets,
-please", the colon and comma intact. Every test alarm was deleted
-afterwards and the owner's own two were left alone.
+### The wire
 
-Known limit, not yet addressed: a repeating reminder sets one alarm,
-for the next occurrence. Daily, weekdays and weekly map onto the
-phone's own repeat; **monthly cannot** -- an alarm clock has nowhere
-to put "the fourteenth".
+`POST http://<phone>:1821/a/<secret>` with a body of
+`hour|minute|label`.
+
+- **A pipe**, because a reminder title will contain a comma and a
+  colon and will not contain a pipe. Any that turn up are replaced,
+  not escaped: a label is for reading at six in the morning, not for
+  parsing. Newlines go too -- Tasker reads one line.
+- **The path is the shared secret.** Tasker's HTTP Request event
+  matches it exactly, so authentication costs no extra action. The
+  listener binds every interface, so without it anyone on the office
+  wifi could set alarms. It lives in `config.ini`.
+- **The reply is checked** against `jarvis-alarm-ok`, Tasker's Quick
+  Response. Anything can answer an HTTP request; a captive portal's
+  cheerful 200 would otherwise read as an alarm that was set.
+
+Tasker side: profile **HTTP Request 1821, POST, /a/...** -> task
+**Jarvis Alarm**, two actions -- `Variable Split %http_request_body`
+on `|`, then `Set Alarm` with `%http_request_body1/2/3`.
+
+### It keeps trying
+
+Owner, same day: *"if reaching the phone failed, then it has to be
+retried a few times, before the actual alarm time."*
+
+A phone is asleep, off the tailnet, or in a lift far more often than
+it is broken, and all of those fix themselves in minutes. So
+`alarm.Keeper` wraps the sender: the first failure is still
+**reported** -- the person is told the alarm is not set yet -- but it
+is retried every 2 minutes behind the answer.
+
+Two bounds, both needed. **The clock**: trying stops a minute before
+the alarm's own time, because an alarm for a moment that has passed
+helps nobody and one set seconds beforehand rings while they are
+still reading that it could not be set. **A count** (20): a phone
+that answers and *refuses* -- a profile switched off, a changed
+secret -- must not be retried until morning.
+
+Keyed by reminder id, so one amended three times is owed one alarm.
+Held in memory: a restart loses outstanding retries, which is
+accepted rather than given a table, because the window is minutes.
+
+### The signature
+
+Owner: *"always add a stamp like 'by J.A.R.V.I.S'. If Jarvis is the
+name, FRIDAY if FRIDAY."*
+
+`take the tablets -- by Jarvis`, with an em dash. The name comes
+from `[assistant] name` and is **never** written down in the server;
+the owner's own example settles the styling question, since FRIDAY
+stays FRIDAY rather than becoming F.R.I.D.A.Y. Nameless signs
+nothing rather than signing "by".
+
+Verified end to end against the phone on 6 October 2026, through
+`alarm.Phone` with the real config: label, colon, comma and em dash
+all intact. Every test alarm was deleted afterwards and the owner's
+own two were left alone.
+
 
 ## 12. Maintaining this file
 

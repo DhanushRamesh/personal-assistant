@@ -1045,36 +1045,12 @@ func alarmed(ctx context.Context, phone alarm.Setter, r *remind.Reminder) string
 	if phone == nil {
 		return " There is no way to reach their phone from here, so no alarm was set: say so."
 	}
-	at := r.DueAt
-	if err := phone.Set(ctx, alarm.Alarm{
-		At:    at,
-		Label: r.Title,
-		Days:  onDays(r.Repeats, at),
-	}); err != nil {
-		slog.Warn("the phone would not take an alarm", "at", at, "error", err)
-		return " The alarm on their phone could not be set. Tell them that plainly, in one clause, " +
+	if err := phone.Set(ctx, alarm.Alarm{At: r.DueAt, Label: r.Title, Key: r.ID}); err != nil {
+		slog.Warn("the phone would not take an alarm", "at", r.DueAt, "error", err)
+		return " Their phone could not be reached, so the alarm is not set yet, though it will " +
+			"keep being tried until the time comes. Tell them that plainly, in one clause, " +
 			"without the reason unless they ask: they may want to set it themselves."
 	}
 	return " An alarm has been asked for on their phone at the same time. Say so in passing, " +
 		"not as a second sentence."
-}
-
-// onDays : The days an alarm for this reminder repeats on, empty
-// for one time only.
-//
-// Monthly is empty, and that is the honest answer rather than an
-// oversight: a phone alarm repeats on weekdays and has nowhere to
-// put "the fourteenth". The reminder still comes back every month;
-// the alarm covers the next one.
-func onDays(r remind.Repeat, at time.Time) []time.Weekday {
-	switch r {
-	case remind.Daily:
-		return []time.Weekday{time.Sunday, time.Monday, time.Tuesday, time.Wednesday,
-			time.Thursday, time.Friday, time.Saturday}
-	case remind.Weekdays:
-		return []time.Weekday{time.Monday, time.Tuesday, time.Wednesday, time.Thursday, time.Friday}
-	case remind.Weekly:
-		return []time.Weekday{at.Weekday()}
-	}
-	return nil
 }

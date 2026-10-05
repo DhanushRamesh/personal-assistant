@@ -2,6 +2,7 @@ package remind
 
 import (
 	"context"
+	"github.com/DhanushRamesh/personal-assistant/internal/alarm"
 	"log/slog"
 	"time"
 )
@@ -56,6 +57,14 @@ type Loop struct {
 	Every time.Duration
 	// Grace : How late is still worth saying. Zero selects DefaultGrace.
 	Grace time.Duration
+	// Alarm : Where a phone alarm is asked for. Nil sets none, which
+	// is what this did before the phone was reachable.
+	//
+	// Only repeating reminders are re-armed here. A one-off had its
+	// alarm set when it was made and does not want another; a
+	// repeat cannot hold its own repeat on the phone, so each firing
+	// sets the next one.
+	Alarm alarm.Setter
 	// Logger : Where failures go. Required in use; nil is silent.
 	Logger *slog.Logger
 }
@@ -174,6 +183,7 @@ func (l *Loop) one(ctx context.Context, r Reminder, at time.Time, pass *Pass) {
 				return
 			}
 			pass.Moved++
+			l.rearm(ctx, r, next)
 			l.note(ctx, "a repeating reminder was too late to say, and was moved on", r)
 		default:
 			if err := l.Store.Missed(ctx, r.ID, at); err != nil {
@@ -210,6 +220,8 @@ func (l *Loop) one(ctx context.Context, r Reminder, at time.Time, pass *Pass) {
 
 	if !repeating {
 		next = time.Time{}
+	} else {
+		l.rearm(ctx, r, next)
 	}
 	if err := l.Store.Fired(ctx, r.ID, at, next); err != nil {
 		// Said and not recorded. Logged loudly: the next pass will say it
@@ -219,6 +231,29 @@ func (l *Loop) one(ctx context.Context, r Reminder, at time.Time, pass *Pass) {
 	}
 	pass.Said++
 	l.note(ctx, "reminder said", r)
+}
+
+// rearm : Sets the phone alarm for a repeating reminder's next turn.
+//
+// The phone's alarm clock can hold a repeat, but not one set from
+// outside: Tasker's Set Alarm takes an hour, a minute and a label
+// and nothing else. So the standing alarm is kept standing from
+// here, one occurrence at a time.
+//
+// What that costs, stated plainly: a server that is down across a
+// firing does not set the next one. The alarm already on the phone
+// still rings, so this degrades by one occurrence rather than
+// going quiet for good.
+//
+// Never fatal. The reminder itself is the thing that must not be
+// lost, and it has already been said by the time this runs.
+func (l *Loop) rearm(ctx context.Context, r Reminder, next time.Time) {
+	if l.Alarm == nil || next.IsZero() {
+		return
+	}
+	if err := l.Alarm.Set(ctx, alarm.Alarm{At: next.In(l.where()), Label: r.Title, Key: r.ID}); err != nil {
+		l.log(ctx, "cannot set the next alarm for a repeating reminder", err)
+	}
 }
 
 // clock : Now, in UTC.

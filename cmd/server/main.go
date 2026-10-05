@@ -246,6 +246,11 @@ func run() error {
 	reminderStore := remindmysql.New(db)
 	clock := reminders.Clock{Now: cfg.Assistant.Now, Location: cfg.Assistant.Location}
 
+	// A real alarm on the person's phone, beside every reminder. Nil
+	// when there is no address for it, which the answer reports as
+	// not being able to reach the phone rather than as a failure.
+	alarms, keepingAlarms := phoneAlarm(cfg, logger.Logger)
+
 	// One OAuth client for every Google API. Nil when no credentials
 	// are configured, which the endpoints report as "nothing to
 	// connect" rather than failing.
@@ -257,7 +262,7 @@ func run() error {
 	tools, err := tool.NewRegistry(slices.Concat(
 		conversations.All(chats),
 		memories.All(remembering),
-		reminders.All(reminderStore, clock, phoneAlarm(cfg)),
+		reminders.All(reminderStore, clock, alarms),
 		taskstool.All(listsOf(googleLink), taskstool.Clock{
 			Now: cfg.Assistant.Now, Location: cfg.Assistant.Location,
 		}),
@@ -366,6 +371,7 @@ func run() error {
 			Logger: logger.Logger,
 		},
 		Location: cfg.Assistant.Location,
+		Alarm:    alarms,
 		Logger:   logger.Logger,
 	}
 	remindCtx, stopReminders := context.WithCancel(context.Background())
@@ -380,6 +386,20 @@ func run() error {
 	// wait for the pass in flight to finish.
 	defer watching.Wait()
 	defer stopReminders()
+
+	// An alarm the phone would not take is tried again behind the
+	// answer, until it works or its own time arrives. Shares the
+	// reminder loop's context and wait group, so it stops with it.
+	if keepingAlarms != nil {
+		watching.Add(1)
+		go func() {
+			defer watching.Done()
+			keepingAlarms.Run(remindCtx)
+		}()
+		logger.Info("alarms go to the phone",
+			slog.Duration("retry every", alarm.DefaultEvery),
+			slog.Int("tries", alarm.DefaultTries))
+	}
 
 	logger.Info("watching for reminders",
 		slog.Duration("every", remind.DefaultEvery),
@@ -647,20 +667,25 @@ func naming(cfg config.Config, logger *slog.Logger) event.Naming {
 //
 // Untyped nil when there is nowhere to ask, for the usual reason: a
 // typed one satisfies the interface and then fails on every call,
-// and the honest answer on a server with no notify service is that
-// it cannot reach the phone at all -- which is a different sentence
-// from the alarm having failed, and the person deserves the right
-// one.
-func phoneAlarm(cfg config.Config) alarm.Setter {
-	phone := strings.TrimSpace(cfg.HomeAssistant.AlarmPhone)
-	if phone == "" || strings.TrimSpace(cfg.HomeAssistant.URL) == "" {
-		return nil
+// and the honest answer on a server with no address for the phone
+// is that it cannot reach the phone at all -- which is a different
+// sentence from the alarm having failed, and the person deserves
+// the right one.
+//
+// Wrapped in a Keeper so a phone that is asleep or off the tailnet
+// costs a sentence rather than the alarm. The returned keeper is
+// nil in the same case, and its Run is simply not started.
+func phoneAlarm(cfg config.Config, logger *slog.Logger) (alarm.Setter, *alarm.Keeper) {
+	where := strings.TrimSpace(cfg.HomeAssistant.AlarmURL.Reveal())
+	if where == "" {
+		return nil, nil
 	}
-	return alarm.Through{
-		URL:     cfg.HomeAssistant.URL,
-		Token:   cfg.HomeAssistant.Token.Reveal(),
-		Service: phone,
+	keeper := &alarm.Keeper{
+		Setter: alarm.Phone{URL: where, By: cfg.Assistant.Name},
+		Now:    cfg.Assistant.Now,
+		Logger: logger,
 	}
+	return keeper, keeper
 }
 
 // mapping : The map, or nothing when there is no key.

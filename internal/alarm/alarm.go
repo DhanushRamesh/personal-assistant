@@ -12,52 +12,60 @@
 // believes an alarm is set and finds it was not has been worse
 // served than somebody told plainly that it was not.
 //
-// Nothing on the phone has to be set up for this. Home Assistant's
-// companion app starts the clock's own activity, so there is no
-// Tasker profile in the path to be edited, exported, or quietly
-// broken by a reinstall.
+// Straight to the phone over the tailnet, rather than out through
+// Home Assistant's push service and back. The phone is a stable
+// address on the tailnet from anywhere, and a reminder's title is
+// the person's own business: "call Gunalan: the invoice" has no
+// reason to pass through anybody else on its way across the room.
 package alarm
 
 import (
-	"bytes"
 	"context"
-	"encoding/json"
 	"fmt"
+	"io"
 	"net/http"
-	"net/url"
 	"strconv"
 	"strings"
 	"time"
 )
 
-const (
-	// Action : Android's own "set an alarm" intent, which every clock
-	// app implements.
-	Action = "android.intent.action.SET_ALARM"
-
-	// Clock : The app the alarm is set in.
-	//
-	// Named rather than left to Android to resolve, because the
-	// companion app requires a package and because the alarm has to
-	// land in the same list the person already looks at. A different
-	// phone with a different clock needs this changed.
-	Clock = "com.google.android.deskclock"
-)
-
 // Alarm : What the phone is being asked for.
+//
+// An hour, a minute and some words, which is all an alarm clock
+// holds. No repeat: the clock's own repeat cannot be set from
+// outside without building a Java object inside Tasker, so a
+// repeating reminder instead has its next alarm set each time it
+// fires. See remind.Loop.
 type Alarm struct {
-	// At : When it goes off. Only the hour and the minute survive the
-	// trip, because that is all an alarm clock holds.
+	// At : When it goes off. Only the hour and the minute make the
+	// trip.
 	At time.Time
 	// Label : What shows on the phone when it rings. Somebody woken
 	// at six wants the words, not a number.
 	Label string
-	// Days : The days it repeats on, empty for one time only.
-	//
-	// The phone's own repeat rather than a fresh alarm each morning,
-	// so it still rings on a day this server is down -- which is the
-	// whole reason for putting it on the phone.
-	Days []time.Weekday
+	// Key : What this alarm is for, usually a reminder's id. Never
+	// sent to the phone; it is how a Keeper knows that two attempts
+	// are the same alarm rather than two.
+	Key string
+}
+
+// Stamp : The words with a signature after them, so an alarm going
+// off at six says who set it.
+//
+// Whatever the assistant is currently called, read from
+// configuration and never written down here. It was FRIDAY before
+// it was Jarvis and may be something else again; an alarm label is
+// no place for that to be out of date. Nameless leaves the words
+// alone rather than signing them "by".
+func Stamp(label, by string) string {
+	label, by = strings.TrimSpace(label), strings.TrimSpace(by)
+	if by == "" {
+		return label
+	}
+	if label == "" {
+		return "by " + by
+	}
+	return label + " — by " + by
 }
 
 // Setter : Somewhere an alarm can be asked for.
@@ -68,17 +76,35 @@ type Setter interface {
 	Set(ctx context.Context, a Alarm) error
 }
 
-// Through : An alarm asked for through Home Assistant's notify
-// service for the phone.
-type Through struct {
-	// URL : Where Home Assistant is.
+// Separator : What divides the hour, the minute and the words.
+//
+// A pipe because the phone splits on it and a reminder title will
+// not contain one, where a comma or a colon certainly will. Any
+// that do turn up are replaced rather than escaped: a title is for
+// reading at six in the morning, not for parsing.
+const Separator = "|"
+
+// Expected : What the phone answers when it has taken the alarm.
+//
+// Checked, because anything can answer an HTTP request. A captive
+// portal returning its own cheerful 200 would otherwise read as an
+// alarm that was set.
+const Expected = "jarvis-alarm-ok"
+
+// Phone : The person's phone, reached directly over the tailnet.
+type Phone struct {
+	// URL : Where the phone listens, including the secret path, such
+	// as http://100.76.164.70:1821/a/<secret>. Empty means there is
+	// nowhere to ask, and asking fails rather than pretending.
+	//
+	// The path is the only thing standing between this and anybody
+	// else who can reach the port, so it is kept in config.ini with
+	// the other secrets rather than written down here.
 	URL string
-	// Token : A long-lived access token.
-	Token string
-	// Service : The notify service for the phone, such as
-	// notify.mobile_app_pixel_7. Empty means there is nowhere to ask,
-	// and asking fails rather than pretending.
-	Service string
+	// By : What the assistant is called, signed after the words.
+	// Empty signs nothing. Configuration, never a constant: it was
+	// FRIDAY before it was Jarvis.
+	By string
 	// Timeout : How long the call may take. Zero selects a sensible
 	// one.
 	Timeout time.Duration
@@ -86,36 +112,25 @@ type Through struct {
 	Client *http.Client
 }
 
-// DefaultTimeout : How long to wait on Home Assistant.
-const DefaultTimeout = 10 * time.Second
+// DefaultTimeout : How long to wait on the phone.
+//
+// Short. This runs inside the turn that sets the reminder, and a
+// phone that is asleep on another network should cost a sentence,
+// not the whole answer.
+const DefaultTimeout = 5 * time.Second
 
 // Set : Asks the phone to set an alarm.
 //
-// What this can and cannot know is worth being plain about. A call
-// that succeeds means Home Assistant accepted the message and
-// handed it to Google, not that the phone is awake, has signal, or
-// did anything with it. So the honest claim afterwards is that the
-// alarm was asked for -- and a failure here is a failure that can be
-// told.
-func (t Through) Set(ctx context.Context, a Alarm) error {
-	if strings.TrimSpace(t.Service) == "" {
-		return fmt.Errorf("alarm: no notify service is configured for the phone")
-	}
-	name := strings.TrimPrefix(strings.TrimSpace(t.Service), "notify.")
-
-	body, err := json.Marshal(map[string]any{
-		"message": "command_activity",
-		"data": map[string]any{
-			"intent_action":       Action,
-			"intent_package_name": Clock,
-			"intent_extras":       Extras(a),
-		},
-	})
-	if err != nil {
-		return fmt.Errorf("alarm: %w", err)
+// What this can and cannot know is worth being plain about. The
+// phone answers once Tasker has run, so a success here really is
+// the alarm having been asked for on the device -- unlike a push,
+// which is only a message accepted for delivery.
+func (p Phone) Set(ctx context.Context, a Alarm) error {
+	if strings.TrimSpace(p.URL) == "" {
+		return fmt.Errorf("alarm: there is no address for the phone")
 	}
 
-	wait := t.Timeout
+	wait := p.Timeout
 	if wait <= 0 {
 		wait = DefaultTimeout
 	}
@@ -123,14 +138,14 @@ func (t Through) Set(ctx context.Context, a Alarm) error {
 	defer done()
 
 	req, err := http.NewRequestWithContext(ask, http.MethodPost,
-		strings.TrimRight(t.URL, "/")+"/api/services/notify/"+name, bytes.NewReader(body))
+		strings.TrimSpace(p.URL),
+		strings.NewReader(Body(Alarm{At: a.At, Label: Stamp(a.Label, p.By)})))
 	if err != nil {
 		return fmt.Errorf("alarm: %w", err)
 	}
-	req.Header.Set("Authorization", "Bearer "+t.Token)
-	req.Header.Set("Content-Type", "application/json")
+	req.Header.Set("Content-Type", "text/plain")
 
-	client := t.Client
+	client := p.Client
 	if client == nil {
 		client = &http.Client{Timeout: wait}
 	}
@@ -140,54 +155,41 @@ func (t Through) Set(ctx context.Context, a Alarm) error {
 	}
 	defer res.Body.Close()
 	if res.StatusCode < 200 || res.StatusCode > 299 {
-		return fmt.Errorf("alarm: home assistant answered %s", res.Status)
+		return fmt.Errorf("alarm: the phone answered %s", res.Status)
+	}
+
+	said, err := io.ReadAll(io.LimitReader(res.Body, 256))
+	if err != nil {
+		return fmt.Errorf("alarm: %w", err)
+	}
+	if strings.TrimSpace(string(said)) != Expected {
+		return fmt.Errorf("alarm: something other than the phone answered")
 	}
 	return nil
 }
 
-// Extras : The alarm written the way the companion app passes
-// intent extras on -- "name:value" pairs separated by commas, with
-// a type where guessing would get it wrong.
-//
-// The types are not decoration. Measured against the phone: the
-// days arrive as a repeat only as int[], and are silently dropped
-// as String[] or with no type at all, which leaves a daily alarm
-// ringing once and nothing anywhere saying why. The label is
-// url-encoded because a reminder says things like "call Gunalan:
-// the invoice, 2pm" and the comma and colon are this format's own
-// punctuation.
-func Extras(a Alarm) string {
-	out := []string{
-		"android.intent.extra.alarm.HOUR:" + strconv.Itoa(a.At.Hour()) + ":int",
-		"android.intent.extra.alarm.MINUTES:" + strconv.Itoa(a.At.Minute()) + ":int",
-		// Otherwise the clock app opens on the person's screen and
-		// waits to be tapped, which is no use at all from a room away.
-		"android.intent.extra.alarm.SKIP_UI:true:boolean",
-	}
-	if label := strings.TrimSpace(a.Label); label != "" {
-		out = append(out, "android.intent.extra.alarm.MESSAGE:"+
-			url.QueryEscape(label)+":String.urlencoded")
-	}
-	if days := Numbered(a.Days); days != "" {
-		out = append(out, "android.intent.extra.alarm.DAYS:"+days+":int[]")
-	}
-	return strings.Join(out, ",")
+// Body : The alarm as the phone reads it -- hour, minute and words,
+// divided by Separator.
+func Body(a Alarm) string {
+	return strings.Join([]string{
+		strconv.Itoa(a.At.Hour()),
+		strconv.Itoa(a.At.Minute()),
+		Labelled(a.Label),
+	}, Separator)
 }
 
-// Numbered : The days as the phone's alarm clock counts them --
-// Sunday 1 through Saturday 7 -- semicolon separated, or empty for
-// one time only.
+// Labelled : The words, with anything that would divide them taken
+// out.
 //
-// Android's numbering rather than Go's, which starts at Sunday 0,
-// and semicolons because commas already separate one extra from the
-// next.
-func Numbered(days []time.Weekday) string {
-	if len(days) == 0 {
-		return ""
-	}
-	var out []string
-	for _, d := range days {
-		out = append(out, strconv.Itoa(int(d)+1))
-	}
-	return strings.Join(out, ";")
+// Newlines go too. The phone reads the body as one line, and a
+// title carrying a second one would arrive truncated with no
+// indication that anything was lost.
+func Labelled(label string) string {
+	clean := strings.Map(func(r rune) rune {
+		if r == '|' || r == '\n' || r == '\r' {
+			return ' '
+		}
+		return r
+	}, label)
+	return strings.Join(strings.Fields(clean), " ")
 }

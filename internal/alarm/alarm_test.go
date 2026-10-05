@@ -2,7 +2,6 @@ package alarm_test
 
 import (
 	"context"
-	"encoding/json"
 	"io"
 	"net/http"
 	"net/http/httptest"
@@ -15,126 +14,123 @@ import (
 
 var six = time.Date(2026, 10, 6, 6, 5, 0, 0, time.UTC)
 
-// TestItAsksThePhoneForTheHourAndTheWords : The phone needs the time
-// in pieces and something to show on the alarm. A broadcast the
-// phone already knows how to catch, rather than anything cleverer.
-func TestItAsksThePhoneForTheHourAndTheWords(t *testing.T) {
-	var got map[string]any
-	var path string
-	ha := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		path = r.URL.Path
-		if r.Header.Get("Authorization") != "Bearer secret" {
-			t.Errorf("went without the token: %q", r.Header.Get("Authorization"))
+// answering : A phone that records what it was asked and answers
+// however the test says.
+func answering(t *testing.T, status int, says string) (*alarm.Phone, *string) {
+	t.Helper()
+	var got string
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.Method != http.MethodPost {
+			t.Errorf("asked with %s", r.Method)
 		}
 		body, _ := io.ReadAll(r.Body)
-		_ = json.Unmarshal(body, &got)
-		w.WriteHeader(http.StatusOK)
+		got = string(body)
+		w.WriteHeader(status)
+		_, _ = w.Write([]byte(says))
 	}))
-	defer ha.Close()
+	t.Cleanup(server.Close)
+	return &alarm.Phone{URL: server.URL + "/a/secret"}, &got
+}
 
-	through := alarm.Through{URL: ha.URL, Token: "secret", Service: "notify.mobile_app_pixel_7"}
-	if err := through.Set(context.Background(), alarm.Alarm{
+// TestItAsksThePhoneForTheHourAndTheWords : The phone needs the
+// time in pieces and something to show when it rings.
+func TestItAsksThePhoneForTheHourAndTheWords(t *testing.T) {
+	phone, got := answering(t, http.StatusOK, alarm.Expected)
+
+	if err := phone.Set(context.Background(), alarm.Alarm{
 		At: six, Label: "take the tablets",
-		Days: []time.Weekday{time.Monday, time.Saturday},
 	}); err != nil {
 		t.Fatalf("set: %v", err)
 	}
-
-	if path != "/api/services/notify/mobile_app_pixel_7" {
-		t.Errorf("asked the wrong service: %q", path)
-	}
-	if got["message"] != "command_activity" {
-		t.Errorf("the companion app would not start anything: %v", got["message"])
-	}
-	data, _ := got["data"].(map[string]any)
-	if data["intent_action"] != alarm.Action {
-		t.Errorf("the phone would not know what it was: %v", data["intent_action"])
-	}
-	extras, _ := data["intent_extras"].(string)
-	for _, want := range []string{
-		"android.intent.extra.alarm.HOUR:6:int",
-		"android.intent.extra.alarm.MINUTES:5:int",
-		"android.intent.extra.alarm.SKIP_UI:true:boolean",
-		"android.intent.extra.alarm.MESSAGE:take+the+tablets:String.urlencoded",
-		"android.intent.extra.alarm.DAYS:2;7:int[]",
-	} {
-		if !strings.Contains(extras, want) {
-			t.Errorf("missing %q from\n%s", want, extras)
-		}
+	if *got != "6|5|take the tablets" {
+		t.Errorf("the phone was asked %q", *got)
 	}
 }
 
-// TestNowhereToAskIsAnError : A server with no notify service cannot
-// reach the phone, and saying the alarm is set would be a lie the
-// person only discovers at six in the morning.
+// TestTheWordsCannotBreakTheLine : The phone splits the body on a
+// pipe and reads it as one line, so a title carrying either would
+// arrive as the wrong alarm or as none.
+func TestTheWordsCannotBreakTheLine(t *testing.T) {
+	phone, got := answering(t, http.StatusOK, alarm.Expected)
+
+	if err := phone.Set(context.Background(), alarm.Alarm{
+		At: six, Label: "call Gunalan | the invoice,\nand the 2pm",
+	}); err != nil {
+		t.Fatalf("set: %v", err)
+	}
+	if strings.Count(*got, "|") != 2 {
+		t.Errorf("the words added a divider of their own: %q", *got)
+	}
+	if *got != "6|5|call Gunalan the invoice, and the 2pm" {
+		t.Errorf("the words did not survive readably: %q", *got)
+	}
+}
+
+// TestACommaAndColonSurvive : What a reminder actually says. These
+// broke the old route and must not break this one.
+func TestACommaAndColonSurvive(t *testing.T) {
+	if got := alarm.Labelled("call Gunalan: the invoice, 2pm"); got != "call Gunalan: the invoice, 2pm" {
+		t.Errorf("ordinary punctuation was mangled: %q", got)
+	}
+}
+
+// TestNowhereToAskIsAnError : A server with no address for the
+// phone cannot set alarms, and saying one was set would be a lie
+// the person only finds out about at six in the morning.
 func TestNowhereToAskIsAnError(t *testing.T) {
-	through := alarm.Through{URL: "http://127.0.0.1:1", Token: "x"}
-	err := through.Set(context.Background(), alarm.Alarm{At: six, Label: "wake up"})
+	err := alarm.Phone{}.Set(context.Background(), alarm.Alarm{At: six, Label: "wake up"})
 	if err == nil {
 		t.Fatal("claimed an alarm with nowhere to ask for one")
 	}
-	if !strings.Contains(err.Error(), "no notify service") {
+	if !strings.Contains(err.Error(), "no address") {
 		t.Errorf("the reason is not clear: %v", err)
 	}
 }
 
-// TestHomeAssistantRefusingIsAnError : Anything but a yes is a no.
-func TestHomeAssistantRefusingIsAnError(t *testing.T) {
-	ha := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
-		w.WriteHeader(http.StatusUnauthorized)
-	}))
-	defer ha.Close()
-
-	through := alarm.Through{URL: ha.URL, Token: "wrong", Service: "notify.mobile_app_pixel_7"}
-	if err := through.Set(context.Background(), alarm.Alarm{At: six, Label: "wake up"}); err == nil {
+// TestARefusalIsAnError : Anything but a yes is a no.
+func TestARefusalIsAnError(t *testing.T) {
+	phone, _ := answering(t, http.StatusNotFound, "")
+	if err := phone.Set(context.Background(), alarm.Alarm{At: six, Label: "wake up"}); err == nil {
 		t.Fatal("a refusal was taken for an alarm")
 	}
 }
 
-// TestTheWeekIsCountedFromSunday : Go counts Sunday as 0 and the
-// phone's alarm clock counts it as 1, and the whole week is
-// silently a day out if that is got wrong.
-func TestTheWeekIsCountedFromSunday(t *testing.T) {
-	week := []time.Weekday{time.Sunday, time.Monday, time.Tuesday, time.Wednesday,
-		time.Thursday, time.Friday, time.Saturday}
-	if got := alarm.Numbered(week); got != "1;2;3;4;5;6;7" {
-		t.Errorf("the week is numbered %q", got)
+// TestSomethingElseAnsweringIsAnError : Anything can answer an
+// HTTP request. A captive portal returning its own cheerful 200
+// would otherwise read as an alarm that was set, which is the
+// failure this whole feature exists to prevent.
+func TestSomethingElseAnsweringIsAnError(t *testing.T) {
+	phone, _ := answering(t, http.StatusOK, "<html>Sign in to continue</html>")
+
+	err := phone.Set(context.Background(), alarm.Alarm{At: six, Label: "wake up"})
+	if err == nil {
+		t.Fatal("a stranger's 200 was taken for an alarm")
+	}
+	if !strings.Contains(err.Error(), "other than the phone") {
+		t.Errorf("the reason is not clear: %v", err)
 	}
 }
 
-// TestTheLabelCannotBreakTheExtras : Extras are separated by
-// commas and colons, and a reminder says things like "call
-// Gunalan: the invoice, 2pm". Unencoded, that is read as two more
-// extras and the alarm arrives with no name or not at all.
-func TestTheLabelCannotBreakTheExtras(t *testing.T) {
-	got := alarm.Extras(alarm.Alarm{At: six, Label: "call Gunalan: the invoice, 2pm"})
-
-	if strings.Count(got, ",") != 3 {
-		t.Errorf("the label added separators of its own: %s", got)
-	}
-	if !strings.Contains(got, "call+Gunalan%3A+the+invoice%2C+2pm:String.urlencoded") {
-		t.Errorf("the label is not encoded: %s", got)
+// TestAnUnreachablePhoneIsAnError : Off the tailnet, asleep, or
+// Tasker not running.
+func TestAnUnreachablePhoneIsAnError(t *testing.T) {
+	phone := alarm.Phone{URL: "http://127.0.0.1:1/a/secret", Timeout: time.Second}
+	if err := phone.Set(context.Background(), alarm.Alarm{At: six, Label: "wake up"}); err == nil {
+		t.Fatal("claimed an alarm on a phone that never answered")
 	}
 }
 
-// TestTheDaysAreTypedAsIntegers : Measured against the phone: the
-// days are taken as a repeat only as int[], and are dropped in
-// silence as String[] or with no type, which leaves a daily alarm
-// ringing once with nothing anywhere saying why.
-func TestTheDaysAreTypedAsIntegers(t *testing.T) {
-	got := alarm.Extras(alarm.Alarm{At: six, Days: []time.Weekday{
-		time.Monday, time.Tuesday, time.Wednesday, time.Thursday, time.Friday,
-	}})
-
-	if !strings.Contains(got, "android.intent.extra.alarm.DAYS:2;3;4;5;6:int[]") {
-		t.Errorf("the week would not repeat: %s", got)
-	}
-}
-
-// TestAOneOffNamesNoDays : An absent DAYS is how the phone is told
-// it rings once, so an empty one must not be sent as a day.
-func TestAOneOffNamesNoDays(t *testing.T) {
-	if got := alarm.Extras(alarm.Alarm{At: six, Label: "wake up"}); strings.Contains(got, "DAYS") {
-		t.Errorf("a one-off claimed days: %s", got)
+// TestTheStampNamesWhoeverItIsCalledNow : The name is
+// configuration -- it was FRIDAY before it was Jarvis -- so the
+// signature follows it rather than being written down.
+func TestTheStampNamesWhoeverItIsCalledNow(t *testing.T) {
+	for _, c := range []struct{ by, want string }{
+		{"Jarvis", "take the tablets — by Jarvis"},
+		{"FRIDAY", "take the tablets — by FRIDAY"},
+		{"", "take the tablets"},
+	} {
+		if got := alarm.Stamp("take the tablets", c.by); got != c.want {
+			t.Errorf("as %q it signed %q, wanted %q", c.by, got, c.want)
+		}
 	}
 }
