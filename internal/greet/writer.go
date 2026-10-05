@@ -72,6 +72,9 @@ func (w *Writer) Write(ctx context.Context, t Told) (said string, written bool) 
 	// arrivals have nothing after it worth hearing; the opening is
 	// then the whole greeting, which is what it was built to be.
 	answer = Without(answer)
+	if Quiet(answer) {
+		answer = ""
+	}
 	if answer == "" {
 		return fallback, false
 	}

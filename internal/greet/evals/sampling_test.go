@@ -679,5 +679,16 @@ func ask(t *testing.T, env *platformai.Environment, cfg config.Config, told gree
 			took, last.Text, last.Detail)
 		t.Fatalf("the provider failed: %s (%s)", last.Text, last.Detail)
 	}
-	return strings.TrimSpace(last.Text), took
+	said := strings.TrimSpace(last.Text)
+	if greet.Quiet(said) {
+		return "", took
+	}
+	// A stream the deadline cut leaves a fragment, and a fragment
+	// with no fault in it scores as a good answer. One case passed
+	// on "'t know".
+	if said != "" && len(strings.Fields(said)) < 3 {
+		fmt.Printf("\n   ✗✗ CUT OFF after %v -- not an answer: %q\n", took, said)
+		return "", took
+	}
+	return said, took
 }

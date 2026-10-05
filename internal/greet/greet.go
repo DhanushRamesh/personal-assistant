@@ -183,6 +183,32 @@ type Chore struct {
 	Overdue bool
 }
 
+// Silence : What the model answers when there is nothing to add.
+//
+// A word rather than an empty reply, and the reason is measured. Of
+// twelve answers to six windows the owner had ruled should produce
+// nothing, not one came back empty -- and one of them came back as
+// "nothing here is outstanding enough to raise ... *(Silence after
+// the greeting.)*", which is a model that has made the right
+// judgement and cannot express it. Asked for a sentence it writes a
+// sentence; given a word that means no sentence, it has somewhere
+// to put the judgement.
+//
+// The same device internal/notice uses, and it was in this package
+// until the prompt was rewritten on 5 October and the refusal
+// wording went with it.
+const Silence = "NOTHING"
+
+// Quiet : Whether the model declined.
+//
+// Generous about how it is written, because the cost of reading a
+// refusal as a greeting is that the refusal is read out loud.
+func Quiet(said string) bool {
+	trimmed := strings.ToUpper(strings.TrimSpace(said))
+	trimmed = strings.Trim(trimmed, ".!\"' ")
+	return trimmed == Silence
+}
+
 // Anything : Whether there is anything at all to write a greeting
 // from.
 //
@@ -220,7 +246,7 @@ func Prompt(t Told) string {
 			"Most of what is below is not a thing to talk about at all; it is what lets you understand the one thing that is.",
 			"The test is whether somebody would ever raise it with a person who had just walked in. Where they would not, it is evidence rather than a subject: use it to reach something worth saying, and leave it out of the saying.",
 			"Where something is worth it, say so and ask about it, the way somebody would: a short question, not a report.",
-			"Where nothing stands out -- and most of the time nothing will -- answer with nothing at all. The greeting has been said; silence after it is a greeting.",
+			"Where nothing stands out -- and most of the time nothing will -- answer "+Silence+". The greeting has been said; silence after it is a greeting.",
 		),
 		nothing(),
 		prompt.Text(
@@ -229,6 +255,7 @@ func Prompt(t Told) string {
 			"One thing at most. Somebody who comes in and is asked three questions has been interrogated, not greeted.",
 		),
 		sure(),
+		shown4(),
 		reminders(t),
 		reached(t),
 		prompt.Text(
@@ -241,7 +268,7 @@ func Prompt(t Told) string {
 			"and do not guess at what something meant -- ask them instead, which is the point of asking.",
 			"A name is worth no more than whatever handed it to you. One that came off a device may be a nickname, a mishearing or the wrong person altogether, and where it says it does not know, it does not know.",
 			"Say somebody rather than a name you cannot vouch for. They will tell you who it was, and a wrong name is not a hedge -- it is a different person.",
-			"If there is nothing here at all, answer with nothing: they have already been greeted.",
+			"If there is nothing here at all, answer "+Silence+": they have already been greeted.",
 		),
 		prompt.Text(
 			"Plain spoken sentences. No lists, no headings, no stage directions, and nothing they would have to read rather than hear.",
@@ -345,7 +372,33 @@ func nothing() string {
 		"Most arrivals have nothing in them worth a word. Returning nothing is the commonest right answer here, and it is not a failure to have found one.",
 		"You are not being asked to produce a sentence. You are being asked whether there is one worth saying, and usually there is not.",
 		"If what you are left with is the shape of their day, the hour they came in, how long they were gone, or how their phone behaved, then you have nothing: they were there for all of it and none of it needs telling.",
-		"Return nothing, and do not say that you are returning nothing.",
+		"Where that is what you have, answer with the single word "+Silence+" and nothing else -- no full stop, no explanation, and nothing about having nothing to say. It is never spoken; it is how you say there is nothing.",
+	)
+}
+
+// shown4 : Four arrivals already judged, two of them silences.
+//
+// Telling it that saying nothing is the ordinary answer moved
+// nothing: nought silences in twelve across six windows the owner
+// had ruled should produce one. Twice. Showing is the thing left to
+// try, and there was nothing to show until he ruled on ten real
+// windows and six came back silent.
+//
+// Four of those ten, chosen for the two things they settle: that an
+// answered call is not news, and that a thing which merely happened
+// loses to a thing still outstanding. The other six are held back
+// to measure against, because a prompt carrying the cases it is
+// scored on is scored on nothing.
+//
+// Compressed on purpose. They are at a door inside ten seconds, and
+// the point of each is its verdict rather than its detail.
+func shown4() string {
+	return prompt.Text(
+		"Four arrivals somebody has already ruled on, with what was said and why. They are the measure; match them.",
+		"-- Home all morning. Two short calls, one from his mother and one from a friend, both answered. Answered "+Silence+": a call that connected is not news to the person who took it.",
+		"-- An afternoon at the office, with nothing in the window but the phone reporting on itself. Answered "+Silence+": a working afternoon, and a device's own housekeeping, are the mechanics of a day and he was there for both.",
+		"-- Nothing reported at all, and the dentist and a haircut at eleven in the morning. Said: \"You have the dentist and the haircut at eleven, sir.\" Near enough that hearing it now beats finding it out.",
+		"-- Out all evening, a meeting in the diary he plainly went to, and two calls from a number with no name that nobody answered and nothing since. Said: \"A couple of calls came in while you were out, sir, from a number the phone did not know.\" The meeting is over and nothing is owed on it; the calls are still outstanding, and outstanding beats finished.",
 	)
 }
 
