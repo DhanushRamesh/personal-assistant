@@ -1152,6 +1152,6 @@ func carried(r *remind.Reminder, where *time.Location) string {
 
 // alarmFor : The alarm a reminder would put on the phone.
 func alarmFor(r *remind.Reminder, where *time.Location) alarm.Alarm {
-	at := r.DueAt.In(where)
+	at := alarm.OnTheMinute(r.DueAt.In(where))
 	return alarm.Alarm{At: at, Label: r.Title, Days: remind.AlarmDays(r.Repeats, at), Key: r.ID}
 }

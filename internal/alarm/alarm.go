@@ -240,6 +240,21 @@ func Body(a Alarm) string {
 	}, Separator)
 }
 
+// OnTheMinute : The time the phone will actually ring at.
+//
+// An alarm clock holds an hour and a minute and nothing smaller,
+// so a reminder at 34 minutes past and 33 seconds becomes an alarm
+// at 34 minutes past -- ringing 33 seconds *before* the thing it
+// is for. Rounded up instead, so the alarm never goes off ahead of
+// the reminder it belongs to. A reminder already on the minute is
+// left exactly where it is.
+func OnTheMinute(t time.Time) time.Time {
+	if t.Second() == 0 && t.Nanosecond() == 0 {
+		return t
+	}
+	return t.Truncate(time.Minute).Add(time.Minute).In(t.Location())
+}
+
 // Numbered : The days as the phone's alarm clock counts them --
 // Sunday 1 through Saturday 7 -- semicolon separated, or empty for
 // one time only.

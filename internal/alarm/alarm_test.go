@@ -246,3 +246,23 @@ func TestHoldsIsWhatThePhoneKeepsOnItsOwn(t *testing.T) {
 		t.Error("a repeat was not taken for something the phone holds")
 	}
 }
+
+// TestTheAlarmNeverRingsBeforeTheReminder : An alarm clock holds
+// no seconds, so a reminder at 34 past and 33 seconds would ring
+// at 34 past -- half a minute before the thing it is for, which
+// is how the alarm came to lead the voice.
+func TestTheAlarmNeverRingsBeforeTheReminder(t *testing.T) {
+	odd := time.Date(2026, 10, 7, 2, 34, 33, 0, time.UTC)
+	if got := alarm.OnTheMinute(odd); got.Hour() != 2 || got.Minute() != 35 {
+		t.Errorf("34:33 became %02d:%02d, which rings early", got.Hour(), got.Minute())
+	}
+}
+
+// TestAWholeMinuteIsLeftWhereItIs : Rounding up a time already on
+// the minute would push every ordinary reminder a minute late.
+func TestAWholeMinuteIsLeftWhereItIs(t *testing.T) {
+	exact := time.Date(2026, 10, 7, 8, 0, 0, 0, time.UTC)
+	if got := alarm.OnTheMinute(exact); !got.Equal(exact) {
+		t.Errorf("08:00 became %s", got)
+	}
+}

@@ -10100,6 +10100,33 @@ That is the standing weakness here: **the phone answers before it
 acts**, so a success is the message having been accepted, not the
 alarm existing. Everything above is built knowing it.
 
+### The alarm was beating the voice
+
+Owner, 6 October 2026: *"when the reminder comes, the phone alarm
+rings first, but you said time to wake up late."* Two causes, both
+real, found in one trace: a one-minute reminder set at **02:33:33**
+was spoken at **02:34:36.7**.
+
+**The seconds were being dropped.** An alarm clock holds an hour
+and a minute and nothing smaller, so a reminder at 34 past and 33
+seconds became an alarm at 34 past -- ringing **33 seconds before**
+the thing it was for. `alarm.OnTheMinute` rounds **up** instead, so
+the alarm can never precede its reminder. A time already on the
+minute is left exactly where it is, or every ordinary reminder
+would slip a minute late.
+
+**Saying one is not instant.** The look at the clock, the call to
+Home Assistant, Piper, then the satellite: about three and a half
+seconds, against a phone alarm that rings exactly on its minute. So
+the alarm led the voice every single time and the voice sounded
+like an afterthought. `remind.Loop.Lead` (4s) picks a reminder up
+slightly before its moment, so the sentence *lands* on the moment
+rather than starting there.
+
+Worth keeping straight: the poll was never the problem. It runs
+every two seconds. The delay is the speaking, and no amount of
+looking more often fixes that -- only starting sooner does.
+
 ### The signature
 
 Owner: *"always add a stamp like 'by J.A.R.V.I.S'. If Jarvis is the

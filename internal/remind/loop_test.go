@@ -652,3 +652,35 @@ func TestAOneOffArmsNothingFurther(t *testing.T) {
 		t.Error("a one-off reminder armed another alarm after firing")
 	}
 }
+
+// Saying a reminder is not instant -- the clock, then Home
+// Assistant, then Piper, then the satellite -- while the phone
+// alarm rings exactly on its minute. Picked up slightly early, the
+// voice lands on the moment instead of trailing the alarm.
+func TestOneIsPickedUpBeforeItsMoment(t *testing.T) {
+	due := time.Date(2026, 10, 7, 8, 0, 0, 0, india)
+	l, store, spoke := loop(t, due.Add(-2*time.Second))
+	put(t, store, due, remind.Once)
+
+	if got := l.Once(context.Background()); got.Said != 1 {
+		t.Fatalf("pass = %+v, want it said just before its time", got)
+	}
+	if spoke.count() != 1 {
+		t.Errorf("it was not said: %d heard", spoke.count())
+	}
+}
+
+// Not so early that it is wrong. A reminder a minute off is still
+// a minute off.
+func TestOneIsNotSaidLongBefore(t *testing.T) {
+	due := time.Date(2026, 10, 7, 8, 0, 0, 0, india)
+	l, store, spoke := loop(t, due.Add(-time.Minute))
+	put(t, store, due, remind.Once)
+
+	if got := l.Once(context.Background()); got.Said != 0 {
+		t.Fatalf("pass = %+v, want it left alone", got)
+	}
+	if spoke.count() != 0 {
+		t.Errorf("a reminder was said a minute early")
+	}
+}

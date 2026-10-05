@@ -15,6 +15,19 @@ const (
 	// noticeably wrong, and the question is one indexed read.
 	DefaultEvery = 2 * time.Second
 
+	// DefaultLead : How far ahead of its time a reminder is picked up.
+	//
+	// Saying one is not instant. Measured on this server, a
+	// reminder due at 02:34:33 was spoken at 02:34:36.7: the look
+	// at the clock, then the call to Home Assistant, then Piper,
+	// then the satellite. Meanwhile the phone alarm rings exactly
+	// on its minute, so the alarm led the voice every time and the
+	// voice sounded like an afterthought.
+	//
+	// Starting the sentence slightly early puts the voice where it
+	// belongs: at the moment, or just before the alarm backs it up.
+	DefaultLead = 4 * time.Second
+
 	// DefaultGrace : How late a reminder may be and still be worth saying.
 	//
 	// The server having been off is the usual reason. A timer said three
@@ -57,6 +70,10 @@ type Loop struct {
 	Every time.Duration
 	// Grace : How late is still worth saying. Zero selects DefaultGrace.
 	Grace time.Duration
+	// Lead : How far ahead of its time to pick one up, so that the
+	// speaking of it lands on the moment rather than after it.
+	// Zero selects DefaultLead.
+	Lead time.Duration
 	// Alarm : Where a phone alarm is asked for. Nil sets none, which
 	// is what this did before the phone was reachable.
 	//
@@ -124,7 +141,9 @@ func (l *Loop) Once(ctx context.Context) Pass {
 	}
 
 	at := l.clock()
-	due, err := l.Store.Due(ctx, at, DefaultDueLimit)
+	// Asked for slightly ahead, because saying one takes a few
+	// seconds and the phone alarm does not wait.
+	due, err := l.Store.Due(ctx, at.Add(l.lead()), DefaultDueLimit)
 	if err != nil {
 		l.log(ctx, "cannot read what is due", err)
 		return pass
@@ -257,7 +276,8 @@ func (l *Loop) rearm(ctx context.Context, r Reminder, next time.Time) {
 	if len(AlarmDays(r.Repeats, next)) > 0 {
 		return
 	}
-	if err := l.Alarm.Set(ctx, alarm.Alarm{At: next.In(l.where()), Label: r.Title, Key: r.ID}); err != nil {
+	at := alarm.OnTheMinute(next.In(l.where()))
+	if err := l.Alarm.Set(ctx, alarm.Alarm{At: at, Label: r.Title, Key: r.ID}); err != nil {
 		l.log(ctx, "cannot set the next alarm for a repeating reminder", err)
 	}
 }
@@ -276,6 +296,17 @@ func (l *Loop) where() *time.Location {
 		return time.UTC
 	}
 	return l.Location
+}
+
+// lead : How far ahead of its time to pick one up.
+func (l *Loop) lead() time.Duration {
+	if l.Lead < 0 {
+		return 0
+	}
+	if l.Lead == 0 {
+		return DefaultLead
+	}
+	return l.Lead
 }
 
 // grace : How late is still worth saying.
