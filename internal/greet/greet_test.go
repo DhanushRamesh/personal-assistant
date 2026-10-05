@@ -119,13 +119,13 @@ func TestAFailedModelStillGreets(t *testing.T) {
 		return "", errors.New("the provider is down")
 	}}
 	said, written := w.Write(context.Background(), greet.Told{
-		Now: evening, Fallback: "Good evening, sir.",
+		Now: evening, Opening: "Good evening, sir. Welcome back.",
 		Reminders: []string{"you were going to call the plumber."},
 	})
 	if written {
 		t.Error("a failure was reported as written")
 	}
-	if !strings.Contains(said, "Good evening, sir.") {
+	if !strings.Contains(said, "Good evening, sir. Welcome back.") {
 		t.Errorf("the fixed greeting was not said: %q", said)
 	}
 	if !strings.Contains(said, "plumber") {
@@ -141,7 +141,7 @@ func TestASlowModelStillGreets(t *testing.T) {
 			return "", ctx.Err()
 		}}
 	start := time.Now()
-	said, written := w.Write(context.Background(), greet.Told{Now: evening, Fallback: "Evening."})
+	said, written := w.Write(context.Background(), greet.Told{Now: evening, Opening: "Evening."})
 	if written || said != "Evening." {
 		t.Errorf("a slow model should fall back, got %q written=%v", said, written)
 	}
@@ -154,7 +154,7 @@ func TestASlowModelStillGreets(t *testing.T) {
 // greeted anybody, and silence at the door is the failure being avoided.
 func TestAnEmptyAnswerIsNotSaid(t *testing.T) {
 	w := &greet.Writer{Ask: func(context.Context, string) (string, error) { return "   ", nil }}
-	said, written := w.Write(context.Background(), greet.Told{Now: evening, Fallback: "Evening."})
+	said, written := w.Write(context.Background(), greet.Told{Now: evening, Opening: "Evening."})
 	if written || said != "Evening." {
 		t.Errorf("an empty answer was used: %q written=%v", said, written)
 	}
@@ -164,7 +164,7 @@ func TestAnEmptyAnswerIsNotSaid(t *testing.T) {
 // says one of the fixed sentences, exactly as it used to.
 func TestNoModelAtAllIsHowItWorkedBefore(t *testing.T) {
 	var w *greet.Writer
-	said, written := w.Write(context.Background(), greet.Told{Now: evening, Fallback: "Evening."})
+	said, written := w.Write(context.Background(), greet.Told{Now: evening, Opening: "Evening."})
 	if written || said != "Evening." {
 		t.Errorf("got %q written=%v", said, written)
 	}
@@ -464,5 +464,62 @@ func TestNothingPlannedAddsNothing(t *testing.T) {
 	got := greet.Prompt(greet.Told{Now: time.Now(), Were: nil})
 	if strings.Contains(got, "was in their diary for the time they were away") {
 		t.Error("an empty section was written anyway")
+	}
+}
+
+// TestTheOpeningIsAlwaysSaid : Owner, after a greeting that began
+// "Kliffy rang while you were out, sir": "it should say the good
+// morning / afternoon / evening and welcome backs at the beginning."
+//
+// The model is told the opening has been said and asked for what
+// follows; the opening itself is put in front of the answer here, so
+// that a model which ignores the instruction cannot drop it.
+func TestTheOpeningIsAlwaysSaid(t *testing.T) {
+	w := &greet.Writer{Ask: func(context.Context, string) (string, error) {
+		return "Kliffy rang while you were out, sir.", nil
+	}}
+	said, written := w.Write(context.Background(), greet.Told{
+		Now: evening, Opening: "Good evening, sir. Welcome back.",
+	})
+	if !written {
+		t.Fatal("the model wrote one and it was not used")
+	}
+	want := "Good evening, sir. Welcome back. Kliffy rang while you were out, sir."
+	if said != want {
+		t.Errorf("got %q, want %q", said, want)
+	}
+}
+
+// TestNobodyIsGreetedTwice : And the other way. A model that writes
+// its own salutation anyway must not produce two of them out loud.
+func TestNobodyIsGreetedTwice(t *testing.T) {
+	for _, answer := range []string{
+		"Good evening, sir. Kliffy rang while you were out.",
+		"Evening, sir -- Kliffy rang while you were out.",
+		"Welcome back. Kliffy rang while you were out.",
+		"Good evening, sir. Welcome back. Kliffy rang while you were out.",
+	} {
+		w := &greet.Writer{Ask: func(context.Context, string) (string, error) {
+			return answer, nil
+		}}
+		said, _ := w.Write(context.Background(), greet.Told{
+			Now: evening, Opening: "Good evening, sir. Welcome back.",
+		})
+		want := "Good evening, sir. Welcome back. Kliffy rang while you were out."
+		if said != want {
+			t.Errorf("from %q\n got %q\nwant %q", answer, said, want)
+		}
+	}
+}
+
+// TestTheModelIsToldNotToGreet : The instruction, so that the
+// stripping above is a guard rather than the mechanism.
+func TestTheModelIsToldNotToGreet(t *testing.T) {
+	asked := greet.Prompt(greet.Told{Now: evening, Opening: "Good evening, sir. Welcome back."})
+	if !strings.Contains(asked, "Good evening, sir. Welcome back.") {
+		t.Error("the model was not told what had already been said")
+	}
+	if !strings.Contains(asked, "Do not greet them again") {
+		t.Error("the model was not told to write only what follows")
 	}
 }

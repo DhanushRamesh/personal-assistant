@@ -15,6 +15,7 @@ import (
 
 	"github.com/DhanushRamesh/personal-assistant/internal/api/apitest"
 	"github.com/DhanushRamesh/personal-assistant/internal/api/presence"
+	"github.com/DhanushRamesh/personal-assistant/internal/greet"
 	"github.com/DhanushRamesh/personal-assistant/internal/remind"
 	"github.com/DhanushRamesh/personal-assistant/internal/remind/inmemory"
 )
@@ -180,17 +181,30 @@ func TestAMissIsToldAtTheDoorAndOnlyOnce(t *testing.T) {
 	}
 }
 
-// The greeting itself is the hour and nothing more.
-func TestTheGreetingIsJustTheHour(t *testing.T) {
+// The greeting with nothing to say is the hour and the welcome, and
+// nothing more. Owner: "it should say the good morning / afternoon /
+// evening and welcome backs at the beginning."
+func TestTheGreetingIsTheHourAndTheWelcome(t *testing.T) {
 	sat := &satellite{}
 	e := apitest.NewWith(t, apitest.Options{Announcer: sat, Reminders: inmemory.New()})
 
-	got := arrive(t, e)
-	if !strings.HasSuffix(strings.TrimSpace(got.Said), "sir.") {
-		t.Errorf("greeting = %q", got.Said)
+	got := strings.TrimSpace(arrive(t, e).Said)
+	if !strings.HasSuffix(got, greet.Back) {
+		t.Errorf("greeting = %q, wants the welcome behind it", got)
 	}
-	if n := len(strings.Fields(got.Said)); n > 4 {
-		t.Errorf("greeting = %q, %d words: it should be the hour and nothing else", got.Said, n)
+	opened := false
+	for _, band := range greet.Salutations {
+		for _, salutation := range band {
+			if strings.HasPrefix(got, salutation) {
+				opened = true
+			}
+		}
+	}
+	if !opened {
+		t.Errorf("greeting = %q, wants a salutation for the hour in front", got)
+	}
+	if n := len(strings.Fields(got)); n > 7 {
+		t.Errorf("greeting = %q, %d words: it should be the hour, the welcome, and nothing else", got, n)
 	}
 }
 

@@ -255,7 +255,7 @@ func (h *Handler) compose(ctx context.Context, user string, owed []string) (stri
 	now := h.clock().In(h.where())
 	told := greet.Told{
 		Now:       now,
-		Fallback:  fixed,
+		Opening:   fixed,
 		Reminders: owed,
 		Since:     h.lastSpoke(ctx, user),
 		Profile:   h.profile(ctx, user),
@@ -725,43 +725,16 @@ func (h *Handler) neverSaid(ctx context.Context, user string) []remind.Reminder 
 	return unsaid
 }
 
-// greetings : What to say, by the hour.
+// hour : The opening for the time of day: a salutation that is not
+// the one used last, and the welcome behind it.
 //
-// Several of each, because one fixed line per part of the day is the
-// same sentence every morning for ever, and a greeting somebody can
-// recite along with is not a greeting.
-//
-// "Welcome back" is in every band rather than tied to the hour. It used
-// to be the small hours and the late evening only, which made it mean
-// "it is late" while sounding like "you have returned".
-var greetings = map[string][]string{
-	"night":     {"Hello, sir.", "Welcome back, sir.", "Still up, sir."},
-	"morning":   {"Good morning, sir.", "Morning, sir.", "Welcome back, sir."},
-	"afternoon": {"Good afternoon, sir.", "Afternoon, sir.", "Welcome back, sir."},
-	"evening":   {"Good evening, sir.", "Evening, sir.", "Welcome back, sir."},
-}
-
-// band : Which set the hour falls in, in the person's own zone.
-func (h *Handler) band() string {
-	switch at := h.clock().In(h.where()); {
-	case at.Hour() < 5:
-		return "night"
-	case at.Hour() < 12:
-		return "morning"
-	case at.Hour() < 17:
-		return "afternoon"
-	case at.Hour() < 22:
-		return "evening"
-	default:
-		return "night"
-	}
-}
-
-// hour : A greeting for the time of day, and not the last one used.
+// The salutations live in internal/greet, because the same list is
+// what takes a salutation back off the front of a greeting the model
+// wrote one into. Two copies would agree until one was edited.
 func (h *Handler) hour() string {
-	choices := greetings[h.band()]
+	choices := greet.Salutations[greet.Band(h.clock().In(h.where()))]
 	if len(choices) == 0 {
-		return "Hello, sir."
+		return greet.Opening("Hello, sir.")
 	}
 
 	h.mu.Lock()
@@ -774,7 +747,7 @@ func (h *Handler) hour() string {
 		pick = choices[rand.IntN(len(choices))]
 	}
 	h.lastGreeting = pick
-	return pick
+	return greet.Opening(pick)
 }
 
 // clock : Now, in UTC.

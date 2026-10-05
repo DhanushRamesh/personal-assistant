@@ -23,14 +23,19 @@ type Writer struct {
 // Write : What to say, and whether the model wrote it.
 //
 // Never an error. Somebody is standing in the doorway: every way this
-// can go wrong ends in the fixed greeting being said, because a
+// can go wrong ends in the opening being said on its own, because a
 // greeting that is merely ordinary is far better than a silence while
 // a provider is down.
+//
+// The opening goes in front of whatever the model wrote rather than
+// being asked for, so that it cannot be left out. Anything the model
+// wrote in its place is taken off first.
 //
 // The fallback carries the reminders itself, since those are the part
 // that must be said whatever happens.
 func (w *Writer) Write(ctx context.Context, t Told) (said string, written bool) {
-	fallback := strings.TrimSpace(t.Fallback)
+	opening := strings.TrimSpace(t.Opening)
+	fallback := opening
 	if len(t.Reminders) > 0 {
 		fallback = strings.TrimSpace(fallback + " " + strings.Join(t.Reminders, " "))
 	}
@@ -54,12 +59,15 @@ func (w *Writer) Write(ctx context.Context, t Told) (said string, written bool) 
 		w.warn(ctx, "could not write a greeting, saying the usual one", err, t)
 		return fallback, false
 	}
-	answer = strings.TrimSpace(answer)
+	// Nothing is the ordinary answer now, and not a failure. The
+	// prompt asks for what comes *after* the greeting, and most
+	// arrivals have nothing after it worth hearing; the opening is
+	// then the whole greeting, which is what it was built to be.
+	answer = Without(answer)
 	if answer == "" {
-		w.warn(ctx, "the model greeted nobody, saying the usual one", nil, t)
 		return fallback, false
 	}
-	return answer, true
+	return strings.TrimSpace(opening + " " + answer), true
 }
 
 // warn : A failure at the door is worth a line and nothing more.

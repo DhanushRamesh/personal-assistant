@@ -90,9 +90,21 @@ type Told struct {
 	Events []event.Event
 	// Profile : The standing description of them. May be empty.
 	Profile string
-	// Fallback : The fixed greeting, said when there is no time to
-	// think of a better one.
-	Fallback string
+	// Opening : The first words, written by the server rather than
+	// by the model.
+	//
+	// A salutation for the hour and a welcome back. Said whatever
+	// else happens: on its own when the model has nothing or cannot
+	// be reached in time, and in front of whatever it wrote when it
+	// can. The model is told it has already been said.
+	//
+	// Owner, 5 October 2026, after a greeting that opened "Kliffy
+	// rang while you were out, sir": *"it should say the good
+	// morning / afternoon / evening and welcome backs at the
+	// beginning."* Asking the model for it would have worked most
+	// of the time, which is the trouble: the failure is silent and
+	// nobody is reading the greeting afterwards to catch it.
+	Opening string
 	// Reminders : Anything held back while they were out, and anything
 	// that was never said at all, in the words they would be said in.
 	// The model is told to say these and not to summarise them away.
@@ -178,8 +190,9 @@ func Prompt(t Told) string {
 		prompt.Text(
 			"Somebody has just walked in to the room their assistant is in.",
 			"You are that assistant, speaking aloud to them, and you have known them for a while.",
-			"Write what you say. One or two sentences, out loud, the way a person greets somebody they know.",
+			"Write what you say after the greeting. One or two sentences at most, out loud, the way a person speaks to somebody they know.",
 		),
+		opening(t),
 		when(t),
 		prompt.Text(
 			"Below is everything their own devices reported while the two of you were not talking.",
@@ -187,7 +200,7 @@ func Prompt(t Told) string {
 			"Something that happened far more often than usual, or lasted far longer than usual,",
 			"or involved the same person again and again, or is simply out of keeping with their ordinary day, is worth remarking on.",
 			"Where it is, say so and ask about it, the way somebody would: a short question, not a report.",
-			"Where nothing stands out -- and most of the time nothing will -- just greet them, and say nothing about the events at all.",
+			"Where nothing stands out -- and most of the time nothing will -- answer with nothing at all. The greeting has been said; silence after it is a greeting.",
 		),
 		prompt.Text(
 			"Never list what the devices reported, never read out a count, and never use the names the events are written under.",
@@ -209,7 +222,7 @@ func Prompt(t Told) string {
 		prompt.Text(
 			"Only what is in front of you. Do not invent an event, a person or a reason,",
 			"and do not guess at what something meant -- ask them instead, which is the point of asking.",
-			"If there is nothing here at all, greet them and stop.",
+			"If there is nothing here at all, answer with nothing: they have already been greeted.",
 		),
 		prompt.Text(
 			"Plain spoken sentences. No lists, no headings, no stage directions, and nothing they would have to read rather than hear.",
@@ -229,6 +242,25 @@ func Prompt(t Told) string {
 		profile(t),
 		coming(t),
 		happened(t),
+	)
+}
+
+// opening : What has already been said, so the model does not say it
+// again.
+//
+// The salutation and the welcome are the server's, and they are
+// spoken in front of whatever comes back from here. A model that
+// writes its own greets the person twice.
+func opening(t Told) string {
+	said := strings.TrimSpace(t.Opening)
+	if said == "" {
+		return ""
+	}
+	return prompt.Text(
+		"You have already said this much, out loud, and they have heard it: \""+said+"\"",
+		"Write only what comes after it. Do not greet them again, do not say good morning or good afternoon or good evening,",
+		"and do not welcome them back: it has been done.",
+		"What you write follows straight on, so it begins mid-greeting rather than at the start of one.",
 	)
 }
 

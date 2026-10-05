@@ -9437,6 +9437,61 @@ person knows there was never a second kind.
 transcripts already written; nothing new will carry it.
 
 
+## The greeting opens with the greeting
+
+A greeting arrived reading, in full:
+
+> *"Kliffy rang while you were out, sir -- came through just before
+> one."*
+
+Owner: *"it should say the good morning / afternoon / evening and
+welcome backs at the beginning."*
+
+Nothing had ever told it to. The fixed sentences -- *Good evening,
+sir.*, *Welcome back, sir.* -- were the **fallback**, said only when
+the model failed or ran out of time. When it succeeded, the whole
+greeting was whatever it wrote, and whether that began with a
+salutation was left to it. Sometimes it did. Often it opened on the
+news, which is a sentence somebody shouts across a room, not a
+greeting.
+
+**Written by the server and put in front, not asked for.** `Told`
+loses `Fallback` and gains `Opening`, which is the same string doing
+one job instead of two: the first words, spoken whatever happens.
+The model is told it has already been said and asked for what comes
+after.
+
+Asking for it would have worked most of the time, and that is the
+objection: the failure is silent and nobody reads the greeting
+afterwards to catch it. This is the rule about enforcing in code
+before enforcing in the prompt, and the prompt line is still there,
+because a model that knows the greeting has been said writes a
+better second sentence than one that is merely prevented from
+repeating it.
+
+**`Welcome back` left the rota.** It used to be a third alternative
+in each band, so a greeting had the salutation *or* the welcome and,
+once the model was writing them, usually neither. It is a constant
+now, said after whichever salutation came up. Safe because nothing
+at this door is anything but an arrival: presence sleeps when the
+laptop does, so an absence it never saw produces no greeting at all.
+
+**The stripping is the guard.** `greet.Without` takes a salutation
+back off the front of the answer when the model writes one anyway --
+including "Evening, sir -- ..." with no full stop, and a doubled
+"Good evening, sir. Welcome back." The phrases it recognises are
+read from the same table the server writes from, not from a list of
+English pleasantries invented for the purpose, which would be a
+keyword match that fails silently and would one day eat a real first
+sentence. For the same reason the table moved into `internal/greet`:
+two copies agree until one is edited.
+
+**An empty answer stopped being a warning.** The prompt now says to
+answer with nothing where nothing stands out, and most arrivals are
+that. The opening is then the whole greeting, which is what it was
+built to be.
+
+
 ## 12. Maintaining this file
 
 When the owner states a preference, makes a decision, or corrects something,
