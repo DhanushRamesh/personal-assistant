@@ -47,6 +47,8 @@ var (
 	seed    = flag.Uint64("seed", 0, "0 picks one and prints it, so a run can be repeated")
 	arrived = flag.String("at", "", "one arrival instead of a sample, as 2006-01-02 15:04 in their own zone")
 	spokeAt = flag.String("since", "", "when the assistant last spoke before it, same format")
+	cases   = flag.Bool("cases", false, "run the judged cases in testdata/cases.json")
+	runs    = flag.Int("runs", 2, "how many times to ask about each case")
 	replay  = flag.Int("real", 0, "replay the last N greetings that were actually spoken, against the prompt as it stands")
 	dry     = flag.String("dry", "", "\"facts\" prints this arrival's half of the prompt, \"all\" the whole of it; neither asks the model")
 )
@@ -156,6 +158,11 @@ func TestGreetingRealArrivals(t *testing.T) {
 	}
 	now := time.Now().In(where)
 
+	if *cases {
+		judged(t, env, cfg, events, user, profile, diary, where)
+		return
+	}
+
 	// Every arrival that really happened, against the prompt as it
 	// stands now. What it said at the time is printed beside what it
 	// would say today, because the only verdict worth having is one
@@ -193,6 +200,10 @@ func TestGreetingRealArrivals(t *testing.T) {
 				fmt.Printf("   diary while out: %s at %s\n", a.What, a.When.In(where).Format("3:04 pm"))
 			}
 			fmt.Printf("   then: %q\n", strings.TrimSpace(r.Said))
+			if *dry != "" {
+				fmt.Printf("%s\n", lines(told))
+				continue
+			}
 			if n > 0 {
 				time.Sleep(3 * time.Second)
 			}
@@ -317,6 +328,101 @@ func facts(told greet.Told) string {
 		}
 	}
 	return "(nothing)"
+}
+
+// judged : The cases the owner has ruled on, each asked about more
+// than once.
+//
+// A greeting has no right words, so a case says whether it should
+// speak at all and what about. Speaking when it should be quiet is
+// the commoner failure by a long way: of the first ten he ruled on,
+// six are silences, and nothing measured before this had ever
+// produced one.
+func judged(t *testing.T, env *platformai.Environment, cfg config.Config,
+	events *eventmysql.Store, user, profile string,
+	diary []greet.Appointment, where *time.Location) {
+
+	raw, err := os.ReadFile("testdata/cases.json")
+	if err != nil {
+		t.Fatalf("cases: %v", err)
+	}
+	var set []struct {
+		At, Since, Want, About string
+		Must, Mustnt           []string
+	}
+	if err := json.Unmarshal(raw, &set); err != nil {
+		t.Fatalf("cases: %v", err)
+	}
+
+	asked, right := 0, 0
+	for i, c := range set {
+		at, err := time.ParseInLocation("2006-01-02 15:04", c.At, where)
+		if err != nil {
+			t.Fatalf("case %d: at: %v", i+1, err)
+		}
+		since, err := time.ParseInLocation("2006-01-02 15:04", c.Since, where)
+		if err != nil {
+			t.Fatalf("case %d: since: %v", i+1, err)
+		}
+		told, n := compose(t, events, user, profile, diary, at, since, where)
+
+		fmt.Printf("\n── %d · %s · %d events · wants %s: %s\n",
+			i+1, at.Format("Mon 2 Jan 3:04 pm"), n, c.Want, c.About)
+
+		for r := 0; r < *runs; r++ {
+			if asked > 0 {
+				time.Sleep(4 * time.Second)
+			}
+			asked++
+			said, _ := ask(t, env, cfg, told)
+			var why []string
+			switch {
+			case c.Want == "silent" && said != "":
+				why = append(why, "should have said nothing")
+			case c.Want == "speak" && said == "":
+				why = append(why, "said nothing, and should have spoken")
+			}
+			low := strings.ToLower(said)
+			for _, w := range c.Must {
+				if said != "" && !strings.Contains(low, strings.ToLower(w)) {
+					why = append(why, "never mentioned "+w)
+				}
+			}
+			for _, w := range c.Mustnt {
+				if strings.Contains(low, strings.ToLower(w)) {
+					why = append(why, "raised "+w)
+				}
+			}
+			why = append(why, wrong(said, told)...)
+			if len(why) == 0 {
+				right++
+				fmt.Printf("   ✓ %q\n", said)
+				continue
+			}
+			fmt.Printf("   ✗ %q\n", said)
+			for _, w := range why {
+				fmt.Printf("     %s\n", w)
+			}
+		}
+	}
+	fmt.Printf("\n═══ %d of %d right across %d cases\n", right, asked, len(set))
+	if right < asked {
+		t.Errorf("%d of %d answers were not what was wanted", asked-right, asked)
+	}
+}
+
+// lines : The event lines alone, with the instructions around them
+// taken off. What somebody reads to judge a window by.
+func lines(told greet.Told) string {
+	whole := greet.Prompt(told)
+	mark := "being told they were at a restaurant they have never been to is worse than being told nothing."
+	if i := strings.LastIndex(whole, mark); i >= 0 {
+		return strings.TrimSpace(whole[i+len(mark):])
+	}
+	if i := strings.LastIndex(whole, "Their devices reported nothing in between."); i >= 0 {
+		return "   (nothing reported)"
+	}
+	return "   (nothing)"
 }
 
 // wrong : The things that are wrong whatever the words are.

@@ -1,0 +1,37 @@
+[
+ {"at":"2026-10-02 21:44","since":"2026-10-02 21:33","want":"silent",
+  "about":"a routine arrival home, eleven minutes after the last word"},
+
+ {"at":"2026-10-03 00:19","since":"2026-10-02 22:05","want":"silent",
+  "about":"Alekhya's missed call was resolved by the calls that followed it",
+  "mustnt":["missed","tried to reach","get through"]},
+
+ {"at":"2026-10-03 00:19","since":"2026-10-03 00:19","want":"speak",
+  "about":"the dentist and the haircut at eleven",
+  "must":["dentist"]},
+
+ {"at":"2026-10-03 21:48","since":"2026-10-03 17:10","want":"speak",
+  "about":"the two unknown calls that went unanswered while he was out",
+  "mustnt":["Vishnu","Ammaniammal","Muthu Supermarket"]},
+
+ {"at":"2026-10-04 10:47","since":"2026-10-04 10:15","want":"silent",
+  "about":"short calls with Amma and Kliffy, both answered"},
+
+ {"at":"2026-10-04 17:45","since":"2026-10-04 17:36","want":"speak",
+  "about":"the film starting at ten past six",
+  "must":["Meesaya Murukku"]},
+
+ {"at":"2026-10-04 21:41","since":"2026-10-04 17:45","want":"speak",
+  "about":"how the film was",
+  "must":["Meesaya Murukku"],
+  "mustnt":["you went","Flavors","restaurant"]},
+
+ {"at":"2026-10-05 12:44","since":"2026-10-05 11:32","want":"silent",
+  "about":"one short outgoing call and the phone being picked up"},
+
+ {"at":"2026-10-05 13:43","since":"2026-10-05 12:44","want":"silent",
+  "about":"another short call, answered, and the phone being picked up"},
+
+ {"at":"2026-10-05 18:06","since":"2026-10-05 16:27","want":"silent",
+  "about":"an ordinary afternoon at the office"}
+]
