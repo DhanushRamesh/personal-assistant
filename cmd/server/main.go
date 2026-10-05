@@ -681,7 +681,11 @@ func phoneAlarm(cfg config.Config, logger *slog.Logger) (alarm.Setter, *alarm.Ke
 		return nil, nil
 	}
 	keeper := &alarm.Keeper{
-		Setter: alarm.Phone{URL: where, By: cfg.Assistant.Name},
+		Setter: alarm.Phone{
+			URL:    where,
+			OffURL: strings.TrimSpace(cfg.HomeAssistant.AlarmOffURL.Reveal()),
+			By:     cfg.Assistant.Name,
+		},
 		Now:    cfg.Assistant.Now,
 		Logger: logger,
 	}

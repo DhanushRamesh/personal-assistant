@@ -195,3 +195,54 @@ func TestTheRepeatSurvivesBeingSigned(t *testing.T) {
 		t.Errorf("the phone was asked %q", *got)
 	}
 }
+
+// TestClearingDropsTheAlarmByItsWords : The phone finds the alarm
+// by its label, so the words have to match what was sent --
+// signature and all, which is why the signing happens inside.
+func TestClearingDropsTheAlarmByItsWords(t *testing.T) {
+	var got string
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		body, _ := io.ReadAll(r.Body)
+		got = string(body)
+		_, _ = w.Write([]byte(alarm.ExpectedOff))
+	}))
+	defer server.Close()
+
+	phone := alarm.Phone{OffURL: server.URL + "/x/secret", By: "Jarvis"}
+	if err := phone.Clear(context.Background(), alarm.Alarm{Label: "stretch", Key: "rem_1"}); err != nil {
+		t.Fatalf("clear: %v", err)
+	}
+	if got != "stretch — by Jarvis" {
+		t.Errorf("the phone was asked to drop %q", got)
+	}
+}
+
+// TestARepeatingAlarmCannotBeTakenBack : Android has no way to
+// remove one from outside -- dismissing skips a single occurrence
+// and asking again makes a second alarm rather than changing the
+// first. Saying so beats a call that reports success and leaves
+// the alarm ringing every morning.
+func TestARepeatingAlarmCannotBeTakenBack(t *testing.T) {
+	phone := alarm.Phone{OffURL: "http://127.0.0.1:1/x", By: "Jarvis"}
+
+	err := phone.Clear(context.Background(), alarm.Alarm{
+		Label: "wake up", Days: []time.Weekday{time.Monday},
+	})
+	if err == nil {
+		t.Fatal("claimed to have taken back a repeating alarm")
+	}
+	if !strings.Contains(err.Error(), "repeating") {
+		t.Errorf("the reason is not clear: %v", err)
+	}
+}
+
+// TestHoldsIsWhatThePhoneKeepsOnItsOwn : The same property makes a
+// repeat survive this server and makes it unreachable from here.
+func TestHoldsIsWhatThePhoneKeepsOnItsOwn(t *testing.T) {
+	if alarm.Holds(alarm.Alarm{}) {
+		t.Error("a one-off was taken for something the phone holds")
+	}
+	if !alarm.Holds(alarm.Alarm{Days: []time.Weekday{time.Monday}}) {
+		t.Error("a repeat was not taken for something the phone holds")
+	}
+}

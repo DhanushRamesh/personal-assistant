@@ -867,6 +867,7 @@ func TestOneBadIdentifierCancelsNothing(t *testing.T) {
 type phone struct {
 	got     alarm.Alarm
 	asked   int
+	dropped []string
 	refuses error
 }
 
@@ -874,6 +875,11 @@ func (p *phone) Set(_ context.Context, a alarm.Alarm) error {
 	p.asked++
 	p.got = a
 	return p.refuses
+}
+
+func (p *phone) Clear(_ context.Context, a alarm.Alarm) error {
+	p.dropped = append(p.dropped, a.Label)
+	return nil
 }
 
 // withPhone : A registry whose reminders also reach a phone.
@@ -998,5 +1004,107 @@ func TestARepeatingReminderRepeatsOnThePhone(t *testing.T) {
 				t.Errorf("the phone was asked for %02d:%02d, not 06:05", h, m)
 			}
 		})
+	}
+}
+
+// Cancelling a one-off reminder takes its alarm off the phone.
+// Otherwise it goes off at six for something called off the night
+// before, which is the worst way to learn the two are not linked.
+func TestCancellingAReminderDropsItsAlarm(t *testing.T) {
+	p := &phone{}
+	r := withPhone(t, p)
+	out := call(t, r, "reminder_set",
+		`{"title":"take the tablets","say":"Take the tablets.",`+
+			`"say_if_late":"You should have taken them","at":"2026-09-27 06:05"}`)
+	if out.Outcome != conversation.OutcomeOK {
+		t.Fatalf("reminder_set: %s", out.Content)
+	}
+	id := p.got.Key
+
+	if got := call(t, r, "reminder_cancel",
+		`{"ids":["`+id+`"],"saying":"calling it off"}`); got.Outcome != conversation.OutcomeOK {
+		t.Fatalf("reminder_cancel: %s", got.Content)
+	}
+	if len(p.dropped) != 1 {
+		t.Fatalf("the phone was asked to drop %d alarms, wanted 1", len(p.dropped))
+	}
+	if p.dropped[0] != "take the tablets" {
+		t.Errorf("the wrong alarm was dropped: %q", p.dropped[0])
+	}
+}
+
+// A repeating alarm cannot be taken back -- Android has no way --
+// so saying nothing would leave it waking them every morning for
+// something they called off.
+func TestCancellingARepeatSaysTheAlarmRemains(t *testing.T) {
+	p := &phone{}
+	r := withPhone(t, p)
+	out := call(t, r, "reminder_set",
+		`{"title":"wake up","say":"Time to get up.","say_if_late":"You have slept in",`+
+			`"at":"2026-09-27 06:05","repeats":"daily"}`)
+	if out.Outcome != conversation.OutcomeOK {
+		t.Fatalf("reminder_set: %s", out.Content)
+	}
+
+	got := call(t, r, "reminder_cancel",
+		`{"ids":["`+p.got.Key+`"],"saying":"calling it off"}`)
+	if got.Outcome != conversation.OutcomeOK {
+		t.Fatalf("reminder_cancel: %s", got.Content)
+	}
+	if len(p.dropped) != 0 {
+		t.Errorf("tried to drop a repeating alarm, which cannot work: %v", p.dropped)
+	}
+	if !strings.Contains(got.Content, "cannot be removed") {
+		t.Errorf("silence about the alarm that is still set: %s", got.Content)
+	}
+}
+
+// Moving a reminder moves its alarm: the old one off, the new one
+// on. Leaving the old would ring at the time they just changed.
+func TestMovingAReminderMovesItsAlarm(t *testing.T) {
+	p := &phone{}
+	r := withPhone(t, p)
+	out := call(t, r, "reminder_set",
+		`{"title":"take the tablets","say":"Take the tablets.",`+
+			`"say_if_late":"You should have taken them","at":"2026-09-27 06:05"}`)
+	if out.Outcome != conversation.OutcomeOK {
+		t.Fatalf("reminder_set: %s", out.Content)
+	}
+
+	got := call(t, r, "reminder_update",
+		`{"id":"`+p.got.Key+`","at":"2026-09-27 07:30","saying":"moving it"}`)
+	if got.Outcome != conversation.OutcomeOK {
+		t.Fatalf("reminder_update: %s", got.Content)
+	}
+	if len(p.dropped) != 1 {
+		t.Fatalf("the old alarm was not taken off: %v", p.dropped)
+	}
+	if h, m := p.got.At.Hour(), p.got.At.Minute(); h != 7 || m != 30 {
+		t.Errorf("the new alarm is for %02d:%02d, not 07:30", h, m)
+	}
+}
+
+// Changing only the spoken words leaves the phone alone: nothing
+// an alarm carries has changed, and dropping and re-adding it
+// would be two requests for no reason.
+func TestChangingOnlyTheWordsLeavesTheAlarmAlone(t *testing.T) {
+	p := &phone{}
+	r := withPhone(t, p)
+	out := call(t, r, "reminder_set",
+		`{"title":"take the tablets","say":"Take the tablets.",`+
+			`"say_if_late":"You should have taken them","at":"2026-09-27 06:05"}`)
+	if out.Outcome != conversation.OutcomeOK {
+		t.Fatalf("reminder_set: %s", out.Content)
+	}
+	asked := p.asked
+
+	got := call(t, r, "reminder_update",
+		`{"id":"`+p.got.Key+`","say":"Tablets, sir.","saying":"rewording it"}`)
+	if got.Outcome != conversation.OutcomeOK {
+		t.Fatalf("reminder_update: %s", got.Content)
+	}
+	if len(p.dropped) != 0 || p.asked != asked {
+		t.Errorf("the phone was touched for a change it cannot see: dropped %v, asked %d",
+			p.dropped, p.asked-asked)
 	}
 }

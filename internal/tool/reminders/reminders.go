@@ -116,14 +116,14 @@ func All(store remind.Store, clock Clock, phone alarm.Setter) []tool.Tool {
 		set(store, clock, phone),
 		list(store, clock),
 		recent(store, clock),
-		update(store, clock),
+		update(store, clock, phone),
 		snooze(store, clock),
-		cancel(store),
+		cancel(store, clock, phone),
 	}
 }
 
 // update : Changes a reminder that has not happened yet.
-func update(store remind.Store, clock Clock) tool.Tool {
+func update(store remind.Store, clock Clock, phone alarm.Setter) tool.Tool {
 	return tool.Tool{
 		Name:    "reminder_update",
 		Domain:  "reminder",
@@ -245,7 +245,8 @@ func update(store remind.Store, clock Clock) tool.Tool {
 			}
 			_ = changed
 
-			return tool.Changed("Changed the reminder", diff(before, after, clock)...)
+			return tool.Changed("Changed the reminder"+moved(ctx, phone, before, after, clock.where()),
+				diff(before, after, clock)...)
 		},
 	}
 }
@@ -770,7 +771,7 @@ func list(store remind.Store, clock Clock) tool.Tool {
 }
 
 // cancel : Calls one or more off.
-func cancel(store remind.Store) tool.Tool {
+func cancel(store remind.Store, clock Clock, phone alarm.Setter) tool.Tool {
 	return tool.Tool{
 		Name:    "reminder_cancel",
 		Domain:  "reminder",
@@ -821,6 +822,7 @@ func cancel(store remind.Store) tool.Tool {
 			// Found before any is cancelled, so a batch with one bad
 			// identifier changes nothing rather than half of it.
 			titles := make([]string, 0, len(args.IDs))
+			was := make([]remind.Reminder, 0, len(args.IDs))
 			for _, id := range args.IDs {
 				existing, err := store.Get(ctx, in.Caller.UserID, id)
 				if err != nil {
@@ -831,6 +833,7 @@ func cancel(store remind.Store) tool.Tool {
 					return tool.Failed(err.Error())
 				}
 				titles = append(titles, existing.Title)
+				was = append(was, *existing)
 			}
 
 			before := count(ctx, store, in.Caller.UserID)
@@ -849,7 +852,7 @@ func cancel(store remind.Store) tool.Tool {
 						"it is still there and still "+string(still.Status))
 				}
 			}
-			return tool.RemovedMany(calledOff(titles), len(titles),
+			return tool.RemovedMany(calledOff(titles)+dropped(ctx, phone, was, clock.where()), len(titles),
 				before, count(ctx, store, in.Caller.UserID), "reminder")
 		},
 	}
@@ -1049,15 +1052,106 @@ func alarmed(ctx context.Context, phone alarm.Setter, r *remind.Reminder, where 
 	// holds a wall clock, so a reminder kept as UTC and handed over
 	// unconverted rings five and a half hours early and nothing
 	// anywhere disagrees with it.
-	at := r.DueAt.In(where)
-	if err := phone.Set(ctx, alarm.Alarm{
-		At: at, Label: r.Title, Days: remind.AlarmDays(r.Repeats, at), Key: r.ID,
-	}); err != nil {
-		slog.Warn("the phone would not take an alarm", "at", at, "error", err)
+	a := alarmFor(r, where)
+	if err := phone.Set(ctx, a); err != nil {
+		slog.Warn("the phone would not take an alarm", "at", a.At, "error", err)
 		return " Their phone could not be reached, so the alarm is not set yet, though it will " +
 			"keep being tried until the time comes. Tell them that plainly, in one clause, " +
 			"without the reason unless they ask: they may want to set it themselves."
 	}
 	return " An alarm has been asked for on their phone at the same time. Say so in passing, " +
 		"not as a second sentence."
+}
+
+// dropped : What to add about the alarms on their phone.
+//
+// Said only when there is something to say. A one-off goes quietly
+// with the reminder and is not worth a sentence; a repeating one
+// cannot be taken back from here at all, and that has to be said
+// or the person is woken at six by a thing they called off and has
+// no idea why.
+func dropped(ctx context.Context, phone alarm.Setter, was []remind.Reminder,
+	where *time.Location) string {
+	if phone == nil {
+		return ""
+	}
+	var standing []string
+	for i := range was {
+		r := &was[i]
+		a := alarmFor(r, where)
+		if alarm.Holds(a) {
+			standing = append(standing, r.Title)
+			continue
+		}
+		if err := phone.Clear(ctx, a); err != nil {
+			slog.Warn("the phone would not drop an alarm", "title", r.Title, "error", err)
+			standing = append(standing, r.Title)
+		}
+	}
+	if len(standing) == 0 {
+		return ""
+	}
+	return fmt.Sprintf(" The repeating alarm on their phone for %s cannot be removed from here -- "+
+		"nothing outside the phone can take one back. Tell them to delete it in the Clock app, "+
+		"in one clause, so it does not wake them for something they called off.",
+		strconv.Quote(standing[0]))
+}
+
+// moved : Takes the old alarm off the phone and puts the new one
+// on, and says what could not be moved.
+//
+// Nothing happens where nothing an alarm can carry has changed: a
+// reminder renamed in its spoken words alone does not need the
+// phone touched.
+func moved(ctx context.Context, phone alarm.Setter, before, after *remind.Reminder,
+	where *time.Location) string {
+	if phone == nil || before == nil || after == nil {
+		return ""
+	}
+	was, now := carried(before, where), carried(after, where)
+	if was == now {
+		return ""
+	}
+
+	// A repeating alarm cannot be taken back, so setting the new
+	// one would leave two ringing. Say so instead, and leave the
+	// phone alone.
+	old := alarmFor(before, where)
+	if alarm.Holds(old) {
+		return fmt.Sprintf(". The repeating alarm on their phone still says %s and cannot be changed "+
+			"from here -- nothing outside the phone can. Tell them to fix it in the Clock app, in one "+
+			"clause", strconv.Quote(before.Title))
+	}
+
+	if err := phone.Clear(ctx, old); err != nil {
+		slog.Warn("the phone would not drop the old alarm", "title", before.Title, "error", err)
+	} else {
+		// Taking one back and putting the next on are two starts of
+		// the clock's own activity, and back to back the second is
+		// dropped in silence. Waiting is the whole fix.
+		select {
+		case <-ctx.Done():
+			return ""
+		case <-time.After(alarm.Settle):
+		}
+	}
+	if err := phone.Set(ctx, alarmFor(after, where)); err != nil {
+		slog.Warn("the phone would not take the new alarm", "title", after.Title, "error", err)
+		return ". Their phone could not be reached, so the alarm still has the old time, though it " +
+			"will keep being tried. Say so plainly, in one clause"
+	}
+	return ""
+}
+
+// carried : Everything about a reminder that an alarm can hold, as
+// one comparable value.
+func carried(r *remind.Reminder, where *time.Location) string {
+	a := alarmFor(r, where)
+	return alarm.Body(a) + "|" + alarm.Numbered(a.Days)
+}
+
+// alarmFor : The alarm a reminder would put on the phone.
+func alarmFor(r *remind.Reminder, where *time.Location) alarm.Alarm {
+	at := r.DueAt.In(where)
+	return alarm.Alarm{At: at, Label: r.Title, Days: remind.AlarmDays(r.Repeats, at), Key: r.ID}
 }

@@ -74,13 +74,30 @@ func Stamp(label, by string) string {
 	return label + " — by " + by
 }
 
-// Setter : Somewhere an alarm can be asked for.
+// Setter : Somewhere an alarm can be asked for, and taken back.
 type Setter interface {
 	// Set : Asks the phone for an alarm. Returns an error where the
 	// asking failed, which is not the same as the phone having
 	// refused.
 	Set(ctx context.Context, a Alarm) error
+	// Clear : Asks the phone to drop the alarm with these words.
+	//
+	// Only a one-off can be dropped. Android has no way to remove a
+	// repeating alarm from outside -- dismissing one skips a single
+	// occurrence and asking again makes a second alarm rather than
+	// changing the first -- so Repeating reports that rather than
+	// pretending. See Holds.
+	Clear(ctx context.Context, a Alarm) error
 }
+
+// Holds : Whether the phone keeps this alarm on its own, which is
+// also exactly when it cannot be taken back.
+//
+// The two go together and it is worth being plain about why: a
+// repeating alarm survives this server being switched off, which
+// is the reason for using one, and the same independence means
+// nothing here can reach in and remove it.
+func Holds(a Alarm) bool { return len(a.Days) > 0 }
 
 // Separator : What divides the hour, the minute and the words.
 //
@@ -104,6 +121,9 @@ const Never = "0"
 // alarm that was set.
 const Expected = "jarvis-alarm-ok"
 
+// ExpectedOff : What the phone answers when it has dropped one.
+const ExpectedOff = "jarvis-alarm-off"
+
 // Phone : The person's phone, reached directly over the tailnet.
 type Phone struct {
 	// URL : Where the phone listens, including the secret path, such
@@ -114,6 +134,10 @@ type Phone struct {
 	// else who can reach the port, so it is kept in config.ini with
 	// the other secrets rather than written down here.
 	URL string
+	// OffURL : Where the phone listens for an alarm to be dropped,
+	// including its own secret path. Empty means an alarm once set
+	// cannot be taken back.
+	OffURL string
 	// By : What the assistant is called, signed after the words.
 	// Empty signs nothing. Configuration, never a constant: it was
 	// FRIDAY before it was Jarvis.
@@ -124,6 +148,15 @@ type Phone struct {
 	// Client : Replaceable in tests.
 	Client *http.Client
 }
+
+// Settle : How long to leave the phone alone between taking an
+// alarm back and putting the new one on.
+//
+// Measured, not guessed: the two arrive as separate starts of the
+// clock's own activity, and back to back the second is dropped --
+// the phone still answers that it worked, and no alarm appears.
+// A move was losing its alarm entirely before this.
+const Settle = 1500 * time.Millisecond
 
 // DefaultTimeout : How long to wait on the phone.
 //
@@ -143,21 +176,27 @@ func (p Phone) Set(ctx context.Context, a Alarm) error {
 		return fmt.Errorf("alarm: there is no address for the phone")
 	}
 
-	wait := p.Timeout
-	if wait <= 0 {
-		wait = DefaultTimeout
-	}
-	ask, done := context.WithTimeout(ctx, wait)
-	defer done()
-
 	// Signed, and otherwise left alone. Rebuilding the alarm here
 	// rather than copying it once dropped the repeat and turned
 	// every daily alarm into a one-off.
 	signed := a
 	signed.Label = Stamp(a.Label, p.By)
 
-	req, err := http.NewRequestWithContext(ask, http.MethodPost,
-		strings.TrimSpace(p.URL), strings.NewReader(Body(signed)))
+	return p.ask(ctx, p.URL, Body(signed), Expected)
+}
+
+// ask : One request to the phone, and the one place that decides
+// whether it was really the phone that answered.
+func (p Phone) ask(ctx context.Context, where, body, want string) error {
+	wait := p.Timeout
+	if wait <= 0 {
+		wait = DefaultTimeout
+	}
+	asking, done := context.WithTimeout(ctx, wait)
+	defer done()
+
+	req, err := http.NewRequestWithContext(asking, http.MethodPost,
+		strings.TrimSpace(where), strings.NewReader(body))
 	if err != nil {
 		return fmt.Errorf("alarm: %w", err)
 	}
@@ -180,7 +219,7 @@ func (p Phone) Set(ctx context.Context, a Alarm) error {
 	if err != nil {
 		return fmt.Errorf("alarm: %w", err)
 	}
-	if strings.TrimSpace(string(said)) != Expected {
+	if strings.TrimSpace(string(said)) != want {
 		return fmt.Errorf("alarm: something other than the phone answered")
 	}
 	return nil
@@ -242,4 +281,18 @@ func Labelled(label string) string {
 		return r
 	}, label)
 	return strings.Join(strings.Fields(clean), " ")
+}
+
+// Clear : Asks the phone to drop the alarm with these words.
+//
+// The words have to match what was sent, signature and all, which
+// is why the signing happens here rather than at the call site.
+func (p Phone) Clear(ctx context.Context, a Alarm) error {
+	if Holds(a) {
+		return fmt.Errorf("alarm: a repeating alarm cannot be taken back from here")
+	}
+	if strings.TrimSpace(p.OffURL) == "" {
+		return fmt.Errorf("alarm: there is no address for taking an alarm back")
+	}
+	return p.ask(ctx, p.OffURL, Labelled(Stamp(a.Label, p.By)), ExpectedOff)
 }

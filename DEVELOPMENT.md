@@ -10052,6 +10052,54 @@ The general shape, worth carrying: **assert what crosses the
 boundary.** A test that checks a richer value than the wire carries
 will keep passing after the wire starts lying.
 
+### Cancelling and moving a reminder, and what cannot follow
+
+Owner, 6 October 2026: *"if I cancel the reminder, update the
+reminder, it should update from the alarm too."*
+
+Measured against the phone, because the answer is not symmetrical:
+
+| | one-off | repeating |
+|---|---|---|
+| create | yes | yes |
+| **remove** | `DISMISS_ALARM` by label deletes it | **impossible** |
+| **move** | remove, then create | **impossible** |
+
+Dismissing a repeating alarm skips a single occurrence, and sending
+it again makes a **second** alarm rather than changing the first.
+Android offers nothing else. So a repeat cannot be taken back from
+outside the phone at all.
+
+**The same property both ways.** A repeating alarm survives this
+server being switched off -- which is the reason for using one --
+and that independence is exactly why nothing here can reach in and
+remove it. `alarm.Holds` is the one predicate for both facts.
+
+The owner chose to keep native repeats and be told. So:
+
+- A one-off reminder cancelled or moved takes its alarm with it.
+- A repeating one leaves its alarm standing, and the assistant says
+  so in a clause -- *delete it in the Clock app* -- rather than
+  letting it wake them for something they called off.
+- A change the alarm cannot see, such as new spoken words, touches
+  the phone not at all.
+
+**Two paths, two secrets.** `/a/<secret>` sets, `/x/<secret>` takes
+back. Separate paths rather than a verb in the body because Tasker
+matches the path exactly, so it costs no extra action on the phone.
+
+**`alarm.Settle`, and why it exists.** Taking one back and putting
+the next on are two starts of the clock's own activity, and back to
+back **the second is silently dropped** -- the phone still answers
+`jarvis-alarm-ok`, nothing logs a failure, and no alarm appears. A
+move lost its alarm entirely until a 1.5 second wait went between
+them. The same shape bit once more, setting two alarms in one
+breath.
+
+That is the standing weakness here: **the phone answers before it
+acts**, so a success is the message having been accepted, not the
+alarm existing. Everything above is built knowing it.
+
 ### The signature
 
 Owner: *"always add a stamp like 'by J.A.R.V.I.S'. If Jarvis is the

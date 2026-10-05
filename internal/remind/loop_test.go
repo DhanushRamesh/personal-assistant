@@ -558,14 +558,22 @@ func TestWithoutAPastTenseWordingItFallsBack(t *testing.T) {
 
 // clockface : An alarm sink that keeps what it was handed.
 type clockface struct {
-	mu   sync.Mutex
-	kept []alarm.Alarm
+	mu      sync.Mutex
+	kept    []alarm.Alarm
+	dropped []string
 }
 
 func (c *clockface) Set(_ context.Context, a alarm.Alarm) error {
 	c.mu.Lock()
 	defer c.mu.Unlock()
 	c.kept = append(c.kept, a)
+	return nil
+}
+
+func (c *clockface) Clear(_ context.Context, a alarm.Alarm) error {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	c.dropped = append(c.dropped, a.Label)
 	return nil
 }
 

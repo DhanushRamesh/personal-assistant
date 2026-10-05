@@ -16,6 +16,7 @@ type flaky struct {
 	refuses bool
 	asked   int
 	last    alarm.Alarm
+	cleared []string
 }
 
 func (f *flaky) Set(_ context.Context, a alarm.Alarm) error {
@@ -26,6 +27,13 @@ func (f *flaky) Set(_ context.Context, a alarm.Alarm) error {
 	if f.refuses {
 		return errors.New("the phone is asleep")
 	}
+	return nil
+}
+
+func (f *flaky) Clear(_ context.Context, a alarm.Alarm) error {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	f.cleared = append(f.cleared, a.Label)
 	return nil
 }
 
@@ -164,5 +172,28 @@ func TestTheSameReminderIsOwedOneAlarm(t *testing.T) {
 	}
 	if k.Waiting() != 1 {
 		t.Errorf("%d alarms are owed for one reminder", k.Waiting())
+	}
+}
+
+// A reminder cancelled while its alarm was still being retried
+// must not have that alarm turn up a minute later. That is the one
+// way this could wake somebody for a thing they called off.
+func TestClearingStopsAPendingRetry(t *testing.T) {
+	phone := &flaky{refuses: true}
+	k := keeper(phone)
+
+	owed := alarm.Alarm{At: noon.Add(time.Hour), Label: "take the tablets", Key: "rem_1"}
+	if err := k.Set(context.Background(), owed); err == nil {
+		t.Fatal("a refusal was reported as an alarm")
+	}
+	if k.Waiting() != 1 {
+		t.Fatalf("%d alarms are owed, wanted 1", k.Waiting())
+	}
+
+	if err := k.Clear(context.Background(), owed); err != nil {
+		t.Fatalf("clear: %v", err)
+	}
+	if k.Waiting() != 0 {
+		t.Errorf("the cancelled alarm is still owed: %d waiting", k.Waiting())
 	}
 }

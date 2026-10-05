@@ -201,3 +201,14 @@ func (k *Keeper) logLocked(msg string, owed *attempt, err error) {
 	}
 	k.Logger.Warn(msg, at...)
 }
+
+// Clear : Asks the phone to drop an alarm, and stops owing it one.
+//
+// Forgotten first. A reminder cancelled while its alarm was still
+// being retried must not have that alarm appear a minute later,
+// which is the one way this could wake somebody for a thing they
+// called off.
+func (k *Keeper) Clear(ctx context.Context, a Alarm) error {
+	k.forget(a.Key)
+	return k.Setter.Clear(ctx, a)
+}
