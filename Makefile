@@ -81,7 +81,13 @@ stop: ## Stop the background one
 		rm -f $(PIDFILE); echo "not running"; \
 	fi
 	@# Anything else of ours left holding the port, from a crash or an older run.
-	@pkill -x $(BINARY) 2>/dev/null && echo "  (also cleared a stray $(BINARY))" || true
+	@#
+	@# Matched on the command line, not the process name. Linux
+	@# truncates a name to fifteen characters, so -x personal-assistant
+	@# never matched personal-assist and a server started by hand sat
+	@# through every restart -- the symptom being "address already in
+	@# use" after stop had just said it was done.
+	@pkill -f '^\./$(BINARY)$$' 2>/dev/null && echo "  (also cleared a stray $(BINARY))" || true
 
 .PHONY: restart
 restart: stop start ## Stop then start
