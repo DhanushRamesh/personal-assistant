@@ -630,19 +630,75 @@ func TestNothingToWriteFromIsNotAsked(t *testing.T) {
 	}
 }
 
-// TestACallIsNeededBeforeCallsAreMentioned : The block saying a
-// missed call outranks everything used to be in every prompt, which
-// made it a standing suggestion of the thing to look for.
-func TestACallIsNeededBeforeCallsAreMentioned(t *testing.T) {
-	quiet := greet.Told{Now: evening, Opening: "Evening, sir. Welcome back.",
-		Events: []event.Event{happened("wifi.joined", "Dhanush", evening.Add(-time.Hour))}}
-	if strings.Contains(greet.Prompt(quiet), "tried to reach them") {
-		t.Error("a window with no call in it was still told about missed calls")
+// TestOnlyWhatWasLeftHangingIsRaised : The block saying somebody
+// tried to reach them used to appear whenever the window mentioned
+// that sort of thing at all, so an answered call got raised as
+// though it were owed. Owner's rulings: a call returned eight
+// minutes later is settled and is nothing.
+func TestOnlyWhatWasLeftHangingIsRaised(t *testing.T) {
+	reaching := func(kind, who string, secs int, at time.Time) event.Event {
+		p := fmt.Sprintf(`{"value":%q,"number":"+919000000001"}`, who)
+		if secs >= 0 {
+			p = fmt.Sprintf(`{"value":%q,"number":"+919000000001","seconds":%d}`, who, secs)
+		}
+		return event.Event{Kind: kind, Payload: []byte(p), OccurredAt: at}
 	}
-	rang := quiet
-	rang.Events = append(rang.Events, happened("call.missed", "unknown", evening.Add(-time.Minute)))
-	if !strings.Contains(greet.Prompt(rang), "tried to reach them") {
-		t.Error("a window with a missed call was not told the rule about them")
+	base := greet.Told{Now: evening, Opening: "Evening, sir. Welcome back."}
+
+	// Nothing of the sort in the window at all.
+	quiet := base
+	quiet.Events = []event.Event{happened("wifi.joined", "Dhanush", evening.Add(-time.Hour))}
+	if strings.Contains(greet.Prompt(quiet), "did not get through") {
+		t.Error("a window with nothing of the sort was told about it")
+	}
+
+	// Tried and never got through.
+	open := base
+	open.Events = []event.Event{reaching("call.missed", "Priya", -1, evening.Add(-time.Hour))}
+	if got := greet.Outstanding(open); len(got) != 1 {
+		t.Errorf("a call nobody answered was not left hanging: %v", got)
+	}
+	if !strings.Contains(greet.Prompt(open), "did not get through") {
+		t.Error("what was left hanging was not put to the model")
+	}
+
+	// Tried, then spoke. Settled.
+	back := base
+	back.Events = []event.Event{
+		reaching("call.missed", "Priya", -1, evening.Add(-time.Hour)),
+		reaching("call.made", "Priya", 21, evening.Add(-52*time.Minute)),
+	}
+	if got := greet.Outstanding(back); len(got) != 0 {
+		t.Errorf("a call that was returned is still hanging: %v", got)
+	}
+	asked := greet.Prompt(back)
+	if strings.Contains(asked, "did not get through") {
+		t.Error("a settled call was raised as though it were owed")
+	}
+	if !strings.Contains(asked, "got through, or was settled by something after it") {
+		t.Error("the model was not told the window holds nothing owed")
+	}
+
+	// Answered when it came, and never a missed one at all.
+	spoke := base
+	spoke.Events = []event.Event{reaching("call.received", "Amma", 19, evening.Add(-time.Hour))}
+	if got := greet.Outstanding(spoke); len(got) != 0 {
+		t.Errorf("an answered call was treated as an attempt: %v", got)
+	}
+
+	// A zero is not a time.
+	none := base
+	none.Events = []event.Event{reaching("call.unanswered", "Muthu", 0, evening.Add(-time.Hour))}
+	if got := greet.Outstanding(none); len(got) != 1 {
+		t.Errorf("a call of no length was treated as having happened: %v", got)
+	}
+
+	// A caller with no name is not named.
+	nameless := base
+	nameless.Events = []event.Event{reaching("call.missed", "unknown", -1, evening.Add(-time.Hour))}
+	if got := greet.Outstanding(nameless); len(got) != 1 ||
+		!strings.Contains(got[0], "could not name") {
+		t.Errorf("a nameless caller was given a name: %v", got)
 	}
 }
 

@@ -255,6 +255,7 @@ func Prompt(t Told) string {
 			"One thing at most. Somebody who comes in and is asked three questions has been interrogated, not greeted.",
 		),
 		sure(),
+		settled(t),
 		shown4(),
 		reminders(t),
 		reached(t),
@@ -313,32 +314,129 @@ func opening(t Told) string {
 	)
 }
 
-// reached : That somebody trying to get hold of them outranks
-// everything else here.
+// Outstanding : Whoever tried to reach them and did not, with
+// nothing since to settle it.
 //
-// Only when somebody did. The block used to be in every prompt,
-// which made it a standing suggestion that this is the thing to look
-// for, and a model with nothing else to say reached for the slot
-// with the highest value in it and filled it.
+// Worked out here rather than asked for. Deciding whether a thing
+// was left hanging is not a judgement about language, it is two
+// comparisons, and a model asked to make it got it wrong on four
+// arrivals out of four -- raising a call somebody returned eight
+// minutes later, and raising calls that were answered when they
+// came.
 //
-// It was already conditional in its wording -- "if and only if" --
-// after it invented a caller six times out of six. That helped and
-// did not stop it: over twelve sampled arrivals it invented one
-// three times, once over a window holding four wifi events and
-// nothing else, and once over a window holding nothing at all. One
-// of those went as far as a voicemail.
+// Two payload conventions do the whole of it, and neither is a
+// kind:
 //
-// So the condition moved into the code, where the diary's already
-// is. Nothing can be said about a call that is not there if nothing
-// has mentioned calls.
+//   - number. A sender writing one has said this was somebody being
+//     reached; it means the same whoever sends it, and no kind has
+//     to be named for it to be read.
+//   - seconds. A sender writing it has said how long something ran.
+//     Some of it means the reaching worked. None of it, or nought
+//     of it, means it did not.
 //
-// By prefix rather than by naming the kinds, because a phone that
-// learns to report some new sort of call should not need a line
-// here before the rule covers it.
+// So: an attempt is an event carrying a number and no time. It is
+// settled by anything later that carries a number, names the same
+// person, and did take some time.
+//
+// Inferring the family from the window was tried first -- a member
+// with no seconds, in a family where another member had some -- and
+// it fails on the commonest case of all: a window holding one
+// missed call and nothing else has nothing to compare it against.
+//
+// Measured against the owner's own rulings on twenty arrivals: it
+// agrees with every one of them. A call returned eight minutes
+// later is settled; two from a number with no name and nothing
+// after are not; an evening of answered calls holds nothing
+// outstanding at all.
+func Outstanding(t Told) []string {
+	type attempt struct {
+		who  string
+		when time.Time
+	}
+	open := map[string]attempt{}
+	for _, e := range t.Events {
+		into := fields(e)
+		if _, reaching := into[Number]; !reaching {
+			continue
+		}
+		who := value(e)
+		if n, had := number(into[Seconds]); had && n > 0 {
+			// It got through. Anything left hanging with this
+			// person is hanging no longer.
+			delete(open, who)
+			continue
+		}
+		open[who] = attempt{who: who, when: e.OccurredAt}
+	}
+	if len(open) == 0 {
+		return nil
+	}
+
+	out := make([]string, 0, len(open))
+	for _, a := range open {
+		who := strings.TrimSpace(a.who)
+		if who == "" || who == event.Unknown || event.Number(who) {
+			who = "somebody the phone could not name"
+		} else {
+			who = event.Readable(who)
+		}
+		out = append(out, who+", at "+a.when.In(t.Now.Location()).Format("3:04 pm"))
+	}
+	sort.Strings(out)
+	return out
+}
+
+// fields : A payload as a map, or an empty one.
+func fields(e event.Event) map[string]any {
+	var into map[string]any
+	if json.Unmarshal(e.Payload, &into) != nil {
+		return nil
+	}
+	return into
+}
+
+// reached : What was left hanging, and that it outranks the rest.
+//
+// Only when something was. The block used to be in every prompt,
+// which made it a standing suggestion of the thing to look for, and
+// a model with nothing else to say filled the slot with the highest
+// value in it -- inventing a caller three times in twelve, once over
+// a window holding nothing at all.
+//
+// Then it was conditional on the window mentioning that sort of
+// thing, which stopped the inventions and not the rest: an answered
+// call is still a call, and it went on raising those. Now the
+// condition is the fact itself, worked out above, and the block
+// says which one rather than asking it to find one.
 func reached(t Told) string {
+	open := Outstanding(t)
+	if len(open) == 0 {
+		return ""
+	}
+	return prompt.Block(
+		prompt.Text(
+			"Somebody tried to reach them while they were out and did not get through, and nothing since shows it was settled.",
+			"That is the thing to say. It is told rather than asked about, it wins over anything else here, and it is a few words: no number, no count, and nothing about what they wanted.",
+			"Say only that it happened and who, where there is a who. A message nobody left is the worst thing this could do: they will ring somebody back who never called.",
+		),
+		prompt.Lines(open...),
+	)
+}
+
+// settled : That everything else anybody tried did get through.
+//
+// Said outright, because its absence was being read as licence. The
+// window holds calls, one of them was returned eight minutes later,
+// and a model left to work that out raised it anyway on four
+// arrivals out of four. Stating the conclusion costs a sentence and
+// removes the judgement.
+func settled(t Told) string {
+	if len(Outstanding(t)) > 0 {
+		return ""
+	}
 	var any bool
 	for _, e := range t.Events {
-		if strings.HasPrefix(e.Kind, "call.") {
+		if _, reaching := fields(e)[Number]; reaching {
 			any = true
 			break
 		}
@@ -347,10 +445,8 @@ func reached(t Told) string {
 		return ""
 	}
 	return prompt.Text(
-		"If something below shows that somebody tried to reach them while they were out and did not get through, that one is told rather than asked about.",
-		"They would want to know and would want to know now, and it is the only thing here that costs them something by waiting, so it wins over anything else worth saying.",
-		"A few words, without the number and without the count.",
-		"Only what is actually below. An invented message that nobody left is the worst thing this could do: they will ring somebody back who never called.",
+		"Everything anybody tried while they were out got through, or was settled by something after it.",
+		"So nothing there is owed and none of it is news: they were present for all of it. Do not raise any of it, and do not ask whether somebody reached them.",
 	)
 }
 
@@ -931,6 +1027,14 @@ func value(e event.Event) string {
 
 // Seconds : The field a sender uses for how long something ran.
 const Seconds = "seconds"
+
+// Number : The field a sender uses for the way somebody was reached.
+//
+// A unit of a sort, like Seconds, and not a kind: a sender writing
+// one has said this event was an attempt to get hold of a person.
+// What it contains is never read out and never counted -- only that
+// it is there.
+const Number = "number"
 
 // span : A number of seconds as somebody would say it.
 //
