@@ -71,6 +71,20 @@ var accused = []string{
 	"you skipped", "you failed", "instead of",
 }
 
+// contact : Saying somebody tried to reach them. Checked against
+// whether anything in the window was a call at all.
+//
+// The worst thing this can do, in the prompt's own words, because
+// they will ring back somebody who never called -- and the check
+// that was here only looked for invented names, so it waved through
+// "someone tried to reach you while you were out, sir" over a
+// window holding four wifi events and nothing else.
+var contact = []string{
+	"tried to reach", "tried to call", "tried to get", "get through",
+	"rang", "called you", "a call", "missed call", "didn't connect",
+	"did not connect", "trying to reach",
+}
+
 // greeted : A salutation. The server says the opening itself; one
 // here is the model greeting them twice.
 var greeted = []string{
@@ -87,10 +101,13 @@ var greeted = []string{
 // the sample -- and a number word is not a count when it is the
 // hour, which flagged "just before six this morning".
 //
-// What is actually forbidden is a tally: three of something, four
-// times, twice. Those are what turn a greeting into a report.
-var counted = regexp.MustCompile(
-	`\b\d+\s+\w+|\b(two|three|four|five|six|seven|eight|nine|ten)\s+\w+s\b|\b(times|twice)\b`)
+// What is actually forbidden is a tally: four times, twice, two
+// calls. Those are what turn a greeting into a report.
+//
+// Narrow again after a second run: a branch for number words
+// followed by a plural read "five this morning" as a count, because
+// "this" ends in an s.
+var counted = regexp.MustCompile(`\b\d+\s+[a-z]+s\b|\b(times|twice|thrice)\b`)
 
 func TestGreetingRealArrivals(t *testing.T) {
 	cfg, err := config.Load("../../../config.ini", os.LookupEnv)
@@ -207,6 +224,9 @@ func wrong(said string, told greet.Told) []string {
 	if n := strings.Count(said, "?"); n > 1 {
 		why = append(why, "asked more than one question")
 	}
+	if w, ok := has(low, contact); ok && !anyCall(told) {
+		why = append(why, "said somebody tried to reach them ("+w+") with no call in the window")
+	}
 	for _, name := range invented(said, told) {
 		why = append(why, "named somebody nothing reported ("+name+")")
 	}
@@ -247,6 +267,20 @@ func invented(said string, told greet.Told) []string {
 		}
 	}
 	return out
+}
+
+// anyCall : Whether anything in the window was a call of any kind.
+//
+// By prefix, not by naming the kinds. A phone that learns to report
+// a new sort of call should not need a line here before the check
+// understands it.
+func anyCall(told greet.Told) bool {
+	for _, e := range told.Events {
+		if strings.HasPrefix(e.Kind, "call.") {
+			return true
+		}
+	}
+	return false
 }
 
 // named : Whether a number is part of something they were told

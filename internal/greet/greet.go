@@ -182,6 +182,23 @@ type Chore struct {
 	Overdue bool
 }
 
+// Anything : Whether there is anything at all to write a greeting
+// from.
+//
+// Asked before the model is, and the model is not asked when the
+// answer is no. A prompt with nothing under it is a page of
+// instructions about finding something worth saying, handed to
+// something obliging, and over twelve sampled arrivals the one with
+// an empty window answered with an invented missed call.
+//
+// There is no judgement in it. Where every source is empty the
+// greeting is the opening, which is what it would have been anyway,
+// and nothing is spent finding that out.
+func (t Told) Anything() bool {
+	return len(t.Events) > 0 || len(t.Were) > 0 || len(t.Diary) > 0 ||
+		len(t.Reminders) > 0 || len(t.Chores.Due) > 0
+}
+
 // Prompt : What the model is asked.
 //
 // Exported so an eval builds the same thing the server does.
@@ -204,6 +221,7 @@ func Prompt(t Told) string {
 			"Where something is worth it, say so and ask about it, the way somebody would: a short question, not a report.",
 			"Where nothing stands out -- and most of the time nothing will -- answer with nothing at all. The greeting has been said; silence after it is a greeting.",
 		),
+		nothing(),
 		prompt.Text(
 			"Never list what the devices reported, never read out a count, and never use the names the events are written under.",
 			"You noticed something; you did not read a log.",
@@ -211,12 +229,7 @@ func Prompt(t Told) string {
 		),
 		sure(),
 		reminders(t),
-		prompt.Text(
-			"If -- and only if -- something below shows that somebody tried to reach them while they were out and did not get through, that one is told rather than asked about.",
-			"They would want to know and would want to know now, and it is the only thing here that costs them something by waiting, so it wins over anything else worth saying.",
-			"A few words, without the number and without the count.",
-			"Where nothing below shows that, say nothing of the kind. An invented message that nobody left is the worst thing this could do: they will ring somebody back who never called.",
-		),
+		reached(t),
 		prompt.Text(
 			"It is said out loud in a room that may have other people in it.",
 			"Where mentioning something would mean saying aloud who called them or what they were doing, keep it to what they would not mind overheard,",
@@ -266,6 +279,70 @@ func opening(t Told) string {
 		"Write only what comes after it. Do not greet them again, do not say good morning or good afternoon or good evening,",
 		"and do not welcome them back: it has been done.",
 		"What you write follows straight on, so it begins mid-greeting rather than at the start of one.",
+	)
+}
+
+// reached : That somebody trying to get hold of them outranks
+// everything else here.
+//
+// Only when somebody did. The block used to be in every prompt,
+// which made it a standing suggestion that this is the thing to look
+// for, and a model with nothing else to say reached for the slot
+// with the highest value in it and filled it.
+//
+// It was already conditional in its wording -- "if and only if" --
+// after it invented a caller six times out of six. That helped and
+// did not stop it: over twelve sampled arrivals it invented one
+// three times, once over a window holding four wifi events and
+// nothing else, and once over a window holding nothing at all. One
+// of those went as far as a voicemail.
+//
+// So the condition moved into the code, where the diary's already
+// is. Nothing can be said about a call that is not there if nothing
+// has mentioned calls.
+//
+// By prefix rather than by naming the kinds, because a phone that
+// learns to report some new sort of call should not need a line
+// here before the rule covers it.
+func reached(t Told) string {
+	var any bool
+	for _, e := range t.Events {
+		if strings.HasPrefix(e.Kind, "call.") {
+			any = true
+			break
+		}
+	}
+	if !any {
+		return ""
+	}
+	return prompt.Text(
+		"If something below shows that somebody tried to reach them while they were out and did not get through, that one is told rather than asked about.",
+		"They would want to know and would want to know now, and it is the only thing here that costs them something by waiting, so it wins over anything else worth saying.",
+		"A few words, without the number and without the count.",
+		"Only what is actually below. An invented message that nobody left is the worst thing this could do: they will ring somebody back who never called.",
+	)
+}
+
+// nothing : That saying nothing is the ordinary answer and not a
+// failure to find one.
+//
+// The instruction was already there and was already ignored. Over
+// twenty-two real arrivals sampled out of four weeks of a phone's
+// reporting, the model spoke twenty-two times and returned nothing
+// not once -- with "most of the time nothing will" sitting in the
+// middle of a paragraph about finding something, which is not where
+// a model looks for permission to stop.
+//
+// Having found nothing worth saying it reached for whatever was
+// left: the shape of the day, the hour they came in, the phone
+// itself. So those are named as what having nothing looks like,
+// rather than left for it to discover that they do not count.
+func nothing() string {
+	return prompt.Text(
+		"Most arrivals have nothing in them worth a word. Returning nothing is the commonest right answer here, and it is not a failure to have found one.",
+		"You are not being asked to produce a sentence. You are being asked whether there is one worth saying, and usually there is not.",
+		"If what you are left with is the shape of their day, the hour they came in, how long they were gone, or how their phone behaved, then you have nothing: they were there for all of it and none of it needs telling.",
+		"Return nothing, and do not say that you are returning nothing.",
 	)
 }
 
@@ -697,9 +774,17 @@ const Dark = 90 * time.Minute
 //
 // Absence is the one thing nothing else in this prompt can show.
 // Every other line is something that happened; a gap is the shape
-// of the time between, and it is often the whole story -- a phone
-// that went flat at seven explains two hours of nothing far better
-// than any event in the window does.
+// of the time between, and without it a window with little in it
+// reads as a day with little in it.
+//
+// Working material, and said so plainly, because it did not used to
+// be. It offered the usual reasons for a gap -- off, flat, no signal
+// -- and allowed the model to say the one that seemed plain. Over
+// twenty-two sampled arrivals that produced "your phone went quiet
+// just before six this morning, sir, did it go flat?" and "your
+// phone was off the whole time, sir, was the walk long?", neither
+// of which anything had reported. It was the block naming the
+// inventions and then licensing them.
 //
 // Worked out here rather than given, because it is a reading of the
 // same events and not another fact to fetch.
@@ -739,10 +824,10 @@ func silent(t Told) string {
 			spell(g.to.Sub(g.from))))
 	}
 	lines = append(lines,
-		"A gap is not an absence of anything happening; it is an absence of anything being reported, which is a different thing and often the larger one.",
-		"The phone being off, flat, or without signal are the usual reasons, and what came just before says which: a battery falling to nothing, or a last position somewhere with no coverage.",
-		"Where the reason is plain, you may say it, because they will wonder why nothing was recorded and it is better said than discovered.",
-		"Where it is not plain, do not guess at it and do not ask them to account for the time.")
+		"A gap is not an absence of anything happening; it is an absence of anything being reported, which is a different thing.",
+		"It is here so that a thin window is not read as a quiet day. It is not itself a thing to say: they know what their phone was doing better than you do, and whatever it was, telling them is telling them nothing.",
+		"Never offer a reason for it. A flat battery, a place with no signal, a phone somebody switched off -- none of those was reported, all of them are guesses, and a guess about why nothing was recorded is the easiest thing here to invent and the least worth inventing.",
+		"Do not ask them to account for the time either.")
 	return prompt.Text(lines...)
 }
 

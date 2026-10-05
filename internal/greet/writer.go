@@ -44,6 +44,14 @@ func (w *Writer) Write(ctx context.Context, t Told) (said string, written bool) 
 		return fallback, false
 	}
 
+	// Nothing to write from, so nothing is written. The opening was
+	// always going to be the whole greeting here; asking anyway
+	// spends a call and a doorway's worth of waiting on a prompt
+	// whose only honest answer is silence.
+	if !t.Anything() {
+		return fallback, false
+	}
+
 	// A deadline of its own, and not the caller's. The request that
 	// asked for this is already gone -- Home Assistant gives up after
 	// ten seconds -- and the greeting outlives it on purpose.

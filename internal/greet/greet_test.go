@@ -480,6 +480,7 @@ func TestTheOpeningIsAlwaysSaid(t *testing.T) {
 	}}
 	said, written := w.Write(context.Background(), greet.Told{
 		Now: evening, Opening: "Good evening, sir. Welcome back.",
+		Events: []event.Event{happened("call.missed", "unknown", evening.Add(-time.Minute))},
 	})
 	if !written {
 		t.Fatal("the model wrote one and it was not used")
@@ -504,6 +505,7 @@ func TestNobodyIsGreetedTwice(t *testing.T) {
 		}}
 		said, _ := w.Write(context.Background(), greet.Told{
 			Now: evening, Opening: "Good evening, sir. Welcome back.",
+			Events: []event.Event{happened("call.missed", "unknown", evening.Add(-time.Minute))},
 		})
 		want := "Good evening, sir. Welcome back. Kliffy rang while you were out."
 		if said != want {
@@ -589,5 +591,42 @@ func TestAnUnvouchedNameIsSomebody(t *testing.T) {
 	asked := greet.Prompt(greet.Told{Now: evening, Opening: "Evening, sir. Welcome back."})
 	if !strings.Contains(asked, "Say somebody rather than a name you cannot vouch for") {
 		t.Error("the model is not told to fall back to somebody")
+	}
+}
+
+// TestNothingToWriteFromIsNotAsked : A prompt with nothing under it
+// is a page about finding something worth saying, handed to
+// something obliging. The one sampled arrival with an empty window
+// answered it with an invented missed call.
+func TestNothingToWriteFromIsNotAsked(t *testing.T) {
+	var asked int
+	w := &greet.Writer{Ask: func(context.Context, string) (string, error) {
+		asked++
+		return "Somebody tried to reach you, sir.", nil
+	}}
+	said, written := w.Write(context.Background(), greet.Told{
+		Now: evening, Opening: "Good evening, sir. Welcome back.",
+	})
+	if asked != 0 {
+		t.Errorf("asked a model about an empty window %d times", asked)
+	}
+	if written || said != "Good evening, sir. Welcome back." {
+		t.Errorf("got %q written=%v", said, written)
+	}
+}
+
+// TestACallIsNeededBeforeCallsAreMentioned : The block saying a
+// missed call outranks everything used to be in every prompt, which
+// made it a standing suggestion of the thing to look for.
+func TestACallIsNeededBeforeCallsAreMentioned(t *testing.T) {
+	quiet := greet.Told{Now: evening, Opening: "Evening, sir. Welcome back.",
+		Events: []event.Event{happened("wifi.joined", "Dhanush", evening.Add(-time.Hour))}}
+	if strings.Contains(greet.Prompt(quiet), "tried to reach them") {
+		t.Error("a window with no call in it was still told about missed calls")
+	}
+	rang := quiet
+	rang.Events = append(rang.Events, happened("call.missed", "unknown", evening.Add(-time.Minute)))
+	if !strings.Contains(greet.Prompt(rang), "tried to reach them") {
+		t.Error("a window with a missed call was not told the rule about them")
 	}
 }
