@@ -9578,6 +9578,92 @@ the barber, the empty diary, run before and after -- is the next
 piece of work and was deferred to do these first.
 
 
+## Sampling real arrivals, and the three things it found
+
+The owner asked for a sampling test rather than a set of situations:
+take an accumulation of events that actually happened, run the model
+on it, and see. `make evals-greeting` picks arrivals out of the four
+weeks the phone has been reporting, builds exactly what the server
+would have built at that moment, asks the real model, and prints what
+came back with the seed so a sample can be run again.
+
+Nothing asserts the words, because a greeting has no right answer.
+It asserts the few things that are wrong whatever the words are: a
+name nobody reported, a call nobody made, an inference stated as a
+fact where there was something to infer, an absence put as an
+accusation, a second salutation, a tally read out loud.
+
+### Three of the checks were wrong before the greeting was
+
+Worth recording, because every number the first runs produced was
+worthless and none of them looked it:
+
+- Sampling uniformly over four weeks put every arrival in September.
+  **The events begin on 1 October.** Eight empty windows measure
+  nothing, and the output read as though the model had a problem
+  with quiet days.
+- A capital at the start of a sentence was read as a name, so
+  *Someone*, *Today* and *Looks* were reported as invented people.
+- A number was read as a count when it was the hour, and when it was
+  the title of a film -- it flagged *"How was Meesaya Murukku 2,
+  sir?"*, which is the best greeting in the sample. Narrowed twice:
+  a later run read *"five this morning"* as a count because *this*
+  ends in an s.
+
+### What it found
+
+**The cross-check works.** On the real evening of 4 October -- diary
+saying *Meesaya Murukku 2 Movie* at 18:10, the phone recording a
+hundred and seventy minutes at *Flavors non veg restaurant* a
+hundred and twenty-seven metres away -- it asked *"How was Meesaya
+Murukku 2, sir?"* Twice, independently. That is the thing the owner
+asked for, on data neither of us arranged.
+
+**It invented missed calls, three times in twelve.** One window held
+four wifi events and nothing else; one held nothing at all, and that
+one invented a voicemail as well. This is the failure the prompt
+names as the worst it can do.
+
+The cause was not wording. The block saying a missed call outranks
+everything was in **every** prompt, so it stood there as a standing
+suggestion of what to look for, and a model with nothing to say
+filled the slot with the highest value in it. It had already been
+made conditional in its wording after inventing a caller six times
+out of six; that helped and did not finish it. The condition is in
+the code now, where the diary's always was.
+
+**It invented reasons for silence.** *"Did it go flat?"*, *"was the
+walk long?"* -- over windows that reported neither. The silence block
+was handing it over: it named off, flat and no signal as the usual
+reasons and then allowed the model to say whichever seemed plain. A
+gap is working material now and never a subject. They know what
+their phone was doing better than it does.
+
+**It never says nothing.** Twelve of twelve, and twenty-two of
+twenty-two before that. The instruction to return nothing had been
+there all along, as one clause inside a paragraph about finding
+something, which is not where a model looks for permission to stop.
+A block of its own naming what having nothing looks like -- the shape
+of the day, the hour, how the phone behaved -- did not move it
+either.
+
+Invented calls went from three to nought on the identical sample.
+The silence rate did not move at all, and what is left is reaching
+rather than inventing: the hour they came in, a plan for tomorrow
+evening at breakfast time. Whether that is wrong is the owner's
+judgement rather than a defect, and it is still open.
+
+### A page with nothing under it is not put to a model
+
+The last fix of the three, and the cheapest. Where the window, the
+diary, the reminders and the chores are all empty there is nothing
+to write a greeting from, and the opening was always going to be the
+whole of it. Asking anyway spends a call and a doorway's worth of
+waiting on a prompt whose only honest answer is silence -- and the
+one sampled arrival with an empty window answered it with a missed
+call that never happened.
+
+
 ## 12. Maintaining this file
 
 When the owner states a preference, makes a decision, or corrects something,
