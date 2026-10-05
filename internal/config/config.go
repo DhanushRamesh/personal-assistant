@@ -268,6 +268,17 @@ type HomeAssistant struct {
 	// house, which nothing else here does.
 	Notify []string
 
+	// AlarmPhone : The notify service for the one phone that can set
+	// an alarm, such as notify.mobile_app_pixel_7. Empty means a
+	// reminder sets no alarm, and says so.
+	//
+	// Not Notify, though it is usually the same phone. Notify is an
+	// audience -- everything in it hears an announcement -- and an
+	// alarm is a thing one device does. Add a tablet to Notify and
+	// every reminder would set two alarms, one of them on a device
+	// nobody wakes up next to.
+	AlarmPhone string
+
 	// MediaPlayer : The satellite's media player, such as
 	// media_player.laptop_lva_media_player. Used for what is said while a
 	// turn is still running, because that player is not the one the voice
@@ -557,6 +568,7 @@ func Load(path string, lookup Lookup) (Config, error) {
 			PresenceEntity:  l.str("homeassistant", "presence_entity", ""),
 			ThisMachine:     l.str("homeassistant", "this_machine", ""),
 			Notify:          l.list("homeassistant", "notify"),
+			AlarmPhone:      l.str("homeassistant", "alarm_phone", ""),
 			MediaPlayer:     l.str("homeassistant", "media_player", ""),
 			TTSEngine:       l.str("homeassistant", "tts_engine", "tts.piper"),
 			TTSVoice:        l.str("homeassistant", "tts_voice", ""),

@@ -19,6 +19,7 @@ import (
 	"syscall"
 	"time"
 
+	"github.com/DhanushRamesh/personal-assistant/internal/alarm"
 	"github.com/DhanushRamesh/personal-assistant/internal/announce"
 	"github.com/DhanushRamesh/personal-assistant/internal/announce/hass"
 	"github.com/DhanushRamesh/personal-assistant/internal/announcement"
@@ -256,7 +257,7 @@ func run() error {
 	tools, err := tool.NewRegistry(slices.Concat(
 		conversations.All(chats),
 		memories.All(remembering),
-		reminders.All(reminderStore, clock),
+		reminders.All(reminderStore, clock, phoneAlarm(cfg)),
 		taskstool.All(listsOf(googleLink), taskstool.Clock{
 			Now: cfg.Assistant.Now, Location: cfg.Assistant.Location,
 		}),
@@ -640,6 +641,26 @@ func naming(cfg config.Config, logger *slog.Logger) event.Naming {
 		Places:  cfg.Geoapify.Places,
 		Timeout: cfg.Geoapify.Timeout,
 	}}
+}
+
+// phoneAlarm : Somewhere to ask for an alarm, or nothing.
+//
+// Untyped nil when there is nowhere to ask, for the usual reason: a
+// typed one satisfies the interface and then fails on every call,
+// and the honest answer on a server with no notify service is that
+// it cannot reach the phone at all -- which is a different sentence
+// from the alarm having failed, and the person deserves the right
+// one.
+func phoneAlarm(cfg config.Config) alarm.Setter {
+	phone := strings.TrimSpace(cfg.HomeAssistant.AlarmPhone)
+	if phone == "" || strings.TrimSpace(cfg.HomeAssistant.URL) == "" {
+		return nil
+	}
+	return alarm.Through{
+		URL:     cfg.HomeAssistant.URL,
+		Token:   cfg.HomeAssistant.Token.Reveal(),
+		Service: phone,
+	}
 }
 
 // mapping : The map, or nothing when there is no key.

@@ -148,7 +148,7 @@ func offered(t *testing.T) []environment.ToolSpec {
 	registry, err := tool.NewRegistry(slices.Concat(
 		conversations.All(nil),
 		memories.All(recall),
-		reminders.All(remindstore.New(), reminders.Clock{Location: time.UTC}),
+		reminders.All(remindstore.New(), reminders.Clock{Location: time.UTC}, nil),
 	)...)
 	if err != nil {
 		t.Fatalf("NewRegistry: %v", err)

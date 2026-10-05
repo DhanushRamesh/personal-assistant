@@ -88,7 +88,7 @@ func TestAStaleAnswerIsNotRepeated(t *testing.T) {
 	// either looked up -- and finds nothing -- or invented.
 	registry, err := tool.NewRegistry(reminders.All(inmemory.New(), reminders.Clock{
 		Location: time.Local,
-	})...)
+	}, nil)...)
 	if err != nil {
 		t.Fatalf("NewRegistry: %v", err)
 	}

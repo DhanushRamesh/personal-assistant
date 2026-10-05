@@ -11,10 +11,12 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"log/slog"
 	"strconv"
 	"strings"
 	"time"
 
+	"github.com/DhanushRamesh/personal-assistant/internal/alarm"
 	"github.com/DhanushRamesh/personal-assistant/internal/chat"
 	"github.com/DhanushRamesh/personal-assistant/internal/prompt"
 	"github.com/DhanushRamesh/personal-assistant/internal/remind"
@@ -109,9 +111,9 @@ var WhenUnasked = prompt.Text(
 //
 // Any of them may be said out loud. None destroys anything: a cancelled
 // reminder that was wanted after all is set again in a sentence.
-func All(store remind.Store, clock Clock) []tool.Tool {
+func All(store remind.Store, clock Clock, phone alarm.Setter) []tool.Tool {
 	return []tool.Tool{
-		set(store, clock),
+		set(store, clock, phone),
 		list(store, clock),
 		recent(store, clock),
 		update(store, clock),
@@ -559,7 +561,7 @@ func laterBy(clock Clock, seconds, minutes int, written string) (time.Time, stri
 }
 
 // set : Arranges for something to be said later.
-func set(store remind.Store, clock Clock) tool.Tool {
+func set(store remind.Store, clock Clock, phone alarm.Setter) tool.Tool {
 	return tool.Tool{
 		Name:    "reminder_set",
 		Domain:  "reminder",
@@ -694,11 +696,16 @@ func set(store remind.Store, clock Clock) tool.Tool {
 				return tool.Unverified("Setting that reminder", "it cannot be read back")
 			}
 
+			// And on the phone, which is the half that works when the
+			// speaker is off and they are asleep. Owner: every
+			// reminder is kept as a phone alarm, and a failure is
+			// told rather than swallowed.
 			return tool.OK(fmt.Sprintf("Set and read back: %q, %s%s. Its identifier is %s. "+
 				"There %s %d waiting before, and there %s %d now. Tell the person when it will "+
-				"happen, in their words rather than as a date.",
+				"happen, in their words rather than as a date.%s",
 				stored.Title, spell(stored.DueAt, clock.where()), repeating(stored.Repeats), stored.ID,
-				wasWere(before), before, wasWere(before+1), count(ctx, store, in.Caller.UserID)))
+				wasWere(before), before, wasWere(before+1), count(ctx, store, in.Caller.UserID),
+				alarmed(ctx, phone, stored.DueAt, stored.Title)))
 		},
 	}
 }
@@ -1022,4 +1029,27 @@ func repeatWords() []string {
 		out = append(out, string(r))
 	}
 	return out
+}
+
+// alarmed : What to add about the alarm on their phone.
+//
+// Said either way and never silently. An alarm that was asked for
+// is worth one clause; one that could not be is worth saying
+// outright, because somebody who believes an alarm is set and finds
+// it was not has been worse served than somebody told plainly.
+//
+// What is claimed is exactly what is known. Home Assistant
+// accepting the message is not the phone having set anything, so
+// the words are that it was asked for.
+func alarmed(ctx context.Context, phone alarm.Setter, at time.Time, title string) string {
+	if phone == nil {
+		return " There is no way to reach their phone from here, so no alarm was set: say so."
+	}
+	if err := phone.Set(ctx, at, title); err != nil {
+		slog.Warn("the phone would not take an alarm", "at", at, "error", err)
+		return " The alarm on their phone could not be set. Tell them that plainly, in one clause, " +
+			"without the reason unless they ask: they may want to set it themselves."
+	}
+	return " An alarm has been asked for on their phone at the same time. Say so in passing, " +
+		"not as a second sentence."
 }

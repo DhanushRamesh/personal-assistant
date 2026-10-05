@@ -3,6 +3,7 @@ package reminders_test
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"strings"
 	"testing"
 	"time"
@@ -33,7 +34,7 @@ func harness(t *testing.T) (*tool.Registry, *inmemory.Store) {
 	store := inmemory.New()
 	clock := reminders.Clock{Now: func() time.Time { return noon }, Location: india}
 
-	r, err := tool.NewRegistry(reminders.All(store, clock)...)
+	r, err := tool.NewRegistry(reminders.All(store, clock, nil)...)
 	if err != nil {
 		t.Fatalf("NewRegistry: %v", err)
 	}
@@ -53,7 +54,7 @@ func call(t *testing.T, r *tool.Registry, name, args string) tool.Result {
 // Every reminder tool has to survive registration, which is where a
 // missing description or an untyped argument is caught.
 func TestEveryReminderToolRegisters(t *testing.T) {
-	if _, err := tool.NewRegistry(reminders.All(nil, reminders.Clock{})...); err != nil {
+	if _, err := tool.NewRegistry(reminders.All(nil, reminders.Clock{}, nil)...); err != nil {
 		t.Fatalf("a reminder tool is not usable: %v", err)
 	}
 }
@@ -63,7 +64,7 @@ func TestEveryReminderToolRegisters(t *testing.T) {
 // without a voice channel is caught instead of the count being edited.
 func TestVoiceMayUseAllOfThem(t *testing.T) {
 	r, _ := harness(t)
-	all := len(reminders.All(nil, reminders.Clock{}))
+	all := len(reminders.All(nil, reminders.Clock{}, nil))
 
 	if got := len(r.For(chat.ChannelVoice)); got != all {
 		t.Errorf("voice is offered %d of the %d reminder tools", got, all)
@@ -858,5 +859,98 @@ func TestOneBadIdentifierCancelsNothing(t *testing.T) {
 	}
 	if left, _ := store.List(context.Background(), user, remind.Pending); len(left) != 1 {
 		t.Errorf("%d left, want the real one untouched", len(left))
+	}
+}
+
+// phone : A phone that records what it was asked for, or refuses.
+type phone struct {
+	at      time.Time
+	label   string
+	asked   int
+	refuses error
+}
+
+func (p *phone) Set(_ context.Context, at time.Time, label string) error {
+	p.asked++
+	p.at, p.label = at, label
+	return p.refuses
+}
+
+// withPhone : A registry whose reminders also reach a phone.
+func withPhone(t *testing.T, p *phone) *tool.Registry {
+	t.Helper()
+	clock := reminders.Clock{Now: func() time.Time { return noon }, Location: india}
+	r, err := tool.NewRegistry(reminders.All(inmemory.New(), clock, p)...)
+	if err != nil {
+		t.Fatalf("NewRegistry: %v", err)
+	}
+	return r
+}
+
+// A reminder is a thing the assistant says and an alarm is a thing
+// the phone does, and at six in the morning only the second one
+// works. So setting one asks for the other, at the same moment and
+// under the same words.
+func TestSettingAReminderAsksThePhoneForAnAlarm(t *testing.T) {
+	p := &phone{}
+	out := call(t, withPhone(t, p), "reminder_set",
+		`{"title":"take the tablets","say":"Take the tablets.",
+		`+`"say_if_late":"You should have taken them","at":"2026-09-27 06:05"}`)
+
+	if out.Outcome != conversation.OutcomeOK {
+		t.Fatalf("reminder_set: %s", out.Content)
+	}
+	if p.asked != 1 {
+		t.Fatalf("the phone was asked %d times", p.asked)
+	}
+	if !p.at.Equal(time.Date(2026, 9, 27, 6, 5, 0, 0, india)) {
+		t.Errorf("the alarm is at %s, not the reminder's time", p.at)
+	}
+	if p.label != "take the tablets" {
+		t.Errorf("the alarm would show %q", p.label)
+	}
+	if !strings.Contains(out.Content, "alarm") {
+		t.Errorf("the model is never told an alarm was asked for: %s", out.Content)
+	}
+}
+
+// Owner: *"if it could not reach it should say I could not set the
+// alarm."* Believing an alarm is set and finding it was not is
+// worse than being told plainly, so the failure reaches the words
+// and the reminder itself still stands.
+func TestAPhoneThatRefusesIsSaidOutLoud(t *testing.T) {
+	p := &phone{refuses: errors.New("home assistant answered 401 Unauthorized")}
+	out := call(t, withPhone(t, p), "reminder_set",
+		`{"title":"take the tablets","say":"Take the tablets.",
+		`+`"say_if_late":"You should have taken them","at":"2026-09-27 06:05"}`)
+
+	if out.Outcome != conversation.OutcomeOK {
+		t.Fatalf("a refused alarm lost the reminder: %s", out.Content)
+	}
+	if !strings.Contains(out.Content, "could not be set") {
+		t.Errorf("the failure never reaches the words: %s", out.Content)
+	}
+	if strings.Contains(out.Content, "401") {
+		t.Errorf("the raw reason is being handed to the model: %s", out.Content)
+	}
+	if !strings.Contains(out.Content, "Set and read back") {
+		t.Errorf("the reminder itself should still stand: %s", out.Content)
+	}
+}
+
+// A server with no phone configured cannot set alarms and should
+// not imply it did. Untyped nil, because a typed one satisfies the
+// interface and then fails on every call.
+func TestNoPhoneAtAllIsSaidToo(t *testing.T) {
+	r, _ := harness(t)
+	out := call(t, r, "reminder_set",
+		`{"title":"take the tablets","say":"Take the tablets.",
+		`+`"say_if_late":"You should have taken them","at":"2026-09-27 06:05"}`)
+
+	if out.Outcome != conversation.OutcomeOK {
+		t.Fatalf("reminder_set: %s", out.Content)
+	}
+	if !strings.Contains(out.Content, "no alarm was set") {
+		t.Errorf("silence about the alarm, which reads as success: %s", out.Content)
 	}
 }

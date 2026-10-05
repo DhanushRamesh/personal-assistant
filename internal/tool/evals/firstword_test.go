@@ -64,7 +64,7 @@ func harness(t *testing.T) (*platformai.Environment, []environment.ToolSpec, con
 	registry, err := tool.NewRegistry(slices.Concat(
 		conversations.All(nil),
 		memories.All(recall),
-		reminders.All(remindmemory.New(), reminders.Clock{Location: time.UTC}),
+		reminders.All(remindmemory.New(), reminders.Clock{Location: time.UTC}, nil),
 		events.Tools(eventmemory.New(), events.Clock{Location: time.UTC}),
 		calendar.All(nil, calendar.Clock{Location: time.UTC}),
 		tasks.All(nil, tasks.Clock{Location: time.UTC}),

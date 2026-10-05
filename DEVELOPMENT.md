@@ -9910,6 +9910,57 @@ because it is the only one where the change could have made the
 assistant less honest rather than more useful.
 
 
+### A reminder is also a phone alarm
+
+Owner, 6 October 2026: *"whenever a reminder is set in Jarvis, that
+reminder should be kept as a phone alarm, and if it could not reach
+it should say I could not set the alarm."*
+
+A reminder is a thing the assistant **says**; an alarm is a thing the
+**phone does**. The difference is the whole point. At six in the
+morning the satellite is a speaker in a room that may be off, the
+person is asleep, and the only thing that is going to work is the
+phone in their hand. So every `reminder_set` asks the phone for a
+real alarm at the same moment, under the same words.
+
+**Both outcomes are said, and neither is silent.** Somebody who
+believes an alarm is set and finds at six that it was not has been
+worse served than somebody told plainly that it was not. Three
+sentences, decided in Go and handed to the model as an instruction
+rather than left to its judgement:
+
+| state | what the model is told |
+|---|---|
+| asked for | an alarm was asked for -- say so in passing, not as a second sentence |
+| refused | it could not be set -- say so plainly, in one clause |
+| no phone configured | there is no way to reach their phone, so no alarm was set |
+
+The claim is exactly what is known. Home Assistant accepting the
+message is not the phone having set anything, so the words are that
+the alarm was **asked for**. The raw reason never reaches the model;
+it goes to the log, and is given only if asked.
+
+**`alarm_phone`, not `notify`.** They are the same Pixel today, and
+reusing the list would still have been wrong twice over. `notify` is
+an *audience* -- everything in it hears an announcement -- where an
+alarm is one device doing one thing; add a tablet and every reminder
+would set two alarms, one beside nobody. And `notify` is switched
+**off** on purpose (2 October 2026, announcements kept in the house),
+so alarms would have been off with it and the reason would have been
+invisible.
+
+**Left empty until the phone is listening.** The server half is
+live and inert. Empty is the honest state: the assistant says it
+could not set an alarm, which is true. A filled-in line with no
+Tasker profile catching `jarvis.SET_ALARM` would be worse than
+either -- Home Assistant would accept every message, the assistant
+would report an alarm each time, and nothing would ever ring. The
+line goes in when the profile exists, which needs the phone.
+
+Known limit, not yet addressed: a repeating reminder sets one alarm,
+for the next occurrence.
+
+
 ## 12. Maintaining this file
 
 When the owner states a preference, makes a decision, or corrects something,

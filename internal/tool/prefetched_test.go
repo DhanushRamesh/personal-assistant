@@ -42,7 +42,7 @@ func TestOnlyMemoryIsReadBeforeTheQuestion(t *testing.T) {
 	registry, err := tool.NewRegistry(concat(
 		conversations.All(nil),
 		memories.All(nil),
-		reminders.All(nil, reminders.Clock{Now: time.Now, Location: where}),
+		reminders.All(nil, reminders.Clock{Now: time.Now, Location: where}, nil),
 		calendartool.All(nil, calendartool.Clock{Now: time.Now, Location: where}),
 		taskstool.All(nil, taskstool.Clock{Now: time.Now, Location: where}),
 	)...)

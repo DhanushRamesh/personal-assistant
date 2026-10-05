@@ -417,7 +417,7 @@ func TestTheModelReachesForTheRightTool(t *testing.T) {
 	registry, err := tool.NewRegistry(slices.Concat(
 		conversations.All(nil),
 		memories.All(recall),
-		reminders.All(remindmemory.New(), clock),
+		reminders.All(remindmemory.New(), clock, nil),
 		events.Tools(eventmemory.New(), events.Clock{Location: time.UTC}),
 		calendar.All(nil, calendar.Clock{Location: time.UTC}),
 		tasks.All(nil, tasks.Clock{Location: time.UTC}),
