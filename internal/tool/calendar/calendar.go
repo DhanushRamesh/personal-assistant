@@ -154,7 +154,21 @@ func add(diary Diary, clock Clock) tool.Tool {
 					Description: "True for something that takes the whole day and has no time, " +
 						"such as a birthday or a day off.",
 				},
-				"where": {Type: "string", Description: "The place, if they said one."},
+				"where": {Type: "string", Description: "The place, as somewhere that could be " +
+					"found on a map -- a name and enough of an address to tell it from " +
+					"every other one of its kind. " +
+					"Worth one short question where it is something they will travel to and " +
+					"they have not said: \"where is that, sir?\", asked once, in the same " +
+					"breath as confirming the entry rather than as a turn of its own. " +
+					"It is what lets them be told when to set off, which is the one thing " +
+					"about the day they cannot work out faster themselves, and an entry " +
+					"saved without it can never be. " +
+					"Not for the many things that are nowhere: a birthday, a renewal, " +
+					"something they will do at home, anything already named after the place " +
+					"it is at. Asking then is an interrogation, and one unanswered question " +
+					"is cheaper than one too many. " +
+					"Never invent one and never hold the entry back for it: save what they " +
+					"said, and add the place after if they give it."},
 				"notes": {Type: "string", Description: "Anything else worth keeping with it."},
 			},
 		},

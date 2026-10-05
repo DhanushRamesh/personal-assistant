@@ -173,6 +173,18 @@ var cases = []eval{
 	{Say: "am I free on Thursday afternoon", Tool: []string{"calendar_free", "calendar_events"}},
 	{Say: "put the dentist in for Tuesday at four",
 		Tool: []string{"calendar_add", "calendar_events", "calendar_free"}},
+	// Where something is matters: it is what lets them be told when
+	// to set off. But most of what goes in a diary is nowhere, and
+	// asking then is an interrogation. Across a hundred and five days
+	// of this person's calendar, three entries had a time and one had
+	// a place, so the description that asks for it had to be written
+	// narrowly and this is what holds it narrow.
+	{Say: "put Amma's birthday in for the twelfth of March",
+		Tool:  []string{"calendar_add"},
+		Never: []string{"where", "Where", "which address", "whereabouts"}},
+	{Say: "add a reminder in the diary to renew the insurance on the first",
+		Tool:  []string{"calendar_add", "reminder_set"},
+		Never: []string{"where", "Where", "which address"}},
 	{Say: "I am thinking of going to Chennai next weekend", Tool: []string{"calendar_events"}},
 	{Say: "is anything happening on the 26th", Tool: []string{"calendar_events"}},
 
