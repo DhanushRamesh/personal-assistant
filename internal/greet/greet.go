@@ -423,30 +423,66 @@ func reached(t Told) string {
 	)
 }
 
-// settled : That everything else anybody tried did get through.
+// Settled : Everybody who was reached, and when.
 //
-// Said outright, because its absence was being read as licence. The
-// window holds calls, one of them was returned eight minutes later,
-// and a model left to work that out raised it anyway on four
-// arrivals out of four. Stating the conclusion costs a sentence and
-// removes the judgement.
-func settled(t Told) string {
-	if len(Outstanding(t)) > 0 {
-		return ""
+// The other half of Outstanding and the half that was missing. Said
+// one by one rather than as a sentence about the window, because a
+// sentence about the window was not enough: told that nothing was
+// owed, the model stopped asking whether somebody had got through
+// and started asking how the call went instead. It had given up
+// treating them as owed and not as news.
+//
+// They were there for every one of these. That is the whole
+// argument, and it is easier to make about a named call at a named
+// hour than about a window.
+func Settled(t Told) []string {
+	type got struct {
+		who  string
+		when time.Time
 	}
-	var any bool
+	last := map[string]got{}
+	order := []string{}
 	for _, e := range t.Events {
-		if _, reaching := fields(e)[Number]; reaching {
-			any = true
-			break
+		into := fields(e)
+		if _, reaching := into[Number]; !reaching {
+			continue
 		}
+		n, had := number(into[Seconds])
+		if !had || n <= 0 {
+			continue
+		}
+		who := value(e)
+		if _, seen := last[who]; !seen {
+			order = append(order, who)
+		}
+		last[who] = got{who: who, when: e.OccurredAt}
 	}
-	if !any {
+	out := make([]string, 0, len(order))
+	for _, who := range order {
+		g := last[who]
+		name := strings.TrimSpace(g.who)
+		if name == "" || name == event.Unknown || event.Number(name) {
+			name = "somebody the phone could not name"
+		} else {
+			name = event.Readable(name)
+		}
+		out = append(out, name+", last at "+g.when.In(t.Now.Location()).Format("3:04 pm"))
+	}
+	return out
+}
+
+// settled : What got through, and that none of it is a subject.
+func settled(t Told) string {
+	done := Settled(t)
+	if len(done) == 0 {
 		return ""
 	}
-	return prompt.Text(
-		"Everything anybody tried while they were out got through, or was settled by something after it.",
-		"So nothing there is owed and none of it is news: they were present for all of it. Do not raise any of it, and do not ask whether somebody reached them.",
+	return prompt.Block(
+		prompt.Text(
+			"These got through. They spoke, and they were there for every one of them.",
+			"So none of these is owed and none of them is news. Do not raise one, do not ask whether somebody reached them, and do not ask how it went: they know how it went.",
+		),
+		prompt.Lines(done...),
 	)
 }
 

@@ -675,8 +675,14 @@ func TestOnlyWhatWasLeftHangingIsRaised(t *testing.T) {
 	if strings.Contains(asked, "did not get through") {
 		t.Error("a settled call was raised as though it were owed")
 	}
-	if !strings.Contains(asked, "got through, or was settled by something after it") {
-		t.Error("the model was not told the window holds nothing owed")
+	if !strings.Contains(asked, "These got through") {
+		t.Error("the model was not told what got through")
+	}
+	// By name and hour, not as a sentence about the window. Told
+	// only that nothing was owed, it stopped asking whether somebody
+	// had reached them and started asking how the call went.
+	if got := greet.Settled(back); len(got) != 1 || !strings.Contains(got[0], "Priya") {
+		t.Errorf("the call that got through was not named: %v", got)
 	}
 
 	// Answered when it came, and never a missed one at all.
