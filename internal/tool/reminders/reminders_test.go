@@ -8,6 +8,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/DhanushRamesh/personal-assistant/internal/alarm"
 	"github.com/DhanushRamesh/personal-assistant/internal/chat"
 	"github.com/DhanushRamesh/personal-assistant/internal/conversation"
 	"github.com/DhanushRamesh/personal-assistant/internal/remind"
@@ -864,15 +865,14 @@ func TestOneBadIdentifierCancelsNothing(t *testing.T) {
 
 // phone : A phone that records what it was asked for, or refuses.
 type phone struct {
-	at      time.Time
-	label   string
+	got     alarm.Alarm
 	asked   int
 	refuses error
 }
 
-func (p *phone) Set(_ context.Context, at time.Time, label string) error {
+func (p *phone) Set(_ context.Context, a alarm.Alarm) error {
 	p.asked++
-	p.at, p.label = at, label
+	p.got = a
 	return p.refuses
 }
 
@@ -903,11 +903,14 @@ func TestSettingAReminderAsksThePhoneForAnAlarm(t *testing.T) {
 	if p.asked != 1 {
 		t.Fatalf("the phone was asked %d times", p.asked)
 	}
-	if !p.at.Equal(time.Date(2026, 9, 27, 6, 5, 0, 0, india)) {
-		t.Errorf("the alarm is at %s, not the reminder's time", p.at)
+	if !p.got.At.Equal(time.Date(2026, 9, 27, 6, 5, 0, 0, india)) {
+		t.Errorf("the alarm is at %s, not the reminder's time", p.got.At)
 	}
-	if p.label != "take the tablets" {
-		t.Errorf("the alarm would show %q", p.label)
+	if p.got.Label != "take the tablets" {
+		t.Errorf("the alarm would show %q", p.got.Label)
+	}
+	if len(p.got.Days) != 0 {
+		t.Errorf("a one-off reminder set a repeating alarm: %v", p.got.Days)
 	}
 	if !strings.Contains(out.Content, "alarm") {
 		t.Errorf("the model is never told an alarm was asked for: %s", out.Content)
@@ -952,5 +955,37 @@ func TestNoPhoneAtAllIsSaidToo(t *testing.T) {
 	}
 	if !strings.Contains(out.Content, "no alarm was set") {
 		t.Errorf("silence about the alarm, which reads as success: %s", out.Content)
+	}
+}
+
+// A reminder that comes back every day should be an alarm that
+// comes back every day, rather than a fresh one set each morning.
+// The phone's own repeat still rings on a day this server is down,
+// which is the reason for putting it on the phone at all.
+func TestARepeatingReminderRepeatsOnThePhone(t *testing.T) {
+	for _, c := range []struct {
+		repeats string
+		days    int
+	}{
+		{"daily", 7},
+		{"weekdays", 5},
+		{"weekly", 1},
+		{"monthly", 0},
+	} {
+		t.Run(c.repeats, func(t *testing.T) {
+			p := &phone{}
+			out := call(t, withPhone(t, p), "reminder_set",
+				`{"title":"take the tablets","say":"Take the tablets.",`+
+					`"say_if_late":"You should have taken them","at":"2026-09-27 06:05",`+
+					`"repeats":"`+c.repeats+`"}`)
+
+			if out.Outcome != conversation.OutcomeOK {
+				t.Fatalf("reminder_set: %s", out.Content)
+			}
+			if len(p.got.Days) != c.days {
+				t.Errorf("%s repeats on %d days, wanted %d: %v",
+					c.repeats, len(p.got.Days), c.days, p.got.Days)
+			}
+		})
 	}
 }

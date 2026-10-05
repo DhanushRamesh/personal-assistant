@@ -9949,17 +9949,47 @@ would set two alarms, one beside nobody. And `notify` is switched
 so alarms would have been off with it and the reason would have been
 invisible.
 
-**Left empty until the phone is listening.** The server half is
-live and inert. Empty is the honest state: the assistant says it
-could not set an alarm, which is true. A filled-in line with no
-Tasker profile catching `jarvis.SET_ALARM` would be worse than
-either -- Home Assistant would accept every message, the assistant
-would report an alarm each time, and nothing would ever ring. The
-line goes in when the profile exists, which needs the phone.
+### No Tasker in the path
+
+The first build broadcast `jarvis.SET_ALARM` for a Tasker profile to
+catch. Measured against the phone, that turned out to be an
+unnecessary hop: Home Assistant's companion app can start the clock's
+own activity directly with `command_activity`, so there is nothing to
+set up on the phone and nothing to be broken later by a reinstall or
+a half-edited profile.
+
+The owner raised Tasker's built-in HTTP server as an alternative. It
+is a worse fit for this one, for a reason that has already bitten
+this project elsewhere: it only works on the local network. A
+reminder gets set from wherever the person is, the phone's local
+address moves with DHCP, and the laptop is often not on the same
+network as the phone. The companion-app route is handed to Google
+and arrives on mobile data and on somebody else's wifi -- the same
+property that makes `notify` reach the phone at all.
+
+**What the extras have to look like**, measured rather than assumed:
+
+| extra | encoding | what happens otherwise |
+|---|---|---|
+| `HOUR`, `MINUTES` | `:int` | |
+| `MESSAGE` | `:String.urlencoded` | a title with a comma or colon is read as more extras |
+| `SKIP_UI` | `:true:boolean` | the clock app opens and waits to be tapped |
+| `DAYS` | `:int[]`, semicolons | **silently dropped** as `String[]` or untyped |
+
+That last row is the one worth keeping. `String[]` and a bare value
+both return HTTP 200 and set the alarm -- as a one-off, with nothing
+anywhere saying the repeat was discarded. `int[]` and
+`ArrayList<Integer>` both work; `int[]` is the one in the code.
+
+Verified end to end through `alarm.Through` against the real phone on
+6 October 2026: Mon/Wed/Fri at 6:21 labelled "end to end: tablets,
+please", the colon and comma intact. Every test alarm was deleted
+afterwards and the owner's own two were left alone.
 
 Known limit, not yet addressed: a repeating reminder sets one alarm,
-for the next occurrence.
-
+for the next occurrence. Daily, weekdays and weekly map onto the
+phone's own repeat; **monthly cannot** -- an alarm clock has nowhere
+to put "the fourteenth".
 
 ## 12. Maintaining this file
 

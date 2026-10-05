@@ -11,6 +11,11 @@
 // and a failure is told rather than swallowed -- somebody who
 // believes an alarm is set and finds it was not has been worse
 // served than somebody told plainly that it was not.
+//
+// Nothing on the phone has to be set up for this. Home Assistant's
+// companion app starts the clock's own activity, so there is no
+// Tasker profile in the path to be edited, exported, or quietly
+// broken by a reinstall.
 package alarm
 
 import (
@@ -19,25 +24,48 @@ import (
 	"encoding/json"
 	"fmt"
 	"net/http"
+	"net/url"
+	"strconv"
 	"strings"
 	"time"
 )
 
-// Intent : The broadcast the phone listens for.
-//
-// Caught on the phone by a profile watching for it, which then sets
-// the alarm with the hour, the minute and the words. A broadcast
-// rather than anything cleverer because it is the one thing both
-// ends already understand: Home Assistant's companion sends it and
-// Tasker receives it, and neither needs to know about the other.
-const Intent = "jarvis.SET_ALARM"
+const (
+	// Action : Android's own "set an alarm" intent, which every clock
+	// app implements.
+	Action = "android.intent.action.SET_ALARM"
+
+	// Clock : The app the alarm is set in.
+	//
+	// Named rather than left to Android to resolve, because the
+	// companion app requires a package and because the alarm has to
+	// land in the same list the person already looks at. A different
+	// phone with a different clock needs this changed.
+	Clock = "com.google.android.deskclock"
+)
+
+// Alarm : What the phone is being asked for.
+type Alarm struct {
+	// At : When it goes off. Only the hour and the minute survive the
+	// trip, because that is all an alarm clock holds.
+	At time.Time
+	// Label : What shows on the phone when it rings. Somebody woken
+	// at six wants the words, not a number.
+	Label string
+	// Days : The days it repeats on, empty for one time only.
+	//
+	// The phone's own repeat rather than a fresh alarm each morning,
+	// so it still rings on a day this server is down -- which is the
+	// whole reason for putting it on the phone.
+	Days []time.Weekday
+}
 
 // Setter : Somewhere an alarm can be asked for.
 type Setter interface {
-	// Set : Asks the phone for an alarm at a time, labelled. Returns
-	// an error where the asking failed, which is not the same as the
-	// phone having refused.
-	Set(ctx context.Context, at time.Time, label string) error
+	// Set : Asks the phone for an alarm. Returns an error where the
+	// asking failed, which is not the same as the phone having
+	// refused.
+	Set(ctx context.Context, a Alarm) error
 }
 
 // Through : An alarm asked for through Home Assistant's notify
@@ -69,21 +97,18 @@ const DefaultTimeout = 10 * time.Second
 // did anything with it. So the honest claim afterwards is that the
 // alarm was asked for -- and a failure here is a failure that can be
 // told.
-func (t Through) Set(ctx context.Context, at time.Time, label string) error {
+func (t Through) Set(ctx context.Context, a Alarm) error {
 	if strings.TrimSpace(t.Service) == "" {
 		return fmt.Errorf("alarm: no notify service is configured for the phone")
 	}
 	name := strings.TrimPrefix(strings.TrimSpace(t.Service), "notify.")
 
 	body, err := json.Marshal(map[string]any{
-		"message": "command_broadcast_intent",
-		"title":   Intent,
+		"message": "command_activity",
 		"data": map[string]any{
-			"intent_package_name": "net.dinglisch.android.taskerm",
-			"hour":                at.Hour(),
-			"minute":              at.Minute(),
-			"label":               strings.TrimSpace(label),
-			"at":                  at.Format(time.RFC3339),
+			"intent_action":       Action,
+			"intent_package_name": Clock,
+			"intent_extras":       Extras(a),
 		},
 	})
 	if err != nil {
@@ -118,4 +143,51 @@ func (t Through) Set(ctx context.Context, at time.Time, label string) error {
 		return fmt.Errorf("alarm: home assistant answered %s", res.Status)
 	}
 	return nil
+}
+
+// Extras : The alarm written the way the companion app passes
+// intent extras on -- "name:value" pairs separated by commas, with
+// a type where guessing would get it wrong.
+//
+// The types are not decoration. Measured against the phone: the
+// days arrive as a repeat only as int[], and are silently dropped
+// as String[] or with no type at all, which leaves a daily alarm
+// ringing once and nothing anywhere saying why. The label is
+// url-encoded because a reminder says things like "call Gunalan:
+// the invoice, 2pm" and the comma and colon are this format's own
+// punctuation.
+func Extras(a Alarm) string {
+	out := []string{
+		"android.intent.extra.alarm.HOUR:" + strconv.Itoa(a.At.Hour()) + ":int",
+		"android.intent.extra.alarm.MINUTES:" + strconv.Itoa(a.At.Minute()) + ":int",
+		// Otherwise the clock app opens on the person's screen and
+		// waits to be tapped, which is no use at all from a room away.
+		"android.intent.extra.alarm.SKIP_UI:true:boolean",
+	}
+	if label := strings.TrimSpace(a.Label); label != "" {
+		out = append(out, "android.intent.extra.alarm.MESSAGE:"+
+			url.QueryEscape(label)+":String.urlencoded")
+	}
+	if days := Numbered(a.Days); days != "" {
+		out = append(out, "android.intent.extra.alarm.DAYS:"+days+":int[]")
+	}
+	return strings.Join(out, ",")
+}
+
+// Numbered : The days as the phone's alarm clock counts them --
+// Sunday 1 through Saturday 7 -- semicolon separated, or empty for
+// one time only.
+//
+// Android's numbering rather than Go's, which starts at Sunday 0,
+// and semicolons because commas already separate one extra from the
+// next.
+func Numbered(days []time.Weekday) string {
+	if len(days) == 0 {
+		return ""
+	}
+	var out []string
+	for _, d := range days {
+		out = append(out, strconv.Itoa(int(d)+1))
+	}
+	return strings.Join(out, ";")
 }

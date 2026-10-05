@@ -705,7 +705,7 @@ func set(store remind.Store, clock Clock, phone alarm.Setter) tool.Tool {
 				"happen, in their words rather than as a date.%s",
 				stored.Title, spell(stored.DueAt, clock.where()), repeating(stored.Repeats), stored.ID,
 				wasWere(before), before, wasWere(before+1), count(ctx, store, in.Caller.UserID),
-				alarmed(ctx, phone, stored.DueAt, stored.Title)))
+				alarmed(ctx, phone, stored)))
 		},
 	}
 }
@@ -1041,15 +1041,40 @@ func repeatWords() []string {
 // What is claimed is exactly what is known. Home Assistant
 // accepting the message is not the phone having set anything, so
 // the words are that it was asked for.
-func alarmed(ctx context.Context, phone alarm.Setter, at time.Time, title string) string {
+func alarmed(ctx context.Context, phone alarm.Setter, r *remind.Reminder) string {
 	if phone == nil {
 		return " There is no way to reach their phone from here, so no alarm was set: say so."
 	}
-	if err := phone.Set(ctx, at, title); err != nil {
+	at := r.DueAt
+	if err := phone.Set(ctx, alarm.Alarm{
+		At:    at,
+		Label: r.Title,
+		Days:  onDays(r.Repeats, at),
+	}); err != nil {
 		slog.Warn("the phone would not take an alarm", "at", at, "error", err)
 		return " The alarm on their phone could not be set. Tell them that plainly, in one clause, " +
 			"without the reason unless they ask: they may want to set it themselves."
 	}
 	return " An alarm has been asked for on their phone at the same time. Say so in passing, " +
 		"not as a second sentence."
+}
+
+// onDays : The days an alarm for this reminder repeats on, empty
+// for one time only.
+//
+// Monthly is empty, and that is the honest answer rather than an
+// oversight: a phone alarm repeats on weekdays and has nowhere to
+// put "the fourteenth". The reminder still comes back every month;
+// the alarm covers the next one.
+func onDays(r remind.Repeat, at time.Time) []time.Weekday {
+	switch r {
+	case remind.Daily:
+		return []time.Weekday{time.Sunday, time.Monday, time.Tuesday, time.Wednesday,
+			time.Thursday, time.Friday, time.Saturday}
+	case remind.Weekdays:
+		return []time.Weekday{time.Monday, time.Tuesday, time.Wednesday, time.Thursday, time.Friday}
+	case remind.Weekly:
+		return []time.Weekday{at.Weekday()}
+	}
+	return nil
 }
