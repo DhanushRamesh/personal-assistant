@@ -48,6 +48,7 @@ var (
 	seed    = flag.Uint64("seed", 0, "0 picks one and prints it, so a run can be repeated")
 	arrived = flag.String("at", "", "one arrival instead of a sample, as 2006-01-02 15:04 in their own zone")
 	spokeAt = flag.String("since", "", "when the assistant last spoke before it, same format")
+	rivalAt = flag.String("prompt", "", "judge this instruction file instead of the server's own prompt")
 	which   = flag.String("model", "", "ask this model instead of the configured one")
 	cases   = flag.Bool("cases", false, "run the judged cases in testdata/cases.json")
 	runs    = flag.Int("runs", 2, "how many times to ask about each case")
@@ -116,10 +117,15 @@ var greeted = []string{
 // What is actually forbidden is a tally: four times, twice, two
 // calls. Those are what turn a greeting into a report.
 //
-// Narrow again after a second run: a branch for number words
-// followed by a plural read "five this morning" as a count, because
-// "this" ends in an s.
-var counted = regexp.MustCompile(`\b\d+\s+[a-z]+s\b|\b(times|twice|thrice)\b`)
+// Narrow again, twice. A branch for number words followed by a
+// plural read "five this morning" as a count, because "this" ends
+// in an s. Then the digit branch read "Meesaya Murukku 2 is at ten
+// past six" the same way, for the same reason, and scored the
+// answer the owner had asked for as wrong four times over. The
+// following word has to be four letters or more, and the guard
+// below is handed the number alone rather than the whole match.
+var counted = regexp.MustCompile(
+	`\b(\d+)\s+(?:[a-z]{4,}s|percent)\b|\b(times|twice|thrice)\b`)
 
 func TestGreetingRealArrivals(t *testing.T) {
 	cfg, err := config.Load("../../../config.ini", os.LookupEnv)
@@ -209,7 +215,7 @@ func TestGreetingRealArrivals(t *testing.T) {
 			if n > 0 {
 				time.Sleep(3 * time.Second)
 			}
-			said, took := ask(t, env, cfg, told)
+			said, took, _ := ask(t, env, cfg, told)
 			fmt.Printf("   now:  %q   %v\n", said, took)
 			for _, w := range wrong(said, told) {
 				fmt.Printf("   ✗ %s\n", w)
@@ -248,7 +254,7 @@ func TestGreetingRealArrivals(t *testing.T) {
 			fmt.Printf("\n%s\n", greet.Prompt(told))
 			return
 		}
-		said, took := ask(t, env, cfg, told)
+		said, took, _ := ask(t, env, cfg, told)
 		fmt.Printf("\n   → %q   %v\n", said, took)
 		for _, w := range wrong(said, told) {
 			fmt.Printf("   ✗ %s\n", w)
@@ -285,7 +291,7 @@ func TestGreetingRealArrivals(t *testing.T) {
 		if i > 1 {
 			time.Sleep(Pace)
 		}
-		said, took := ask(t, env, cfg, told)
+		said, took, _ := ask(t, env, cfg, told)
 
 		fmt.Printf("\n── %d · arrived %s · %d events since %s\n",
 			i, at.Format("Mon 2 Jan 3:04 pm"), n, since.Format("3:04 pm"))
@@ -376,7 +382,10 @@ func judged(t *testing.T, env *platformai.Environment, cfg config.Config,
 				time.Sleep(4 * time.Second)
 			}
 			asked++
-			said, _ := ask(t, env, cfg, told)
+			said, _, ok := ask(t, env, cfg, told)
+			if !ok {
+				continue
+			}
 			var why []string
 			switch {
 			case c.Want == "silent" && said != "":
@@ -413,6 +422,56 @@ func judged(t *testing.T, env *platformai.Environment, cfg config.Config,
 	}
 }
 
+// rival : A whole prompt built from somebody else's instructions and
+// this server's own data.
+//
+// So that a rewrite can be scored on the judged cases before it is
+// anywhere near the server. The instructions come from the file; the
+// facts are assembled here in the plainest form, because the point
+// is to compare instructions and not two different renderings of a
+// window.
+func rival(text string, told greet.Told) string {
+	var b strings.Builder
+	b.WriteString(strings.ReplaceAll(text, "%OPENING%", told.Opening))
+	b.WriteString("\n\n## NOW\n\nIt is " + told.Now.Format("Monday 2 January, 3:04 pm") + ".")
+	if !told.Since.IsZero() {
+		b.WriteString(" You last said something to them at " +
+			told.Since.In(told.Now.Location()).Format("Monday 3:04 pm") +
+			". Anything before that you have already talked about.")
+	}
+	if len(told.Were) > 0 {
+		b.WriteString("\n\n## IN THEIR DIARY FOR THE HOURS THEY WERE AWAY\n")
+		for _, a := range told.Were {
+			b.WriteString("\n- " + a.What + ", " + a.When.In(told.Now.Location()).Format("3:04 pm"))
+			if a.Where != "" {
+				b.WriteString(", at " + a.Where)
+			}
+		}
+	}
+	if len(told.Diary) > 0 {
+		b.WriteString("\n\n## STILL TO COME\n")
+		for _, a := range told.Diary {
+			when := a.When.In(told.Now.Location())
+			day := "today"
+			if when.YearDay() != told.Now.YearDay() {
+				day = "tomorrow"
+			}
+			b.WriteString("\n- " + day + " " + when.Format("3:04 pm") + ": " + a.What)
+		}
+	}
+	if len(told.Reminders) > 0 {
+		b.WriteString("\n\n## DUE WHILE THEY WERE OUT, AND NOT YET SAID\n")
+		for _, r := range told.Reminders {
+			b.WriteString("\n- " + r)
+		}
+	}
+	if strings.TrimSpace(told.Profile) != "" {
+		b.WriteString("\n\n## WHAT YOU KNOW ABOUT THEM\n\n" + told.Profile)
+	}
+	b.WriteString("\n\n## WHAT THEIR DEVICES REPORTED IN BETWEEN\n\n" + lines(told))
+	return b.String()
+}
+
 // lines : The event lines alone, with the instructions around them
 // taken off. What somebody reads to judge a window by.
 func lines(told greet.Told) string {
@@ -446,8 +505,14 @@ func wrong(said string, told greet.Told) []string {
 	if w, ok := has(low, greeted); ok {
 		why = append(why, "greeted them a second time ("+w+")")
 	}
-	if m := counted.FindString(low); m != "" && !named(m, told) {
-		why = append(why, "read a count out loud ("+m+")")
+	if m := counted.FindStringSubmatch(low); m != nil {
+		n := m[1]
+		if n == "" {
+			n = m[2]
+		}
+		if !named(n, told) {
+			why = append(why, "read a count out loud ("+m[0]+")")
+		}
 	}
 	if n := strings.Count(said, "?"); n > 1 {
 		why = append(why, "asked more than one question")
@@ -641,15 +706,24 @@ func provider(t *testing.T, cfg config.Config, quiet *slog.Logger) *platformai.E
 // them. Checked raw on purpose: the server strips a salutation the
 // model wrote, and a test that looked after the stripping would never
 // see it happening.
-func ask(t *testing.T, env *platformai.Environment, cfg config.Config, told greet.Told) (string, time.Duration) {
+func ask(t *testing.T, env *platformai.Environment, cfg config.Config, told greet.Told) (string, time.Duration, bool) {
 	t.Helper()
 	model := cmp.Or(*which, cfg.PlatformAI.FastModel, cfg.PlatformAI.Model)
 	ctx, done := context.WithTimeout(t.Context(), greet.Within)
 	defer done()
 
+	ask := greet.Prompt(told)
+	if *rivalAt != "" {
+		text, err := os.ReadFile(*rivalAt)
+		if err != nil {
+			t.Fatalf("prompt file: %v", err)
+		}
+		ask = rival(string(text), told)
+	}
+
 	start := time.Now()
 	stream, err := env.Run(ctx, environment.Request{
-		Prompt: greet.Prompt(told), Purpose: environment.PurposeGreeting,
+		Prompt: ask, Purpose: environment.PurposeGreeting,
 		Vendor: cfg.PlatformAI.Vendor, Model: model,
 		SystemPrompt: persona.Voice(cfg.Assistant.Persona, cfg.Assistant.Name),
 	})
@@ -670,24 +744,26 @@ func ask(t *testing.T, env *platformai.Environment, cfg config.Config, told gree
 	// time wrong, because the failures went to the test log and the
 	// answers went to stdout.
 	if last == nil {
-		fmt.Printf("\n   ✗✗ THE PROVIDER SENT NOTHING after %v -- not a silence\n", took)
-		t.Fatalf("the provider said nothing after %v", took)
+		fmt.Printf("   ✗✗ THE PROVIDER SENT NOTHING after %v -- not a silence\n", took)
+		t.Errorf("the provider said nothing after %v", took)
+		return "", took, false
 	}
 	if last.Kind == environment.KindError {
-		fmt.Printf("\n   ✗✗ THE PROVIDER REFUSED after %v -- not a silence: %s\n      %s\n",
+		fmt.Printf("   ✗✗ THE PROVIDER REFUSED after %v -- not a silence: %s\n      %s\n",
 			took, last.Text, last.Detail)
-		t.Fatalf("the provider failed: %s (%s)", last.Text, last.Detail)
+		t.Errorf("the provider failed: %s (%s)", last.Text, last.Detail)
+		return "", took, false
 	}
 	said := strings.TrimSpace(last.Text)
 	if greet.Quiet(said) {
-		return "", took
+		return "", took, true
 	}
 	// A stream the deadline cut leaves a fragment, and a fragment
 	// with no fault in it scores as a good answer. One case passed
 	// on "'t know".
 	if said != "" && len(strings.Fields(said)) < 3 {
-		fmt.Printf("\n   ✗✗ CUT OFF after %v -- not an answer: %q\n", took, said)
-		return "", took
+		fmt.Printf("   ✗✗ CUT OFF after %v -- not an answer: %q\n", took, said)
+		return "", took, false
 	}
-	return said, took
+	return said, took, true
 }
