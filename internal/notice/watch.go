@@ -4,6 +4,7 @@ import (
 	"context"
 	"log/slog"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/DhanushRamesh/personal-assistant/internal/event"
@@ -82,6 +83,11 @@ type Watcher struct {
 	Now func() time.Time
 	// Logger : Where failures go. Nil is silent.
 	Logger *slog.Logger
+
+	mu sync.Mutex
+	// failed : How many times each arrival has been put to the model
+	// and come back with nothing. Cleared when it is finally said.
+	failed map[string]int
 }
 
 // Look : One pass for one person.
@@ -200,9 +206,34 @@ func (w *Watcher) look(ctx context.Context, userID string, behind time.Duration)
 			// next look tries again. Thirty seconds later, inside a
 			// window five minutes wide, is nine more chances at
 			// something that has to be said.
-			w.Gate.Forget(c)
-			w.note(ctx, userID, c, Failed, "", "could not ask: "+err.Error())
-			return "", err
+			//
+			// Until the chances run out. A provider down for the
+			// evening would otherwise be the same as never having
+			// been told, and the whole point of this one is that
+			// waiting costs something, so it goes out in the
+			// sender's own words instead.
+			if w.tried(c) < Tries {
+				w.Gate.Forget(c)
+				w.note(ctx, userID, c, Failed, "", "could not ask: "+err.Error())
+				return "", err
+			}
+			plain := Plain(c)
+			if plain == "" {
+				w.note(ctx, userID, c, Failed, "", "could not ask: "+err.Error())
+				return "", err
+			}
+			if sayErr := w.Say(ctx, userID, plain, c.Immediate); sayErr != nil {
+				w.note(ctx, userID, c, Failed, plain, "could not say it: "+sayErr.Error())
+				return "", sayErr
+			}
+			w.done(c)
+			w.note(ctx, userID, c, Said, plain, "said plainly: "+err.Error())
+			if w.Logger != nil {
+				w.Logger.WarnContext(ctx, "said it plainly, having failed to word it",
+					slog.String("user_id", userID), slog.String("about", c.Label),
+					slog.Int("tries", Tries), slog.Any("error", err))
+			}
+			return plain, nil
 		}
 		said = strings.TrimSpace(said)
 		if said == "" || Nothing(said) {
@@ -218,6 +249,7 @@ func (w *Watcher) look(ctx context.Context, userID string, behind time.Duration)
 			w.note(ctx, userID, c, Failed, said, "could not say it: "+err.Error())
 			return "", err
 		}
+		w.done(c)
 		w.note(ctx, userID, c, Said, said, "")
 		if w.Logger != nil {
 			w.Logger.InfoContext(ctx, "announced it",
@@ -279,6 +311,25 @@ func (w *Watcher) Run(ctx context.Context, who func(context.Context) ([]string, 
 		first = false
 		cancel()
 	}
+}
+
+// tried : How many times this arrival has been put to the model and
+// come back with nothing, counting this one.
+func (w *Watcher) tried(c Candidate) int {
+	w.mu.Lock()
+	defer w.mu.Unlock()
+	if w.failed == nil {
+		w.failed = map[string]int{}
+	}
+	w.failed[key(c)]++
+	return w.failed[key(c)]
+}
+
+// done : Forgets the failures behind something finally said.
+func (w *Watcher) done(c Candidate) {
+	w.mu.Lock()
+	defer w.mu.Unlock()
+	delete(w.failed, key(c))
 }
 
 // clock : Now.

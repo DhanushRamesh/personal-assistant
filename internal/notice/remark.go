@@ -77,3 +77,37 @@ func beside(c Candidate) []string {
 	}
 	return []string{"- also reported: " + c.Detail}
 }
+
+// Tries : How many times a thing that must be said is put to the
+// model before it is said plainly instead.
+//
+// Three, which at a look every thirty seconds is a minute and a
+// half. Long enough that a provider busy for a moment still gets to
+// write the sentence properly, short enough that a warning is out
+// while it is still worth having.
+const Tries = 3
+
+// Plain : What is said when the model cannot be reached at all.
+//
+// A warning that cannot be worded is still a warning, and silence
+// is the one wrong answer here. At five past midnight on 6 October
+// a battery at twenty per cent was found, allowed, and lost to a
+// provider busy for a few seconds; retrying covers that, and this
+// covers the provider being down for the evening.
+//
+// Built from the label, which is the sender's own words for the
+// thing and the only description that exists. Nothing here knows
+// what it means -- the dot becomes a space and that is the whole of
+// the rendering -- so a kind nobody has thought of yet comes out
+// just as well as a battery does.
+//
+// It says why it is terse. Somebody who hears "battery level 20"
+// with no sentence around it would reasonably wonder what is wrong,
+// and the answer is that something is.
+func Plain(c Candidate) string {
+	said := strings.TrimSpace(strings.ReplaceAll(c.Label, ".", " "))
+	if said == "" {
+		return ""
+	}
+	return "This was marked to be said at once, and I cannot word it just now: " + said + "."
+}

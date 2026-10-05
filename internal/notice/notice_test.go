@@ -441,3 +441,80 @@ func TestAProviderHiccupDoesNotSwallowAWarning(t *testing.T) {
 		t.Errorf("said it %d times: %v", len(spoke), spoke)
 	}
 }
+
+// TestAProviderDownAllEveningStillWarnsThem : Retrying covers a
+// provider busy for a moment. A provider down for the evening would
+// otherwise be the same as never having been told, and the whole
+// point of this class of announcement is that waiting costs
+// something.
+func TestAProviderDownAllEveningStillWarnsThem(t *testing.T) {
+	var asked int
+	var spoke []string
+	w := &notice.Watcher{
+		Events: recorded{held: []event.Event{marked("battery.level", "20", 0)}},
+		Gate:   &notice.Gate{Away: func(string) (bool, bool) { return false, true }},
+		Ask: func(context.Context, string, string) (string, error) {
+			asked++
+			return "", errors.New("the provider is down")
+		},
+		Say: func(_ context.Context, _, text string, immediate bool) error {
+			if !immediate {
+				t.Error("a warning went out as company rather than at once")
+			}
+			spoke = append(spoke, text)
+			return nil
+		},
+		Now: func() time.Time { return at },
+	}
+
+	// The first two looks try and say nothing.
+	for i := 1; i <= notice.Tries-1; i++ {
+		if _, err := w.Look(context.Background(), "usr_1"); err == nil {
+			t.Fatalf("look %d: a failure was reported as a success", i)
+		}
+		if len(spoke) != 0 {
+			t.Fatalf("look %d: gave up on wording it too soon: %v", i, spoke)
+		}
+	}
+
+	// The third says it in the sender's own words.
+	if _, err := w.Look(context.Background(), "usr_1"); err != nil {
+		t.Fatalf("the last look: %v", err)
+	}
+	if len(spoke) != 1 {
+		t.Fatalf("the warning was lost after %d tries: %v", asked, spoke)
+	}
+	if !strings.Contains(spoke[0], "battery level 20") {
+		t.Errorf("the plain words do not say what it was: %q", spoke[0])
+	}
+	if !strings.Contains(spoke[0], "cannot word it") {
+		t.Errorf("nothing explains why it is terse: %q", spoke[0])
+	}
+
+	// And it is still said only once.
+	if _, err := w.Look(context.Background(), "usr_1"); err != nil {
+		t.Fatalf("after: %v", err)
+	}
+	if len(spoke) != 1 {
+		t.Errorf("said it %d times: %v", len(spoke), spoke)
+	}
+}
+
+// TestThePlainWordsNameNoKind : Built from the label, which is the
+// sender's own words, so a kind nobody has thought of yet comes out
+// as well as a battery does.
+func TestThePlainWordsNameNoKind(t *testing.T) {
+	for label, want := range map[string]string{
+		"battery.level 20":            "battery level 20",
+		"device.overheating pixel 7":  "device overheating pixel 7",
+		"something.nobody.imagined x": "something nobody imagined x",
+	} {
+		said := notice.Plain(notice.Candidate{Label: label, Immediate: true})
+		if !strings.Contains(said, want) {
+			t.Errorf("%q came out as %q", label, said)
+		}
+	}
+	if notice.Plain(notice.Candidate{}) != "" {
+		t.Error("a candidate with no label produced words anyway")
+	}
+}
