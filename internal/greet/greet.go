@@ -199,7 +199,9 @@ func Prompt(t Told) string {
 			"Read it the way somebody who knows them would, and work out whether anything in it is worth mentioning.",
 			"Something that happened far more often than usual, or lasted far longer than usual,",
 			"or involved the same person again and again, or is simply out of keeping with their ordinary day, is worth remarking on.",
-			"Where it is, say so and ask about it, the way somebody would: a short question, not a report.",
+			"Most of what is below is not a thing to talk about at all; it is what lets you understand the one thing that is.",
+			"The test is whether somebody would ever raise it with a person who had just walked in. Where they would not, it is evidence rather than a subject: use it to reach something worth saying, and leave it out of the saying.",
+			"Where something is worth it, say so and ask about it, the way somebody would: a short question, not a report.",
 			"Where nothing stands out -- and most of the time nothing will -- answer with nothing at all. The greeting has been said; silence after it is a greeting.",
 		),
 		prompt.Text(
@@ -207,6 +209,7 @@ func Prompt(t Told) string {
 			"You noticed something; you did not read a log.",
 			"One thing at most. Somebody who comes in and is asked three questions has been interrogated, not greeted.",
 		),
+		sure(),
 		reminders(t),
 		prompt.Text(
 			"If -- and only if -- something below shows that somebody tried to reach them while they were out and did not get through, that one is told rather than asked about.",
@@ -222,6 +225,8 @@ func Prompt(t Told) string {
 		prompt.Text(
 			"Only what is in front of you. Do not invent an event, a person or a reason,",
 			"and do not guess at what something meant -- ask them instead, which is the point of asking.",
+			"A name is worth no more than whatever handed it to you. One that came off a device may be a nickname, a mishearing or the wrong person altogether, and where it says it does not know, it does not know.",
+			"Say somebody rather than a name you cannot vouch for. They will tell you who it was, and a wrong name is not a hedge -- it is a different person.",
 			"If there is nothing here at all, answer with nothing: they have already been greeted.",
 		),
 		prompt.Text(
@@ -261,6 +266,29 @@ func opening(t Told) string {
 		"Write only what comes after it. Do not greet them again, do not say good morning or good afternoon or good evening,",
 		"and do not welcome them back: it has been done.",
 		"What you write follows straight on, so it begins mid-greeting rather than at the start of one.",
+	)
+}
+
+// sure : How far the evidence goes, and what may be said at each
+// distance.
+//
+// The judgement asked for here has not changed; what was missing was
+// a scale to make it on. "Judge it as a person would" leaves two
+// moves -- say it or do not -- and the useful third is to ask about a
+// thing rather than assert it. A question is what a person does with
+// evidence that points somewhere without proving it, and it costs
+// almost nothing when it turns out to be wrong.
+//
+// Nothing here names a kind of event, because the distances are
+// about how much the evidence establishes and not about what it is
+// evidence of.
+func sure() string {
+	return prompt.Text(
+		"How far the evidence goes decides how it may be said, and there are three distances.",
+		"Where a thing is recorded outright, you may simply say it.",
+		"Where several separate things point the same way and no one of them settles it -- the hour, how long it went on, a place that could be the same place -- you may ask about it, as somebody would who thought they already knew the answer. You may not state it.",
+		"The whole of the difference is between asking how the film was and telling them they went to it: the first is still worth saying when it is wrong, and the second is not.",
+		"Where it rests on a single thing that could be read two ways, say nothing -- and do not say that you are unsure either, because a doubt read out loud is worse than the silence it replaced.",
 	)
 }
 
@@ -304,7 +332,9 @@ func planned(t Told) string {
 		"Judge it as a person would, on all of that together, and do not require the names to match.",
 		"Where they plainly did it, that is the thing to say: ask how it was, by name, as somebody who knew they were going would.",
 		"A thing being in the diary is not evidence that it happened; it is evidence that it was meant to. What makes it likely is the rest lining up -- the hour, the length, and a place that could be the same place.",
-		"Where none of that lines up, say nothing about it at all: plans change, and being asked to account for one is not a greeting.",
+		"Where none of it lines up, be careful what you make of that. Nothing in front of you is a record of what did not happen: a device reports where it was and says nothing whatever about where it was not, and a quiet hour is as likely to be a quiet phone.",
+		"So never conclude that they did not go, and never put it to them as though they had not. Being asked to account for a plan is not a greeting, and plans change for reasons that are nobody else's business.",
+		"Where what is in front of you does cover those hours and plainly has them elsewhere, you may ask whether they got to it at all -- lightly, the way somebody asks who has no stake in the answer.",
 		"This beats anything else here. Something they planned and did is the one thing in front of you that you know they care about, because they wrote it down.")
 	return prompt.Text(lines...)
 }

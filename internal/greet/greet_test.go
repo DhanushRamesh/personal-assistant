@@ -523,3 +523,71 @@ func TestTheModelIsToldNotToGreet(t *testing.T) {
 		t.Error("the model was not told to write only what follows")
 	}
 }
+
+// TestTheEvidenceHasThreeDistances : The scale the judgement is made
+// on. Recorded outright may be said; several things pointing the same
+// way may be asked about; one ambiguous thing is silence.
+//
+// Wired as well as written: a block that is not in Prompt is a rule
+// that can never run, and this file has been fooled by one before.
+func TestTheEvidenceHasThreeDistances(t *testing.T) {
+	asked := greet.Prompt(greet.Told{Now: evening, Opening: "Evening, sir. Welcome back."})
+	for _, want := range []string{
+		"three distances",
+		"you may simply say it",
+		"You may not state it",
+		"do not say that you are unsure either",
+	} {
+		if !strings.Contains(asked, want) {
+			t.Errorf("the confidence ladder is not in the prompt: %q missing", want)
+		}
+	}
+}
+
+// TestEvidenceIsNotASubject : Most of what a phone reports is how you
+// work out the one thing worth saying, not the thing itself. Stated
+// as a test anybody can apply, because a list of kinds is wrong the
+// day a new sender appears.
+func TestEvidenceIsNotASubject(t *testing.T) {
+	asked := greet.Prompt(greet.Told{Now: evening, Opening: "Evening, sir. Welcome back."})
+	if !strings.Contains(asked, "evidence rather than a subject") {
+		t.Error("the model is not told that most of what it is given is not a topic")
+	}
+	// And it must stay general. Naming kinds here is the mistake the
+	// file records three times over.
+	for _, kind := range []string{"unlocked", "wifi", "Wi-Fi", "bluetooth", "Bluetooth", "battery"} {
+		if strings.Contains(asked, kind) {
+			t.Errorf("the prompt names a kind of event (%q); it must not", kind)
+		}
+	}
+}
+
+// TestNothingProvesAnAbsence : A device says where it was and nothing
+// at all about where it was not. Owner's barber case: the diary said
+// nine, the phone says home all morning, and that is not proof.
+func TestNothingProvesAnAbsence(t *testing.T) {
+	told := greet.Told{
+		Now: evening, Opening: "Evening, sir. Welcome back.",
+		Were: []greet.Appointment{{What: "Barber", When: evening.Add(-10 * time.Hour)}},
+	}
+	asked := greet.Prompt(told)
+	for _, want := range []string{
+		"says nothing whatever about where it was not",
+		"never conclude that they did not go",
+		"you may ask whether they got to it at all",
+	} {
+		if !strings.Contains(asked, want) {
+			t.Errorf("the absence rule is not in the prompt: %q missing", want)
+		}
+	}
+}
+
+// TestAnUnvouchedNameIsSomebody : "Kliffy" came off a phone's contact
+// list and may be a nickname, a mishearing or the wrong person. A
+// wrong name is not a hedge; it is a different person.
+func TestAnUnvouchedNameIsSomebody(t *testing.T) {
+	asked := greet.Prompt(greet.Told{Now: evening, Opening: "Evening, sir. Welcome back."})
+	if !strings.Contains(asked, "Say somebody rather than a name you cannot vouch for") {
+		t.Error("the model is not told to fall back to somebody")
+	}
+}

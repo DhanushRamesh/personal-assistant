@@ -9492,6 +9492,92 @@ that. The opening is then the whole greeting, which is what it was
 built to be.
 
 
+## Four rules taken from a second opinion, and the rest left
+
+The owner had the whole greeting -- every event kind with its counts
+and payload fields, the budgets, the prompt as it stands, the known
+defects -- written up and put to another model, and brought back a
+three-thousand-word production prompt. Four of its ideas went in.
+The rest did not, and why is worth more than the four.
+
+### What went in
+
+**A scale for the judgement.** The prompt already asked the model to
+"judge it as a person would" and gave it nothing to judge *on*, which
+leaves two moves: say it or do not. The useful third is to ask. So:
+a thing recorded outright may be said; several things pointing the
+same way with no one of them settling it may be *asked about*; one
+ambiguous thing is silence, and the doubt is not read out either.
+
+The line that carries it is the owner's own case -- *"the whole of
+the difference is between asking how the film was and telling them
+they went to it: the first is still worth saying when it is wrong,
+and the second is not."*
+
+**Evidence is not a subject.** Most of what a phone reports is how
+you work out the one thing worth saying, not the thing itself. The
+test given is whether somebody would ever raise it with a person who
+had just walked in; where they would not, it is evidence, and it is
+used to reach something and then left out of the saying.
+
+The second opinion stated this well and then listed the kinds it
+meant -- unlocks, wifi, bluetooth, battery. The list is exactly what
+this file records as wrong three times over, so the principle went in
+and the list did not. There is now a test that fails if any event
+kind is named in the instructions at all.
+
+**Nothing proves an absence.** The barber is in the diary for nine
+and the phone has them at home all morning. The old rule was blunt --
+where nothing lines up, say nothing -- and it was blunt because an
+earlier attempt at this turned the same case into an accusation.
+
+The distinction that makes it safe is not confidence, it is what the
+data *is*: a device reports where it was and says nothing whatever
+about where it was not, so a quiet hour is as likely to be a quiet
+phone. Never conclude they did not go. But where the record does
+cover those hours and plainly has them elsewhere, ask whether they
+got to it at all -- lightly, the way somebody asks who has no stake
+in the answer.
+
+**A name is worth no more than what handed it to you.** One off a
+device may be a nickname, a mishearing or the wrong person; where it
+says unknown, it is unknown. Say *somebody*. They will say who. This
+is the `Kliffy` case, and the point is that a wrong name is not a
+hedge -- it is a different person.
+
+### What did not
+
+**An entire tool-use policy, for a model with no tools.** Four
+sections of it, down to a worked example turning "someone tried to
+reach you" into a name via a contact lookup that does not exist. The
+greeting is one call, no tools, ten seconds; a tool loop is two more
+round trips inside a budget a single call already spends up to 4.4
+seconds of. Written in, it would have been the third rule in this
+file that exists and can never run.
+
+**Three times the length.** Twenty-four numbered sections with §3,
+§21 and §24 all saying "one thing only". Prompt size is paid for in
+time to first token out of the same ten seconds, and a document that
+long asks a model to be thorough when the whole instruction is to be
+brief. What went in added about two hundred words.
+
+**A worked answer instead of a rule.** Its section on several
+candidates at once resolves one specific combination -- three missed
+calls against a reminder -- rather than stating that somebody
+actively trying to reach you outranks a machine's schedule. A worked
+case teaches the case.
+
+### Not yet measured
+
+All four are beliefs. The barber one is the one to watch, because it
+is the nearest neighbour of a change that went wrong earlier the same
+day, and the difference between asking and accusing is a matter of
+tone that a prompt cannot guarantee. The snapshot set that would
+settle it -- a quiet arrival, the film afternoon, the missed calls,
+the barber, the empty diary, run before and after -- is the next
+piece of work and was deferred to do these first.
+
+
 ## 12. Maintaining this file
 
 When the owner states a preference, makes a decision, or corrects something,
