@@ -500,3 +500,54 @@ func TestTheKindsGoFirst(t *testing.T) {
 	}
 	t.Fatal("event_kinds is not registered")
 }
+
+// TestANameFoundNowhereIsLookedForEverywhere : Asked whether Gunalan
+// had called, the model narrowed to the kind that means an incoming
+// one and the answer said nothing of that kind mentions him -- then
+// listed every kind there is with its total, which says nothing
+// about him at all. So it reported that he had not called, three
+// hours after a call to him.
+//
+// Telling it not to guess a kind was written twice and ignored
+// twice. The widening happens here instead.
+func TestANameFoundNowhereIsLookedForEverywhere(t *testing.T) {
+	at := time.Date(2026, 10, 5, 19, 12, 0, 0, time.UTC)
+	store := &oneEvent{e: event.Event{
+		Kind:       "call.made",
+		Payload:    []byte(`{"value":"Gunalan","number":"+918610822039","seconds":4}`),
+		OccurredAt: at,
+	}}
+	said := eventstool.Nothing(context.Background(), store, "usr_1",
+		event.Query{Kind: "call.received", Contains: "Gunalan"}, "in the past month")
+
+	if !strings.Contains(said, "Gunalan is in the window all the same") {
+		t.Errorf("the name was not looked for without the kind:\n%s", said)
+	}
+	if !strings.Contains(said, "call.made (1)") {
+		t.Errorf("the kind it is actually under was not named:\n%s", said)
+	}
+	// And a name that genuinely is not there still says so plainly.
+	absent := eventstool.Nothing(context.Background(), store, "usr_1",
+		event.Query{Kind: "call.received", Contains: "Nobody"}, "in the past month")
+	if strings.Contains(absent, "in the window all the same") {
+		t.Errorf("a name that is not there was claimed to be:\n%s", absent)
+	}
+}
+
+// oneEvent : A reader holding one event, returned when the query
+// does not pin a kind it lacks.
+type oneEvent struct{ e event.Event }
+
+func (o *oneEvent) Recent(_ context.Context, _ string, q event.Query) ([]event.Event, error) {
+	if q.Kind != "" && q.Kind != o.e.Kind {
+		return nil, nil
+	}
+	if q.Contains != "" && !strings.Contains(string(o.e.Payload), q.Contains) {
+		return nil, nil
+	}
+	return []event.Event{o.e}, nil
+}
+
+func (o *oneEvent) Kinds(context.Context, string) ([]event.Kind, error) {
+	return []event.Kind{{Kind: o.e.Kind, Count: 1}}, nil
+}

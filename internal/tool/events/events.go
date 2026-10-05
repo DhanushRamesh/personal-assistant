@@ -380,18 +380,21 @@ func recent(reader Reader, clock Clock) tool.Tool {
 			}
 
 			if len(found) == 0 {
-				return tool.OK(nothing(ctx, reader, in.Caller.UserID, q, over))
+				return tool.OK(Nothing(ctx, reader, in.Caller.UserID, q, over))
 			}
 			return tool.OK(describe(found, q, over, where))
 		},
 	}
 }
 
-// nothing : What to say when the window held none.
+// Nothing : What to say when the window held none.
+//
+// Exported so a test can ask it directly: the widening below is the
+// whole of the behaviour and it is not reachable any other way.
 //
 // Which kinds do exist, when the question found nothing, because the
 // likeliest reason is a kind that was guessed at rather than a quiet day.
-func nothing(ctx context.Context, reader Reader, userID string, q event.Query, over string) string {
+func Nothing(ctx context.Context, reader Reader, userID string, q event.Query, over string) string {
 	asked := q.Kind + q.Prefix
 	if asked == "" && q.Contains == "" {
 		return "Their devices reported nothing " + over + "."
@@ -405,6 +408,49 @@ func nothing(ctx context.Context, reader Reader, userID string, q event.Query, o
 		what = append(what, "mentioning "+q.Contains)
 	}
 	none := "Nothing " + strings.Join(what, " ") + " was reported " + over + "."
+
+	// Asked about a named thing and narrowed to one kind, look again
+	// for the name on its own before saying there is nothing.
+	//
+	// The catalogue below is no use for this. Asked whether Gunalan
+	// had called, the model narrowed to the kind that means an
+	// incoming one, and the answer said nothing of that kind
+	// mentions Gunalan and then listed every kind there is with its
+	// total -- call.made (13), which is thirteen calls to anybody.
+	// So it reported that he had not called, three hours after a
+	// call to him. The name was in the window the whole time, one
+	// kind over.
+	//
+	// Telling it not to guess a kind was written twice and ignored
+	// twice: the question says called me and the kind that means
+	// that is right there. This does not ask it to resist that. It
+	// widens the search once, on its behalf, and only when the name
+	// found nothing where it was asked for.
+	if q.Contains != "" && asked != "" {
+		wider := q
+		wider.Kind, wider.Prefix = "", ""
+		if also, err := reader.Recent(ctx, userID, wider); err == nil && len(also) > 0 {
+			seen := map[string]int{}
+			order := []string{}
+			for _, e := range also {
+				if _, had := seen[e.Kind]; !had {
+					order = append(order, e.Kind)
+				}
+				seen[e.Kind]++
+			}
+			named := make([]string, 0, len(order))
+			for _, k := range order {
+				named = append(named, fmt.Sprintf("%s (%d)", k, seen[k]))
+			}
+			return prompt.Text(
+				none,
+				q.Contains+" is in the window all the same, under other kinds: "+
+					strings.Join(named, ", ")+".",
+				"Ask again without a kind and say what is actually there. Answering that the "+
+					"narrow thing did not happen, while this is sitting beside it, is true and useless.",
+			)
+		}
+	}
 
 	kinds, err := reader.Kinds(ctx, userID)
 	if err != nil || len(kinds) == 0 {
