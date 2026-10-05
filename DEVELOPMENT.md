@@ -9370,6 +9370,73 @@ discharges past a threshold, and the hundred arm on the next full
 charge.
 
 
+## The judging half of the unasked remarks is gone
+
+Owner, 5 October 2026, reading the Unasked page -- *"Sir, your phone
+has been unlocked three times in the last few minutes"*, said aloud
+at 09:47 and held at 09:50:
+
+> *"no need for these kind of unasked announcement. Currently have
+> only the immediate and greeting alone."*
+
+`notice` could offer three reasons for speaking unprompted: **Often**
+(three of a thing inside fifteen minutes), **Novel** (nothing like it
+in four weeks), and **Immediate** (the sender marked it). The first
+two are gone. What is left is: a device said this has to be known
+now, somebody is in the room, say it.
+
+**The premise was wrong, and the screenshot is the proof.** The
+design assumed an unusual event and an event worth interrupting
+somebody for were the same thing. They are not, and nothing in this
+server can tell which it has -- it deliberately does not know what a
+screen or a battery or a call is. Six unlocks in ten minutes is
+unusual and is *also* the most ordinary thing a person does with a
+phone. Only the sender knows the difference, and the sender already
+has a way to say so.
+
+Everything that existed to serve the two judgements went with them:
+
+- `Burst`, `Insistent`, `Candidate.Times`, `Candidate.Before`
+- `Toggling`, which existed so that a screen reporting locked and
+  unlocked fifty times a day could never be *frequent*
+- `measured`, which existed so that a battery at seventy-three per
+  cent was not *novel*
+- the gate's `Quiet` (twenty minutes between remarks), `Over` (once
+  a day per thing), `Spoke`, and the refusal wording that named what
+  beat a remark to it
+- the half of the `Remark` prompt that invited the model to answer
+  `NOTHING`
+
+**801 lines out, 228 in.** `Gate.Allow` lost its candidate argument
+along the way: nothing about the thing itself can hold it back any
+more, so the only question left is about the room.
+
+### A look got cheaper by four weeks
+
+`Find` took `history` to decide whether a thing was familiar, so
+every tick -- **every thirty seconds, for ever** -- read four weeks
+of events, capped at 4000 rows. Reading a mark the sender already
+wrote needs the last five minutes. The cap came down to 500, and the
+only thing that still wants four weeks is the question of *whose*
+events to read at all, which is the caller's.
+
+This was not the point of the change and is the largest single
+saving in the server.
+
+### What is kept, and why
+
+`Candidate.Immediate` is always true and is still passed rather than
+assumed. The gate reads it to know the room is the only rule; a gate
+that inferred that from the absence of anything else would start
+announcing the day anything else appeared. `Reason` is still a type
+with one value, because it is written into every row of the Unasked
+page and a column that has only ever held one word is how the next
+person knows there was never a second kind.
+
+`conversation.Remark` stays. The kind is in the database and in
+transcripts already written; nothing new will carry it.
+
+
 ## 12. Maintaining this file
 
 When the owner states a preference, makes a decision, or corrects something,

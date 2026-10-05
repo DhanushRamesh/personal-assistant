@@ -1380,7 +1380,7 @@ func noticing(
 		Entity: cfg.HomeAssistant.PresenceEntity,
 	})
 	if err != nil || speaker == nil || !speaker.Available() {
-		logger.Info("saying nothing unasked about what happens, " +
+		logger.Info("announcing nothing, " +
 			"with nothing watching the room or nowhere to say it")
 		return
 	}
@@ -1420,10 +1420,10 @@ func noticing(
 		Logger: logger,
 	}
 
-	logger.Info("saying something about what happens",
+	logger.Info("announcing what devices mark as needing to be said",
 		slog.String("model", model),
 		slog.Duration("every", notice.Every),
-		slog.Duration("quiet", notice.Quiet))
+		slog.Duration("behind", notice.Behind))
 
 	// The watcher catches up over this wait on its first look, so
 	// tell it how long the wait was. Without that the two windows

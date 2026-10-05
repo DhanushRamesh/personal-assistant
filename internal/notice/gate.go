@@ -1,39 +1,20 @@
 package notice
 
 import (
-	"fmt"
-	"strconv"
-	"strings"
 	"sync"
 	"time"
 )
 
-// Quiet : The least time between two things said unasked.
-//
-// Deliberately long to begin with. The failure that kills a feature
-// like this is not missing something; it is being a nuisance by
-// Tuesday, after which the person stops listening to the remarks
-// that were worth hearing. It is easier to loosen this once it has
-// earned its place than to win back somebody who has started
-// ignoring it.
-const Quiet = 20 * time.Minute
-
-// Over : How long a thing stays said.
-//
-// Once per thing, but not for ever: somebody being called repeatedly
-// today and again next month is two pieces of news, and a gate that
-// remembers for ever turns the second into silence.
-const Over = 24 * time.Hour
-
 // Gate : What may be said, and when.
 //
-// Three refusals, in the order they cost nothing to check. Nobody is
-// there to hear it; something was said too recently; this exact
-// thing has been said already.
+// Two refusals, in the order they cost nothing to check. Nobody is
+// there to hear it; this exact event has been weighed already.
 //
-// Deliberately separate from deciding what is worth saying. One is
-// about the remark and the other is about the moment, and the
-// moment's rules are the ones that will be tuned.
+// It used to hold a third -- a quiet between things said, and a
+// once-a-day rule per thing -- and both went with the remarks they
+// were for. Politeness is for company. What is left here is a
+// device saying something has to be known now, and the only
+// question about the moment is whether anybody is in it.
 type Gate struct {
 	// Away : Whether the person is known to be elsewhere. Nil means
 	// nobody is watching, and nothing is said at all -- an assistant
@@ -44,22 +25,12 @@ type Gate struct {
 	// must come back as "cannot tell", and the caller decides.
 	Away func(userID string) (away bool, known bool)
 
-	mu   sync.Mutex
-	last time.Time
-	// said : What the last remark actually was, so a refusal can name
-	// it. "Something was said four minutes ago" tells the person
-	// reading the page nothing they can act on; the sentence itself
-	// tells them whether the thing being held back was worth more
-	// than the thing that beat it to it.
-	said  string
-	spoke map[string]time.Time
-	// weighed : Everything considered lately, whatever came of it.
+	mu sync.Mutex
+	// weighed : Every event considered lately, whatever came of it.
 	//
-	// Separate from spoke, which is only what was said and holds for
-	// a day. A candidate stays inside the watcher's look-back window
-	// for five minutes and the watcher ticks every thirty seconds, so
-	// without this one song produces ten identical rows saying it was
-	// held.
+	// A candidate stays inside the watcher's look-back window for
+	// five minutes and the watcher ticks every thirty seconds, so
+	// without this one warning is announced ten times.
 	weighed map[string]time.Time
 }
 
@@ -76,20 +47,19 @@ const Weighing = 10 * time.Minute
 // weighed and refused a minute ago has not become interesting since,
 // and asking again writes a second row saying so.
 //
-// A warning is held to a different test, and this is the only thing
-// that still holds one at all. Owner: *"if it's urgent it should say
-// every time, regardless of twenty minutes since the last and twice
-// within ten minutes -- if an urgent event is captured, say it."*
-// Quite right, and it cannot simply be let through: the watcher
-// re-reads the last five minutes every thirty seconds, so one
-// warning would be found ten times and said ten times.
+// Owner: *"if it's urgent it should say every time, regardless of
+// twenty minutes since the last and twice within ten minutes -- if
+// an urgent event is captured, say it."* Quite right, and it cannot
+// simply be let through: the watcher re-reads the last five minutes
+// every thirty seconds, so one warning would be found ten times and
+// said ten times.
 //
-// So a warning is weighed once per *event* rather than once per
-// spell of time. Two warnings a minute apart are two events and both
-// are said; the same one found again on the next tick is the same
-// moment and is not. The record is kept the same length, which is
-// longer than the window an event can be found in, so nothing comes
-// back after it is forgotten.
+// So it is weighed once per *event* rather than once per spell of
+// time. Two warnings a minute apart are two events and both are
+// said; the same one found again on the next tick is the same
+// moment and is not. The record is kept longer than the window an
+// event can be found in, so nothing comes back after it is
+// forgotten.
 func (g *Gate) Considered(c Candidate, now time.Time) bool {
 	if g == nil {
 		return true
@@ -97,10 +67,7 @@ func (g *Gate) Considered(c Candidate, now time.Time) bool {
 	g.mu.Lock()
 	defer g.mu.Unlock()
 
-	key := c.Label
-	if c.Immediate {
-		key += "@" + c.At.UTC().Format(time.RFC3339Nano)
-	}
+	key := c.Label + "@" + c.At.UTC().Format(time.RFC3339Nano)
 
 	if when, had := g.weighed[key]; had && now.Sub(when) < Weighing {
 		return true
@@ -117,29 +84,17 @@ func (g *Gate) Considered(c Candidate, now time.Time) bool {
 	return false
 }
 
-// Spoke : Records what was said, so a later refusal can name it.
-func (g *Gate) Spoke(said string, now time.Time) {
-	if g == nil {
-		return
-	}
-	g.mu.Lock()
-	defer g.mu.Unlock()
-	g.said = said
-	g.last = now
-}
-
 // Allow : Whether this may be said now, and why not when it may not.
 //
 // The reason is returned rather than asked for afterwards, because
-// asking twice would be two different answers: the clock moves, and
-// a gate that said no because something was said thirty seconds ago
-// will say no for a different reason a minute later.
+// asking twice would be two different answers: presence moves while
+// nobody is looking, and a page that explained a refusal by asking
+// again would explain the wrong one.
 //
-// Records that it was allowed, when it says yes. A caller that asks
-// and then does not speak has used up the quiet, which is the safe
-// way round: asking is cheap, and the cost of being wrong is one
-// remark missed rather than two remarks together.
-func (g *Gate) Allow(userID string, c Candidate, now time.Time) (bool, string) {
+// Takes no candidate. Nothing about the thing itself can stop it
+// being said any more -- that was the remarks' half of this -- so
+// the only question left is about the room.
+func (g *Gate) Allow(userID string) (bool, string) {
 	if g == nil {
 		return false, "there is no gate"
 	}
@@ -156,78 +111,5 @@ func (g *Gate) Allow(userID string, c Candidate, now time.Time) (bool, string) {
 		return false, "it cannot tell whether they are in the room"
 	}
 
-	g.mu.Lock()
-	defer g.mu.Unlock()
-
-	// An immediate announcement is not held back for politeness. The
-	// quiet between remarks exists so company does not become a
-	// nuisance; a battery about to die is not company, and somebody
-	// not told because something else was said four minutes ago is
-	// worse off than somebody interrupted twice.
-	//
-	// The once-a-day rule goes with it. Owner: *"if a hundred is
-	// reached it announces, I plug out, it becomes 99 in five
-	// seconds, I plug back in and it becomes 100 in ten seconds --
-	// it has to announce again."*
-	if c.Immediate {
-		g.last = now
-		return true, ""
-	}
-
-	if !g.last.IsZero() && now.Sub(g.last) < Quiet {
-		return false, quoted(g.said) + " was said " + spoken(now.Sub(g.last)) + " ago"
-	}
-	if when, said := g.spoke[c.Label]; said && now.Sub(when) < Over {
-		return false, "this was said " + spoken(now.Sub(when)) + " ago"
-	}
-
-	if g.spoke == nil {
-		g.spoke = map[string]time.Time{}
-	}
-	g.spoke[c.Label] = now
-	g.last = now
-	// What has gone stale, so a long-running server does not hold
-	// every label it has ever seen.
-	for label, when := range g.spoke {
-		if now.Sub(when) >= Over {
-			delete(g.spoke, label)
-		}
-	}
 	return true, ""
-}
-
-// quoted : The last remark, for a refusal to name.
-//
-// Falls back to saying that something was, for the gate that has
-// been handed a refusal before it has ever allowed anything -- which
-// happens after a restart, when the clock is fresh but the quiet is
-// not.
-func quoted(said string) string {
-	said = strings.TrimSpace(said)
-	if said == "" {
-		return "something"
-	}
-	return strconv.Quote(said)
-}
-
-// spoken : A duration as somebody would say it.
-func spoken(d time.Duration) string {
-	switch {
-	case d < time.Minute:
-		return "moments"
-	case d < time.Hour:
-		return count(int(d.Minutes()), "minute")
-	case d < 24*time.Hour:
-		return count(int(d.Hours()), "hour")
-	default:
-		return count(int(d.Hours()/24), "day")
-	}
-}
-
-// count : A number and its noun, singular when it is one.
-func count(n int, noun string) string {
-	if n == 1 {
-		return "1 " + noun
-	}
-	return fmt.Sprintf("%d %ss", n, noun)
 }

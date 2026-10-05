@@ -26,19 +26,21 @@ const (
 	// so tight that things fall out of it.
 	Behind = 5 * time.Minute
 
-	// Since : How much history a judgement is made against.
+	// Since : How far back somebody counts as somebody to watch.
 	//
-	// The same four weeks the description is written from, because
-	// "never seen before" means the same thing in both and a remark
-	// that disagreed with the description would be worse than no
-	// remark.
+	// Not used here -- nothing in a look reaches further than
+	// Behind any more -- but by whoever runs the watcher, to decide
+	// whose events to read at all. Four weeks, so a person who has
+	// been away a fortnight is still announced to when they come
+	// back.
 	Since = 28 * 24 * time.Hour
 
 	// Within : How long one look may take, including the model.
 	//
-	// Short. Nothing is waiting on this and nobody asked for it, so a
-	// slow answer is simply not worth having: the moment it was about
-	// has passed.
+	// Short, because the thing being announced is a thing somebody
+	// needs to know now. An answer that arrives a minute late is
+	// about a moment that has passed, and the next tick is thirty
+	// seconds away in any case.
 	Within = 20 * time.Second
 )
 
@@ -51,15 +53,16 @@ type Events interface {
 // be nothing.
 type Ask func(ctx context.Context, userID, prompt string) (string, error)
 
-// Say : How a remark reaches the person.
+// Say : How an announcement reaches the person.
 //
-// Immediate whether it is urgent, because that decides where it goes
-// rather than only what it says: a remark is company and belongs in
-// the room, and a warning follows them out of it.
+// immediate decides where it goes rather than only what it says: a
+// warning follows them out of the room. Always true today, and
+// passed rather than assumed, so that the day something quieter is
+// announced the door it goes through is already there.
 type Say func(ctx context.Context, userID, text string, immediate bool) error
 
-// Watcher : Looks at what has arrived and occasionally says
-// something about it.
+// Watcher : Looks at what has arrived and announces whatever its
+// sender marked to be announced.
 type Watcher struct {
 	// Events : Where events are read from. Required.
 	Events Events
@@ -85,8 +88,8 @@ type Watcher struct {
 //
 // Returns what was said, which is usually nothing. Nothing is not a
 // failure here and is not logged as one: most minutes of most days
-// contain nothing worth interrupting somebody for, and a watcher
-// that says so is working.
+// contain nothing a device thought worth interrupting somebody for,
+// and a watcher that says so is working.
 func (w *Watcher) Look(ctx context.Context, userID string) (string, error) {
 	return w.look(ctx, userID, Behind)
 }
@@ -127,24 +130,27 @@ func (w *Watcher) look(ctx context.Context, userID string, behind time.Duration)
 	}
 
 	now := w.clock()
-	history, err := w.Events.Recent(ctx, userID, event.Query{
-		Since: now.Add(-Since),
+	from := now.Add(-behind)
+	recent, err := w.Events.Recent(ctx, userID, event.Query{
+		Since: from,
 		Limit: Seen,
-		// The position readings only. Every value is a coordinate,
-		// there are more of them than of everything else together,
-		// and they would fill the cap on their own. The rest of the
-		// working material is kept: a player's state is the only
-		// place a track is named, and a thing can be new without
-		// being countable.
+		// The position readings only. Every value is a coordinate
+		// and there are more of them than of everything else
+		// together, so they would fill the cap on their own. The
+		// rest is kept: a sender may mark anything to be said.
 		Omit: []string{event.Fixed},
 	})
 	if err != nil {
 		return "", err
 	}
 
+	// Windowed here as well as in the query. The store is asked for
+	// the window and is trusted to answer it, but what is announced
+	// is too easy to get wrong in the direction of announcing
+	// something from this morning, so the bound is applied where it
+	// can be read.
 	arrived := make([]event.Event, 0, 8)
-	from := now.Add(-behind)
-	for _, e := range history {
+	for _, e := range recent {
 		if e.OccurredAt.After(from) && !e.OccurredAt.After(now) {
 			arrived = append(arrived, e)
 		}
@@ -153,7 +159,7 @@ func (w *Watcher) look(ctx context.Context, userID string, behind time.Duration)
 		return "", nil
 	}
 
-	found := Find(arrived, history, now)
+	found := Find(arrived, now)
 	if len(found) == 0 {
 		return "", nil
 	}
@@ -162,7 +168,7 @@ func (w *Watcher) look(ctx context.Context, userID string, behind time.Duration)
 	// causes. Without a line here, "nothing was said" cannot be told
 	// apart from "nothing was running".
 	if w.Logger != nil {
-		w.Logger.InfoContext(ctx, "something might be worth saying",
+		w.Logger.InfoContext(ctx, "something to announce",
 			slog.String("user_id", userID),
 			slog.Int("candidates", len(found)),
 			slog.String("first", found[0].Label),
@@ -176,18 +182,18 @@ func (w *Watcher) look(ctx context.Context, userID string, behind time.Duration)
 		if w.Gate.Considered(c, now) {
 			continue
 		}
-		allowed, why := w.Gate.Allow(userID, c, now)
+		allowed, why := w.Gate.Allow(userID)
 		if !allowed {
 			if w.Logger != nil {
-				w.Logger.InfoContext(ctx, "not the moment to say it",
+				w.Logger.InfoContext(ctx, "cannot announce it now",
 					slog.String("about", c.Label), slog.String("because", why))
 			}
 			w.note(ctx, userID, c, Held, "", why)
 			continue
 		}
-		// One at a time. Two things worth saying in the same moment
-		// are two remarks, and the second will still be worth saying
-		// in twenty minutes if it was worth saying now.
+		// One at a time. Two things to announce in the same moment
+		// are two announcements, and the second is found again on
+		// the next tick thirty seconds later.
 		said, err := w.Ask(ctx, userID, Remark(c, now))
 		if err != nil {
 			w.note(ctx, userID, c, Failed, "", "could not ask: "+err.Error())
@@ -197,7 +203,7 @@ func (w *Watcher) look(ctx context.Context, userID string, behind time.Duration)
 		if said == "" || Nothing(said) {
 			// The model's own refusal, and the point of asking it.
 			if w.Logger != nil {
-				w.Logger.InfoContext(ctx, "decided it was not worth saying",
+				w.Logger.InfoContext(ctx, "the model would not say it",
 					slog.String("about", c.Label))
 			}
 			w.note(ctx, userID, c, Declined, "", "")
@@ -207,12 +213,9 @@ func (w *Watcher) look(ctx context.Context, userID string, behind time.Duration)
 			w.note(ctx, userID, c, Failed, said, "could not say it: "+err.Error())
 			return "", err
 		}
-		// What it was, so the next refusal can name it rather than
-		// saying something was said.
-		w.Gate.Spoke(said, now)
 		w.note(ctx, userID, c, Said, said, "")
 		if w.Logger != nil {
-			w.Logger.InfoContext(ctx, "said something unasked",
+			w.Logger.InfoContext(ctx, "announced it",
 				slog.String("user_id", userID),
 				slog.String("about", c.Label),
 				slog.String("because", string(c.Reason)),
@@ -225,10 +228,11 @@ func (w *Watcher) look(ctx context.Context, userID string, behind time.Duration)
 
 // Seen : The most events one look reads.
 //
-// A cap rather than a promise. Four weeks fits comfortably today and
-// will not for ever, and the oldest of them only establishes whether
-// a thing is familiar, which the newest answer just as well.
-const Seen = 4000
+// A cap rather than a promise, and a generous one now that a look
+// reads minutes rather than weeks. Anything that overflows it is a
+// device in a loop, and the right answer to a device in a loop is
+// not to announce all of it.
+const Seen = 500
 
 // Run : Looks, for ever, on a tick.
 func (w *Watcher) Run(ctx context.Context, who func(context.Context) ([]string, error)) {

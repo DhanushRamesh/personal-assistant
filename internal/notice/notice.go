@@ -1,26 +1,25 @@
 // Package notice decides when the assistant has something worth
 // saying that nobody asked for.
 //
-// The want, in the owner's words: it should act like someone in the
-// room. Somebody in your room does not read out what you just did --
-// you were there -- and does not sit in silence either. They mention
-// the thing you would not have noticed.
+// One thing is, and only one: an event whose sender marked it to be
+// said at once. The phone knows its battery is at five per cent and
+// says so in the payload; this reads that mark, checks there is
+// somebody in the room, and says it.
 //
-// So nothing here reacts to an event happening. Events happening is
-// the normal state of the world and there are hundreds a day. What
-// is worth a remark is an event being *different*: more of it than
-// usual, or a thing never seen before.
+// It used to judge as well -- more of a thing than usual, or a thing
+// never seen before -- and the judging is gone. Owner, 5 October
+// 2026, looking at *"Sir, your phone has been unlocked three times
+// in the last few minutes"*: *"no need for these kind of unasked
+// announcement."* The two reasons it could invent were the two it
+// was wrong about, because an unusual event and an event worth
+// interrupting somebody for are not the same thing, and nothing
+// here can tell which it has. A sender can.
 //
-// Nothing in this package names a kind of event, and nothing may.
-// The senders describe themselves and more of them are coming; a
-// rule that knows what a call or a song is stops working the day a
-// new one is added. A thing is whatever label it carries.
-//
-// Two kinds are left out, and both are mechanism rather than
-// judgement: the raw position readings, which arrive every few
-// minutes and whose values are all distinct, so every one of them
-// would look new; and the music churn the stays and states are
-// worked out from. What they are turned into is here instead.
+// So nothing here names a kind of event, and nothing may. The
+// senders describe themselves and more of them are coming; a rule
+// that knows what a call or a song is stops working the day a new
+// one is added. A thing is whatever label it carries, and whether
+// it is worth saying is whatever its sender said.
 package notice
 
 import (
@@ -29,51 +28,32 @@ import (
 	"sort"
 	"strings"
 	"time"
-	"unicode"
 
 	"github.com/DhanushRamesh/personal-assistant/internal/event"
 )
 
-// Burst : How close together repeats have to be to be worth
-// mentioning.
-//
-// The owner's example is a third missed call from the same number.
-// Three in a quarter of an hour is somebody trying to reach you;
-// three across a week is just somebody who calls.
-const Burst = 15 * time.Minute
-
-// Insistent : How many times inside Burst before it is remarked on.
-//
-// Three rather than two, for the reason counts are used everywhere
-// else here: two of anything is a coincidence, and a remark made on
-// a coincidence is worse than one not made.
-const Insistent = 3
-
 // Reason : Why something is worth saying.
 //
-// Not what happened -- that is the label -- but what makes it
-// different from the ordinary run of things. The model is given this
-// so it can say the interesting half rather than reading the event
-// out.
+// One value, and kept as a type with one value on purpose: it is
+// written down with every row the watcher considers, and a column
+// that has only ever held one word is how the next person reading
+// the page knows there was never a second kind.
 type Reason string
 
 const (
-	// Often : More of it, faster, than usual.
-	Often Reason = "often"
-	// Novel : Nothing like it in the record.
-	Novel Reason = "novel"
 	// Immediate : The sender said this is to be said now.
 	//
-	// Not a judgement at all, which is the point, and not an
-	// unusual thing noticed -- a different kind of announcement
-	// that happens to come through the same door. A battery at five
-	// per cent is not interesting because it is rare; it is worth
-	// saying because of what it is.
+	// The only reason there is. Not a judgement, which is the
+	// point: a battery at five per cent is not interesting because
+	// it is rare, it is worth saying because of what it is, and the
+	// device that measured it is the only thing here that knows
+	// that.
 	//
-	// Owner, on the two being described together: *"it's not
-	// urgent, name it immediate announcement. Event arrives, check
-	// if present, announce. It's simple. This is separate and the
-	// other unasked is separate."*
+	// Owner, when this was one of three: *"it's not urgent, name it
+	// immediate announcement. Event arrives, check if present,
+	// announce. It's simple. This is separate and the other unasked
+	// is separate."* The other unasked is now gone and this is what
+	// is left.
 	Immediate Reason = "immediate"
 )
 
@@ -96,29 +76,24 @@ const (
 	Urgent      = "urgent"
 )
 
-// Candidate : Something that might be worth saying.
+// Candidate : Something to be said.
 //
-// Might. This is what the cheap half found; whether it is worth
-// interrupting somebody for is a judgement, and judgement is not
-// made here.
+// Not a maybe any more. The sender has already decided; what is
+// left is whether there is anybody to hear it, and what words to
+// put it in.
 type Candidate struct {
 	// Label : The thing, as its own sender described it.
 	Label string
 	// Reason : What makes it worth a look.
 	Reason Reason
-	// Times : How many times inside Burst, for Often. One for Novel.
-	Times int
-	// Before : How many times it has happened in the whole history
-	// behind this. Zero is what makes a thing Novel.
-	Before int
 	// At : When the latest of them happened.
 	At time.Time
 	// Immediate : Whether the sender said to announce it at once.
 	//
-	// Bypasses the quiet between remarks, the once-a-day rule and
-	// the model's refusal. It does not bypass there being nobody to
-	// tell: an announcement into an empty room is not an
-	// announcement.
+	// Always true, and kept rather than assumed. The gate reads it
+	// to know that the quiet between remarks does not apply, and a
+	// gate that inferred that from the absence of anything else
+	// would start saying things the day something else appeared.
 	Immediate bool
 	// Detail : Whatever else the sender said about it, which the
 	// label deliberately leaves out.
@@ -132,51 +107,27 @@ type Candidate struct {
 	Detail string
 }
 
-// Find : What among the things that just arrived might be worth
-// saying, given everything behind them.
+// Find : What among the things that just arrived is to be said.
 //
-// Generous on purpose. Being quiet is decided twice after this --
-// once by a model that may answer with nothing, and once by a gate
-// that will not allow two remarks close together -- and a candidate
-// that never gets made cannot be rescued by either.
+// One candidate per label, newest wins. A burst of six events when
+// somebody walks through the door is six events and at most one
+// thing to say about each distinct thing in it; the watcher looks
+// on a tick for the same reason.
 //
-// history is everything known before this moment, arrived included
-// or not; a thing is counted Novel on what came before it, so
-// passing the same slice twice does not make everything familiar.
-func Find(arrived, history []event.Event, now time.Time) []Candidate {
-	seen := map[string]int{}
-	for _, e := range history {
-		if skip(e) {
-			continue
-		}
-		if e.OccurredAt.After(now) {
-			continue
-		}
-		seen[Label(e)]++
-	}
-
-	// What turned up just now, newest last, so the moment reported is
-	// the latest one rather than whichever came out of the store
-	// first.
-	lately := map[string]int{}
+// No history, and that is the change. Judging whether a thing was
+// unusual needed four weeks of events read on every tick; reading
+// a mark the sender already wrote needs the last few minutes.
+func Find(arrived []event.Event, now time.Time) []Candidate {
 	latest := map[string]time.Time{}
 	detail := map[string]string{}
-	state := map[string]bool{}
-	immediate := map[string]bool{}
 	order := []string{}
 	for _, e := range arrived {
-		if skip(e) {
+		if skip(e) || !told(e.Payload) || e.OccurredAt.After(now) {
 			continue
 		}
 		label := Label(e)
 		if _, had := latest[label]; !had {
 			order = append(order, label)
-		}
-		if Toggling(e.Payload) {
-			state[label] = true
-		}
-		if told(e.Payload) {
-			immediate[label] = true
 		}
 		if e.OccurredAt.After(latest[label]) || detail[label] == "" {
 			latest[label] = e.OccurredAt
@@ -184,45 +135,12 @@ func Find(arrived, history []event.Event, now time.Time) []Candidate {
 		}
 	}
 
-	// Repeats are counted over the window rather than over what
-	// arrived, because a burst split across two ticks is still a
-	// burst.
-	from := now.Add(-Burst)
-	for _, e := range history {
-		if skip(e) || e.OccurredAt.Before(from) || e.OccurredAt.After(now) {
-			continue
-		}
-		lately[Label(e)]++
-	}
-
 	out := make([]Candidate, 0, len(order))
 	for _, label := range order {
-		// Said because the sender said so, whether or not it is
-		// unusual. A battery at five per cent has been at five per
-		// cent before and is not news; it is still worth saying.
-		if immediate[label] {
-			out = append(out, Candidate{
-				Label: label, Reason: Immediate, Immediate: true,
-				Times: lately[label], Before: seen[label] - lately[label],
-				At: latest[label], Detail: detail[label],
-			})
-			continue
-		}
-		switch {
-		case lately[label] >= Insistent && !state[label]:
-			out = append(out, Candidate{
-				Label: label, Reason: Often,
-				Times: lately[label], Before: seen[label] - lately[label],
-				At: latest[label], Detail: detail[label],
-			})
-		case seen[label] <= lately[label] && !measured(label):
-			// Nothing of it before this window, so this is the first
-			// time it has ever been reported.
-			out = append(out, Candidate{
-				Label: label, Reason: Novel, Times: 1, Before: 0,
-				At: latest[label], Detail: detail[label],
-			})
-		}
+		out = append(out, Candidate{
+			Label: label, Reason: Immediate, Immediate: true,
+			At: latest[label], Detail: detail[label],
+		})
 	}
 	return out
 }
@@ -247,55 +165,6 @@ func Label(e event.Event) string {
 // none of them is a thing to say a sentence about.
 func skip(e event.Event) bool {
 	return event.Position(valueOf(e.Payload))
-}
-
-// Toggling : Whether a sender is reporting a state rather than
-// something that happened.
-//
-// A state is not an occurrence. A player reporting that it is
-// playing, then paused, then playing is one song being listened to,
-// not three of anything, and counting the toggles would have the
-// assistant remark on somebody using a pause button. A screen
-// reporting locked and unlocked fifty times a day is the same thing
-// again. Such a sender can still report something new -- which is
-// the half worth having -- but it can never be frequent.
-//
-// Read from the payload rather than from a list of kinds here. The
-// senders describe themselves and more of them are coming; a list
-// means every new toggle the person adds needs a line in this
-// server before it stops being a nuisance, which is exactly the
-// coupling the rest of this design avoids. A field that is true or
-// false says what the event is, and the sender has already written
-// it: playing, connected, locked.
-//
-// The value itself does not count. A thing whose whole value is
-// "true" is a sender saying something happened, not a sender
-// describing a state of something.
-func Toggling(payload json.RawMessage) bool {
-	if len(payload) == 0 {
-		return false
-	}
-	var fields map[string]any
-	if err := json.Unmarshal(payload, &fields); err != nil {
-		return false
-	}
-	for name, said := range fields {
-		if name == "value" {
-			continue
-		}
-		switch v := said.(type) {
-		case bool:
-			return true
-		case string:
-			if strings.EqualFold(strings.TrimSpace(v), "true") ||
-				strings.EqualFold(strings.TrimSpace(v), "false") {
-				return true
-			}
-		default:
-			_ = v
-		}
-	}
-	return false
 }
 
 // valueOf : The value a sender gave, if it gave one.
@@ -375,33 +244,4 @@ func told(payload json.RawMessage) bool {
 		}
 	}
 	return false
-}
-
-// measured : Whether a label's value is a reading rather than a name.
-//
-// A song, a place, a caller are identities, and the first time one
-// appears is worth a word. A battery at seventy-three per cent is a
-// measurement, and every measurement is new the first time it is
-// taken -- a device reporting every one per cent would offer a
-// hundred novelties a day, each of them nothing.
-//
-// Nothing here knows what is being measured. A value made of digits
-// is a reading of something; a value made of words is the name of
-// something. That holds for a battery, a temperature, a step count
-// and whatever is sent next.
-func measured(label string) bool {
-	_, value, ok := strings.Cut(label, " ")
-	if !ok {
-		return false
-	}
-	value = strings.TrimSpace(value)
-	if value == "" {
-		return false
-	}
-	for _, r := range value {
-		if !unicode.IsDigit(r) && r != '.' && r != '-' && r != '+' && r != '%' {
-			return false
-		}
-	}
-	return true
 }
