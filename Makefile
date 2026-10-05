@@ -105,6 +105,10 @@ logs: ## Follow the local log
 test: ## Run the tests
 	@go test ./... -race
 
+.PHONY: evals-greeting
+evals-greeting: ## Greet real arrivals sampled from the last four weeks (costs API calls)
+	@go test ./internal/greet/evals/ -tags evals -count=1 -v -timeout 20m $(ARGS)
+
 .PHONY: evals
 evals: ## Ask a real model whether the tool descriptions work (costs API calls)
 	@go test ./internal/tool/evals/... ./internal/embed/evals/... ./internal/memory/evals/... ./internal/persona/evals/... ./internal/conversation/evals/... ./internal/remind/evals/... -tags evals -count=1 -v

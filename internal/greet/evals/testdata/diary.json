@@ -1,0 +1,50 @@
+[
+ {
+  "what": "Muthuselvi's Birthday",
+  "when": "2026-09-10",
+  "allday": true,
+  "where": ""
+ },
+ {
+  "what": "Alekhya Chintada's birthday",
+  "when": "2026-09-18",
+  "allday": true,
+  "where": ""
+ },
+ {
+  "what": "Bharathraj's Birthday",
+  "when": "2026-09-25",
+  "allday": true,
+  "where": ""
+ },
+ {
+  "what": "Meganadham's Birthday",
+  "when": "2026-09-29",
+  "allday": true,
+  "where": ""
+ },
+ {
+  "what": "Meet Vishnu",
+  "when": "2026-10-03T18:00:00+05:30",
+  "allday": false,
+  "where": ""
+ },
+ {
+  "what": "Meesaya Murukku 2 Movie",
+  "when": "2026-10-04T18:10:00+05:30",
+  "allday": false,
+  "where": "Seven Screen's Cinemas, SKY HUB, 155A/1A1, GST Rd, Kilambakkam, Urapakkam, Chennai, Kilampakkam, Tamil Nadu 603210, India"
+ },
+ {
+  "what": "Ganesh Chaturthi",
+  "when": "2026-09-14",
+  "allday": true,
+  "where": ""
+ },
+ {
+  "what": "Mahatma Gandhi Jayanti",
+  "when": "2026-10-02",
+  "allday": true,
+  "where": ""
+ }
+]
