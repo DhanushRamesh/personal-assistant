@@ -19,6 +19,7 @@
 package evals
 
 import (
+	"cmp"
 	"context"
 	"encoding/json"
 	"flag"
@@ -47,6 +48,7 @@ var (
 	seed    = flag.Uint64("seed", 0, "0 picks one and prints it, so a run can be repeated")
 	arrived = flag.String("at", "", "one arrival instead of a sample, as 2006-01-02 15:04 in their own zone")
 	spokeAt = flag.String("since", "", "when the assistant last spoke before it, same format")
+	which   = flag.String("model", "", "ask this model instead of the configured one")
 	cases   = flag.Bool("cases", false, "run the judged cases in testdata/cases.json")
 	runs    = flag.Int("runs", 2, "how many times to ask about each case")
 	replay  = flag.Int("real", 0, "replay the last N greetings that were actually spoken, against the prompt as it stands")
@@ -641,10 +643,7 @@ func provider(t *testing.T, cfg config.Config, quiet *slog.Logger) *platformai.E
 // see it happening.
 func ask(t *testing.T, env *platformai.Environment, cfg config.Config, told greet.Told) (string, time.Duration) {
 	t.Helper()
-	model := cfg.PlatformAI.FastModel
-	if model == "" {
-		model = cfg.PlatformAI.Model
-	}
+	model := cmp.Or(*which, cfg.PlatformAI.FastModel, cfg.PlatformAI.Model)
 	ctx, done := context.WithTimeout(t.Context(), greet.Within)
 	defer done()
 
