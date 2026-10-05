@@ -70,7 +70,7 @@ type Journey func(ctx context.Context, userID, where string) (time.Duration, err
 // door. Before it there is nothing to say and the person is not
 // late; after it by more than Late there is nothing useful to say
 // either, because the thing has begun.
-func Leaving(a Appointment, takes time.Duration, now time.Time) (string, bool) {
+func Leaving(a Appointment, takes time.Duration, caution string, now time.Time) (string, bool) {
 	what := strings.TrimSpace(a.What)
 	if what == "" || a.When.IsZero() || takes <= 0 {
 		return "", false
@@ -86,12 +86,29 @@ func Leaving(a Appointment, takes time.Duration, now time.Time) (string, bool) {
 
 	// Past the moment and the thing has not started: say so as it is,
 	// rather than counting backwards from a departure already missed.
+	said := "Time to set off for " + what + ": it is about " +
+		spell(takes) + " away."
 	if now.After(set.Add(2 * time.Minute)) {
-		return what + " starts " + spell(a.When.Sub(now)) +
-			" from now and it is about " + spell(takes) + " away.", true
+		said = what + " starts " + spell(a.When.Sub(now)) +
+			" from now and it is about " + spell(takes) + " away."
 	}
-	return "Time to set off for " + what + ": it is about " +
-		spell(takes) + " away.", true
+	return said + tacked(caution), true
+}
+
+// tacked : A caution on the end of the sentence, where there is one.
+//
+// One clause and no more. This is the one moment in the day when
+// they are about to go and are still in the room to hear it, which
+// makes it the only place a thing like a low battery can be said
+// usefully -- said as they leave it reaches an empty room, and said
+// an hour earlier it is forgotten. It is also why there is exactly
+// one: a doorway is not where anybody wants a list.
+func tacked(caution string) string {
+	caution = strings.TrimSpace(caution)
+	if caution == "" {
+		return ""
+	}
+	return " " + strings.ToUpper(caution[:1]) + caution[1:] + "."
 }
 
 // Worth : Whether this entry is one to work a journey out for.

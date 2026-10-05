@@ -23,6 +23,9 @@ type Diary func(ctx context.Context, userID string, from, to time.Time) ([]Appoi
 // be caught is not company.
 type Say func(ctx context.Context, userID, text string) error
 
+// Caution : One short clause worth hearing on the way out, or empty.
+type Caution func(ctx context.Context, userID string) string
+
 // Here : Whether they are in the room to hear it.
 //
 // The same shape as everywhere else: anything that is not a
@@ -41,6 +44,13 @@ type Watcher struct {
 	// Here : Whether anybody is listening. Required: without it
 	// nothing is said, which is the safe failure.
 	Here Here
+	// Caution : One short clause worth hearing on the way out, or
+	// empty. Optional: nil adds nothing.
+	//
+	// Given as words rather than as something to judge, so that what
+	// counts as worth a caution lives with whoever knows. This
+	// package does not know what a battery is and should not learn.
+	Caution Caution
 	// Now : The clock, replaceable in tests.
 	Now func() time.Time
 	// Logger : Where failures go. Nil is silent.
@@ -90,7 +100,11 @@ func (w *Watcher) Look(ctx context.Context, userID string) (string, error) {
 			}
 			continue
 		}
-		said, ok := Leaving(a, takes, now)
+		var caution string
+		if w.Caution != nil {
+			caution = w.Caution(ctx, userID)
+		}
+		said, ok := Leaving(a, takes, caution, now)
 		if !ok {
 			continue
 		}

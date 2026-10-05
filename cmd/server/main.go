@@ -13,6 +13,7 @@ import (
 	"os/signal"
 	"runtime/debug"
 	"slices"
+	"strconv"
 	"strings"
 	"sync"
 	"syscall"
@@ -1371,7 +1372,7 @@ func settingOff(
 	cfg config.Config,
 	diary coming.Diary,
 	maps mapstool.Maps,
-	stays interface {
+	reported interface {
 		Recent(ctx context.Context, userID string, q event.Query) ([]event.Event, error)
 	},
 	talkers interface {
@@ -1415,7 +1416,7 @@ func settingOff(
 			return out, nil
 		},
 		Journey: func(ctx context.Context, userID, where string) (time.Duration, error) {
-			return howFar(ctx, maps, stays, userID, where)
+			return howFar(ctx, maps, reported, userID, where)
 		},
 		Say: func(ctx context.Context, userID, text string) error {
 			if err := announcement.Speak(ctx, speaker, conversation.Coming, text); err != nil {
@@ -1427,6 +1428,9 @@ func settingOff(
 		Here: func(userID string) (bool, bool) {
 			present, known := here.Here(ctx, userID)
 			return present, known
+		},
+		Caution: func(ctx context.Context, userID string) string {
+			return lowOnCharge(ctx, reported, userID)
 		},
 		Now:    cfg.Assistant.Now,
 		Logger: logger,
@@ -1451,12 +1455,12 @@ func settingOff(
 // and nothing is said, which is right -- a guessed destination gives
 // a confident time to the wrong place.
 func howFar(ctx context.Context, maps mapstool.Maps,
-	stays interface {
+	reported interface {
 		Recent(ctx context.Context, userID string, q event.Query) ([]event.Event, error)
 	},
 	userID, where string) (time.Duration, error) {
 
-	lat, lon, ok := lastSeenAt(ctx, stays, userID)
+	lat, lon, ok := lastSeenAt(ctx, reported, userID)
 	if !ok {
 		return 0, fmt.Errorf("leaving: nothing says where they are")
 	}
@@ -1474,6 +1478,71 @@ func howFar(ctx context.Context, maps mapstool.Maps,
 	return journey.Takes, nil
 }
 
+// Spare : The charge below which it is worth a word on the way out.
+//
+// Above the thresholds the phone shouts about on its own, which
+// stop at twenty-five, because this is a different question. Not
+// "is it about to die" but "will it last the trip", and the moment
+// to ask is the one moment they are about to go and are still in
+// the room to hear the answer.
+const Spare = 40
+
+// lowOnCharge : That the phone has not much left, in words, or
+// nothing.
+//
+// The charger half is the thing the phone used to decide for
+// itself, with a variable kept by two Tasker tasks. It is worked
+// out here now, from the events the phone already sends, which is
+// the direction the owner asked for: the phone reports facts and
+// the server decides what they mean together. The phone's own rule
+// stays where it is until this has proved itself.
+//
+// Says nothing it is not sure of. No reading, or a reading older
+// than the last hour, is no caution: a number from this morning
+// says nothing about the phone in their pocket now.
+func lowOnCharge(ctx context.Context, events interface {
+	Recent(ctx context.Context, userID string, q event.Query) ([]event.Event, error)
+}, userID string) string {
+	if events == nil {
+		return ""
+	}
+	level, err := events.Recent(ctx, userID, event.Query{Kind: "battery.level", Limit: 1})
+	if err != nil || len(level) == 0 {
+		return ""
+	}
+	if time.Since(level[0].OccurredAt) > time.Hour {
+		return ""
+	}
+	var reading struct {
+		Value string `json:"value"`
+	}
+	if json.Unmarshal(level[0].Payload, &reading) != nil {
+		return ""
+	}
+	percent, err := strconv.Atoi(strings.TrimSpace(reading.Value))
+	if err != nil || percent <= 0 || percent >= Spare {
+		return ""
+	}
+	// On charge it will be better by the time they go, and saying so
+	// is a warning about a problem that is solving itself.
+	if plugged(ctx, events, userID) {
+		return ""
+	}
+	return "your phone is at " + strconv.Itoa(percent) + " per cent"
+}
+
+// plugged : Whether the newest thing the phone said about its
+// charger was that it had one.
+func plugged(ctx context.Context, events interface {
+	Recent(ctx context.Context, userID string, q event.Query) ([]event.Event, error)
+}, userID string) bool {
+	found, err := events.Recent(ctx, userID, event.Query{Prefix: "power.", Limit: 1})
+	if err != nil || len(found) == 0 {
+		return false
+	}
+	return found[0].Kind == "power.plugged"
+}
+
 // lastSeenAt : Where they were last reported to be.
 //
 // The newest stay, which is the one thing that carries a coordinate
@@ -1482,13 +1551,13 @@ func howFar(ctx context.Context, maps mapstool.Maps,
 // reporting nearly fourteen hours straight through an evening out,
 // because the phone reports leaving a place and never reports
 // coming back -- and a journey does not need it.
-func lastSeenAt(ctx context.Context, stays interface {
+func lastSeenAt(ctx context.Context, reported interface {
 	Recent(ctx context.Context, userID string, q event.Query) ([]event.Event, error)
 }, userID string) (lat, lon float64, ok bool) {
-	if stays == nil {
+	if reported == nil {
 		return 0, 0, false
 	}
-	found, err := stays.Recent(ctx, userID, event.Query{Kind: event.Stayed, Limit: 1})
+	found, err := reported.Recent(ctx, userID, event.Query{Kind: event.Stayed, Limit: 1})
 	if err != nil || len(found) == 0 {
 		return 0, 0, false
 	}
