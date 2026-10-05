@@ -255,6 +255,8 @@ func Prompt(t Told) string {
 			"Sometimes there is nothing to ask and a sentence is simply said to them.",
 			"Where you have a name for the thing, use it rather than describing it: \"how was the film\" is worse than its title, and \"you were out a good while\" is worse than either.",
 			"Short. Somebody at a door has their hands full.",
+			"Every sentence must be one. \"There was a call came in\" is not, and neither is a clause hung on the end that cannot stand by itself.",
+			"A length of time is a count like any other, and is no more said than a count is. A long call, or one that went on a while; never an hour and a half.",
 		),
 		planned(t),
 		silent(t),

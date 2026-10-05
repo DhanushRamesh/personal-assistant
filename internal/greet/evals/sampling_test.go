@@ -47,7 +47,7 @@ var (
 	seed    = flag.Uint64("seed", 0, "0 picks one and prints it, so a run can be repeated")
 	arrived = flag.String("at", "", "one arrival instead of a sample, as 2006-01-02 15:04 in their own zone")
 	spokeAt = flag.String("since", "", "when the assistant last spoke before it, same format")
-	dry     = flag.String("dry", "", "\"facts\" prints what the model would be shown and asks nothing")
+	dry     = flag.String("dry", "", "\"facts\" prints this arrival's half of the prompt, \"all\" the whole of it; neither asks the model")
 )
 
 // Ordinary, OrdinaryMost, Most : The same bounds the server uses, so
@@ -70,9 +70,13 @@ var asserted = []string{
 // account of it. The failure an earlier attempt at the absence rule
 // produced, and the reason it was reverted.
 var accused = []string{
-	"you didn't", "you did not", "you never", "you missed",
+	"you didn't", "you did not", "you never",
 	"you skipped", "you failed", "instead of",
 }
+
+// Not "you missed". It reads as an accusation in a list and is the
+// plain word for a call that was not answered, which is a fact the
+// phone reported rather than a charge laid against anybody.
 
 // contact : Saying somebody tried to reach them. Checked against
 // whether anything in the window was a call at all.
@@ -173,8 +177,12 @@ func TestGreetingRealArrivals(t *testing.T) {
 		for _, a := range told.Diary {
 			fmt.Printf("   still to come:   %s at %s\n", a.What, a.When.In(where).Format("Mon 3:04 pm"))
 		}
-		if *dry == "facts" {
+		switch *dry {
+		case "facts":
 			fmt.Printf("\n%s\n", facts(told))
+			return
+		case "all":
+			fmt.Printf("\n%s\n", greet.Prompt(told))
 			return
 		}
 		said, took := ask(t, env, cfg, told)
@@ -499,13 +507,21 @@ func ask(t *testing.T, env *platformai.Environment, cfg config.Config, told gree
 		last = &m
 	}
 	took := time.Since(start).Round(time.Millisecond)
+
+	// Printed where the answer would be, and loudly. A refusal and a
+	// silence are both an empty string to everything downstream, and
+	// eleven rate-limited calls in a row were read as the model
+	// choosing to say nothing -- a conclusion drawn three times, each
+	// time wrong, because the failures went to the test log and the
+	// answers went to stdout.
 	if last == nil {
-		t.Errorf("the provider said nothing after %v", took)
-		return "", took
+		fmt.Printf("\n   ✗✗ THE PROVIDER SENT NOTHING after %v -- not a silence\n", took)
+		t.Fatalf("the provider said nothing after %v", took)
 	}
 	if last.Kind == environment.KindError {
-		t.Errorf("the provider failed after %v: %s", took, last.Text)
-		return "", took
+		fmt.Printf("\n   ✗✗ THE PROVIDER REFUSED after %v -- not a silence: %s\n      %s\n",
+			took, last.Text, last.Detail)
+		t.Fatalf("the provider failed: %s (%s)", last.Text, last.Detail)
 	}
 	return strings.TrimSpace(last.Text), took
 }

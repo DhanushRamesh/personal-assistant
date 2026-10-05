@@ -9700,6 +9700,52 @@ Twelve of twelve still spoke. What is left is thin rather than
 mechanical -- the hour they came in, how late they were out -- and
 whether that is worth saying is still the owner's judgement to give.
 
+### Eleven refusals read as eleven silences
+
+The greeting had been answering "There was a call came in just after
+half one, sir" -- four times in five on one window. Owner's own
+version of the same greeting was *"You were on a pretty long call
+last night. Everything alright?"*: shorter, grammatical, and a thing
+a person says. Right judgement, bad speech.
+
+Two lines went in for it: that every sentence must be one, with the
+offending construction quoted, and that a length of time is a count
+like any other and is no more said than one.
+
+**Then the measurements went to pieces, and the fault was mine.**
+Runs began coming back empty -- two in five, then six in six, then
+five in five with the lines reverted, and five in five with the
+*committed* prompt that had spoken five times out of five an hour
+earlier. Three conclusions were drawn from that and all three were
+wrong, the last of them being to revert a change that was working.
+
+They were never silences. The provider was rate-limited:
+
+    code="bad_request"
+    detail="You have made too many requests continuously."
+
+The harness had always reported it, through `t.Errorf`. But a
+failure goes to the test log and an answer goes to stdout, and the
+command filtering the output for answers -- `grep -E "   → "` --
+dropped every one of them. The signal was there and the filter
+removed it.
+
+**A refusal and a silence are the same empty string to everything
+downstream, so they have to be told apart loudly and in the same
+place.** The harness now prints `THE PROVIDER REFUSED -- not a
+silence` where the answer would have gone, with the detail beside
+it, and fails hard rather than carrying on.
+
+The same run showed the other half of it: one call reached the
+ten-second deadline and returned nothing at all, which in the server
+is the fallback path and in a measurement is another empty string
+that is not a silence.
+
+With the lines in and the provider answering: three replies, all
+grammatical, none reading a duration out loud, and all three about
+the right thing.
+
+
 ## 12. Maintaining this file
 
 When the owner states a preference, makes a decision, or corrects something,
