@@ -9664,6 +9664,42 @@ one sampled arrival with an empty window answered it with a missed
 call that never happened.
 
 
+### More of a thing is still that thing
+
+Owner, on the greetings that were left: *"talking about switching
+wifi is not a better humany way of response."*
+
+Quite right, and the prompt was licensing it in so many words. It
+said that something happening dozens of times a month is the texture
+of their life and not news -- and then, in the next clause, that what
+is worth remarking on is what is rare **or far more of something
+than there usually is**. A phone moves between a router and its
+extender seventeen times in a morning. By that second clause it
+qualified every time.
+
+So the second clause went. More of it is still it: a count higher
+than usual is the same thing more often, and the mechanics of a day
+-- what a device did because somebody was somewhere, or moving, or
+awake -- are never the subject whatever the number says.
+
+**With one exception, and it is the one that matters.** Anything
+with another person at the other end of it. Somebody doing a thing
+again and again is somebody; a device doing a thing again and again
+is a device. That keeps the case the whole feature was built for --
+the same caller, four times -- without naming a kind of event to do
+it.
+
+On the same twelve arrivals this was the first run with nothing
+flagged at all, and the character of them changed rather than the
+count: *"You were on the phone with Alekhya just a few minutes ago,
+sir -- is everything all right?"*, *"Were you and Alekhya up late
+talking, sir?"*, the film, the plan with Vishnu. The device
+mechanics are gone.
+
+Twelve of twelve still spoke. What is left is thin rather than
+mechanical -- the hour they came in, how late they were out -- and
+whether that is worth saying is still the owner's judgement to give.
+
 ## 12. Maintaining this file
 
 When the owner states a preference, makes a decision, or corrects something,
