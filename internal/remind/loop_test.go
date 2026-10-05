@@ -578,10 +578,10 @@ func (c *clockface) last() (alarm.Alarm, bool) {
 	return c.kept[len(c.kept)-1], true
 }
 
-// The phone cannot hold a repeat set from outside, so each firing
-// of a repeating reminder sets the next alarm. Without this a daily
-// reminder has an alarm on the first morning and none after.
-func TestARepeatingReminderArmsTheNextAlarm(t *testing.T) {
+// A daily alarm repeats on the phone, so asking again after every
+// firing would stack a second identical alarm beside it each
+// morning.
+func TestADailyReminderDoesNotStackAlarms(t *testing.T) {
 	six := time.Date(2026, 10, 6, 6, 5, 0, 0, india)
 	l, store, _ := loop(t, six)
 	phone := &clockface{}
@@ -590,18 +590,38 @@ func TestARepeatingReminderArmsTheNextAlarm(t *testing.T) {
 
 	l.Once(context.Background())
 
+	if got, ok := phone.last(); ok {
+		t.Errorf("a daily reminder armed another alarm for %s, beside the one the phone repeats", got.At)
+	}
+}
+
+// Monthly is the repeat an alarm clock cannot hold -- it has
+// nowhere to put "the fourteenth" -- so that one is re-armed an
+// occurrence at a time.
+func TestAMonthlyReminderArmsTheNextAlarm(t *testing.T) {
+	six := time.Date(2026, 10, 6, 6, 5, 0, 0, india)
+	l, store, _ := loop(t, six)
+	phone := &clockface{}
+	l.Alarm = phone
+	put(t, store, six, remind.Monthly)
+
+	l.Once(context.Background())
+
 	got, ok := phone.last()
 	if !ok {
-		t.Fatal("a daily reminder fired and armed no alarm for tomorrow")
+		t.Fatal("a monthly reminder fired and armed no alarm for next month")
 	}
 	// The wall clock, not the instant: only the hour and the minute
 	// reach the phone, so the right instant in the wrong zone still
 	// rings at 1:42 in the morning.
 	if h, m := got.At.Hour(), got.At.Minute(); h != 6 || m != 5 {
-		t.Errorf("tomorrow's alarm is for %02d:%02d, not 06:05", h, m)
+		t.Errorf("next month's alarm is for %02d:%02d, not 06:05", h, m)
 	}
-	if got.At.Day() != 7 {
-		t.Errorf("the alarm is for day %d, not tomorrow", got.At.Day())
+	if got.At.Month() != time.November {
+		t.Errorf("the alarm is for %s, not next month", got.At.Month())
+	}
+	if len(got.Days) != 0 {
+		t.Errorf("a monthly alarm claimed weekdays the phone would repeat on: %v", got.Days)
 	}
 	if got.Key == "" {
 		t.Error("the alarm is not tied to the reminder, so a retry cannot know which it is")

@@ -963,3 +963,40 @@ func TestNoPhoneAtAllIsSaidToo(t *testing.T) {
 		t.Errorf("silence about the alarm, which reads as success: %s", out.Content)
 	}
 }
+
+// A reminder that comes back every day should be an alarm that
+// comes back every day. The phone holds the repeat itself, so it
+// keeps ringing on a day this server is down -- which is the whole
+// reason for putting it there.
+func TestARepeatingReminderRepeatsOnThePhone(t *testing.T) {
+	for _, c := range []struct {
+		repeats string
+		days    int
+	}{
+		{"daily", 7},
+		{"weekdays", 5},
+		{"weekly", 1},
+		// An alarm clock has nowhere to put "the fourteenth", so
+		// this one is re-armed by the loop instead.
+		{"monthly", 0},
+	} {
+		t.Run(c.repeats, func(t *testing.T) {
+			p := &phone{}
+			out := call(t, withPhone(t, p), "reminder_set",
+				`{"title":"take the tablets","say":"Take the tablets.",`+
+					`"say_if_late":"You should have taken them","at":"2026-09-27 06:05",`+
+					`"repeats":"`+c.repeats+`"}`)
+
+			if out.Outcome != conversation.OutcomeOK {
+				t.Fatalf("reminder_set: %s", out.Content)
+			}
+			if len(p.got.Days) != c.days {
+				t.Errorf("%s repeats on %d days, wanted %d: %v",
+					c.repeats, len(p.got.Days), c.days, p.got.Days)
+			}
+			if h, m := p.got.At.Hour(), p.got.At.Minute(); h != 6 || m != 5 {
+				t.Errorf("the phone was asked for %02d:%02d, not 06:05", h, m)
+			}
+		})
+	}
+}

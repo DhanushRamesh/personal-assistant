@@ -43,6 +43,12 @@ type Alarm struct {
 	// Label : What shows on the phone when it rings. Somebody woken
 	// at six wants the words, not a number.
 	Label string
+	// Days : The days it repeats on, empty for one time only.
+	//
+	// The phone's own repeat, so it keeps ringing on a day this
+	// server is down -- which is the whole reason for putting it on
+	// the phone rather than only saying it.
+	Days []time.Weekday
 	// Key : What this alarm is for, usually a reminder's id. Never
 	// sent to the phone; it is how a Keeper knows that two attempts
 	// are the same alarm rather than two.
@@ -83,6 +89,13 @@ type Setter interface {
 // that do turn up are replaced rather than escaped: a title is for
 // reading at six in the morning, not for parsing.
 const Separator = "|"
+
+// Never : What stands for "no days" on the wire.
+//
+// A value rather than an empty field, because the phone splits the
+// body into a fixed number of pieces and a trailing empty one is
+// not reliably one of them.
+const Never = "0"
 
 // Expected : What the phone answers when it has taken the alarm.
 //
@@ -137,9 +150,14 @@ func (p Phone) Set(ctx context.Context, a Alarm) error {
 	ask, done := context.WithTimeout(ctx, wait)
 	defer done()
 
+	// Signed, and otherwise left alone. Rebuilding the alarm here
+	// rather than copying it once dropped the repeat and turned
+	// every daily alarm into a one-off.
+	signed := a
+	signed.Label = Stamp(a.Label, p.By)
+
 	req, err := http.NewRequestWithContext(ask, http.MethodPost,
-		strings.TrimSpace(p.URL),
-		strings.NewReader(Body(Alarm{At: a.At, Label: Stamp(a.Label, p.By)})))
+		strings.TrimSpace(p.URL), strings.NewReader(Body(signed)))
 	if err != nil {
 		return fmt.Errorf("alarm: %w", err)
 	}
@@ -171,11 +189,34 @@ func (p Phone) Set(ctx context.Context, a Alarm) error {
 // Body : The alarm as the phone reads it -- hour, minute and words,
 // divided by Separator.
 func Body(a Alarm) string {
+	days := Numbered(a.Days)
+	if days == "" {
+		days = Never
+	}
 	return strings.Join([]string{
 		strconv.Itoa(a.At.Hour()),
 		strconv.Itoa(a.At.Minute()),
 		Labelled(a.Label),
+		days,
 	}, Separator)
+}
+
+// Numbered : The days as the phone's alarm clock counts them --
+// Sunday 1 through Saturday 7 -- semicolon separated, or empty for
+// one time only.
+//
+// Android's numbering rather than Go's, which starts at Sunday 0,
+// and semicolons because Separator already divides one field from
+// the next.
+func Numbered(days []time.Weekday) string {
+	if len(days) == 0 {
+		return ""
+	}
+	out := make([]string, 0, len(days))
+	for _, d := range days {
+		out = append(out, strconv.Itoa(int(d)+1))
+	}
+	return strings.Join(out, ";")
 }
 
 // Labelled : The words, with anything that would divide them taken
@@ -186,7 +227,16 @@ func Body(a Alarm) string {
 // indication that anything was lost.
 func Labelled(label string) string {
 	clean := strings.Map(func(r rune) rune {
-		if r == '|' || r == '\n' || r == '\r' {
+		switch r {
+		// Divides one field from the next.
+		case '|', '\n', '\r':
+			return ' '
+		// The phone builds the alarm in a line of Java, where the
+		// label is a string literal, and reads the whole body for
+		// %variables of its own first. A quote, a backslash or a
+		// per cent would end the literal or name a variable, and
+		// the alarm would simply not be set.
+		case '"', '\\', '%':
 			return ' '
 		}
 		return r

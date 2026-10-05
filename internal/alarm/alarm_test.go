@@ -42,7 +42,7 @@ func TestItAsksThePhoneForTheHourAndTheWords(t *testing.T) {
 	}); err != nil {
 		t.Fatalf("set: %v", err)
 	}
-	if *got != "6|5|take the tablets" {
+	if *got != "6|5|take the tablets|0" {
 		t.Errorf("the phone was asked %q", *got)
 	}
 }
@@ -58,10 +58,10 @@ func TestTheWordsCannotBreakTheLine(t *testing.T) {
 	}); err != nil {
 		t.Fatalf("set: %v", err)
 	}
-	if strings.Count(*got, "|") != 2 {
+	if strings.Count(*got, "|") != 3 {
 		t.Errorf("the words added a divider of their own: %q", *got)
 	}
-	if *got != "6|5|call Gunalan the invoice, and the 2pm" {
+	if *got != "6|5|call Gunalan the invoice, and the 2pm|0" {
 		t.Errorf("the words did not survive readably: %q", *got)
 	}
 }
@@ -132,5 +132,66 @@ func TestTheStampNamesWhoeverItIsCalledNow(t *testing.T) {
 		if got := alarm.Stamp("take the tablets", c.by); got != c.want {
 			t.Errorf("as %q it signed %q, wanted %q", c.by, got, c.want)
 		}
+	}
+}
+
+// TestADailyAlarmCarriesEveryDay : The phone holds the repeat
+// itself, so it keeps ringing on a day this server is down. Sunday
+// is 1 on the phone and 0 in Go, and the whole week is silently a
+// day out if that is got wrong.
+func TestADailyAlarmCarriesEveryDay(t *testing.T) {
+	week := []time.Weekday{time.Sunday, time.Monday, time.Tuesday, time.Wednesday,
+		time.Thursday, time.Friday, time.Saturday}
+
+	got := alarm.Body(alarm.Alarm{At: six, Label: "wake up", Days: week})
+	if got != "6|5|wake up|1;2;3;4;5;6;7" {
+		t.Errorf("a daily alarm goes over as %q", got)
+	}
+}
+
+// TestAOneOffSaysSoRatherThanSayingNothing : The phone splits the
+// body into a fixed number of pieces, and a trailing empty one is
+// not reliably among them.
+func TestAOneOffSaysSoRatherThanSayingNothing(t *testing.T) {
+	got := alarm.Body(alarm.Alarm{At: six, Label: "wake up"})
+	if got != "6|5|wake up|"+alarm.Never {
+		t.Errorf("a one-off goes over as %q", got)
+	}
+}
+
+// TestALabelCannotEscapeTheJava : The phone builds the alarm in a
+// line of Java where the label is a string literal, and reads the
+// body for %variables of its own first. A quote, a backslash or a
+// per cent would end the literal or name a variable, and the alarm
+// would simply not be set.
+func TestALabelCannotEscapeTheJava(t *testing.T) {
+	got := alarm.Labelled(`pay the 50% "deposit" \ today`)
+
+	for _, bad := range []string{`"`, `\`, "%"} {
+		if strings.Contains(got, bad) {
+			t.Errorf("%s survived into the label: %q", bad, got)
+		}
+	}
+	if got != "pay the 50 deposit today" {
+		t.Errorf("the label reads as %q", got)
+	}
+}
+
+// TestTheRepeatSurvivesBeingSigned : Signing the label once
+// rebuilt the alarm and dropped its days, so every daily alarm
+// went over as a one-off. Body was tested directly and never saw
+// it; this goes through Set, which is what the server calls.
+func TestTheRepeatSurvivesBeingSigned(t *testing.T) {
+	phone, got := answering(t, http.StatusOK, alarm.Expected)
+	phone.By = "Jarvis"
+
+	if err := phone.Set(context.Background(), alarm.Alarm{
+		At: six, Label: "stretch", Key: "rem_1",
+		Days: []time.Weekday{time.Monday, time.Saturday},
+	}); err != nil {
+		t.Fatalf("set: %v", err)
+	}
+	if *got != "6|5|stretch \u2014 by Jarvis|2;7" {
+		t.Errorf("the phone was asked %q", *got)
 	}
 }

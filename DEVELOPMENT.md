@@ -9961,23 +9961,35 @@ misled.
 
 - `Set Alarm` takes **Hours, Minutes, Label, Sound, Vibrate,
   Confirm**. No repeat days.
-- `Send Intent` extras take a **Java object**, not a typed literal,
-  so `AlarmClock.EXTRA_DAYS` (an `ArrayList<Integer>`) needs a Java
-  Function action and a loop to build -- 8-10 brittle actions.
+- `Send Intent` extras take a **Java object**, not a typed literal.
+- **`Java Code` takes arbitrary Java.** This is the one that matters,
+  and ruling out the repeat before finding it was the second time in
+  this feature that an early conclusion was wrong.
 
-So the phone sets **one-off alarms only**, and a repeating reminder
-has its next alarm set by the server each time it fires
-(`remind.Loop.rearm`). The cost, stated plainly: a server down
-*across a firing* does not set the next one. The alarm already on
-the phone still rings, so this degrades by one occurrence rather
-than going quiet for good. Monthly works here where it could not
-before, because nothing has to express "the fourteenth" to an alarm
-clock any more.
+So the task is two actions: `Variable Split %http_request_body` on
+`|`, then one `Java Code` action that builds the intent itself,
+including `putIntegerArrayListExtra` for the days. The phone holds
+daily, weekdays and weekly repeats **natively** -- they keep ringing
+with this server switched off, which is the whole point of putting
+them there.
+
+Monthly is still re-armed by `remind.Loop.rearm` one occurrence at a
+time, because an alarm clock has nowhere to put "the fourteenth".
+The loop skips every repeat the phone *can* hold, or it would stack
+a second identical alarm beside it every morning.
+
+Because the label is pasted into a line of Java and Tasker expands
+`%variables` in the field first, the server strips `"`, `\` and
+`%` from it as well as `|` and newlines. Any of them would end the
+string literal or name a variable, and the alarm would simply not
+be set.
 
 ### The wire
 
 `POST http://<phone>:1821/a/<secret>` with a body of
-`hour|minute|label`.
+`hour|minute|label|days`, where days is `1;2;3` counting Sunday as
+1, or `0` for one time only -- a value rather than an empty field,
+because a trailing empty one is not reliably one of the pieces.
 
 - **A pipe**, because a reminder title will contain a comma and a
   colon and will not contain a pipe. Any that turn up are replaced,

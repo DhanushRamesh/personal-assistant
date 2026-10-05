@@ -1050,7 +1050,9 @@ func alarmed(ctx context.Context, phone alarm.Setter, r *remind.Reminder, where 
 	// unconverted rings five and a half hours early and nothing
 	// anywhere disagrees with it.
 	at := r.DueAt.In(where)
-	if err := phone.Set(ctx, alarm.Alarm{At: at, Label: r.Title, Key: r.ID}); err != nil {
+	if err := phone.Set(ctx, alarm.Alarm{
+		At: at, Label: r.Title, Days: remind.AlarmDays(r.Repeats, at), Key: r.ID,
+	}); err != nil {
 		slog.Warn("the phone would not take an alarm", "at", at, "error", err)
 		return " Their phone could not be reached, so the alarm is not set yet, though it will " +
 			"keep being tried until the time comes. Tell them that plainly, in one clause, " +

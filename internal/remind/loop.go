@@ -60,10 +60,10 @@ type Loop struct {
 	// Alarm : Where a phone alarm is asked for. Nil sets none, which
 	// is what this did before the phone was reachable.
 	//
-	// Only repeating reminders are re-armed here. A one-off had its
-	// alarm set when it was made and does not want another; a
-	// repeat cannot hold its own repeat on the phone, so each firing
-	// sets the next one.
+	// Only the repeats the phone cannot hold are re-armed here --
+	// monthly, in practice. A one-off had its alarm set when it was
+	// made, and a daily or weekly one is already repeating on the
+	// phone, where it keeps ringing through this server being down.
 	Alarm alarm.Setter
 	// Logger : Where failures go. Required in use; nil is silent.
 	Logger *slog.Logger
@@ -249,6 +249,12 @@ func (l *Loop) one(ctx context.Context, r Reminder, at time.Time, pass *Pass) {
 // lost, and it has already been said by the time this runs.
 func (l *Loop) rearm(ctx context.Context, r Reminder, next time.Time) {
 	if l.Alarm == nil || next.IsZero() {
+		return
+	}
+	// The phone holds this repeat itself and is already set for the
+	// next one. Asking again would stack a second identical alarm
+	// beside it every morning.
+	if len(AlarmDays(r.Repeats, next)) > 0 {
 		return
 	}
 	if err := l.Alarm.Set(ctx, alarm.Alarm{At: next.In(l.where()), Label: r.Title, Key: r.ID}); err != nil {

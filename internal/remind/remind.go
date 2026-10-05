@@ -79,6 +79,27 @@ func (r Repeat) Valid() bool {
 // Repeats : Every repeat a caller may offer, without the empty one.
 func Repeats() []Repeat { return []Repeat{Daily, Weekdays, Weekly, Monthly} }
 
+// AlarmDays : The days a phone alarm for this repeat should ring
+// on, empty where the phone cannot hold the repeat itself.
+//
+// An alarm clock repeats on weekdays and has nowhere to put "the
+// fourteenth", so Monthly is empty and is re-armed one occurrence
+// at a time instead. Everything else the phone keeps on its own,
+// and keeps through this server being down, which is the point of
+// putting it there.
+func AlarmDays(r Repeat, at time.Time) []time.Weekday {
+	switch r {
+	case Daily:
+		return []time.Weekday{time.Sunday, time.Monday, time.Tuesday, time.Wednesday,
+			time.Thursday, time.Friday, time.Saturday}
+	case Weekdays:
+		return []time.Weekday{time.Monday, time.Tuesday, time.Wednesday, time.Thursday, time.Friday}
+	case Weekly:
+		return []time.Weekday{at.Weekday()}
+	}
+	return nil
+}
+
 // Status : Where a reminder is in its life.
 type Status string
 
