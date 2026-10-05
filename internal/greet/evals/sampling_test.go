@@ -45,6 +45,9 @@ import (
 var (
 	samples = flag.Int("samples", 8, "how many arrivals to sample")
 	seed    = flag.Uint64("seed", 0, "0 picks one and prints it, so a run can be repeated")
+	arrived = flag.String("at", "", "one arrival instead of a sample, as 2006-01-02 15:04 in their own zone")
+	spokeAt = flag.String("since", "", "when the assistant last spoke before it, same format")
+	dry     = flag.String("dry", "", "\"facts\" prints what the model would be shown and asks nothing")
 )
 
 // Ordinary, OrdinaryMost, Most : The same bounds the server uses, so
@@ -142,8 +145,46 @@ func TestGreetingRealArrivals(t *testing.T) {
 	t.Logf("seed %d -- rerun this exact sample with -seed %d", *seed, *seed)
 	dice := rand.New(rand.NewPCG(*seed, 0x9E3779B97F4A7C15))
 
-	env := provider(t, cfg, quiet)
+	var env *platformai.Environment
+	if *dry == "" {
+		env = provider(t, cfg, quiet)
+	}
 	now := time.Now().In(where)
+
+	// One named arrival instead of a sample, so a window somebody
+	// wants to look at twice can be looked at twice.
+	if *arrived != "" {
+		at, err := time.ParseInLocation("2006-01-02 15:04", *arrived, where)
+		if err != nil {
+			t.Fatalf("-at: %v", err)
+		}
+		since := at.Add(-5 * time.Hour)
+		if *spokeAt != "" {
+			if since, err = time.ParseInLocation("2006-01-02 15:04", *spokeAt, where); err != nil {
+				t.Fatalf("-since: %v", err)
+			}
+		}
+		told, n := compose(t, events, user, profile, diary, at, since, where)
+		fmt.Printf("\n══ arrived %s · %d events since %s\n",
+			at.Format("Mon 2 Jan 3:04 pm"), n, since.Format("3:04 pm"))
+		for _, a := range told.Were {
+			fmt.Printf("   diary while out: %s at %s\n", a.What, a.When.In(where).Format("3:04 pm"))
+		}
+		for _, a := range told.Diary {
+			fmt.Printf("   still to come:   %s at %s\n", a.What, a.When.In(where).Format("Mon 3:04 pm"))
+		}
+		if *dry == "facts" {
+			fmt.Printf("\n%s\n", facts(told))
+			return
+		}
+		said, took := ask(t, env, cfg, told)
+		fmt.Printf("\n   → %q   %v\n", said, took)
+		for _, w := range wrong(said, told) {
+			fmt.Printf("   ✗ %s\n", w)
+			t.Errorf("%s -- %q", w, said)
+		}
+		return
+	}
 
 	// Only where there is anything to sample. Uniform over four weeks
 	// put the first eight arrivals in September, where this phone had
@@ -197,6 +238,27 @@ func TestGreetingRealArrivals(t *testing.T) {
 	}
 	t.Logf("%d sampled: %d spoke, %d stayed quiet, %d had something wrong with them",
 		*samples, spoke, silent, flagged)
+}
+
+// facts : The part of the prompt that is this arrival rather than
+// the standing instructions.
+//
+// Everything from where the instructions stop, which is where the
+// first of the fact blocks begins. Printed so that a window can be
+// read by a person before anybody asks a model about it.
+func facts(told greet.Told) string {
+	whole := greet.Prompt(told)
+	for _, mark := range []string{
+		"This was in their diary for the time they were away",
+		"Their devices reported nothing at all for these stretches",
+		"This is what you have come to know about them",
+		"What their devices reported in between",
+	} {
+		if i := strings.Index(whole, mark); i >= 0 {
+			return whole[i:]
+		}
+	}
+	return "(nothing)"
 }
 
 // wrong : The things that are wrong whatever the words are.
@@ -319,7 +381,7 @@ func compose(t *testing.T, events *eventmysql.Store, user, profile string,
 	}
 	all, err := events.Recent(t.Context(), user, event.Query{
 		Since: from, Until: at, Limit: OrdinaryMost,
-		Omit: append([]string{event.Stayed}, event.Churn...),
+		Omit: []string{event.Fixed},
 	})
 	if err != nil {
 		t.Fatalf("events: %v", err)

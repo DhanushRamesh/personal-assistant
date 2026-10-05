@@ -23,6 +23,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"sort"
+	"strconv"
 	"strings"
 	"time"
 
@@ -563,12 +564,19 @@ func happened(t Told) string {
 		"At that distance name the area and not the place, or say nothing about which it was and ask instead.",
 		"Never repeat a name from that far away as though it were a fact: being told they were at a restaurant they have never been to is worse than being told nothing.")
 
-	evs := t.Events
+	// The spans first, and taken out before the cap. A stay re-
+	// reports itself every five minutes while it is open and music
+	// reports every track, so left among the rest they crowd out
+	// everything else and then lose to the cap anyway. Folded, each
+	// is one line, and they are the two that say what somebody was
+	// actually doing.
+	spans, evs := spanned(t.Events, t.Now.Location())
 	if len(evs) > Most {
 		evs = evs[len(evs)-Most:]
 	}
 
-	lines := make([]string, 0, len(evs))
+	lines := make([]string, 0, len(evs)+len(spans))
+	lines = append(lines, spans...)
 	day := ""
 	for _, r := range folded(evs) {
 		at := r.first.In(t.Now.Location())
@@ -612,6 +620,148 @@ type run struct {
 	more        string
 	first, last time.Time
 	times       int
+}
+
+// Apart : How long a silence ends a sitting of music.
+//
+// A ride out with music on and a ride back with music on are two
+// sittings and not one three-hour one, and the difference decides
+// whether somebody could have been sitting in a cinema in between.
+const Apart = 20 * time.Minute
+
+// spanned : The stays and the listening as one line each, and
+// everything else unchanged.
+//
+// These two used to be left out of the greeting altogether, on the
+// grounds that a day of them is longer than a day of everything
+// else -- which is true of the rows and not of the facts. Owner,
+// looking at a window that had neither: *"stay should reach and
+// also the music, only then it can know whether I went to movie or
+// not."*
+//
+// Quite right, and they are the two that answer it. The diary says
+// a film at ten past six; where somebody sat for three hours says
+// whether they went, and music playing through those same hours
+// says they did not. Neither was in front of the model.
+//
+// A span rather than a count, because that is what they are. A stay
+// is one place for a stretch, however many times the phone said so
+// while it was open; a sitting of music is one sitting, however
+// many tracks.
+func spanned(evs []event.Event, where *time.Location) ([]string, []event.Event) {
+	type span struct {
+		what            string
+		first, last     time.Time
+		minutes, tracks int
+		detail          string
+	}
+	stays := map[string]*span{}
+	var sittings []*span
+	kept := make([]event.Event, 0, len(evs))
+
+	for _, e := range evs {
+		switch {
+		case e.Kind == event.Stayed:
+			at := valued(e)
+			s, had := stays[at]
+			if !had {
+				s = &span{what: at, first: e.OccurredAt, last: e.OccurredAt}
+				stays[at] = s
+			}
+			if e.OccurredAt.After(s.last) {
+				s.last = e.OccurredAt
+			}
+			if m := numbered(e, "minutes"); m > s.minutes {
+				s.minutes = m
+			}
+			if s.detail == "" {
+				s.detail = rest(e)
+			}
+		case strings.HasPrefix(e.Kind, "music."):
+			// A new sitting when the last one stopped long enough
+			// ago. Folding every track of an evening into one span
+			// said "listening until 9:23 pm" over music that played
+			// on the way out and again on the way back, which reads
+			// as three hours of it and is the opposite of the truth:
+			// somebody listening through a film did not watch one.
+			var at *span
+			if n := len(sittings); n > 0 && e.OccurredAt.Sub(sittings[n-1].last) < Apart {
+				at = sittings[n-1]
+			} else {
+				at = &span{first: e.OccurredAt, last: e.OccurredAt}
+				sittings = append(sittings, at)
+			}
+			if e.OccurredAt.After(at.last) {
+				at.last = e.OccurredAt
+			}
+			at.tracks++
+			if who := valued(e); who != "" && who != event.Unknown {
+				at.what = who
+				at.detail = rest(e)
+			}
+		default:
+			kept = append(kept, e)
+		}
+	}
+
+	out := make([]string, 0, len(stays)+1)
+	order := make([]*span, 0, len(stays))
+	for _, s := range stays {
+		order = append(order, s)
+	}
+	sort.Slice(order, func(i, j int) bool { return order[i].first.Before(order[j].first) })
+	for _, s := range order {
+		// Reported, not worked out. The duration is the sender's own
+		// and the row times are only when it said so; computing an
+		// end from the two produced a stay at home of nearly
+		// fourteen hours that ran straight through an evening out,
+		// because stays sharing a name are rejoined elsewhere.
+		line := s.first.In(where).Format("3:04 pm") + "  stayed at " + s.what
+		if s.minutes > 0 {
+			line += ", reported as " + spell(time.Duration(s.minutes)*time.Minute)
+		}
+		if s.last.After(s.first) {
+			line += ", still being reported at " + s.last.In(where).Format("3:04 pm")
+		}
+		out = append(out, line)
+	}
+	for _, m := range sittings {
+		line := m.first.In(where).Format("3:04 pm") + "  listening"
+		if m.last.After(m.first) {
+			line += " until " + m.last.In(where).Format("3:04 pm")
+		}
+		if m.what != "" {
+			line += ", " + m.what
+		}
+		if m.detail != "" {
+			line += "  (" + m.detail + ")"
+		}
+		out = append(out, line)
+	}
+	sort.SliceStable(out, func(i, j int) bool { return out[i] < out[j] })
+	return out, kept
+}
+
+// valued : A sender's own word for the thing.
+func valued(e event.Event) string { return value(e) }
+
+// numbered : A whole number out of the payload, or zero.
+func numbered(e event.Event, field string) int {
+	var fields map[string]any
+	if json.Unmarshal(e.Payload, &fields) != nil {
+		return 0
+	}
+	switch v := fields[field].(type) {
+	case float64:
+		return int(v)
+	case string:
+		n, err := strconv.Atoi(strings.TrimSpace(v))
+		if err != nil {
+			return 0
+		}
+		return n
+	}
+	return 0
 }
 
 // folded : The same thing happening repeatedly, as one line with a

@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"strings"
 	"testing"
 	"time"
@@ -295,7 +296,9 @@ func TestThePayloadCarriesMoreThanItsValue(t *testing.T) {
 		Events: []event.Event{stay, call}})
 
 	for _, want := range []string{
-		"place.stayed the office  (minutes 501, still)",
+		// A stay is a span now rather than a line of fields, because
+		// it re-reports itself every five minutes while it is open.
+		"stayed at the office, reported as 8 hours",
 		"call.ended Priya  (minutes 42)",
 	} {
 		if !strings.Contains(got, want) {
@@ -628,5 +631,49 @@ func TestACallIsNeededBeforeCallsAreMentioned(t *testing.T) {
 	rang.Events = append(rang.Events, happened("call.missed", "unknown", evening.Add(-time.Minute)))
 	if !strings.Contains(greet.Prompt(rang), "tried to reach them") {
 		t.Error("a window with a missed call was not told the rule about them")
+	}
+}
+
+// TestTheStayAndTheMusicReachTheModel : Owner, looking at a window
+// that had neither: "stay should reach and also the music, only
+// then it can know whether I went to movie or not."
+//
+// They are the two that answer it. Where somebody sat for three
+// hours says whether they went; music through the same hours says
+// they did not. Both used to be filtered out of the greeting
+// entirely because of how many rows they are, which is true of the
+// rows and not of the facts.
+func TestTheStayAndTheMusicReachTheModel(t *testing.T) {
+	at := func(h, m int) time.Time {
+		return time.Date(evening.Year(), evening.Month(), evening.Day(), h, m, 0, 0, evening.Location())
+	}
+	evs := []event.Event{
+		{Kind: "place.exited", OccurredAt: at(17, 57), Payload: []byte(`{"value":"home"}`)},
+	}
+	// A stay that said so every five minutes for three hours, the way
+	// an open one does.
+	for m := 0; m <= 170; m += 5 {
+		evs = append(evs, event.Event{Kind: "place.stayed", OccurredAt: at(18, 5).Add(time.Duration(m) * time.Minute),
+			Payload: []byte(fmt.Sprintf(`{"value":"Flavors non veg restaurant","minutes":%d}`, m))})
+	}
+	for m := 0; m < 40; m += 3 {
+		evs = append(evs, event.Event{Kind: "music.state", OccurredAt: at(17, 47).Add(time.Duration(m) * time.Minute),
+			Payload: []byte(`{"value":"Daft Punk","track":"Face to Face","playing":"true"}`)})
+	}
+
+	got := greet.Prompt(greet.Told{Now: at(21, 25), Since: at(16, 25), Events: evs})
+
+	if !strings.Contains(got, "stayed at Flavors non veg restaurant, reported as 2 hours 50 minutes") {
+		t.Errorf("the stay did not reach the model as one span:\n%s", got)
+	}
+	if !strings.Contains(got, "listening until") || !strings.Contains(got, "Daft Punk") {
+		t.Error("the music did not reach the model")
+	}
+	// One line each, not thirty-five and fourteen.
+	if n := strings.Count(got, "stayed at Flavors"); n != 1 {
+		t.Errorf("the stay was written out %d times", n)
+	}
+	if n := strings.Count(got, "listening until"); n != 1 {
+		t.Errorf("the listening was written out %d times", n)
 	}
 }

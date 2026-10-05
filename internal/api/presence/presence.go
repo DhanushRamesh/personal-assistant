@@ -342,10 +342,19 @@ func (h *Handler) happened(ctx context.Context, user string, from time.Time) ([]
 	}
 	all, err := h.reported.Recent(ctx, user, event.Query{
 		Since: since, Limit: OrdinaryMost,
-		// The working material as well as the stays: a track a song
-		// is a hundred rows an evening, and a greeting built from
-		// them would be nothing but what was playing.
-		Omit: append([]string{event.Stayed}, event.Churn...),
+		// The coordinates only. Every value is distinct, there are
+		// more of them than of everything else together, and none of
+		// them is a thing to say a sentence about.
+		//
+		// The stays and the music used to go with them, because a
+		// stay re-reports itself every five minutes and a track is a
+		// hundred rows an evening. That is true of the rows and not
+		// of the facts, and it cost the greeting the two things that
+		// say what somebody was actually doing -- owner: "stay should
+		// reach and also the music, only then it can know whether I
+		// went to movie or not." They are folded into one span each
+		// where the window is read.
+		Omit: []string{event.Fixed},
 		// Not what this machine reported about itself. It publishes
 		// its own network so the person's phone can be compared
 		// against it, and a laptop reconnecting to its own wifi is not
