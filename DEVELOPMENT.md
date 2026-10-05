@@ -9746,6 +9746,59 @@ grammatical, none reading a duration out loud, and all three about
 the right thing.
 
 
+## An ordinary day gets a section
+
+Owner: *"the profiling should have the daily routine section -- it
+should be able to profile my daily activities."*
+
+The material was already being asked for and had nowhere to live.
+WHAT IS SO holds one countable line per thing, ordered by how well
+established it is, so a day arrives in it shuffled: morning silence
+ends between 7:27 and 9:57 on one line, thirteen hours away on
+another, a call around eleven at night on a third. WHAT THEY ARE
+LIKE had *"and their weeks: what they do most days, where they go
+and when"* tacked to the end of a hundred and fifty words about
+everything else.
+
+So: **AN ORDINARY DAY**, between the two. The shape of one in the
+order it happens, ten lines at most, each an hour or a stretch and
+what is usually true of it. Hours as they would be said. Weekdays
+and the weekend named apart where the evidence tells them apart,
+and said to be indistinguishable where it does not, rather than
+averaged into a day nobody has. Every line marked with how sure it
+is, and an hour nothing is known about said to be unknown -- which
+is worth more than a guess, because this part exists to be **the
+thing an unusual day is measured against**.
+
+That is also why it is the greeting's section more than the
+profile's. Telling an ordinary evening from an odd one is the whole
+of what the greeting does, and until now the baseline for it was
+spread across two parts written for other purposes.
+
+The old sentence in WHAT THEY ARE LIKE is gone, so the two do not
+compete for the same hundred and fifty words. That part now covers
+their weeks -- which days differ and how -- and leaves the day
+itself above.
+
+### It could not have been added without raising the cap
+
+The description stood at **3,988 runes of the 4,000** a memory is
+allowed. Twelve characters of headroom, which is not a description
+that had said what there was to say; it is one that stopped. The
+next thing worth adding would have failed `Valid()` and the symptom
+is a profile that quietly stops being rewritten -- which is exactly
+what happened on 4 October.
+
+Raised by who writes it rather than by what it says.
+`memory.MaxBody` stays at 4,000 for everything a person asked to
+have kept, because a memory is a fact and anything longer is a
+conversation that wanted condensing. The standing description is
+the one memory that is a document on purpose, so
+`memory.Written()` builds it and `MaxWritten` allows eight
+thousand. The flag is not stored: it decides how long the body may
+be and nothing else.
+
+
 ## 12. Maintaining this file
 
 When the owner states a preference, makes a decision, or corrects something,

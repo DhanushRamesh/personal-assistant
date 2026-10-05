@@ -6,6 +6,7 @@ import (
 	"time"
 
 	"github.com/DhanushRamesh/personal-assistant/internal/conversation"
+	"github.com/DhanushRamesh/personal-assistant/internal/memory"
 	"github.com/DhanushRamesh/personal-assistant/internal/profile"
 )
 
@@ -77,5 +78,51 @@ func TestRenamingIsNotAnswered(t *testing.T) {
 	}
 	if !found {
 		t.Error("a warning spoken unasked is not weighed")
+	}
+}
+
+// TestTheDayHasASectionOfItsOwn : Owner: "the profiling should have
+// the daily routine section -- it should be able to profile my daily
+// activities."
+//
+// It is also what the greeting needs most. Telling an unusual day
+// from an ordinary one is the whole of that job, and the ordinary
+// one was scattered across two parts written for other purposes.
+func TestTheDayHasASectionOfItsOwn(t *testing.T) {
+	asked := profile.Prompt(nil, "", "", nil, "")
+	for _, want := range []string{
+		"Write three parts",
+		"AN ORDINARY DAY",
+		"in the order it happens, from waking to sleeping",
+		"If weekdays and the weekend are different days, say so",
+		"An hour nothing is known about is said to be unknown",
+		"the thing an unusual day is measured against",
+	} {
+		if !strings.Contains(asked, want) {
+			t.Errorf("the ordinary day is not asked for: %q missing", want)
+		}
+	}
+	// And the old home for it has given it up, so the two do not
+	// compete for the same hundred and fifty words.
+	if strings.Contains(asked, "And their weeks: what they do most days") {
+		t.Error("the day is still being asked for twice")
+	}
+}
+
+// TestTheDescriptionMayBeLongerThanAMemory : It stood at 3,988 runes
+// of the 4,000 a memory is allowed, which is not a description that
+// had finished -- it is one that stopped. A section could not be
+// added to it without the save failing, silently.
+func TestTheDescriptionMayBeLongerThanAMemory(t *testing.T) {
+	long := strings.Repeat("a", memory.MaxBody+500)
+	if _, err := memory.New("usr_1", memory.TierAlways, profile.Subject, long); err == nil {
+		t.Error("a memory somebody asked to keep is no longer held to its length")
+	}
+	if _, err := memory.Written("usr_1", memory.TierAlways, profile.Subject, long); err != nil {
+		t.Errorf("the description the server writes for itself was refused: %v", err)
+	}
+	tooLong := strings.Repeat("a", memory.MaxWritten+1)
+	if _, err := memory.Written("usr_1", memory.TierAlways, profile.Subject, tooLong); err == nil {
+		t.Error("there is no limit at all on what the server writes")
 	}
 }

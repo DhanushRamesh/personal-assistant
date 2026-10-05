@@ -30,7 +30,7 @@ func Prompt(said []conversation.Message, rhythm, asking string, replies []conver
 			"The assistant reads this before it answers them, so a thing you leave out is a thing it will not know.",
 		),
 		prompt.Text(
-			"Write two parts, in this order and with these headings exactly.",
+			"Write three parts, in this order and with these headings exactly.",
 		),
 		prompt.Text(
 			"WHAT IS SO",
@@ -40,13 +40,22 @@ func Prompt(said []conversation.Message, rhythm, asking string, replies []conver
 			"Order them by how well established they are, not by how interesting.",
 		),
 		prompt.Text(
+			"AN ORDINARY DAY",
+			"The shape of one, in the order it happens, from waking to sleeping. Ten lines at most.",
+			"Each line is an hour or a stretch of hours and what is usually true of it -- when they are first about, when they leave if they leave, where they go, how long they are gone, when they are back, when they settle, when they stop.",
+			"Hours as they would be said, and a range where it is a range: around nine, between seven and ten, not 09:00.",
+			"Say which days it is true of. If weekdays and the weekend are different days, say so and give whichever you have the evidence for; if you cannot tell them apart, say that instead of averaging them into a day nobody has.",
+			"Mark every line with how sure it is -- most days, usually, sometimes, once or twice -- and leave out anything you would have to invent to fill the gap. An hour nothing is known about is said to be unknown, which is worth more than a guess at it.",
+			"The point of this part is to be the thing an unusual day is measured against, so a line that is nearly always true is worth more than an interesting one.",
+		),
+		prompt.Text(
 			"WHAT THEY ARE LIKE",
 			"Plain sentences, third person, under a hundred and fifty words, no headings and no lists.",
 			"What the first part adds up to.",
 			"What they talk about, and which of it keeps coming back rather than having come up once.",
 			"The people in their life, by name, and who those people are to them.",
 			"How they behave: how they ask for things, what they want more of and less of, what they lose patience with.",
-			"And their weeks: what they do most days, where they go and when, how long they stay, and what tends to follow what.",
+			"Their weeks rather than their days -- which days differ from the others and how -- since the day itself is the part above.",
 			"This part may say things the counts only imply, and it is the only part that may.",
 		),
 		prompt.Text(

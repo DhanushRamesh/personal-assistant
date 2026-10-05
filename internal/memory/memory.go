@@ -30,6 +30,20 @@ const MaxSubject = 160
 // wanted condensing.
 const MaxBody = 4000
 
+// MaxWritten : The longest a memory the server writes for itself may be.
+//
+// One memory is a document on purpose: the standing description of the
+// person, rewritten daily from everything they said and everything their
+// devices reported, and read before every answer. It is not a fact
+// somebody asked to have kept, so the rule above is not about it.
+//
+// Raised because it had run out. It stood at 3,988 of the 4,000 it was
+// allowed, which is not a description that had said what there was to say
+// -- it is one that stopped. Twelve characters of headroom also means the
+// next thing worth adding fails to save, silently, and the symptom is a
+// profile that quietly stops being rewritten.
+const MaxWritten = 8000
+
 // Tier : How a memory reaches the model.
 type Tier string
 
@@ -59,6 +73,12 @@ type Memory struct {
 	Subject string
 	// Body : The memory itself.
 	Body string
+	// Written : Whether the server wrote this for itself rather than
+	// the person asking for it to be kept.
+	//
+	// Not stored. It decides how long the body may be and nothing
+	// else, and it is only ever true while one is on its way in.
+	Written bool
 	// EmbedModel : What produced Embedding. Empty when it has none.
 	EmbedModel string
 	// Embedding : The vector for Text, or nil when it has not been embedded.
@@ -126,10 +146,22 @@ func (m *Memory) Valid() error {
 		return ErrNoBody
 	case utf8.RuneCountInString(m.Subject) > MaxSubject:
 		return ErrSubjectTooLong
-	case utf8.RuneCountInString(m.Body) > MaxBody:
+	case utf8.RuneCountInString(m.Body) > m.longest():
 		return ErrBodyTooLong
 	}
 	return nil
+}
+
+// longest : How long this memory may be.
+//
+// By who wrote it rather than by what it says. Everything a person asked
+// to have kept is held to MaxBody; the one the server writes for itself
+// is a document and is held to MaxWritten.
+func (m *Memory) longest() int {
+	if m.Written {
+		return MaxWritten
+	}
+	return MaxBody
 }
 
 // NewID : A fresh memory identifier.
@@ -147,6 +179,20 @@ func ValidID(id string) bool {
 
 // New : A memory ready to be stored, or why it cannot be.
 func New(userID string, tier Tier, subject, body string) (*Memory, error) {
+	return made(userID, tier, subject, body, false)
+}
+
+// Written : A memory the server wrote for itself, ready to be stored.
+//
+// The same thing with a longer body allowed. One exists -- the standing
+// description -- and the difference is who it is for: a person's memory
+// is a fact they asked to have kept, and this is a document the server
+// rewrites daily and reads before every answer.
+func Written(userID string, tier Tier, subject, body string) (*Memory, error) {
+	return made(userID, tier, subject, body, true)
+}
+
+func made(userID string, tier Tier, subject, body string, written bool) (*Memory, error) {
 	at := now()
 	m := &Memory{
 		ID:        NewID(),
@@ -154,6 +200,7 @@ func New(userID string, tier Tier, subject, body string) (*Memory, error) {
 		Tier:      tier,
 		Subject:   strings.TrimSpace(subject),
 		Body:      strings.TrimSpace(body),
+		Written:   written,
 		CreatedAt: at,
 		UpdatedAt: at,
 	}

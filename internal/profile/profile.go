@@ -356,7 +356,10 @@ func (b *Builder) keep(ctx context.Context, userID, body string) error {
 		return nil
 	}
 
-	m, err := memory.New(userID, memory.TierAlways, Subject, body)
+	// The server's own, so it is held to the longer limit. A
+	// description is a document by design; everything a person asked
+	// to have kept is still a fact and still short.
+	m, err := memory.Written(userID, memory.TierAlways, Subject, body)
 	if err != nil {
 		return fmt.Errorf("profile: describing them: %w", err)
 	}

@@ -355,7 +355,7 @@ func TestDifferentThingsAreKept(t *testing.T) {
 func TestThePromptAsksForTwoLayers(t *testing.T) {
 	p := profile.Prompt(said(3), "", "", nil, "")
 
-	for _, want := range []string{"WHAT IS SO", "WHAT THEY ARE LIKE"} {
+	for _, want := range []string{"WHAT IS SO", "AN ORDINARY DAY", "WHAT THEY ARE LIKE"} {
 		if !strings.Contains(p, want) {
 			t.Errorf("the prompt does not ask for the %q part", want)
 		}

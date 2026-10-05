@@ -47,6 +47,7 @@ var (
 	seed    = flag.Uint64("seed", 0, "0 picks one and prints it, so a run can be repeated")
 	arrived = flag.String("at", "", "one arrival instead of a sample, as 2006-01-02 15:04 in their own zone")
 	spokeAt = flag.String("since", "", "when the assistant last spoke before it, same format")
+	replay  = flag.Int("real", 0, "replay the last N greetings that were actually spoken, against the prompt as it stands")
 	dry     = flag.String("dry", "", "\"facts\" prints this arrival's half of the prompt, \"all\" the whole of it; neither asks the model")
 )
 
@@ -154,6 +155,55 @@ func TestGreetingRealArrivals(t *testing.T) {
 		env = provider(t, cfg, quiet)
 	}
 	now := time.Now().In(where)
+
+	// Every arrival that really happened, against the prompt as it
+	// stands now. What it said at the time is printed beside what it
+	// would say today, because the only verdict worth having is one
+	// made on a real moment somebody remembers.
+	if *replay > 0 {
+		type spoken struct {
+			At   time.Time
+			Said string
+		}
+		var rows []spoken
+		if err := db.DB.Raw(`
+			SELECT created_at AS at, content AS said
+			FROM messages WHERE role = 'assistant' AND kind = 'presence'
+			ORDER BY created_at DESC LIMIT ?`, *replay).Scan(&rows).Error; err != nil {
+			t.Fatalf("reading what was said: %v", err)
+		}
+		for i, j := 0, len(rows)-1; i < j; i, j = i+1, j-1 {
+			rows[i], rows[j] = rows[j], rows[i]
+		}
+		for n, r := range rows {
+			at := r.At.In(where)
+			var prev time.Time
+			db.DB.Raw(`SELECT created_at FROM messages
+				WHERE role = 'assistant' AND created_at < ?
+				ORDER BY created_at DESC LIMIT 1`, r.At).Scan(&prev)
+			since := prev.In(where)
+			if prev.IsZero() {
+				since = at.Add(-greet.Recent)
+			}
+			told, events := compose(t, events, user, profile, diary, at, since, where)
+
+			fmt.Printf("\n── %d · %s · %d events since %s\n",
+				n+1, at.Format("Mon 2 Jan 3:04 pm"), events, since.Format("Mon 3:04 pm"))
+			for _, a := range told.Were {
+				fmt.Printf("   diary while out: %s at %s\n", a.What, a.When.In(where).Format("3:04 pm"))
+			}
+			fmt.Printf("   then: %q\n", strings.TrimSpace(r.Said))
+			if n > 0 {
+				time.Sleep(3 * time.Second)
+			}
+			said, took := ask(t, env, cfg, told)
+			fmt.Printf("   now:  %q   %v\n", said, took)
+			for _, w := range wrong(said, told) {
+				fmt.Printf("   ✗ %s\n", w)
+			}
+		}
+		return
+	}
 
 	// One named arrival instead of a sample, so a window somebody
 	// wants to look at twice can be looked at twice.
