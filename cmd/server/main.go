@@ -4,6 +4,7 @@ package main
 import (
 	"cmp"
 	"context"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"log/slog"
@@ -12,6 +13,7 @@ import (
 	"os/signal"
 	"runtime/debug"
 	"slices"
+	"strings"
 	"sync"
 	"syscall"
 	"time"
@@ -38,6 +40,7 @@ import (
 	"github.com/DhanushRamesh/personal-assistant/internal/google"
 	googlemysql "github.com/DhanushRamesh/personal-assistant/internal/google/mysql"
 	"github.com/DhanushRamesh/personal-assistant/internal/greet"
+	"github.com/DhanushRamesh/personal-assistant/internal/leaving"
 	"github.com/DhanushRamesh/personal-assistant/internal/llm"
 	"github.com/DhanushRamesh/personal-assistant/internal/logging"
 	"github.com/DhanushRamesh/personal-assistant/internal/mail"
@@ -494,6 +497,15 @@ func run() error {
 		defer watching.Done()
 		lookingAhead(remindCtx, cfg, comingDiary(googleLink, cfg), comingmysql.New(db.DB),
 			chats, answerer, speaker, announcements, logger.Logger)
+	}()
+
+	// And when to set off for it, which is the half the diary cannot
+	// say on its own: it knows the hour and not the road.
+	watching.Add(1)
+	go func() {
+		defer watching.Done()
+		settingOff(remindCtx, cfg, comingDiary(googleLink, cfg), mapping(cfg),
+			deviceEvents, chats, speaker, announcements, logger.Logger)
 	}()
 
 	handler := api.New(api.Options{
@@ -1342,6 +1354,151 @@ func lookingAhead(
 	ahead.Run(ctx, func(ctx context.Context) ([]string, error) {
 		return talkers.Talkers(ctx, cfg.Assistant.Now().Add(-notice.Since))
 	})
+}
+
+// settingOff : Says when to leave for something with an address.
+//
+// Everything that decides lives in internal/leaving. This is only
+// the wiring: where the diary comes from, how far away a place is,
+// who is in the room, and where the words go.
+//
+// The one announcement on the list that the person could not work
+// out faster themselves. They know the film is at ten past six;
+// what they do not know, standing in the kitchen, is that the road
+// is busy tonight.
+func settingOff(
+	ctx context.Context,
+	cfg config.Config,
+	diary coming.Diary,
+	maps mapstool.Maps,
+	stays interface {
+		Recent(ctx context.Context, userID string, q event.Query) ([]event.Event, error)
+	},
+	talkers interface {
+		Talkers(ctx context.Context, since time.Time) ([]string, error)
+	},
+	speaker announce.Announcer,
+	announcements *announcement.Writer,
+	logger *slog.Logger,
+) {
+	here, err := hass.NewPresence(hass.PresenceConfig{
+		URL:    cfg.HomeAssistant.URL,
+		Token:  cfg.HomeAssistant.Token,
+		Entity: cfg.HomeAssistant.PresenceEntity,
+	})
+	// Four things are needed and any one of them missing turns the
+	// feature off rather than half on. Said once at startup, because
+	// a silent assistant and a broken one look identical.
+	if err != nil || diary == nil || maps == nil || speaker == nil || !speaker.Available() {
+		logger.Info("saying nothing about when to set off, " +
+			"with no diary, no map, nothing watching the room or nowhere to say it")
+		return
+	}
+
+	off := &leaving.Watcher{
+		Diary: func(ctx context.Context, userID string, from, to time.Time) ([]leaving.Appointment, error) {
+			found, _, err := diary.Everywhere(ctx, userID, from, to)
+			if err != nil {
+				return nil, err
+			}
+			out := make([]leaving.Appointment, 0, len(found))
+			for _, e := range found {
+				// All day is not a thing to set off for, and an
+				// entry with nowhere to go has nothing to work out.
+				if e.AllDay || strings.TrimSpace(e.Where) == "" {
+					continue
+				}
+				out = append(out, leaving.Appointment{
+					What: e.Title, When: e.Starts, Where: e.Where,
+				})
+			}
+			return out, nil
+		},
+		Journey: func(ctx context.Context, userID, where string) (time.Duration, error) {
+			return howFar(ctx, maps, stays, userID, where)
+		},
+		Say: func(ctx context.Context, userID, text string) error {
+			if err := announcement.Speak(ctx, speaker, conversation.Coming, text); err != nil {
+				return err
+			}
+			announcements.Coming(ctx, userID, text)
+			return nil
+		},
+		Here: func(userID string) (bool, bool) {
+			present, known := here.Here(ctx, userID)
+			return present, known
+		},
+		Now:    cfg.Assistant.Now,
+		Logger: logger,
+	}
+
+	logger.Info("saying when to set off",
+		slog.Duration("every", leaving.Every),
+		slog.Duration("soon", leaving.Soon),
+		slog.Duration("door", leaving.Door))
+
+	off.Run(ctx, func(ctx context.Context) ([]string, error) {
+		return talkers.Talkers(ctx, cfg.Assistant.Now().Add(-notice.Since))
+	})
+}
+
+// howFar : How long it takes to get from where they are to a place
+// the diary named.
+//
+// Two calls to the map, and the first is the one that can be wrong:
+// an address out of a calendar is written by whoever made the entry
+// and may be anything. Where it cannot be found there is no journey
+// and nothing is said, which is right -- a guessed destination gives
+// a confident time to the wrong place.
+func howFar(ctx context.Context, maps mapstool.Maps,
+	stays interface {
+		Recent(ctx context.Context, userID string, q event.Query) ([]event.Event, error)
+	},
+	userID, where string) (time.Duration, error) {
+
+	lat, lon, ok := lastSeenAt(ctx, stays, userID)
+	if !ok {
+		return 0, fmt.Errorf("leaving: nothing says where they are")
+	}
+	found, err := maps.Find(ctx, where, mapstool.Country, 1)
+	if err != nil {
+		return 0, err
+	}
+	if len(found) == 0 {
+		return 0, fmt.Errorf("leaving: no such place as %q", where)
+	}
+	journey, err := maps.Route(ctx, lat, lon, found[0].Lat, found[0].Lon, place.Driving)
+	if err != nil {
+		return 0, err
+	}
+	return journey.Takes, nil
+}
+
+// lastSeenAt : Where they were last reported to be.
+//
+// The newest stay, which is the one thing that carries a coordinate
+// and a name together. How long they have been there is not asked
+// for and must not be: that number has been wrong -- a stay at home
+// reporting nearly fourteen hours straight through an evening out,
+// because the phone reports leaving a place and never reports
+// coming back -- and a journey does not need it.
+func lastSeenAt(ctx context.Context, stays interface {
+	Recent(ctx context.Context, userID string, q event.Query) ([]event.Event, error)
+}, userID string) (lat, lon float64, ok bool) {
+	if stays == nil {
+		return 0, 0, false
+	}
+	found, err := stays.Recent(ctx, userID, event.Query{Kind: event.Stayed, Limit: 1})
+	if err != nil || len(found) == 0 {
+		return 0, 0, false
+	}
+	var into struct {
+		At string `json:"at"`
+	}
+	if json.Unmarshal(found[0].Payload, &into) != nil {
+		return 0, 0, false
+	}
+	return event.LatLon(into.At)
 }
 
 // noticeFirst : How long after startup the watcher starts looking.
