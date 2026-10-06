@@ -11446,6 +11446,22 @@ server is made to survive it instead.
 	{"value":"{\"value\":\"Geek Music\",\"from\":\"\"q\" in Search\"}"}
 	  -> {"value": "unknown", "unparsed": "{\"value\":\"Geek Music\",…"}
 
+#### And the thirty-one already written
+
+Repaired in place on the day, dumped first. The seventeen power
+readings got their level back; the fourteen broken ones kept
+their text under `unparsed`.
+
+The point of it, in one line -- the labels before and after:
+
+	music.state <fourteen different broken strings>   1 each
+	music.state unknown                              14
+
+Fourteen things the person had each done exactly once became one
+thing they could not be told about, which is the truth. Underneath
+them the real labels sort properly again: Daft Punk 14, Shankar
+Mahadevan 9.
+
 
 ## 12. Maintaining this file
 
