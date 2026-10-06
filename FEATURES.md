@@ -36,7 +36,7 @@ flowchart TB
 
     CORE["The core<br/>persona, memory, tool loop"]
     MODEL["Model<br/>PlatformAI"]
-    TOOLS["55 tools<br/>section 2"]
+    TOOLS["56 tools<br/>section 2"]
     DB[("MySQL<br/>reminders, memories, events,<br/>conversations, places, profile")]
 
     CORE <--> MODEL
@@ -57,7 +57,7 @@ flowchart TB
 
 ## 2. What it can do when asked
 
-55 tools, grouped by what they are about. The model picks; nothing
+56 tools, grouped by what they are about. The model picks; nothing
 here is keyword matched.
 
 ```mermaid
@@ -74,6 +74,7 @@ flowchart LR
     CORE --- WEB["Web<br/>search, read"]
     CORE --- CONV["Conversations<br/>new, list, find, switch,<br/>rename, archive, delete"]
     CORE --- RULE["Rules<br/>add, list, cancel"]
+    CORE --- SIT["Situations<br/>find"]
     CORE --- MISC["Other<br/>coming_settled, tool_describe"]
 ```
 
@@ -94,7 +95,7 @@ everywhere here.
 flowchart TB
     subgraph L["The logic -- is there something to say?"]
         direction LR
-        SI["Situations<br/>missed calls, a dead charger,<br/>a device gone quiet"]
+        SI["Situations<br/>missed calls, a dead charger,<br/>a device gone quiet<br/>a rule and a tool, section 6"]
         RN["Renaming"]
         RM["Reminders"]
         GR["Greeting"]
@@ -287,7 +288,7 @@ flowchart TB
     WHAT -- "check a condition" --> GATE{"Does it hold?<br/>an event value, how old it is,<br/>or who is in the room"}
     WHAT -- "ask the model to write one" --> MODEL{"Anything worth saying?<br/>may call the tools<br/>the rule named"}
     WHAT -- "say a fixed sentence" --> OUT["Published to the outbox<br/>section 3 takes it from there"]
-    WHAT -- "run a tool" --> TOOL["One of the 55 -- reading ones only<br/>what it returns is kept<br/>for the steps after it"]
+    WHAT -- "run a tool" --> TOOL["One of the 56 -- reading ones only<br/>what it returns is kept<br/>for the steps after it"]
 
     GATE -- "no, or nothing is known" --> STOP["Nothing after it runs<br/>not a failure; the row<br/>says what stopped it"]
     MODEL -- "NOTHING" --> STOP
@@ -326,6 +327,12 @@ A trigger is narrower than a check: it must name something that
 *arrives*. Not presence, which is asked of Home Assistant rather
 than reported, and not `older than`, which could never be true at
 the moment a reading lands.
+
+**A tool can end a sequence too**, by answering `NOTHING` — the
+same word a write step uses for it. That is what lets a rule look
+for something every two minutes without asking a model to say
+nothing seven hundred times a day: the looking is cheap and
+deterministic, the sentence is neither.
 
 **Four things a step can do:** say a fixed sentence, run one of the
 tools that already exist, check a condition, or ask the model to
@@ -447,10 +454,9 @@ staying where they are.
 
 Kept here so it is not rediscovered.
 
-- Six of the seven watchers are still loops in Go. Immediate has
-  moved; reminders move last. Situations, the diary and leave-by
-  are no longer blocked — a rule now remembers what it said and
-  will not say it again — but none has been moved across.
+- Five of the seven watchers are still loops in Go. Immediate and
+  situations have moved; reminders move last. The diary and
+  leave-by are no longer blocked and have not been moved.
 - **Greeting and renaming are not moving, by decision.** They stay
   as they are. Neither is a standing rule, and neither would be
   better as one — see DEVELOPMENT.md. Four producers are in scope,

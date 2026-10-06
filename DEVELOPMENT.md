@@ -11680,6 +11680,84 @@ four arguments, and the engine's own words for this were already
 *a sequence is one turn*.
 
 
+### Situations move, and the judging stays in Go
+
+Owner, 6 October 2026: *"move situations."*
+
+The first thing reading the code said was that half of it had
+already moved. Situations does not speak; it publishes to the
+outbox, and has since the outbox existed. What was left to move
+was the two minute loop, the presence gate, the keyed dedupe, and
+the calling of three checks.
+
+#### What must not move
+
+The three checks are careful Go. Somebody tried twice and did not
+get through; a charger has been in an hour and moved nothing; a
+device that reports every few minutes has stopped. Each has a
+window, a threshold and eight tests behind it.
+
+A rule could have been written to do this -- give a model the last
+three hours of readings and ask whether anything is amiss. It
+would have worked, sometimes, and it would have been putting back
+exactly what was taken out of the unasked remarks in the first
+place: *an unusual event and an event worth interrupting somebody
+for are not the same thing, and nothing here can tell which it
+has.*
+
+So the looking stayed Go, behind a tool. What moved is **when to
+look and what to do about it**, which is all the engine was ever
+for.
+
+#### A tool may end a sequence by finding nothing
+
+This is the piece that made it worth doing rather than merely
+possible.
+
+A rule is `[situation_find, write]`. If the tool found something
+the model says it in its own manner; if it found nothing the
+sequence has to stop before the model is asked, or looking every
+two minutes costs seven hundred model calls a day to say nothing.
+
+The word for that already existed. A write step answers `NOTHING`
+when there is nothing worth saying, so a **tool** that answers
+`NOTHING` ends the sequence the same way. No new type, no new
+outcome, no column: one shared constant doing in two places what
+it already did in one.
+
+Proved on the first run: the tool ran, found nothing, and the
+model was never asked.
+
+#### Two things the watcher did that nothing does now
+
+**It held a situation said for six hours**, keyed per check. That
+is gone and is not missed -- a rule is told what it said last time
+and asked whether what it has is the same news. Which also covers
+the case the key could not: the quiet check's sentence says how
+long the silence has been, so it was a different sentence every
+run and only the key kept it quiet. A judgement about meaning
+handles both; a key handled one.
+
+**It asked whether anybody was in the room.** Presence belongs to
+the client now. The server publishes a copy per client and each
+decides for itself whether anybody heard, which is the whole point
+of the outbox and was already true of everything else it carried.
+
+#### What was deleted
+
+`situation.Watcher`, its `Events`, `Say` and `Here`, the `said`
+map behind the dedupe, and `watchingFor` in the server. The
+constants stayed with a note saying they are no longer read here:
+`Every` is the number the rule was made with, and `Again` is a
+record of how long six hours seemed when that was the mechanism.
+
+Five tests went with the watcher. Three of them were about the
+tool and were rewritten against it; the other two described the
+dedupe and the presence gate, and where each of those went is
+written into the test file that replaced them, so that nobody
+looks for them in the old place.
+
+
 ## 12. Maintaining this file
 
 When the owner states a preference, makes a decision, or corrects something,

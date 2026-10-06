@@ -81,6 +81,7 @@ import (
 	placestool "github.com/DhanushRamesh/personal-assistant/internal/tool/places"
 	"github.com/DhanushRamesh/personal-assistant/internal/tool/reminders"
 	"github.com/DhanushRamesh/personal-assistant/internal/tool/rules"
+	situationstool "github.com/DhanushRamesh/personal-assistant/internal/tool/situations"
 	taskstool "github.com/DhanushRamesh/personal-assistant/internal/tool/tasks"
 	webtool "github.com/DhanushRamesh/personal-assistant/internal/tool/web"
 	"github.com/DhanushRamesh/personal-assistant/internal/vocabulary"
@@ -301,6 +302,15 @@ func run() error {
 
 	tools, err := tool.NewRegistry(slices.Concat(
 		conversations.All(chats),
+		situationstool.Tools(deviceEvents, []situation.Check{
+			// The three shapes, in the order they are looked for.
+			// Somebody trying and not getting through comes first:
+			// it is about a person, and the other two are about a
+			// device.
+			situation.Trying,
+			situation.NotCharging,
+			situation.Quiet,
+		}, cfg.Assistant.Now),
 		rules.All(jobmysql.New(db.DB), rules.Clock{
 			Now: cfg.Assistant.Now, Location: cfg.Assistant.Location,
 		}, jobmysql.ID, known),
@@ -661,15 +671,6 @@ func run() error {
 	logger.Info("running what is scheduled",
 		slog.Duration("every", job.Tick),
 		slog.Duration("too late to bother", job.Stale))
-
-	// And what several of them together mean, which no single one
-	// of them does.
-	watching.Add(1)
-	go func() {
-		defer watching.Done()
-		watchingFor(remindCtx, cfg, deviceEvents, chats, speaker,
-			publishing, logger.Logger)
-	}()
 
 	handler := api.New(api.Options{
 		Logger:        logger.Logger,
@@ -1664,76 +1665,6 @@ func lookingAhead(
 	})
 }
 
-// watchingFor : Says what several facts together mean.
-//
-// The third kind of thing said unasked. Everything that decides
-// lives in internal/situation; this is the wiring, and the list of
-// checks, which is the only part worth reading.
-func watchingFor(
-	ctx context.Context,
-	cfg config.Config,
-	reported situation.Events,
-	talkers subscribed,
-	speaker announce.Announcer,
-	publishing *outbox.Publisher,
-	logger *slog.Logger,
-) {
-	here, err := hass.NewPresence(hass.PresenceConfig{
-		URL:    cfg.HomeAssistant.URL,
-		Token:  cfg.HomeAssistant.Token,
-		Entity: cfg.HomeAssistant.PresenceEntity,
-	})
-	if err != nil || speaker == nil || !speaker.Available() {
-		logger.Info("saying nothing about what things add up to, " +
-			"with nothing watching the room or nowhere to say it")
-		return
-	}
-
-	watch := &situation.Watcher{
-		Events: reported,
-		Checks: []situation.Check{
-			// Somebody who needs something, before the greeting
-			// would have got round to it.
-			situation.Trying,
-			// A charger doing nothing, while the cable is still an
-			// arm's length away.
-			situation.NotCharging,
-			// A device that reports every few minutes and has
-			// stopped. Invisible from both ends: the phone
-			// believes it is sending and the server has nothing
-			// to report on.
-			situation.Quiet,
-		},
-		// Written down rather than said. What a situation adds up
-		// to is this watcher's business; whether it reaches
-		// anybody, and what happens if it does not, is the
-		// deliverer's.
-		Say: func(ctx context.Context, userID, text string) error {
-			o, err := outbox.New(outboxmysql.ID(), userID,
-				conversation.Immediate, text, cfg.Assistant.Now())
-			if err != nil {
-				return err
-			}
-			return publishing.Publish(ctx, o)
-		},
-		Here: func(userID string) (bool, bool) {
-			present, known := here.Here(ctx, userID)
-			return present, known
-		},
-		Now:    cfg.Assistant.Now,
-		Logger: logger,
-	}
-
-	logger.Info("saying what things add up to",
-		slog.Int("checks", len(watch.Checks)),
-		slog.Duration("every", situation.Every),
-		slog.Duration("behind", situation.Behind))
-
-	watch.Run(ctx, func(ctx context.Context) ([]string, error) {
-		return talkers.Talkers(ctx, cfg.Assistant.Now().Add(-chat.Active))
-	})
-}
-
 // settingOff : Says when to leave for something with an address.
 //
 // Everything that decides lives in internal/leaving. This is only
@@ -2097,6 +2028,17 @@ func (d doing) Do(ctx context.Context, run job.Turn, s job.Step) (job.Outcome, e
 		}
 		d.logger.InfoContext(ctx, "a job ran a tool",
 			slog.String("tool", s.Tool), slog.String("outcome", string(out.Outcome)))
+
+		// A tool may end the sequence by finding nothing, in the
+		// same word a write step uses for it. Without this a rule
+		// that looks for something unusual every two minutes asks
+		// a model to say nothing seven hundred times a day: the
+		// looking is cheap and deterministic, and the sentence is
+		// neither.
+		if prompt.Nothing(out.Content) {
+			return job.Outcome{Stop: true, Why: s.Tool + " found nothing", Said: run.Before}, nil
+		}
+
 		// Kept for the steps after it. A write step composes its
 		// sentence out of whatever the sequence just found.
 		return job.Outcome{Got: out.Content}, nil
