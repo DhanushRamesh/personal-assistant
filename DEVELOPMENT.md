@@ -12070,6 +12070,47 @@ entirely out of yesterday is yesterday's, and writing it again
 would only move its date.
 
 
+### Saying the old time twice
+
+Owner, 7 October 2026, with a screenshot of the speaker having
+said it:
+
+	Moved to 7:00 am tomorrow, sir. It was at 6:00 am.
+	The time was 6:00 am on Wednesday 7 October 2026 before.
+
+Two sentences about the same fact, the second one a machine's.
+
+`Changed` owes the answer the **from** value, on reasoning that
+is still right: *the from is what gets dropped, every time, and
+it is the half they cannot reconstruct*. `Ensure` appends a
+sentence when an owed fact is missing.
+
+What it called missing was wrong. The fact is built by `spell`,
+which writes `3:04 pm on Monday 2 January 2006` -- the whole
+date, because that is what the tool shows the model. The test was
+`strings.Contains`, so the answer had to carry that spelling
+exactly. It said "6:00 am", as anybody would, and was judged to
+have left the old time out.
+
+So the check reads the substance rather than the spelling: a fact
+counts as said when the answer carries the whole of it **or its
+leading two words**. A time, a title or a name is distinctive in
+its first word or two, and the rest of the spelling is the
+model's business.
+
+Two words, not one -- "the" would pass anything -- and not three,
+which starts spelling out a date again. A fact of fewer than
+three words has no front to lead with and is still matched whole.
+
+**What is still caught.** Dropping the old value altogether,
+which is the thing this exists for. And a wrong one: *"it was at
+8:00 am"* does not carry "6:00", so the sentence is still added.
+
+Saying it loosely is a worse answer than saying it exactly.
+Saying it twice is worse than either, and it is the one of the
+three that sounds broken.
+
+
 ## 12. Maintaining this file
 
 When the owner states a preference, makes a decision, or corrects something,

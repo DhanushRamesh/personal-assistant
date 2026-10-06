@@ -328,13 +328,61 @@ func Merged(owed []Owed) []Owed {
 // crude and deliberately so: a false negative costs one redundant
 // clause, and a false positive costs the person the thing they asked
 // to be told.
+// carries : Whether an answer has said a fact, in its own words.
+//
+// Not the exact spelling, which is what this used to demand and
+// what made it wrong. A reminder moved from six to seven read:
+//
+//	Moved to 7:00 am tomorrow, sir. It was at 6:00 am.
+//	The time was 6:00 am on Wednesday 7 October 2026 before.
+//
+// The second sentence is this function's doing. The fact owed was
+// the fully spelled "6:00 am on Wednesday 7 October 2026"; the
+// answer said "6:00 am", which does not contain it, so the whole
+// sentence was appended and the old time was said twice -- once
+// as somebody would say it and once as a machine would.
+//
+// What is being guarded is that the old value is not dropped
+// altogether, because it is the half they cannot reconstruct.
+// Leading with it is enough to show it was not: a time, a title
+// or a name is distinctive in its first word or two, and the
+// spelling of the rest is the model's business. Saying it twice
+// is worse than saying it loosely.
+func carries(lower, fact string) bool {
+	f := strings.TrimSpace(strings.ToLower(fact))
+	if f == "" {
+		return true
+	}
+	if strings.Contains(lower, f) {
+		return true
+	}
+	if lead := leading(f); lead != "" && strings.Contains(lower, lead) {
+		return true
+	}
+	return false
+}
+
+// leading : The distinctive front of a fact, or nothing.
+//
+// Two words. One is too little -- "the" would pass anything --
+// and three starts spelling out a date again.
+func leading(fact string) string {
+	words := strings.Fields(fact)
+	if len(words) < 3 {
+		// Short enough that the whole of it is the distinctive
+		// part, and it has already been looked for.
+		return ""
+	}
+	return words[0] + " " + words[1]
+}
+
 func Ensure(answer, address string, owed []Owed) string {
 	lower := strings.ToLower(answer)
 
 	for _, o := range owed {
 		missing := o.Always
 		for _, fact := range o.Facts {
-			if f := strings.TrimSpace(strings.ToLower(fact)); f != "" && !strings.Contains(lower, f) {
+			if !carries(lower, fact) {
 				missing = true
 				break
 			}

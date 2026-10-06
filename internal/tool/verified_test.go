@@ -344,3 +344,67 @@ func TestAChangeThatMovedOwesNothingExtra(t *testing.T) {
 		t.Errorf("the before was not owed: %v", got.MustSay)
 	}
 }
+
+// The reply the owner heard, 7 October 2026:
+//
+//	Moved to 7:00 am tomorrow, sir. It was at 6:00 am.
+//	The time was 6:00 am on Wednesday 7 October 2026 before.
+//
+// The second sentence was this function's. It owed the fully
+// spelled old time and the answer had said "6:00 am", which does
+// not contain it, so the whole thing was appended and the old
+// time was said twice -- once as somebody would say it and once
+// as a machine would.
+func TestAFactSaidLooselyIsNotSaidAgain(t *testing.T) {
+	owed := []tool.Owed{{
+		Facts: []string{"6:00 am on Wednesday 7 October 2026"},
+		Else:  "The time was 6:00 am on Wednesday 7 October 2026 before.",
+	}}
+
+	answer := "Moved to 7:00 am tomorrow, sir. It was at 6:00 am."
+	got := tool.Ensure(answer, "sir", owed)
+	if got != answer {
+		t.Errorf("the old time was said twice:\n%s", got)
+	}
+}
+
+// Dropped altogether is still caught, which is the whole reason
+// this exists: the old value is the half they cannot reconstruct.
+func TestAFactLeftOutIsStillAdded(t *testing.T) {
+	owed := []tool.Owed{{
+		Facts: []string{"6:00 am on Wednesday 7 October 2026"},
+		Else:  "The time was 6:00 am before.",
+	}}
+
+	got := tool.Ensure("Moved to 7:00 am tomorrow, sir.", "sir", owed)
+	if !strings.Contains(got, "6:00 am before") {
+		t.Errorf("the old time was dropped and not put back:\n%s", got)
+	}
+}
+
+// A near miss is not a match. Seven is not six, however alike
+// the rest of the sentence reads.
+func TestADifferentValueDoesNotCount(t *testing.T) {
+	owed := []tool.Owed{{
+		Facts: []string{"6:00 am on Wednesday 7 October 2026"},
+		Else:  "The time was 6:00 am before.",
+	}}
+
+	got := tool.Ensure("Moved to 7:00 am tomorrow, sir. It was at 8:00 am.", "sir", owed)
+	if !strings.Contains(got, "6:00 am before") {
+		t.Errorf("a wrong old time passed for the right one:\n%s", got)
+	}
+}
+
+// A fact of one or two words is matched whole, because there is
+// no front of it to lead with.
+func TestAShortFactIsMatchedWhole(t *testing.T) {
+	owed := []tool.Owed{{Facts: []string{"My Tasks"}, Else: "It was in My Tasks before."}}
+
+	if got := tool.Ensure("Moved out of My Tasks, sir.", "sir", owed); strings.Contains(got, "before") {
+		t.Errorf("a short fact that was said was added again:\n%s", got)
+	}
+	if got := tool.Ensure("Moved it, sir.", "sir", owed); !strings.Contains(got, "before") {
+		t.Errorf("a short fact that was dropped was not added:\n%s", got)
+	}
+}
