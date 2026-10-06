@@ -28,6 +28,7 @@ type row struct {
 	State     string     `gorm:"column:state"`
 	LastAt    *time.Time `gorm:"column:last_at"`
 	Why       string     `gorm:"column:why"`
+	LastSaid  string     `gorm:"column:last_said"`
 	CreatedAt time.Time  `gorm:"column:created_at"`
 	UpdatedAt time.Time  `gorm:"column:updated_at"`
 }
@@ -159,13 +160,14 @@ func (s *Store) Watching(ctx context.Context, userID string, limit int) ([]job.J
 }
 
 func (s *Store) Ran(ctx context.Context, id string, next time.Time,
-	state job.State, why string, at time.Time) error {
+	state job.State, why, said string, at time.Time) error {
 	if s == nil || s.db == nil {
 		return fmt.Errorf("job: there is nowhere to record that a job ran")
 	}
 	fields := map[string]any{
 		"state":      string(state),
 		"why":        clip(why, 500),
+		"last_said":  clip(said, 2000),
 		"last_at":    at.UTC(),
 		"next_at":    nil,
 		"updated_at": time.Now().UTC(),
@@ -209,7 +211,8 @@ func assemble(r row) (job.Job, error) {
 	}
 	j := job.Job{
 		ID: r.ID, UserID: r.UserID, Name: r.Name, Kind: r.Kind,
-		Schedule: r.Schedule, Steps: steps, State: job.State(r.State), Why: r.Why,
+		Schedule: r.Schedule, Steps: steps, State: job.State(r.State),
+		Why: r.Why, Said: r.LastSaid,
 	}
 	if r.NextAt != nil {
 		j.Next = r.NextAt.UTC()

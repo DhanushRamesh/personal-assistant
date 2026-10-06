@@ -386,6 +386,12 @@ a task]` satisfies the read-before-write rule the tools enforce, and
 It is a transcript, not variables: nothing compares it or branches
 on it, and a check cannot read it.
 
+**A rule does not say the same thing twice.** It is told what it
+said last time and asked whether what it has now is the same news;
+if it is, it says nothing. The memory is kept while the thing is
+still true and forgotten when a check stops holding, so something
+that goes away and comes back is announced again.
+
 **Linear, on purpose.** A check stops the steps after it, and that
 is the whole of the conditional. No branching, no loops, no
 variables — Tasker and Home Assistant already exist for that. A
@@ -443,10 +449,8 @@ Kept here so it is not rediscovered.
 
 - Six of the seven watchers are still loops in Go. Immediate has
   moved; reminders move last. Situations, the diary and leave-by
-  cannot move yet for one shared reason: a rule has no memory of
-  having already said a thing, so each would repeat itself. The
-  diary knows it has already given the one-hour warning for
-  Thursday; a rule does not.
+  are no longer blocked — a rule now remembers what it said and
+  will not say it again — but none has been moved across.
 - **Greeting and renaming are not moving, by decision.** They stay
   as they are. Neither is a standing rule, and neither would be
   better as one — see DEVELOPMENT.md. Four producers are in scope,

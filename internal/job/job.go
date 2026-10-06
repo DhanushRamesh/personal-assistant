@@ -148,6 +148,12 @@ type Job struct {
 	// Why : What happened last run -- what went wrong, or which
 	// check stopped it. Empty when it simply ran.
 	Why string
+	// Said : The sentence this rule last said, so it does not say
+	// it again.
+	//
+	// Cleared whenever a run says nothing, so a thing that goes
+	// away and comes back is announced again.
+	Said string
 }
 
 // Every, At, Once : How a schedule may be written.

@@ -1,0 +1,43 @@
+-- +goose Up
+-- What a rule last said, so it does not say it again.
+--
+-- Owner, 6 October 2026: *"do the don't say it twice."*
+--
+-- Three of the four producers still waiting to move are waiting on
+-- this one thing. Each would work today and each would repeat
+-- itself: a rule that notices the phone has gone quiet notices it
+-- again ten minutes later, and again, for as long as the phone
+-- stays quiet. The diary knows it has already given the one hour
+-- warning for Thursday; a rule does not.
+--
+-- The memory is the sentence itself rather than a key, which is
+-- the whole of why this is small. A key would have to identify the
+-- occasion -- this entry, this lead, this episode -- and only the
+-- thing that composed the sentence knows what the occasion was. The
+-- sentence is already that: two runs that mean the same thing say
+-- the same words, and two that mean different things do not.
+--
+-- So Thursday's one hour warning and Friday's are different
+-- sentences and both are said; the same warning twice is one
+-- sentence and is said once.
+--
+-- Cleared when a check does not hold, so a condition that goes away
+-- and comes back is announced again: a phone quiet in the morning
+-- has to be reportable quiet again at night.
+--
+-- Kept when the sentence itself comes to nothing. Those two
+-- silences look alike and are opposite. A check that did not hold
+-- means the thing has gone; nothing new to say means the thing is
+-- still there and has already been said, and forgetting then would
+-- announce it afresh a minute later -- which is the repetition
+-- this column exists to stop.
+--
+-- Only a written sentence is held to this. Words fixed when the
+-- rule was made are meant to repeat -- "time to stand up", every
+-- two hours -- and suppressing those would be suppressing the point
+-- of them.
+ALTER TABLE jobs
+    ADD COLUMN last_said VARCHAR(2000) NOT NULL DEFAULT '' AFTER why;
+
+-- +goose Down
+ALTER TABLE jobs DROP COLUMN last_said;

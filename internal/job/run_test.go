@@ -22,16 +22,19 @@ type hands struct {
 	saw     []int
 	heard   [][]string
 	carried [][]job.Ran
+	before  []string
+	says    string
 	got     map[string]string
 	stopAt  string
 	failAt  string
 	failure error
 }
 
-func (h *hands) Do(_ context.Context, _ string, s job.Step, already []job.Ran) (job.Outcome, error) {
-	h.saw = append(h.saw, len(already))
-	h.heard = append(h.heard, job.Tools(already))
-	h.carried = append(h.carried, already)
+func (h *hands) Do(_ context.Context, run job.Turn, s job.Step) (job.Outcome, error) {
+	h.saw = append(h.saw, len(run.Already))
+	h.heard = append(h.heard, job.Tools(run.Already))
+	h.carried = append(h.carried, run.Already)
+	h.before = append(h.before, run.Before)
 	what := string(s.Do) + ":" + s.Say + s.Tool + s.When
 	h.did = append(h.did, what)
 	if h.failAt != "" && strings.Contains(what, h.failAt) {
@@ -40,7 +43,7 @@ func (h *hands) Do(_ context.Context, _ string, s job.Step, already []job.Ran) (
 	if h.stopAt != "" && strings.Contains(what, h.stopAt) {
 		return job.Outcome{Stop: true, Why: "the check " + what + " did not pass"}, nil
 	}
-	return job.Outcome{Got: h.got[s.Tool]}, nil
+	return job.Outcome{Got: h.got[s.Tool], Said: h.says}, nil
 }
 
 // runner : A runner over a store, with the clock held still.
@@ -233,5 +236,85 @@ func TestAStepKnowsWhatTheSequenceAlreadyRan(t *testing.T) {
 	}
 	if h.saw[0] != 0 || h.saw[1] != 1 {
 		t.Errorf("the second step saw %d earlier tools, wanted 1", h.saw[1])
+	}
+}
+
+// A rule that notices a thing notices it again on the next run,
+// and the one after, for as long as the thing stays true. What
+// stops it is being told what it said last time -- the sentence
+// is the key, so nothing has to identify the occasion.
+func TestARuleIsToldWhatItSaidLastTime(t *testing.T) {
+	s, h := inmemory.New(), &hands{}
+	j, err := job.New("job_1", "usr_1", "a rule", "rule", "every 5m",
+		[]job.Step{{Do: job.Write, Ask: "anything worth saying?"}}, noon)
+	if err != nil {
+		t.Fatalf("job.New: %v", err)
+	}
+	j.Next, j.Said = noon, "The phone has gone quiet, sir."
+	s.Add(j)
+
+	runner(s, h, noon).Once(context.Background())
+	if len(h.before) != 1 {
+		t.Fatalf("ran %d steps", len(h.before))
+	}
+	if h.before[0] != "The phone has gone quiet, sir." {
+		t.Errorf("the step was told %q", h.before[0])
+	}
+}
+
+// What a run said is kept, so the next one can be compared
+// against it.
+func TestWhatWasSaidIsRemembered(t *testing.T) {
+	s := inmemory.New()
+	h := &hands{says: "The phone has gone quiet, sir."}
+	put(t, s, "every 5m", job.Step{Do: job.Write, Ask: "anything?"})
+
+	runner(s, h, noon).Once(context.Background())
+	after, _ := s.Get("job_1")
+	if after.Said != "The phone has gone quiet, sir." {
+		t.Errorf("it remembered %q", after.Said)
+	}
+}
+
+// And forgotten when a run says nothing, so a thing that goes
+// away and comes back is announced again. Without this a phone
+// quiet in the morning could never be reported quiet at night.
+func TestSayingNothingForgetsWhatWasSaid(t *testing.T) {
+	s, h := inmemory.New(), &hands{}
+	j, err := job.New("job_1", "usr_1", "a rule", "rule", "every 5m",
+		[]job.Step{{Do: job.Check, When: "battery.level < 20"}}, noon)
+	if err != nil {
+		t.Fatalf("job.New: %v", err)
+	}
+	j.Next, j.Said = noon, "The phone has gone quiet, sir."
+	s.Add(j)
+
+	// The check stops it, so nothing is said.
+	h.stopAt = "check"
+	runner(s, h, noon).Once(context.Background())
+
+	after, _ := s.Get("job_1")
+	if after.Said != "" {
+		t.Errorf("it still remembers %q after saying nothing", after.Said)
+	}
+}
+
+// A moment that passed while nothing was running leaves the
+// memory alone: nothing was said, and nothing was decided against
+// saying either.
+func TestASkippedRunForgetsNothing(t *testing.T) {
+	s, h := inmemory.New(), &hands{}
+	j, err := job.New("job_1", "usr_1", "a rule", "rule", "at 08:00",
+		[]job.Step{{Do: job.Write, Ask: "anything?"}}, noon)
+	if err != nil {
+		t.Fatalf("job.New: %v", err)
+	}
+	j.Next, j.Said = noon, "Something, sir."
+	s.Add(j)
+
+	runner(s, h, noon.Add(4*time.Hour)).Once(context.Background())
+	after, _ := s.Get("job_1")
+	if after.Said != "Something, sir." {
+		t.Errorf("a skipped run forgot %q", after.Said)
 	}
 }

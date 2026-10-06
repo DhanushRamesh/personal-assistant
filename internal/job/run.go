@@ -32,9 +32,9 @@ type Store interface {
 	// Watching : This person's active rules that wait for
 	// something to happen rather than for a time.
 	Watching(ctx context.Context, userID string, limit int) ([]Job, error)
-	// Ran : Records that a job ran, when it next runs, and what
-	// went wrong if anything.
-	Ran(ctx context.Context, id string, next time.Time, state State, why string, at time.Time) error
+	// Ran : Records that a job ran, when it next runs, what went
+	// wrong if anything, and what it said.
+	Ran(ctx context.Context, id string, next time.Time, state State, why, said string, at time.Time) error
 }
 
 // Ran : What a step earlier in the same sequence did.
@@ -73,6 +73,25 @@ func Tools(already []Ran) []string {
 type Readings interface {
 	// Latest : The most recent readings of a kind, newest first.
 	Latest(ctx context.Context, userID, kind string, n int) ([]Reading, error)
+}
+
+// Turn : Everything a step is given besides itself.
+//
+// A struct rather than a fourth parameter, because a sequence is
+// one turn and this is what a turn knows: whose it is, what has
+// happened in it so far, and what this rule said last time.
+type Turn struct {
+	// UserID : Whose rule it is.
+	UserID string
+	// Already : What the earlier steps of this sequence did.
+	Already []Ran
+	// Before : The sentence this rule last said.
+	//
+	// What stops a rule saying the same thing every ten minutes
+	// for as long as the thing it noticed stays true. Only a
+	// written sentence is held to it: words fixed when the rule
+	// was made are meant to repeat.
+	Before string
 }
 
 // Outcome : What carrying out one step came to.
@@ -136,13 +155,13 @@ type Doer interface {
 	// of the conditional in this engine, and deliberately the whole
 	// of it.
 	//
-	// already names the tools earlier steps have run. A sequence
+	// The turn carries what the earlier steps have run. A sequence
 	// is one turn, not several: the tools refuse to write
 	// something they have not read in this turn, and a sequence
 	// that forgot its own first step could never satisfy that. It
 	// is also what makes [list, add] mean anything, which is the
 	// reason sequences exist.
-	Do(ctx context.Context, userID string, s Step, already []Ran) (Outcome, error)
+	Do(ctx context.Context, t Turn, s Step) (Outcome, error)
 }
 
 // Runner : Runs jobs when their time comes.
@@ -350,7 +369,9 @@ func (r *Runner) one(ctx context.Context, j Job, now time.Time, pass *Pass) {
 	if !Watches(j.Schedule) && now.Sub(j.Next) > Stale {
 		pass.Skipped++
 		r.note("a job's moment passed while nothing was running", j, "")
-		r.settle(ctx, j, now, "its moment passed before anything ran")
+		// The memory is left alone: nothing was said, and nothing
+		// was decided against saying either.
+		r.settle(ctx, j, now, "its moment passed before anything ran", j.Said)
 		return
 	}
 
@@ -361,7 +382,8 @@ func (r *Runner) one(ctx context.Context, j Job, now time.Time, pass *Pass) {
 	var stopped, failed bool
 	var already []Ran
 	for _, step := range j.Steps {
-		done, err := r.Doer.Do(ctx, j.UserID, step, already)
+		done, err := r.Doer.Do(ctx,
+			Turn{UserID: j.UserID, Already: already, Before: j.Said}, step)
 		if step.Do == Call && step.Tool != "" {
 			already = append(already, Ran{Tool: step.Tool, Got: done.Got})
 		}
@@ -401,7 +423,7 @@ func (r *Runner) one(ctx context.Context, j Job, now time.Time, pass *Pass) {
 			Said: said, Why: why, Stopped: stopped, Failed: failed,
 		})
 	}
-	r.settle(ctx, j, now, why)
+	r.settle(ctx, j, now, why, said)
 }
 
 // wrote : Writes down one run, if anybody is keeping the record.
@@ -415,11 +437,11 @@ func (r *Runner) wrote(ctx context.Context, rec Record) {
 }
 
 // settle : Works out when the job runs next and records it.
-func (r *Runner) settle(ctx context.Context, j Job, now time.Time, why string) {
+func (r *Runner) settle(ctx context.Context, j Job, now time.Time, why, said string) {
 	// A watching rule has no next time and does not end. It waits
 	// for the next reading that crosses its line.
 	if Watches(j.Schedule) {
-		if err := r.Store.Ran(ctx, j.ID, time.Time{}, Active, why, now); err != nil {
+		if err := r.Store.Ran(ctx, j.ID, time.Time{}, Active, why, said, now); err != nil {
 			r.log("cannot record that a job ran", err)
 		}
 		return
@@ -438,7 +460,7 @@ func (r *Runner) settle(ctx context.Context, j Job, now time.Time, why string) {
 			state, next = Active, following
 		}
 	}
-	if err := r.Store.Ran(ctx, j.ID, next, state, why, now); err != nil {
+	if err := r.Store.Ran(ctx, j.ID, next, state, why, said, now); err != nil {
 		r.log("cannot record that a job ran", err)
 	}
 }

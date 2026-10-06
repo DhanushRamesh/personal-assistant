@@ -2049,7 +2049,7 @@ type doing struct {
 
 // Do : Carries out one step. Never stops the sequence yet -- the
 // step that can is the checking one, which comes with prompts.
-func (d doing) Do(ctx context.Context, userID string, s job.Step, already []job.Ran) (job.Outcome, error) {
+func (d doing) Do(ctx context.Context, run job.Turn, s job.Step) (job.Outcome, error) {
 	if err := s.Valid(); err != nil {
 		return job.Outcome{}, err
 	}
@@ -2059,7 +2059,7 @@ func (d doing) Do(ctx context.Context, userID string, s job.Step, already []job.
 		// Published, which is where announcements go now, and
 		// spoken, which is the only way one is currently heard.
 		// The second half goes when a client collects.
-		o, err := outbox.New(outboxmysql.ID(), userID,
+		o, err := outbox.New(outboxmysql.ID(), run.UserID,
 			conversation.Immediate, s.Say, d.now())
 		if err != nil {
 			return job.Outcome{}, err
@@ -2070,14 +2070,14 @@ func (d doing) Do(ctx context.Context, userID string, s job.Step, already []job.
 		if err := announcement.Speak(ctx, d.speaker, conversation.Immediate, s.Say); err != nil {
 			return job.Outcome{}, err
 		}
-		d.written.Announced(ctx, userID, s.Say)
+		d.written.Announced(ctx, run.UserID, s.Say)
 		return job.Outcome{Said: s.Say}, nil
 
 	case job.Write:
-		return d.write(ctx, userID, s, already)
+		return d.write(ctx, run, s)
 
 	case job.Check:
-		return d.check(ctx, userID, s)
+		return d.check(ctx, run.UserID, s)
 
 	case job.Call:
 		// As the person, on the typed channel. A job is not a
@@ -2085,12 +2085,12 @@ func (d doing) Do(ctx context.Context, userID string, s job.Step, already []job.
 		// tools that withhold themselves from a speaker should not
 		// withhold themselves here.
 		out := d.tools.Call(ctx, s.Tool, tool.Invocation{
-			Caller: tool.Caller{UserID: userID, Channel: chat.ChannelDirect},
+			Caller: tool.Caller{UserID: run.UserID, Channel: chat.ChannelDirect},
 			Args:   s.Args,
 			// What the sequence has already run. The tools refuse
 			// to write something they have not read in this turn,
 			// and a sequence is one turn.
-			Ran: job.Tools(already),
+			Ran: job.Tools(run.Already),
 		})
 		if out.Outcome == conversation.OutcomeFailed {
 			return job.Outcome{}, fmt.Errorf("%s: %s", s.Tool, out.Content)
@@ -2189,12 +2189,12 @@ const Rounds = 4
 // over the toolbox; what it could not do before was decide at the
 // time, and a rule written on Monday cannot know what Thursday
 // needs.
-func (d doing) write(ctx context.Context, userID string, s job.Step, already []job.Ran) (job.Outcome, error) {
+func (d doing) write(ctx context.Context, run job.Turn, s job.Step) (job.Outcome, error) {
 	specs, bad := d.offered(s.Tools)
 	if bad != nil {
 		return job.Outcome{}, bad
 	}
-	answer, err := d.converse(ctx, userID, writing(s.Ask, already), specs)
+	answer, err := d.converse(ctx, run.UserID, writing(s.Ask, run.Already, run.Before), specs)
 	if err != nil {
 		return job.Outcome{}, err
 	}
@@ -2205,11 +2205,42 @@ func (d doing) write(ctx context.Context, userID string, s job.Step, already []j
 	if prompt.Nothing(answer) {
 		d.logger.InfoContext(ctx, "a job had nothing to say",
 			slog.String("ask", s.Ask))
-		return job.Outcome{Stop: true, Why: "there was nothing worth saying"}, nil
+		// The memory is carried, not cleared. Two silences look
+		// alike here and are not: a check that did not hold means
+		// the thing went away, and the rule should speak again
+		// when it comes back; this one means the thing is still
+		// true and has already been said. Forgetting now would
+		// have it announced afresh on the next run, which is the
+		// repetition this is for.
+		return job.Outcome{
+			Stop: true,
+			Why:  "there was nothing new to say",
+			Said: run.Before,
+		}, nil
 	}
 
 	said := strings.TrimSpace(answer)
-	o, err := outbox.New(outboxmysql.ID(), userID, conversation.Immediate, said, d.now())
+
+	// The same sentence as last time is the same news as last
+	// time. A rule that notices the phone has gone quiet notices
+	// it again ten minutes later, and would go on noticing it for
+	// as long as the phone stayed quiet.
+	//
+	// The sentence is the key, which is why this needs nothing to
+	// identify the occasion: two runs that mean the same thing say
+	// the same words, and two that mean different things do not.
+	// Thursday's warning and Friday's are both said; Thursday's
+	// twice is said once.
+	// A backstop behind the asking. The model is told what it said
+	// last time and asked to judge; this catches the case where it
+	// judged wrongly and handed back the same words.
+	if same(said, run.Before) {
+		d.logger.InfoContext(ctx, "a job had nothing new to say",
+			slog.String("ask", s.Ask))
+		return job.Outcome{Stop: true, Why: "it had already said that", Said: said}, nil
+	}
+
+	o, err := outbox.New(outboxmysql.ID(), run.UserID, conversation.Immediate, said, d.now())
 	if err != nil {
 		return job.Outcome{}, err
 	}
@@ -2219,7 +2250,7 @@ func (d doing) write(ctx context.Context, userID string, s job.Step, already []j
 	if err := announcement.Speak(ctx, d.speaker, conversation.Immediate, said); err != nil {
 		return job.Outcome{}, err
 	}
-	d.written.Announced(ctx, userID, said)
+	d.written.Announced(ctx, run.UserID, said)
 	d.logger.InfoContext(ctx, "a job wrote what to say", slog.String("ask", s.Ask))
 	return job.Outcome{Said: said}, nil
 }
@@ -2327,8 +2358,22 @@ func (d doing) converse(ctx context.Context, userID, ask string,
 	return "", fmt.Errorf("a rule asked for tools %d times without answering", Rounds)
 }
 
+// same : Whether two sentences are the same news.
+//
+// Loosely, because a model asked the same question twice writes
+// the same sentence with the spacing somewhere else. Case and
+// runs of whitespace are not the difference between one piece of
+// news and another.
+func same(said, before string) bool {
+	if said == "" || before == "" {
+		return false
+	}
+	return strings.EqualFold(strings.Join(strings.Fields(said), " "),
+		strings.Join(strings.Fields(before), " "))
+}
+
 // writing : What the model is asked, for a write step.
-func writing(ask string, already []job.Ran) string {
+func writing(ask string, already []job.Ran, before string) string {
 	found := make([]string, 0, len(already))
 	for _, r := range already {
 		if strings.TrimSpace(r.Got) == "" {
@@ -2343,9 +2388,28 @@ func writing(ask string, already []job.Ran) string {
 			"and it is everything you have:"), prompt.Block(found...))
 	}
 
+	// Whether this is the same news is a judgement about meaning,
+	// and the thing that wrote the sentence is the only thing that
+	// can make it. Comparing the text was tried first and is not
+	// enough: asked the same question three times a minute apart,
+	// the model answered "at 22:48 on Tuesday the 6th of October"
+	// twice and "at twenty-two forty-eight" in between. The same
+	// news, three wordings, and one rephrasing was enough to make
+	// the other two look new.
+	var again string
+	if strings.TrimSpace(before) != "" {
+		again = prompt.Text(
+			"The last time this rule ran, you said:", strconv.Quote(strings.TrimSpace(before)),
+			"If what you have now is the same news as that, answer with "+prompt.Silence+".",
+			"Say something only if it has changed or there is something new in it.",
+			"Saying the same thing again in different words is still saying it again.",
+		)
+	}
+
 	return prompt.Block(
 		prompt.Text("You are writing one sentence to be said out loud, now.", ask),
 		what,
+		again,
 		// A rule asking for the battery every minute was handed a
 		// week of every kind of event and read out a reading from
 		// the day before, as though it were current. Silence is

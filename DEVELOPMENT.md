@@ -11608,6 +11608,78 @@ with a line saying how many went before. The cap is what is
 shown, not what is answered for -- everything is still marked.
 
 
+### Not saying it twice
+
+Owner, 6 October 2026: *"do the don't say it twice."* Three of the
+four producers still waiting to move were waiting on this and
+nothing else. Each would work today and each would repeat itself.
+
+#### The sentence looked like the key, and is not
+
+The first design held the last sentence and refused to say it
+again. No key, nothing to identify the occasion: two runs that
+mean the same thing say the same words, and two that mean
+different things do not. Thursday's warning and Friday's are both
+said; Thursday's twice is said once.
+
+It lasted one probe. A rule asked the same question three times,
+a minute apart, on data that had not changed:
+
+	The phone was last locked at 22:48 on Tuesday the 6th of October, sir.
+	The phone was last locked at twenty-two forty-eight, sir.
+	The phone was last locked at 22:48 on Tuesday the 6th of October, sir.
+
+The same news, three wordings. Worse than merely missing the
+repeat: the rephrasing in the middle replaced the memory, so the
+third -- character for character the first -- looked new as well.
+
+No amount of comparing text fixes that. Whether two sentences are
+the same news is a judgement about meaning, and the only thing
+that can make it is the thing that wrote them.
+
+#### So it is asked
+
+The write step is told what it said last time and told to answer
+`NOTHING` if what it has now is the same news -- *saying the same
+thing again in different words is still saying it again*. The
+exact-text check stays behind it as a backstop for a model that
+judges wrongly and hands back the identical words.
+
+#### Two silences that look alike and are opposite
+
+This is the part the second probe found, and it would have made
+the whole thing useless.
+
+A run that says nothing **because a check did not hold** means the
+thing has gone away. Forget the sentence: a phone quiet in the
+morning has to be reportable quiet again at night.
+
+A run that says nothing **because there is nothing new** means the
+thing is still there and has already been said. Keep the sentence.
+Forgetting here announces it afresh on the very next run, which is
+the repetition the whole column exists to stop.
+
+The first version cleared on both. The second probe showed it
+exactly: run one spoke, run two was correctly silent, and the
+memory came back empty -- so run three would have spoken again.
+
+#### Proved
+
+Three runs of a rule on data that does not change, before and
+after.
+
+	before   spoke  spoke  spoke
+	after    spoke  silent silent
+
+#### What else it bought
+
+`Doer.Do` now takes a `Turn` rather than a growing list of
+parameters -- whose rule it is, what the earlier steps did, and
+what it said last time. Three additions in a day had taken it to
+four arguments, and the engine's own words for this were already
+*a sequence is one turn*.
+
+
 ## 12. Maintaining this file
 
 When the owner states a preference, makes a decision, or corrects something,

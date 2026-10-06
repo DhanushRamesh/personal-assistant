@@ -114,7 +114,7 @@ func (s *Store) Stop(_ context.Context, userID, id string) (bool, error) {
 
 // Ran : Records that a job ran.
 func (s *Store) Ran(_ context.Context, id string, next time.Time,
-	state job.State, why string, at time.Time) error {
+	state job.State, why, said string, at time.Time) error {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 
@@ -122,7 +122,7 @@ func (s *Store) Ran(_ context.Context, id string, next time.Time,
 	if !ok {
 		return nil
 	}
-	j.Next, j.State, j.Why, j.Last = next, state, why, at
+	j.Next, j.State, j.Why, j.Last, j.Said = next, state, why, at, said
 	s.jobs[id] = j
 	return nil
 }
