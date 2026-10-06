@@ -1777,6 +1777,9 @@ func noticing(
 	model := cmp.Or(cfg.PlatformAI.FastModel, cfg.PlatformAI.Model)
 	watcher := &notice.Watcher{
 		Events: events,
+		// What is worth saying at once, decided here rather than
+		// by the device that noticed it.
+		Rules: notice.ParseRules(cfg.Assistant.AtOnce),
 		Gate: &notice.Gate{Away: func(userID string) (bool, bool) {
 			present, known := here.Here(ctx, userID)
 			return !present, known

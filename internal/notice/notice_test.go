@@ -20,20 +20,21 @@ func happened(kind, value string, ago time.Duration) event.Event {
 	return event.Event{Kind: kind, Payload: payload, OccurredAt: at.Add(-ago)}
 }
 
-// marked : One thing a sender said has to be announced.
+// marked : One thing the rules below ask to be announced.
 func marked(kind, value string, ago time.Duration) event.Event {
-	payload, _ := json.Marshal(map[string]string{
-		"value": value, notice.Immediately: "true",
-	})
-	return event.Event{Kind: kind, Payload: payload, OccurredAt: at.Add(-ago)}
+	return happened(kind, value, ago)
 }
+
+// asked : Rules naming exactly the labels a test uses.
+func wants(labels ...string) []notice.Rule { return notice.ParseRules(labels) }
 
 // TestAPositionReadingIsNeverMentioned : They arrive every few
 // minutes, none of them is a thing to say a sentence about, and a
 // sender that marked one anyway is a sender with a bug.
 func TestAPositionReadingIsNeverMentioned(t *testing.T) {
 	arrived := []event.Event{marked(event.Fixed, "12.91100,80.06241", 0)}
-	if got := notice.Find(arrived, at); len(got) != 0 {
+	rules := wants(event.Fixed + " 12.91100,80.06241")
+	if got := notice.Find(rules, arrived, at); len(got) != 0 {
 		t.Errorf("a coordinate was offered as news: %+v", got)
 	}
 }
@@ -53,7 +54,7 @@ func TestNothingUnmarkedIsEverSaid(t *testing.T) {
 	}
 	arrived = append(arrived, happened("something.new", "never seen", 0))
 
-	if got := notice.Find(arrived, at); len(got) != 0 {
+	if got := notice.Find(nil, arrived, at); len(got) != 0 {
 		t.Errorf("it judged something worth saying on its own: %+v", got)
 	}
 }
@@ -66,11 +67,10 @@ func TestNothingUnmarkedIsEverSaid(t *testing.T) {
 func TestTheTrackReachesTheRemark(t *testing.T) {
 	payload, _ := json.Marshal(map[string]string{
 		"value": "Yuvan Shankar Raja", "track": "Poongatre Poongatre", "via": "spotify",
-		notice.Immediately: "true",
 	})
 	fresh := event.Event{Kind: event.State, Payload: payload, OccurredAt: at}
 
-	got := notice.Find([]event.Event{fresh}, at)
+	got := notice.Find(wants("music.state Yuvan Shankar Raja"), []event.Event{fresh}, at)
 	if len(got) != 1 {
 		t.Fatalf("found %d, want 1", len(got))
 	}
@@ -122,6 +122,7 @@ func (r recorded) Recent(_ context.Context, _ string, _ event.Query) ([]event.Ev
 func TestTheModelMayAnswerWithNothing(t *testing.T) {
 	var spoke []string
 	w := &notice.Watcher{
+		Rules:  wants("battery.level 5"),
 		Events: recorded{held: []event.Event{marked("battery.level", "5", 0)}},
 		Gate:   &notice.Gate{Away: func(string) (bool, bool) { return false, true }},
 		Ask:    func(context.Context, string, string) (string, error) { return notice.Silence, nil },
@@ -146,6 +147,7 @@ func TestTheModelMayAnswerWithNothing(t *testing.T) {
 func TestAnAnnouncementIsSpoken(t *testing.T) {
 	var spoke []string
 	w := &notice.Watcher{
+		Rules:  wants("battery.level 5"),
 		Events: recorded{held: []event.Event{marked("battery.level", "5", 0)}},
 		Gate:   &notice.Gate{Away: func(string) (bool, bool) { return false, true }},
 		Ask: func(context.Context, string, string) (string, error) {
@@ -172,6 +174,7 @@ func TestAnAnnouncementIsSpoken(t *testing.T) {
 func TestOneAnnouncementPerLook(t *testing.T) {
 	var asked int
 	w := &notice.Watcher{
+		Rules: wants("battery.level 5"),
 		Events: recorded{held: []event.Event{
 			marked("battery.level", "5", 0),
 			marked("device.hot", "pixel 7", 0),
@@ -198,6 +201,7 @@ func TestOneAnnouncementPerLook(t *testing.T) {
 func TestNothingArrivedCostsNothing(t *testing.T) {
 	var asked int
 	w := &notice.Watcher{
+		Rules:  wants("battery.level 5"),
 		Events: recorded{held: []event.Event{marked("battery.level", "5", 3*time.Hour)}},
 		Gate:   &notice.Gate{Away: func(string) (bool, bool) { return false, true }},
 		Ask: func(context.Context, string, string) (string, error) {
@@ -254,9 +258,9 @@ func TestEachThingIsWeighedOnce(t *testing.T) {
 	}
 }
 
-// urgently : One thing a device marked as needing to be said.
+// urgently : One thing the rules ask to be said at once.
 func urgently(kind, value string, more map[string]string) event.Event {
-	fields := map[string]string{"value": value, notice.Immediately: "true"}
+	fields := map[string]string{"value": value}
 	for k, v := range more {
 		fields[k] = v
 	}
@@ -281,9 +285,9 @@ func TestADeviceCanInsist(t *testing.T) {
 		urgently("battery.level", "25", nil),
 	}
 
-	got := notice.Find(arrived, at)
+	got := notice.Find(wants("battery.level 25 falling"), arrived, at)
 	if len(got) != 1 {
-		t.Fatalf("a device insisting was not heard: %+v", got)
+		t.Fatalf("a reading the rules ask for was not heard: %+v", got)
 	}
 	if got[0].Reason != notice.Immediate || !got[0].Immediate {
 		t.Errorf("reason = %q urgent = %v, want told and urgent", got[0].Reason, got[0].Immediate)
@@ -337,12 +341,12 @@ func TestTheModelIsNotAskedToDecline(t *testing.T) {
 	}
 }
 
-// TestAReadingCanStillInsist : Which is the whole point of the mark:
-// a battery at five per cent is not unusual and is still worth
-// saying.
+// TestAReadingCanStillInsist : Which is the whole point of the
+// rules: a battery at five per cent is not unusual and is still
+// worth saying.
 func TestAReadingCanStillInsist(t *testing.T) {
 	fresh := []event.Event{urgently("battery.level", "5", nil)}
-	got := notice.Find(fresh, at)
+	got := notice.Find(wants("battery.level 5"), fresh, at)
 	if len(got) != 1 || got[0].Reason != notice.Immediate {
 		t.Fatalf("a device insisting about a reading was not heard: %+v", got)
 	}
@@ -402,6 +406,7 @@ func TestAProviderHiccupDoesNotSwallowAWarning(t *testing.T) {
 	var asked int
 	var spoke []string
 	w := &notice.Watcher{
+		Rules:  wants("battery.level 20"),
 		Events: recorded{held: []event.Event{marked("battery.level", "20", 0)}},
 		Gate:   &notice.Gate{Away: func(string) (bool, bool) { return false, true }},
 		Ask: func(context.Context, string, string) (string, error) {
@@ -451,6 +456,7 @@ func TestAProviderDownAllEveningStillWarnsThem(t *testing.T) {
 	var asked int
 	var spoke []string
 	w := &notice.Watcher{
+		Rules:  wants("battery.level 20"),
 		Events: recorded{held: []event.Event{marked("battery.level", "20", 0)}},
 		Gate:   &notice.Gate{Away: func(string) (bool, bool) { return false, true }},
 		Ask: func(context.Context, string, string) (string, error) {

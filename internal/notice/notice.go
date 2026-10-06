@@ -57,25 +57,6 @@ const (
 	Immediate Reason = "immediate"
 )
 
-// Immediately, Urgent : The payload fields a sender sets to say
-// that something is to be announced the moment it arrives.
-//
-// Two spellings because the phone already says one of them. The
-// word changed here when the idea was separated from the unasked
-// remarks, and a profile on a device is not worth editing for a
-// name.
-//
-// A convention rather than a list of kinds here, for the reason
-// everything else is: the senders describe themselves. Which battery
-// level is worth a warning is the person's own preference and it
-// belongs on the device that knows it, not in a threshold compiled
-// into this server. The phone decides it is urgent; this decides how
-// to say it.
-const (
-	Immediately = "immediate"
-	Urgent      = "urgent"
-)
-
 // Candidate : Something to be said.
 //
 // Not a maybe any more. The sender has already decided; what is
@@ -117,12 +98,25 @@ type Candidate struct {
 // No history, and that is the change. Judging whether a thing was
 // unusual needed four weeks of events read on every tick; reading
 // a mark the sender already wrote needs the last few minutes.
-func Find(arrived []event.Event, now time.Time) []Candidate {
+func Find(rules []Rule, arrived []event.Event, now time.Time) []Candidate {
 	latest := map[string]time.Time{}
 	detail := map[string]string{}
 	order := []string{}
-	for _, e := range arrived {
-		if skip(e) || !told(e.Payload) || e.OccurredAt.After(now) {
+
+	// Oldest first, so that "what did this kind say before" is a
+	// question with an answer. The direction of a value is the
+	// whole of what stops a phone charging through fifteen per
+	// cent announcing fifteen per cent.
+	inOrder := append([]event.Event(nil), arrived...)
+	sort.SliceStable(inOrder, func(i, j int) bool {
+		return inOrder[i].OccurredAt.Before(inOrder[j].OccurredAt)
+	})
+	before := map[string]string{}
+
+	for _, e := range inOrder {
+		was := before[e.Kind]
+		before[e.Kind] = valueOf(e.Payload)
+		if skip(e) || e.OccurredAt.After(now) || !worth(rules, e, was) {
 			continue
 		}
 		label := Label(e)
@@ -214,34 +208,4 @@ func Beside(payload json.RawMessage) string {
 		parts = append(parts, k+": "+said)
 	}
 	return strings.Join(parts, ", ")
-}
-
-// told : Whether a sender marked this as something that must be
-// said.
-//
-// True or the word true, so a device that sends booleans and one
-// that sends strings are both understood -- the same latitude
-// Toggling allows, and for the same reason: nobody is going to read
-// this server's source before writing a profile on a phone.
-func told(payload json.RawMessage) bool {
-	if len(payload) == 0 {
-		return false
-	}
-	var fields map[string]any
-	if err := json.Unmarshal(payload, &fields); err != nil {
-		return false
-	}
-	for _, name := range []string{Immediately, Urgent} {
-		switch v := fields[name].(type) {
-		case bool:
-			if v {
-				return true
-			}
-		case string:
-			if strings.EqualFold(strings.TrimSpace(v), "true") {
-				return true
-			}
-		}
-	}
-	return false
 }

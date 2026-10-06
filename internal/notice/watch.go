@@ -25,7 +25,14 @@ const (
 	// server was restarting, is still seen. Saying the same thing
 	// twice is prevented by the gate rather than by reading a window
 	// so tight that things fall out of it.
-	Behind = 5 * time.Minute
+	//
+	// Widened from five minutes when the server took over deciding
+	// which readings matter. A rule can ask for a value that is
+	// *falling*, and whether it is falling can only be known from
+	// the reading before it -- which has to be in the window. A
+	// phone reports its battery every four to nine minutes, so five
+	// minutes often held one reading and no direction at all.
+	Behind = 30 * time.Minute
 
 	// Since : How far back somebody counts as somebody to watch.
 	//
@@ -83,6 +90,12 @@ type Watcher struct {
 	Now func() time.Time
 	// Logger : Where failures go. Nil is silent.
 	Logger *slog.Logger
+
+	// Rules : What is worth saying the moment it happens, read
+	// from configuration rather than from the payload a device
+	// sent. Empty says nothing at all, which is the honest
+	// behaviour for a server nobody has told what matters.
+	Rules []Rule
 
 	mu sync.Mutex
 	// failed : How many times each arrival has been put to the model
@@ -165,7 +178,7 @@ func (w *Watcher) look(ctx context.Context, userID string, behind time.Duration)
 		return "", nil
 	}
 
-	found := Find(arrived, now)
+	found := Find(w.Rules, arrived, now)
 	if len(found) == 0 {
 		return "", nil
 	}

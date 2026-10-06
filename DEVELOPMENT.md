@@ -10144,6 +10144,52 @@ all intact. Every test alarm was deleted afterwards and the owner's
 own two were left alone.
 
 
+### The server decides which readings matter
+
+Owner, 6 October 2026: *"the urgent shouldn't be coming from the
+Tasker, the Tasker just sends the events, the server should decide
+at what value it should send event."*
+
+This reverses the rule `internal/notice` was built on, and the
+reasoning for the old rule was sound: which battery level is worth
+a warning is the person's own preference, and the device that
+measured it is the only thing that knows. It lost to a practical
+fact. Changing the number meant an adb session editing a Tasker
+profile by hand, and **a rule that is painful to change is a rule
+that stays wrong**. The phone now only reports what happened.
+
+The cost, stated: the server has to know that a battery has
+levels, and a brand new sender cannot be announced without a line
+of configuration. That is the trade.
+
+**What is kept is the shape.** A rule names a *label* -- the same
+kind-and-value a sender describes itself with, and the same one
+the counted half of the profile uses -- so nothing in Go names an
+event kind. `config.ini` does:
+
+    at_once = battery.level 25 falling, battery.level 20 falling,
+              battery.level 15 falling, battery.level 100 rising
+
+**Direction, not a charging check.** A phone charging up through
+fifteen per cent is not a phone running out, which the Tasker
+profile used to suppress by asking whether the charger was in.
+Comparing against the reading before it is the shorter way to the
+same answer, and needs no power events in the window.
+
+**Unknown direction says nothing.** The first draft fired when
+there was nothing to compare against, which made "falling"
+meaningless at the edge of the window -- a phone sitting still at
+twenty per cent announced itself every look. Its own test caught
+it. That is why `Behind` went from five minutes to thirty: a phone
+reports every four to nine minutes, so five minutes often held one
+reading and no direction at all.
+
+**What the data said.** Across five days: 26 event kinds arriving,
+only `battery.*` ever carried the old flag, and it was true eight
+times -- 25, 20, 15 on the way down and 100 on the way up. The
+configuration above is exactly that, which is deliberate: this
+changed where the decision lives, not what it decides.
+
 ### An announcement is published, not delivered
 
 Owner, 6 October 2026, a few hours after the outbox was built:

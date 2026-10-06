@@ -119,6 +119,22 @@ type Assistant struct {
 	// it nameless, which is a working assistant that simply never says what
 	// it is called.
 	Name string
+	// AtOnce : What is worth saying the moment it happens, as
+	// labels -- the kind and value a sender describes itself with
+	// -- with an optional direction.
+	//
+	//	battery.level 20 falling, battery.level 100 rising
+	//
+	// Here rather than on the device that sends the event. The
+	// device knowing its own thresholds was the better idea on
+	// paper and lost to a practical fact: changing a number meant
+	// editing a Tasker profile by hand over adb, and a rule that
+	// is painful to change is a rule that stays wrong.
+	//
+	// Empty announces nothing, which is the honest behaviour for a
+	// server nobody has told what matters.
+	AtOnce []string
+
 	// Persona : The manner it starts in, as a persona identifier. The
 	// setting can be changed while the server runs and returns here when it
 	// restarts, so this is what a lasting choice is written into.
@@ -566,6 +582,7 @@ func Load(path string, lookup Lookup) (Config, error) {
 		},
 		Assistant: Assistant{
 			Name:     l.str("assistant", "name", ""),
+			AtOnce:   l.list("assistant", "at_once"),
 			Persona:  l.str("assistant", "persona", ""),
 			Timezone: l.str("assistant", "timezone", ""),
 			Location: l.location("assistant", "timezone"),
