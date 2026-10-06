@@ -148,14 +148,22 @@ type Job struct {
 //	every 5m          every five minutes, from now
 //	at 08:00          every day at eight in the morning
 //	once 2026-10-07 06:40   one time, then done
+//	when battery.level < 20   not at a time at all
 //
-// Three forms and no more. A cron expression is unreadable to
+// Four forms and no more. A cron expression is unreadable to
 // somebody dictating it out loud, which is how these are meant to
 // be made.
+//
+// [When] is the odd one: it has no next time, so the clock never
+// picks it up. It runs when a reading arrives that makes its
+// condition true, which is the only way to say *when I get home*
+// or *when the battery drops*, neither of which happens at an
+// hour anybody knows in advance.
 const (
 	Every = "every"
 	At    = "at"
 	Once  = "once"
+	When  = "when"
 )
 
 // Stale : How late a run may be and still happen.
@@ -179,14 +187,60 @@ func New(id, userID, name, kind, schedule string, steps []Step, from time.Time) 
 			return Job{}, err
 		}
 	}
-	next, err := Following(schedule, from, from.Location())
-	if err != nil {
-		return Job{}, err
+	// A watching rule has no first run to work out. Its next_at
+	// stays null, which is what keeps the clock from ever picking
+	// it up.
+	var next time.Time
+	if Watches(schedule) {
+		if _, err := Watched(schedule); err != nil {
+			return Job{}, err
+		}
+	} else {
+		following, err := Following(schedule, from, from.Location())
+		if err != nil {
+			return Job{}, err
+		}
+		next = following
 	}
 	return Job{
 		ID: id, UserID: userID, Name: name, Kind: kind,
 		Schedule: schedule, Next: next, Steps: steps, State: Active,
 	}, nil
+}
+
+// Watches : Whether this schedule waits for something to happen
+// rather than for a time.
+func Watches(schedule string) bool {
+	fields := strings.Fields(strings.ToLower(strings.TrimSpace(schedule)))
+	return len(fields) > 0 && fields[0] == When
+}
+
+// Watched : The condition a watching rule waits for.
+//
+// Narrower than a check can be. A trigger must name an event kind,
+// because an arriving reading is what sets it off: presence has no
+// arrival here, and a rule about how old a reading is could never
+// fire on one landing, since landing is what makes it new.
+func Watched(schedule string) (Gate, error) {
+	fields := strings.Fields(strings.TrimSpace(schedule))
+	if len(fields) < 2 || !strings.EqualFold(fields[0], When) {
+		return Gate{}, fmt.Errorf("%w: %q", ErrUnreadableGate, schedule)
+	}
+	gate, err := ParseGate(strings.Join(fields[1:], " "))
+	if err != nil {
+		return Gate{}, err
+	}
+	if gate.Needs() == "" {
+		return Gate{}, fmt.Errorf(
+			"%w: a rule can only wait for an event, and %q is not one",
+			ErrUnreadableGate, gate.Source)
+	}
+	if gate.Op == Older || gate.Op == Within {
+		return Gate{}, fmt.Errorf(
+			"%w: a reading landing is what sets a rule off, so %q could never be true when it does",
+			ErrUnreadableGate, gate.Op)
+	}
+	return gate, nil
 }
 
 // Following : When a schedule next comes round after a moment.

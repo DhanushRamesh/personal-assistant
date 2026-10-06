@@ -151,6 +151,9 @@ type Options struct {
 	// Named apart from Events, which is the bus carrying a chat's own
 	// messages to clients. Two different senses of the word met here.
 	DeviceEvents events.Store
+	// Arrivals : Told which kinds of reading have just landed, for
+	// the rules that wait on one rather than on a time. Optional.
+	Arrivals events.Arrivals
 
 	// Naming : What to ask about a place the person never drew a
 	// geofence around. Optional: without it a stay somewhere new is
@@ -245,12 +248,13 @@ func New(opts Options) *Server {
 			opts.Announcements, opts.Location, opts.Now).
 			Writes(opts.Greeting, opts.Spoke, opts.Reported, opts.Known, opts.ThisMachine).
 			Expects(opts.Diary, opts.Chores),
-		profile:       profileapi.New(opts.Memories, opts.Now, opts.Logger),
-		vocabulary:    vocabularyapi.New(opts.Vocabulary, opts.Logger),
-		google:        googleapi.New(opts.Logger, opts.Google, opts.SettingsURL),
-		assist:        assist.New(opts.Logger, opts.Chats, opts.Runner, opts.Events),
-		speech:        speechapi.New(opts.Logger, opts.Cut),
-		events:        events.New(opts.Logger, opts.DeviceEvents, opts.Now).Naming(opts.Naming),
+		profile:    profileapi.New(opts.Memories, opts.Now, opts.Logger),
+		vocabulary: vocabularyapi.New(opts.Vocabulary, opts.Logger),
+		google:     googleapi.New(opts.Logger, opts.Google, opts.SettingsURL),
+		assist:     assist.New(opts.Logger, opts.Chats, opts.Runner, opts.Events),
+		speech:     speechapi.New(opts.Logger, opts.Cut),
+		events: events.New(opts.Logger, opts.DeviceEvents, opts.Now).
+			Naming(opts.Naming).Arrivals(opts.Arrivals),
 		memories:      memories.New(opts.Logger, opts.Memories),
 		tools:         toolsapi.New(opts.Logger, opts.Tools),
 		remarks:       remarksapi.New(opts.Logger, opts.Remarks),

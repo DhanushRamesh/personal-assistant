@@ -244,10 +244,15 @@ asked for rather than something built.
 
 ```mermaid
 flowchart TB
-    ASK["A rule is asked for<br/>when, and what to do"] --> ROW[("jobs<br/>schedule · steps · next_at")]
+    ASK["A rule is asked for<br/>when or on what, and what to do"] --> ROW[("jobs<br/>schedule · steps · next_at")]
+
     ROW --> TICK{"Runner, every 2s<br/>what is due?"}
     TICK -- "more than an hour late" --> SKIP["Skipped, and the row says why<br/>yesterday's 8am at noon is worse<br/>than not done"]
     TICK -- "due" --> WHAT
+
+    READ["A device posts its readings<br/>/v1/events"] --> CROSS{"Any rule waiting<br/>on one of these kinds?<br/>false before, true now?"}
+    ROW --> CROSS
+    CROSS -- "it has just crossed" --> WHAT
 
     WHAT{"Each step, in order<br/>given what the earlier ones ran and found"}
     WHAT -- "check a condition" --> GATE{"Does it hold?<br/>an event value, how old it is,<br/>or who is in the room"}
@@ -267,11 +272,31 @@ flowchart TB
 
     END{"Does it repeat?"}
     END -- "every 5m · at 08:00" --> AGAIN["next_at moved on, still active<br/>picked up again on a later tick"]
+    END -- "when ..." --> WAITS["no next time, still active<br/>waiting for the next crossing"]
     END -- "once" --> DONE["done"]
 ```
 
-**Three ways to write when:** `every 5m`, `at 08:00`, `once
-2026-10-07 06:40`. No cron — these are meant to be dictated aloud.
+**Four ways to say when:** `every 5m`, `at 08:00`, `once 2026-10-07
+06:40`, and `when battery.level < 20`. No cron — these are meant to
+be dictated aloud.
+
+**The last one is not a time at all.** It has no next run, so the
+clock never picks it up; it runs the moment a reading arrives that
+makes it true. That is the only way to say *when I get home* or
+*when the battery drops*, neither of which happens at an hour
+anybody knows in advance.
+
+It fires on the **crossing**, not on the condition holding. A phone
+at fifteen per cent says so every few minutes; the reading before
+this one is read too, and the rule runs only where the condition
+was false then and true now. So it also never fires on the first
+reading of a kind the server has never seen — nothing known, no
+crossing proved.
+
+A trigger is narrower than a check: it must name something that
+*arrives*. Not presence, which is asked of Home Assistant rather
+than reported, and not `older than`, which could never be true at
+the moment a reading lands.
 
 **Four things a step can do:** say a fixed sentence, run one of the
 tools that already exist, check a condition, or ask the model to
@@ -311,6 +336,12 @@ sequence rather than guessing.
 day-of-week is not a check: "at eight on weekdays" is a *when*, and
 the schedule grammar is where that will go.
 
+The same condition can be either. As a schedule it is the trigger
+and fires on the crossing; as a check it is a gate and is asked
+each time the rule runs. `when the battery drops below 20` and `at
+8am, if the battery is below 20` are both sayable, and mean
+different things.
+
 **A sequence is one turn.** Each step is told which tools the ones
 before it ran and what they returned, so `[list the task lists, add
 a task]` satisfies the read-before-write rule the tools enforce, and
@@ -339,10 +370,9 @@ section 3 move over one at a time, reminders last.
 Kept here so it is not rediscovered.
 
 - The job engine runs nothing real yet: the seven watchers are
-  still loops in Go. Situations, the diary, leave-by and immediate
-  could now be written as rules; greeting and renaming cannot,
-  because they are not triggered by a clock — that needs an event
-  trigger, which does not exist yet.
+  still loops in Go. All seven could now be written as rules —
+  the clock, the event trigger and a model-written sentence are
+  all there — but none has been moved, and reminders move last.
 - There is no way to create a job by voice, so rules can only be
   inserted directly.
 - No client collects its announcements yet, so what situations

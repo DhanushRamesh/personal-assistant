@@ -155,14 +155,31 @@ type Handler struct {
 	httpx.Responder
 	store  Store
 	naming event.Naming
-	now    func() time.Time
+	// arrivals : Told which kinds landed, for rules that wait on one.
+	arrivals Arrivals
+	now      func() time.Time
 }
 
 // Naming : Sets what to ask about a place nobody has named. Without
 // one, a stay somewhere new keeps its coordinates.
 func (h *Handler) Naming(n event.Naming) *Handler { h.naming = n; return h }
 
+// Arrivals : Where to say that readings have landed. Optional.
+func (h *Handler) Arrivals(a Arrivals) *Handler { h.arrivals = a; return h }
+
 // New : Builds the handler.
+// Arrivals : Told which kinds of event have just been stored.
+//
+// For rules that wait on a reading rather than on a time. Done as
+// readings land rather than on a timer, for the same reason the
+// stays are: a reading is the only thing that can make one of
+// these rules true, so there is nothing to poll for.
+//
+// Must not block. The phone is answered either way.
+type Arrivals interface {
+	Arrived(userID string, kinds []string)
+}
+
 func New(logger *slog.Logger, store Store, now func() time.Time) *Handler {
 	if now == nil {
 		now = time.Now
@@ -273,9 +290,32 @@ func (h *Handler) Record(w http.ResponseWriter, r *http.Request) {
 		slog.Int("rejected", len(rejected)))
 
 	h.settle(ctx, user, keep)
+	h.tell(user, keep)
 
 	httpx.WriteJSON(ctx, w, http.StatusOK, BatchResponse{
 		Stored: stored, Seen: seen, Rejected: rejected})
+}
+
+// tell : Says which kinds landed, for the rules that wait on one.
+//
+// The kinds only. What a rule needs beyond that it reads for
+// itself, because it needs the reading before this one as well,
+// and that is a question for the store rather than for whatever
+// happened to be in this batch.
+func (h *Handler) tell(userID string, taken []*event.Event) {
+	if h.arrivals == nil || len(taken) == 0 {
+		return
+	}
+	seen := make(map[string]bool, len(taken))
+	kinds := make([]string, 0, len(taken))
+	for _, e := range taken {
+		if e == nil || seen[e.Kind] {
+			continue
+		}
+		seen[e.Kind] = true
+		kinds = append(kinds, e.Kind)
+	}
+	h.arrivals.Arrived(userID, kinds)
 }
 
 // settle : Works out which stays have ended, now that new readings have

@@ -10710,6 +10710,107 @@ happen at a *time* at all, and need an event trigger, which is the
 next piece.
 
 
+### A rule that waits for something to happen
+
+Owner, 6 October 2026, choosing between polling the condition and
+acting the moment a reading lands: *"do option b, it is the right
+way."*
+
+Until now a rule could only be hung on a clock, and the two
+producers that can never move onto a clock are the two that matter
+most for an assistant that is supposed to notice things. Walking in
+the door does not happen at eight.
+
+So a fourth schedule form, and the odd one out:
+
+	when battery.level < 20
+
+It has no next time. `next_at` stays null, the clock's query asks
+for `next_at IS NOT NULL`, and so the runner's two-second look never
+sees it. It runs when a reading arrives that makes it true.
+
+#### The crossing, not the condition
+
+A phone at fifteen per cent says so every few minutes. A rule that
+ran whenever its condition held would repeat itself all afternoon,
+which is the failure the old battery watcher already had and solved
+with `falling` and `rising`.
+
+Push makes that idea general and the keywords unnecessary. When a
+reading lands, the one before it is read too, and the rule runs only
+where the condition was **false then and true now**. `< 20` fires on
+the way down because the previous reading was not below twenty; it
+does not fire again at eighteen. No direction keyword, and it works
+for every comparison rather than only for numbers going one way.
+
+It follows that **a rule never fires on the first reading of a kind
+the server has never seen.** Nothing is known, so no crossing is
+proved -- the same answer a check gives for the same reason.
+
+#### A trigger is narrower than a check
+
+`Watched` refuses two things a check allows, because a trigger is
+set off by an arrival:
+
+- **presence**, which does not arrive here. It is asked of Home
+  Assistant, so no reading ever lands to wake the rule.
+- **`older than` / `within`**, which could never be true at the
+  moment a reading lands, since landing is what makes it new.
+
+Both fail when the rule is written rather than never firing in
+silence, which is the harder fault to find.
+
+#### Nothing waits on a rule
+
+`Arrived` puts the kinds on a buffered channel and returns; the
+runner's existing loop selects on it beside the ticker, so there is
+one place where jobs run and no second goroutine per batch. A phone
+handing over its readings is answered either way, which matters more
+here than for the stays settled on the same path: a rule can end in
+a model call, and a device must never wait on one.
+
+When the channel is full the batch is **dropped and counted**, not
+queued. A runner that far behind is better off acting on the next
+reading than working through a backlog that has all been overtaken.
+Counted rather than logged, because a line per dropped batch is
+itself what keeps it behind.
+
+This follows the handler's own precedent. Stays are already worked
+out as readings land rather than on a timer, *because a reading is
+the only thing that can end a stay*. The same sentence is true of
+these rules.
+
+#### Proved against the real thing
+
+A rule `when probe.level < 20`, and four readings posted over HTTP
+as a device would:
+
+| reading | fired |
+|---|---|
+| 50, with nothing before it | no |
+| 19 | **yes**, 17ms after it landed |
+| 18 | no -- still low, but not a crossing |
+| 40 | no |
+
+Afterwards the row was still `active` with a null `next_at`: a
+watching rule does not end, it waits for the next crossing.
+
+#### Two things the probe turned up
+
+**A payload's `value` must be a string.** A JSON number fails the
+handler's type assertion, is treated as absent, and is rewritten to
+`unknown` -- so the first attempt stored three readings of
+"unknown" and nothing fired. The phone has always sent strings so
+nothing was broken, but a reading that is silently relabelled is a
+poor way to find that out.
+
+**The in-memory store was not keeping the contract the real one
+keeps.** `Due` matched on `!Next.After(at)`, and a zero time is
+before everything, so every watching rule looked due to it while
+MySQL's `next_at IS NOT NULL` correctly skipped them. The test
+caught it, which is the argument for having written it.
+
+
 ## 12. Maintaining this file
 
 When the owner states a preference, makes a decision, or corrects something,

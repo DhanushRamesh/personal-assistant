@@ -3,6 +3,8 @@ package job
 import (
 	"context"
 	"log/slog"
+	"sync"
+	"sync/atomic"
 	"time"
 )
 
@@ -15,10 +17,21 @@ const Tick = 2 * time.Second
 // Limit : How many jobs are taken in one look.
 const Limit = 50
 
+// Backlog : How many arrivals wait to be looked at.
+//
+// Small, because the readings behind them keep coming. A runner
+// so far behind that this is full is better off dropping a batch
+// and acting on the next one than working through a queue of
+// readings that have all since been overtaken.
+const Backlog = 64
+
 // Store : Where jobs are kept.
 type Store interface {
 	// Due : Jobs whose time has come, soonest first.
 	Due(ctx context.Context, at time.Time, limit int) ([]Job, error)
+	// Watching : This person's active rules that wait for
+	// something to happen rather than for a time.
+	Watching(ctx context.Context, userID string, limit int) ([]Job, error)
 	// Ran : Records that a job ran, when it next runs, and what
 	// went wrong if anything.
 	Ran(ctx context.Context, id string, next time.Time, state State, why string, at time.Time) error
@@ -49,6 +62,17 @@ func Tools(already []Ran) []string {
 		names = append(names, r.Tool)
 	}
 	return names
+}
+
+// Readings : The values an event kind has lately had.
+//
+// What the runner needs to tell a crossing from a reading that
+// was already past the line. Held here rather than inside a step,
+// because deciding whether a rule should run at all is the
+// runner's business.
+type Readings interface {
+	// Latest : The most recent readings of a kind, newest first.
+	Latest(ctx context.Context, userID, kind string, n int) ([]Reading, error)
 }
 
 // Outcome : What carrying out one step came to.
@@ -92,6 +116,9 @@ type Runner struct {
 	Store Store
 	// Doer : What carries out a step. Required.
 	Doer Doer
+	// Readings : What an event kind has lately said, for rules
+	// that wait on one. Nil means no rule ever fires.
+	Readings Readings
 	// Where : The person's zone, for a schedule written as a clock
 	// time. Nil is UTC.
 	Where *time.Location
@@ -101,7 +128,50 @@ type Runner struct {
 	Now func() time.Time
 	// Logger : Where failures go. Nil is silent.
 	Logger *slog.Logger
+
+	// The arrivals waiting to be looked at, made on first use so a
+	// Runner stays usable as a plain struct literal.
+	once    sync.Once
+	landed  chan landing
+	dropped atomic.Int64
 }
+
+// landing : A batch of readings that have just been stored.
+type landing struct {
+	userID string
+	kinds  []string
+}
+
+// Arrived : Tells the runner that events of these kinds have just
+// been stored for this person.
+//
+// Never blocks and never fails. Whatever calls this is in the
+// middle of answering a device, and a phone handing over its
+// readings must not be kept waiting on a rule -- still less on the
+// model a rule might ask for a sentence.
+func (r *Runner) Arrived(userID string, kinds []string) {
+	if r == nil || userID == "" || len(kinds) == 0 {
+		return
+	}
+	select {
+	case r.inbox() <- landing{userID: userID, kinds: kinds}:
+	default:
+		// Counted rather than logged. A runner this far behind
+		// would otherwise write a line per batch about being
+		// behind, which is the thing making it behind.
+		r.dropped.Add(1)
+	}
+}
+
+// inbox : The arrivals channel, made once.
+func (r *Runner) inbox() chan landing {
+	r.once.Do(func() { r.landed = make(chan landing, Backlog) })
+	return r.landed
+}
+
+// Dropped : How many arrivals were thrown away because the runner
+// was too far behind to look at them.
+func (r *Runner) Dropped() int64 { return r.dropped.Load() }
 
 // Pass : What one look did.
 type Pass struct {
@@ -123,14 +193,93 @@ func (r *Runner) Run(ctx context.Context) {
 	tick := time.NewTicker(every)
 	defer tick.Stop()
 
+	in := r.inbox()
 	for {
 		select {
 		case <-ctx.Done():
 			return
 		case <-tick.C:
 			r.Once(ctx)
+		case l := <-in:
+			r.Landed(ctx, l.userID, l.kinds)
 		}
 	}
+}
+
+// Landed : Runs the rules that were waiting for one of these kinds.
+//
+// A rule fires on the **crossing**, not on the condition being
+// true. A phone sitting at fifteen per cent reports itself every
+// few minutes, and a rule that ran each time would say the same
+// thing all afternoon. So the reading before this one is read
+// too, and the rule runs only where the condition was false then
+// and is true now.
+//
+// It follows that a rule can never fire on the first reading of a
+// kind the server has never seen. That is the same answer a check
+// gives when it has nothing to read, for the same reason: nothing
+// is known, so no crossing is proved.
+func (r *Runner) Landed(ctx context.Context, userID string, kinds []string) Pass {
+	var pass Pass
+	if r == nil || r.Store == nil || r.Doer == nil || r.Readings == nil {
+		return pass
+	}
+
+	watching, err := r.Store.Watching(ctx, userID, Limit)
+	if err != nil {
+		r.log("cannot read which rules are waiting", err)
+		return pass
+	}
+	if len(watching) == 0 {
+		return pass
+	}
+
+	landed := make(map[string]bool, len(kinds))
+	for _, k := range kinds {
+		landed[k] = true
+	}
+
+	now := r.clock()
+	for _, j := range watching {
+		gate, err := Watched(j.Schedule)
+		if err != nil {
+			r.note("a rule's condition can no longer be read", j, err.Error())
+			continue
+		}
+		if !landed[gate.Needs()] {
+			continue
+		}
+		crossed, err := r.crossed(ctx, userID, gate, now)
+		if err != nil {
+			r.log("cannot read what a rule is waiting on", err)
+			continue
+		}
+		if !crossed {
+			continue
+		}
+		r.one(ctx, j, now, &pass)
+	}
+	return pass
+}
+
+// crossed : Whether the condition has just become true.
+func (r *Runner) crossed(ctx context.Context, userID string, g Gate, now time.Time) (bool, error) {
+	got, err := r.Readings.Latest(ctx, userID, g.Needs(), 2)
+	if err != nil {
+		return false, err
+	}
+	if len(got) == 0 {
+		return false, nil
+	}
+	// away is false throughout: a watching rule may not ask about
+	// presence, because presence does not arrive.
+	if !g.Passes(got[0], false, now) {
+		return false, nil
+	}
+	if len(got) < 2 {
+		return false, nil
+	}
+	return !g.Passes(got[1], false, now), nil
 }
 
 // Once : One look for work.
@@ -157,7 +306,11 @@ func (r *Runner) one(ctx context.Context, j Job, now time.Time, pass *Pass) {
 	// Too late to be worth doing. The server was off over the
 	// moment, and yesterday's eight o'clock done at noon is worse
 	// than not done at all.
-	if now.Sub(j.Next) > Stale {
+	//
+	// Only ever asked of a rule that had a time. A watching rule
+	// has none, and the reading that set it off arrived a moment
+	// ago by definition.
+	if !Watches(j.Schedule) && now.Sub(j.Next) > Stale {
 		pass.Skipped++
 		r.note("a job's moment passed while nothing was running", j, "")
 		r.settle(ctx, j, now, "its moment passed before anything ran")
@@ -201,6 +354,15 @@ func (r *Runner) one(ctx context.Context, j Job, now time.Time, pass *Pass) {
 
 // settle : Works out when the job runs next and records it.
 func (r *Runner) settle(ctx context.Context, j Job, now time.Time, why string) {
+	// A watching rule has no next time and does not end. It waits
+	// for the next reading that crosses its line.
+	if Watches(j.Schedule) {
+		if err := r.Store.Ran(ctx, j.ID, time.Time{}, Active, why, now); err != nil {
+			r.log("cannot record that a job ran", err)
+		}
+		return
+	}
+
 	state, next := Done, time.Time{}
 	if Repeats(j.Schedule) {
 		following, err := Following(j.Schedule, now, r.where())

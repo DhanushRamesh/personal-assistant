@@ -41,11 +41,33 @@ func (s *Store) Due(_ context.Context, at time.Time, limit int) ([]job.Job, erro
 
 	var out []job.Job
 	for _, j := range s.jobs {
-		if j.State == job.Active && !j.Next.After(at) {
+		// A job with no next time is not due and never will be:
+		// it waits on a reading, not on the clock. The same
+		// "next_at IS NOT NULL" the real store asks for.
+		if j.State == job.Active && !j.Next.IsZero() && !j.Next.After(at) {
 			out = append(out, j)
 		}
 	}
 	sort.Slice(out, func(i, k int) bool { return out[i].Next.Before(out[k].Next) })
+	if limit > 0 && len(out) > limit {
+		out = out[:limit]
+	}
+	return out, nil
+}
+
+// Watching : This person's active rules that wait for something to
+// happen rather than for a time.
+func (s *Store) Watching(_ context.Context, userID string, limit int) ([]job.Job, error) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+
+	var out []job.Job
+	for _, j := range s.jobs {
+		if j.State == job.Active && j.UserID == userID && job.Watches(j.Schedule) {
+			out = append(out, j)
+		}
+	}
+	sort.Slice(out, func(i, k int) bool { return out[i].ID < out[k].ID })
 	if limit > 0 && len(out) > limit {
 		out = out[:limit]
 	}

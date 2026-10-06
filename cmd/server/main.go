@@ -595,9 +595,10 @@ func run() error {
 			answerer: answerer, cfg: cfg,
 			now: cfg.Assistant.Now, logger: logger.Logger,
 		},
-		Where:  cfg.Assistant.Location,
-		Now:    cfg.Assistant.Now,
-		Logger: logger.Logger,
+		Readings: readings{events: deviceEvents},
+		Where:    cfg.Assistant.Location,
+		Now:      cfg.Assistant.Now,
+		Logger:   logger.Logger,
 	}
 	watching.Add(1)
 	go func() {
@@ -620,6 +621,7 @@ func run() error {
 	handler := api.New(api.Options{
 		Logger:        logger.Logger,
 		DB:            db,
+		Arrivals:      running,
 		Chats:         chats,
 		Messages:      chats,
 		Reminders:     reminderStore,
@@ -2027,6 +2029,30 @@ func (d doing) Do(ctx context.Context, userID string, s job.Step, already []job.
 	return job.Outcome{}, fmt.Errorf("job: nothing carries out %q", s.Do)
 }
 
+// readings : What an event kind has lately said.
+//
+// The one place a rule's view of a reading is built, used both by
+// a check step and by the runner deciding whether a watching rule
+// has just crossed its line.
+type readings struct{ events *eventmysql.Store }
+
+// Latest : The most recent readings of a kind, newest first.
+func (r readings) Latest(ctx context.Context, userID, kind string, n int) ([]job.Reading, error) {
+	found, err := r.events.Recent(ctx, userID, event.Query{Kind: kind, Limit: n})
+	if err != nil {
+		return nil, err
+	}
+	out := make([]job.Reading, 0, len(found))
+	for _, e := range found {
+		out = append(out, job.Reading{
+			Value: event.Value(e.Payload),
+			At:    e.ReceivedAt,
+			Known: true,
+		})
+	}
+	return out, nil
+}
+
 // write : Asks the model for the sentence, then says it.
 //
 // The model is given the instruction and what the earlier steps of
@@ -2105,16 +2131,12 @@ func (d doing) check(ctx context.Context, userID string, s job.Step) (job.Outcom
 
 	var reading job.Reading
 	if kind := gate.Needs(); kind != "" {
-		latest, err := d.events.Recent(ctx, userID, event.Query{Kind: kind, Limit: 1})
+		latest, err := readings{events: d.events}.Latest(ctx, userID, kind, 1)
 		if err != nil {
 			return job.Outcome{}, err
 		}
 		if len(latest) > 0 {
-			reading = job.Reading{
-				Value: event.Value(latest[0].Payload),
-				At:    latest[0].ReceivedAt,
-				Known: true,
-			}
+			reading = latest[0]
 		}
 	}
 

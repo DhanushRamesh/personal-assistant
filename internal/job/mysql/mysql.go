@@ -103,6 +103,40 @@ func (s *Store) Due(ctx context.Context, at time.Time, limit int) ([]job.Job, er
 }
 
 // Ran : Records that a job ran and when it next runs.
+// Watching : This person's active rules that wait for something to
+// happen rather than for a time.
+//
+// Matched on the schedule text rather than a column of its own.
+// There are a handful of these rows and they are read when a
+// batch of readings lands, not in a loop; a column would be a
+// migration and a second place for the same fact to be wrong.
+func (s *Store) Watching(ctx context.Context, userID string, limit int) ([]job.Job, error) {
+	if s == nil || s.db == nil {
+		return nil, fmt.Errorf("job: there is nowhere to read jobs")
+	}
+	if limit <= 0 {
+		limit = job.Limit
+	}
+	var rows []row
+	err := s.db.WithContext(ctx).
+		Where("user_id = ? AND state = ? AND schedule LIKE ?",
+			userID, string(job.Active), job.When+" %").
+		Order("created_at ASC").Limit(limit).Find(&rows).Error
+	if err != nil {
+		return nil, fmt.Errorf("job: %w", err)
+	}
+
+	out := make([]job.Job, 0, len(rows))
+	for _, r := range rows {
+		j, err := assemble(r)
+		if err != nil {
+			continue
+		}
+		out = append(out, j)
+	}
+	return out, nil
+}
+
 func (s *Store) Ran(ctx context.Context, id string, next time.Time,
 	state job.State, why string, at time.Time) error {
 	if s == nil || s.db == nil {
