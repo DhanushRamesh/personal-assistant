@@ -75,6 +75,7 @@ import (
 	comingtool "github.com/DhanushRamesh/personal-assistant/internal/tool/coming"
 	"github.com/DhanushRamesh/personal-assistant/internal/tool/conversations"
 	eventstool "github.com/DhanushRamesh/personal-assistant/internal/tool/events"
+	leavingtool "github.com/DhanushRamesh/personal-assistant/internal/tool/leaving"
 	mailtool "github.com/DhanushRamesh/personal-assistant/internal/tool/mail"
 	mapstool "github.com/DhanushRamesh/personal-assistant/internal/tool/maps"
 	"github.com/DhanushRamesh/personal-assistant/internal/tool/memories"
@@ -334,6 +335,8 @@ func run() error {
 		comingtool.Tools(comingmysql.New(db.DB), comingtool.Clock{
 			Now: cfg.Assistant.Now, Location: cfg.Assistant.Location,
 		}),
+		[]tool.Tool{leavingtool.Due(settingOff(cfg, comingDiary(googleLink, cfg),
+			mapping(cfg), deviceEvents, logger.Logger))},
 		[]tool.Tool{comingtool.Due(comingtool.Looking{
 			Diary: comingDiary(googleLink, cfg),
 			Store: comingmysql.New(db.DB),
@@ -596,15 +599,6 @@ func run() error {
 		logger.Info("greeting them with a fixed salutation",
 			slog.String("greeting", cfg.Assistant.Greeting))
 	}
-
-	// And when to set off for it, which is the half the diary cannot
-	// say on its own: it knows the hour and not the road.
-	watching.Add(1)
-	go func() {
-		defer watching.Done()
-		settingOff(remindCtx, cfg, comingDiary(googleLink, cfg), mapping(cfg),
-			deviceEvents, chats, speaker, announcements, logger.Logger)
-	}()
 
 	// Announcements are published to clients, which collect them
 	// and decide for themselves whether anybody heard. The server
@@ -1623,33 +1617,31 @@ func askAs(
 // out faster themselves. They know the film is at ten past six;
 // what they do not know, standing in the kitchen, is that the road
 // is busy tonight.
+// settingOff : The watcher the leaving tool holds, or nothing.
+//
+// Built once and kept, because its memory of what it has already
+// said is a map in the process. A watcher made per call would
+// have no memory at all, and the leave-by sentence counts down --
+// a different sentence every look -- so nothing comparing words
+// could stop it repeating.
+//
+// It no longer says anything itself. Say is a sink: the words go
+// back to the tool, and the rule's relay step publishes them.
 func settingOff(
-	ctx context.Context,
 	cfg config.Config,
 	diary coming.Diary,
 	maps mapstool.Maps,
 	reported interface {
 		Recent(ctx context.Context, userID string, q event.Query) ([]event.Event, error)
 	},
-	talkers interface {
-		Talkers(ctx context.Context, since time.Time) ([]string, error)
-	},
-	speaker announce.Announcer,
-	announcements *announcement.Writer,
 	logger *slog.Logger,
-) {
-	here, err := hass.NewPresence(hass.PresenceConfig{
-		URL:    cfg.HomeAssistant.URL,
-		Token:  cfg.HomeAssistant.Token,
-		Entity: cfg.HomeAssistant.PresenceEntity,
-	})
-	// Four things are needed and any one of them missing turns the
-	// feature off rather than half on. Said once at startup, because
-	// a silent assistant and a broken one look identical.
-	if err != nil || diary == nil || maps == nil || speaker == nil || !speaker.Available() {
-		logger.Info("saying nothing about when to set off, " +
-			"with no diary, no map, nothing watching the room or nowhere to say it")
-		return
+) *leaving.Watcher {
+	// Two things are needed and either missing turns the feature
+	// off rather than half on. Said once at startup, because a
+	// silent assistant and a broken one look identical.
+	if diary == nil || maps == nil {
+		logger.Info("saying nothing about when to set off, with no diary or no map")
+		return nil
 	}
 
 	off := &leaving.Watcher{
@@ -1674,17 +1666,13 @@ func settingOff(
 		Journey: func(ctx context.Context, userID, where string) (time.Duration, error) {
 			return howFar(ctx, maps, reported, userID, where)
 		},
-		Say: func(ctx context.Context, userID, text string) error {
-			if err := announcement.Speak(ctx, speaker, conversation.Coming, text); err != nil {
-				return err
-			}
-			announcements.Coming(ctx, userID, text)
-			return nil
-		},
-		Here: func(userID string) (bool, bool) {
-			present, known := here.Here(ctx, userID)
-			return present, known
-		},
+		// A sink. Look returns the sentence as well, and the
+		// rule's relay step is what publishes it.
+		Say: func(context.Context, string, string) error { return nil },
+		// Always, because presence is the client's now: the server
+		// publishes a copy per client and each decides for itself
+		// whether anybody heard.
+		Here: func(string) (bool, bool) { return true, true },
 		Caution: func(ctx context.Context, userID string) string {
 			return lowOnCharge(ctx, reported, userID)
 		},
@@ -1692,14 +1680,10 @@ func settingOff(
 		Logger: logger,
 	}
 
-	logger.Info("saying when to set off",
-		slog.Duration("every", leaving.Every),
+	logger.Info("ready to say when to set off",
 		slog.Duration("soon", leaving.Soon),
 		slog.Duration("door", leaving.Door))
-
-	off.Run(ctx, func(ctx context.Context) ([]string, error) {
-		return talkers.Talkers(ctx, cfg.Assistant.Now().Add(-chat.Active))
-	})
+	return off
 }
 
 // howFar : How long it takes to get from where they are to a place

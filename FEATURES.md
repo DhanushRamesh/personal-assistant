@@ -36,7 +36,7 @@ flowchart TB
 
     CORE["The core<br/>persona, memory, tool loop"]
     MODEL["Model<br/>PlatformAI"]
-    TOOLS["57 tools<br/>section 2"]
+    TOOLS["58 tools<br/>section 2"]
     DB[("MySQL<br/>reminders, memories, events,<br/>conversations, places, profile")]
 
     CORE <--> MODEL
@@ -57,7 +57,7 @@ flowchart TB
 
 ## 2. What it can do when asked
 
-57 tools, grouped by what they are about. The model picks; nothing
+58 tools, grouped by what they are about. The model picks; nothing
 here is keyword matched.
 
 ```mermaid
@@ -75,6 +75,7 @@ flowchart LR
     CORE --- CONV["Conversations<br/>new, list, find, switch,<br/>rename, archive, delete"]
     CORE --- RULE["Rules<br/>add, list, cancel"]
     CORE --- SIT["Situations<br/>find"]
+    CORE --- LEAVE["Leaving<br/>due"]
     CORE --- MISC["Other<br/>coming_settled, coming_due, tool_describe"]
 ```
 
@@ -100,7 +101,7 @@ flowchart TB
         RM["Reminders"]
         GR["Greeting"]
         CO["Diary<br/>a rule and a tool, section 6"]
-        LV["Leave by"]
+        LV["Leave by<br/>a rule and a tool, section 6"]
         IM["Immediate<br/>six standing rules, section 6<br/>no longer a watcher"]
     end
 
@@ -109,7 +110,7 @@ flowchart TB
     RM -.-> OLD
     GR -.-> OLD
     CO --> EV
-    LV -.-> OLD
+    LV --> EV
     IM --> EV
     RN -.-> OLD
 
@@ -288,7 +289,7 @@ flowchart TB
     WHAT -- "check a condition" --> GATE{"Does it hold?<br/>an event value, how old it is,<br/>or who is in the room"}
     WHAT -- "ask the model to write one" --> MODEL{"Anything worth saying?<br/>may call the tools<br/>the rule named"}
     WHAT -- "say a fixed sentence" --> OUT["Published to the outbox<br/>section 3 takes it from there"]
-    WHAT -- "run a tool" --> TOOL["One of the 57 -- reading ones only<br/>what it returns is kept<br/>for the steps after it"]
+    WHAT -- "run a tool" --> TOOL["One of the 58 -- reading ones only<br/>what it returns is kept<br/>for the steps after it"]
 
     GATE -- "no, or nothing is known" --> STOP["Nothing after it runs<br/>not a failure; the row<br/>says what stopped it"]
     MODEL -- "NOTHING" --> STOP
@@ -460,9 +461,14 @@ staying where they are.
 
 Kept here so it is not rediscovered.
 
-- Four of the seven watchers are still loops in Go. Immediate,
-  situations and the diary have moved; reminders move last.
-  Leave-by is no longer blocked and has not been moved.
+- Three of the seven watchers are still loops in Go: reminders,
+  greeting and renaming. Immediate, situations, the diary and
+  leave-by have moved. Greeting and renaming are not moving;
+  reminders move last, so the engine's share is done.
+- Leave-by forgets what it has already said when the server
+  restarts. Its memory is a map in the process, as it was before
+  the move; the sentence counts down, so nothing comparing words
+  can replace it.
 - **Greeting and renaming are not moving, by decision.** They stay
   as they are. Neither is a standing rule, and neither would be
   better as one — see DEVELOPMENT.md. Four producers are in scope,
@@ -471,8 +477,9 @@ Kept here so it is not rediscovered.
   heard only because the producers still speak directly as well.
   The web client collects; the satellite is the half that has to
   judge whether anybody is in the room.
-- Five watchers still speak directly rather than publishing.
-  Immediate now publishes, because the engine does.
+- Reminders and the greeting still speak directly rather than
+  publishing. Everything on the engine publishes, because the
+  engine does.
 - `Asked` is carrying two different ideas: *only the client that
   caused this*, which a renaming means, and *the room rather than
   the phone*, which an immediate announcement means. A device event

@@ -11822,6 +11822,67 @@ words verbatim, recorded them as what it last said, and made no
 model call.
 
 
+### Leave-by moves, and a table that was nearly built
+
+Owner, 6 October 2026: *"do leave by."* The same shape again, and
+it caught me about to overbuild.
+
+#### The sentence counts down
+
+Situations and the diary are deduped by the rule now: it is told
+what it said last time and asked whether what it has is the same
+news. Leave-by cannot be, and the reason is in the words:
+
+	Time to set off for the dentist: it is about 20 minutes away.
+	The dentist starts 25 minutes from now and it is about 20 minutes away.
+
+The second form counts down. Twenty five, then twenty, then
+fifteen -- a different sentence every five minutes, and nothing
+comparing text could tell they are one warning. The watcher
+deduped per **appointment**, which the sentence cannot carry.
+
+So this needed keyed state, which the engine does not have, and I
+started designing a table for it: a key, a time, a small package,
+a migration.
+
+Stopped, because the watcher's memory is a map in the process and
+always has been. A tool built once and held keeps that map
+exactly as it is. The tool is registered at startup and its
+closure outlives every call, so the dedupe is neither better nor
+worse than it was this morning -- which is the right answer for a
+move, and leaves making it survive a restart as its own decision
+with its own reasons.
+
+Coming builds a loop per call because its state is in a table.
+Leaving holds one watcher because its state is not. The difference
+is written where each is built.
+
+#### What moved
+
+The five minute cadence, into a row. The delivery: it spoke
+directly and now publishes like everything else. And the presence
+gate, which is gone -- `Here` returns true always now, because
+presence belongs to the client and the server keeps no opinion
+about rooms.
+
+`Say` became a sink. `Look` returns the sentence as well as
+saying it, so the watcher now only returns it and the rule's
+relay step publishes it. No model: the words are settled by
+`Leaving`, down to the spelling of the duration.
+
+#### Proved
+
+Three rules now run on the engine where three loops used to:
+
+	anything amiss   every 2m   situation_find found nothing
+	what is coming   every 5m   coming_due found nothing
+	when to set off  every 5m   leaving_due found nothing
+
+Each ends its sequence at the tool, so looking costs no model
+call. That is nine hundred and thirty six looks a day between
+them and not one model call unless there is something to say.
+
+
 ## 12. Maintaining this file
 
 When the owner states a preference, makes a decision, or corrects something,
