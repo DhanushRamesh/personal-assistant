@@ -952,7 +952,9 @@ class Personality {
 
   factory Personality.fromJson(Map<String, dynamic> json) => Personality(
     body: (json['body'] as String?) ?? '',
-    writtenAt: DateTime.tryParse((json['written_at'] as String?) ?? '')?.toLocal(),
+    writtenAt: DateTime.tryParse(
+      (json['written_at'] as String?) ?? '',
+    )?.toLocal(),
     mine: (json['mine'] as bool?) ?? false,
   );
 }
@@ -1078,11 +1080,12 @@ class DeviceEventKind {
   final int count;
   final DateTime? last;
 
-  factory DeviceEventKind.fromJson(Map<String, dynamic> json) => DeviceEventKind(
-    kind: (json['kind'] as String?) ?? '',
-    count: (json['count'] as num?)?.toInt() ?? 0,
-    last: DateTime.tryParse((json['last'] as String?) ?? '')?.toLocal(),
-  );
+  factory DeviceEventKind.fromJson(Map<String, dynamic> json) =>
+      DeviceEventKind(
+        kind: (json['kind'] as String?) ?? '',
+        count: (json['count'] as num?)?.toInt() ?? 0,
+        last: DateTime.tryParse((json['last'] as String?) ?? '')?.toLocal(),
+      );
 }
 
 /// Events : A page of events, and what kinds exist to filter by.
@@ -1199,7 +1202,8 @@ class Remark {
   final String because;
 
   factory Remark.fromJson(Map<String, dynamic> json) => Remark(
-    at: DateTime.tryParse((json['at'] as String?) ?? '')?.toLocal() ??
+    at:
+        DateTime.tryParse((json['at'] as String?) ?? '')?.toLocal() ??
         DateTime.fromMillisecondsSinceEpoch(0),
     label: (json['label'] as String?) ?? '',
     reason: (json['reason'] as String?) ?? '',
@@ -1240,5 +1244,75 @@ class Vocabulary {
     writtenAt: DateTime.tryParse(
       (json['written_at'] as String?) ?? '',
     )?.toLocal(),
+  );
+}
+
+/// Owed : Something the assistant owes this client.
+///
+/// Published by the server and collected here, rather than pushed. A
+/// client is one of several, each with its own copy and its own verdict:
+/// the same warning can be read on a laptop and missed by a speaker in
+/// an empty room, and a single answer could not say so.
+class Owed {
+  const Owed({
+    required this.id,
+    required this.kind,
+    required this.say,
+    required this.due,
+    required this.expires,
+    this.away = '',
+    this.tries = 0,
+  });
+
+  final String id;
+
+  /// kind : reminder, coming, immediate, presence, renamed. What it is
+  /// for, so a screen can tell a reminder from a warning.
+  final String kind;
+
+  /// say : The sentence, settled before it was stored. Nothing here
+  /// composes anything.
+  final String say;
+
+  final DateTime? due;
+
+  /// expires : When it stops being worth saying. The server's half of
+  /// the decision: a client knows whether anybody is there, and only
+  /// the server knows whether the moment has passed.
+  final DateTime? expires;
+
+  /// away : What to do when nobody is there -- "hold" or "drop". A
+  /// screen needs nobody, so this client ignores it; it is here
+  /// because the field is the server's and not this client's.
+  final String away;
+
+  final int tries;
+
+  factory Owed.fromJson(Map<String, dynamic> json) => Owed(
+    id: (json['id'] ?? '') as String,
+    kind: (json['kind'] ?? '') as String,
+    say: (json['say'] ?? '') as String,
+    due: _time(json['due']),
+    expires: _time(json['expires']),
+    away: (json['away'] ?? '') as String,
+    tries: (json['tries'] ?? 0) as int,
+  );
+
+  static DateTime? _time(Object? raw) {
+    if (raw is! String || raw.isEmpty) return null;
+    return DateTime.tryParse(raw)?.toLocal();
+  }
+}
+
+/// Owing : What this client owes, as the endpoint returns it.
+class Owing {
+  const Owing({this.announcements = const []});
+
+  final List<Owed> announcements;
+
+  factory Owing.fromJson(Map<String, dynamic> json) => Owing(
+    announcements: ((json['announcements'] as List?) ?? const [])
+        .map((a) => Owed.fromJson(a as Map<String, dynamic>))
+        .toList(),
   );
 }

@@ -39,6 +39,10 @@ class _HomeScreenState extends State<HomeScreen> {
   void initState() {
     super.initState();
     widget.state.addListener(_onStateChanged);
+    // Everything the server has published to this client, wherever
+    // in the app they happen to be. The transcript shows these too,
+    // but only inside the one conversation they landed in.
+    widget.state.collect();
   }
 
   @override
@@ -174,14 +178,21 @@ class _HomeScreenState extends State<HomeScreen> {
                 if (!compact) SizedBox(width: 280, child: sidebar),
                 if (!compact) const AppDivider(vertical: true),
                 Expanded(
-                  child: _Conversation(
-                    state: state,
-                    composer: _composer,
-                    scroll: _scroll,
-                    onSend: _send,
-                    onMenu: compact
-                        ? () => _scaffold.currentState?.openDrawer()
-                        : null,
+                  child: Column(
+                    children: [
+                      _Owed(state: state),
+                      Expanded(
+                        child: _Conversation(
+                          state: state,
+                          composer: _composer,
+                          scroll: _scroll,
+                          onSend: _send,
+                          onMenu: compact
+                              ? () => _scaffold.currentState?.openDrawer()
+                              : null,
+                        ),
+                      ),
+                    ],
                   ),
                 ),
               ],
@@ -191,6 +202,81 @@ class _HomeScreenState extends State<HomeScreen> {
       },
     );
   }
+}
+
+/// _Owed : What the assistant has said unasked, wherever they are.
+///
+/// These reach the transcript as well, but only the one conversation
+/// they landed in. Something said unasked is said to the person, not
+/// to a thread, so it belongs where they are looking.
+class _Owed extends StatelessWidget {
+  const _Owed({required this.state});
+
+  final AppState state;
+
+  /// _most : How many to show at once.
+  ///
+  /// Three. One or two is the ordinary case; a backlog only happens
+  /// after this client has been shut for a while, and five of them
+  /// took half the screen the first time it collected. The rest are
+  /// still marked said -- the cap is what is shown, not what is
+  /// answered for.
+  static const int _most = 3;
+
+  @override
+  Widget build(BuildContext context) {
+    final all = state.owed;
+    if (all.isEmpty) return const SizedBox.shrink();
+    final owed = all.length <= _most ? all : all.sublist(all.length - _most);
+    final hidden = all.length - owed.length;
+
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(
+        AppSpacing.md,
+        AppSpacing.md,
+        AppSpacing.md,
+        0,
+      ),
+      child: Column(
+        children: [
+          for (final one in owed)
+            Padding(
+              padding: const EdgeInsets.only(bottom: AppSpacing.sm),
+              child: AppBanner(
+                message: one.say,
+                tone: _tone(one.kind),
+                actionLabel: 'Dismiss',
+                onAction: () => state.dismiss(one.id),
+              ),
+            ),
+          if (hidden > 0)
+            Padding(
+              padding: const EdgeInsets.only(bottom: AppSpacing.sm),
+              child: Align(
+                alignment: Alignment.centerLeft,
+                child: Text(
+                  'and $hidden more said earlier',
+                  style: context.text.caption.copyWith(
+                    color: context.colors.textMuted,
+                  ),
+                ),
+              ),
+            ),
+        ],
+      ),
+    );
+  }
+
+  /// _tone : How loudly to show it.
+  ///
+  /// A reminder is the person's own instruction coming back and wants
+  /// noticing; something a device marked to be said now is a warning;
+  /// the rest is the assistant speaking up, which is information.
+  static AppBannerTone _tone(String kind) => switch (kind) {
+    'reminder' => AppBannerTone.warning,
+    'immediate' => AppBannerTone.warning,
+    _ => AppBannerTone.info,
+  };
 }
 
 /// _Sidebar : The conversations, a way to start one, and the way to settings.

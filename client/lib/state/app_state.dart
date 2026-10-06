@@ -529,6 +529,87 @@ class AppState extends ChangeNotifier {
   Remarks? get remarks => _remarks;
   Remarks? _remarks;
 
+  /// owed : What the server has published to this client and not yet
+  /// been told about.
+  ///
+  /// Collected rather than pushed, which is the whole shape of it: the
+  /// server publishes a copy per client and each one decides for itself
+  /// whether anybody heard. A screen needs nobody in front of it, so
+  /// this client's answer is always yes -- it shows them and says so.
+  /// A voice client in an empty room would leave its copy pending.
+  List<Owed> get owed => List.unmodifiable(_owed);
+  final List<Owed> _owed = [];
+
+  /// _said : The ones already reported, so a slow round trip does not
+  /// show the same sentence twice.
+  final Set<String> _said = {};
+
+  Timer? _collecting;
+
+  /// collect : Starts asking for what this client owes.
+  ///
+  /// Polled rather than streamed, for the reason refresh gives: the
+  /// only stream this client opens is for a chat it started itself,
+  /// and a second one to keep alive and reconnect would cost more
+  /// than asking.
+  ///
+  /// Twenty seconds. These are things nobody asked for, so none of
+  /// them is owed to the second; the reminders among them are already
+  /// a minute's grace wide at the server.
+  void collect() {
+    _collecting ??= Timer.periodic(
+      const Duration(seconds: 20),
+      (_) => _collectOnce(),
+    );
+    unawaited(_collectOnce());
+  }
+
+  /// dismiss : Takes one off the screen once it has been seen.
+  void dismiss(String id) {
+    _owed.removeWhere((o) => o.id == id);
+    _set();
+  }
+
+  /// _collectOnce : One reading of what is owed, and the telling.
+  ///
+  /// Failures are swallowed. Nothing here was asked for, so an error
+  /// banner about not having collected something nobody knows about
+  /// would be worse than the silence.
+  ///
+  /// Marked said as it is shown, not as it is dismissed. A screen has
+  /// no later: the sentence is on it from this moment, and leaving the
+  /// telling until somebody clicks would have the sweeper expire
+  /// things that were read.
+  Future<void> _collectOnce() async {
+    if (_disposed) return;
+    try {
+      final owing = await api.listAnnouncements();
+      var fresh = false;
+      for (final one in owing.announcements) {
+        if (one.id.isEmpty || _said.contains(one.id)) continue;
+        _said.add(one.id);
+        _owed.add(one);
+        fresh = true;
+        unawaited(_tell(one.id));
+      }
+      if (fresh) _set();
+    } on Object {
+      // Asked again in twenty seconds.
+    }
+  }
+
+  /// _tell : Says this client said it.
+  Future<void> _tell(String id) async {
+    try {
+      await api.markAnnouncement(id);
+    } on Object {
+      // It stays pending and comes back, which is the right failure:
+      // the server believing it was said when it was not is the one
+      // that loses it.
+      _said.remove(id);
+    }
+  }
+
   /// loadMemories : Reads what has been remembered.
   Future<void> loadMemories() async {
     _set(busy: true, error: null);
@@ -762,6 +843,7 @@ class AppState extends ChangeNotifier {
   @override
   void dispose() {
     _disposed = true;
+    _collecting?.cancel();
     api.close();
     super.dispose();
   }
@@ -782,30 +864,30 @@ class AppState extends ChangeNotifier {
           _replaceLast((t) => t.copyWith(chatId: piece.chatId));
           watching ??= _watchSteps(piece.chatId);
         }
-      if (piece.text.isNotEmpty) {
-        answer += piece.text;
-        _replaceLast(
-          (t) => t.copyWith(answer: answer, status: ChatStatus.running),
-        );
-      }
-      if (!piece.done) continue;
-
-      switch (piece.doneReason) {
-        case 'error':
+        if (piece.text.isNotEmpty) {
+          answer += piece.text;
           _replaceLast(
-            (t) => t.copyWith(
-              status: ChatStatus.failed,
-              error: answer.isEmpty
-                  ? 'The service could not complete the request.'
-                  : answer,
-              detail: piece.errorDetail,
-            ),
+            (t) => t.copyWith(answer: answer, status: ChatStatus.running),
           );
-        case 'cancelled':
-          _replaceLast((t) => t.copyWith(status: ChatStatus.cancelled));
-        default:
-          _replaceLast((t) => t.copyWith(status: ChatStatus.completed));
-      }
+        }
+        if (!piece.done) continue;
+
+        switch (piece.doneReason) {
+          case 'error':
+            _replaceLast(
+              (t) => t.copyWith(
+                status: ChatStatus.failed,
+                error: answer.isEmpty
+                    ? 'The service could not complete the request.'
+                    : answer,
+                detail: piece.errorDetail,
+              ),
+            );
+          case 'cancelled':
+            _replaceLast((t) => t.copyWith(status: ChatStatus.cancelled));
+          default:
+            _replaceLast((t) => t.copyWith(status: ChatStatus.completed));
+        }
       }
     } finally {
       watching?.cancel();
@@ -825,10 +907,8 @@ class AppState extends ChangeNotifier {
   ///
   /// A second apart: the rounds of a turn are seconds each, so anything
   /// faster asks repeatedly for the same answer.
-  Timer _watchSteps(String chatId) => Timer.periodic(
-    const Duration(seconds: 1),
-    (_) => _readSteps(chatId),
-  );
+  Timer _watchSteps(String chatId) =>
+      Timer.periodic(const Duration(seconds: 1), (_) => _readSteps(chatId));
 
   /// _readSteps : One reading of what a turn has done.
   ///
@@ -839,9 +919,7 @@ class AppState extends ChangeNotifier {
     try {
       final steps = await api.steps(chatId);
       if (_disposed) return;
-      _replaceLast(
-        (t) => t.chatId == chatId ? t.copyWith(steps: steps) : t,
-      );
+      _replaceLast((t) => t.chatId == chatId ? t.copyWith(steps: steps) : t);
     } on Object {
       // Deliberately ignored; see above.
     }

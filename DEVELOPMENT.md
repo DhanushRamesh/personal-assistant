@@ -11534,6 +11534,80 @@ trade `rhythm` already makes: the calendar is a network call away
 and the rest of this is not.
 
 
+### Something collects at last
+
+The outbox has been publishing since 6 October and nothing had
+ever fetched from it. Every announcement ever written to a client
+ended the same way:
+
+	expired   12
+	said       0
+
+The sweeper said so twice a minute, in the log, all day: *an
+announcement went stale before a client could say it*.
+
+#### The typed half is the simple half
+
+Owner's design, in his own words: *"for a typed client presence is
+always true."* A screen needs nobody in front of it, so the web
+client collects, shows, and says it said so. The judgement a voice
+client has to make -- is anybody in the room -- does not arise.
+
+Polled at twenty seconds, for the reason `refresh` already gives:
+the only stream this client opens is for a chat it started itself,
+and a second one to keep alive and reconnect costs more than
+asking. Nothing here is owed to the second.
+
+**Marked said as it is shown, not as it is dismissed.** A screen
+has no later: the sentence is on it from that moment. Waiting for
+a click would have the sweeper expire things that were read.
+
+**A failed mark puts it back.** The announcement stays pending and
+comes round again, which is the right way to fail: the server
+believing something was said when it was not is the failure that
+loses it.
+
+#### Where it appears, and why not only the transcript
+
+These reach the transcript too -- `announcement.Writer` has always
+written them -- but only the one conversation they landed in. Open
+on a different conversation, or on the events page, and you never
+see them. Something said unasked is said to the person, not to a
+thread, so it belongs where they are looking: a banner above
+whatever is open, dismissible, with the tone taken from the kind.
+
+#### The bug that would have made all of this do nothing
+
+The first real collection came back with every sentence correct
+and **every identifier empty**. A client cannot report having said
+a thing it cannot name.
+
+`Pending` scanned into an anonymous struct with `copyRow`
+embedded, and GORM does not look inside an embedded struct unless
+it is told to. The joined columns -- kind, say, due, expires --
+were named explicitly and arrived; every column of the delivery
+itself was silently zero. Flattened, and the select names its
+columns rather than asking for `owed_clients.*`.
+
+It had been answering with blank identifiers since the endpoint
+was written in the morning. Nothing caught it because nothing
+collected, which is exactly the shape of fault a feature nobody
+uses accumulates.
+
+#### Proved in the real client
+
+Loaded against the running server, already signed in. Five
+announcements that had been pending for hours appeared as
+banners -- the backlog nothing had ever fetched -- and all five
+went to `said`. A sixth published afterwards appeared alone and
+marked itself within the poll.
+
+The five also taught the one piece of design the plan did not
+have: stacked, they took half the screen. Three at a time now,
+with a line saying how many went before. The cap is what is
+shown, not what is answered for -- everything is still marked.
+
+
 ## 12. Maintaining this file
 
 When the owner states a preference, makes a decision, or corrects something,

@@ -123,7 +123,7 @@ flowchart TB
     DB[("owed + owed_clients<br/>one copy per client, pending")]
 
     DB --> GET["GET /v1/announcements<br/>what THIS client owes"]
-    GET -.-> NOBODY["nothing collects yet"]
+    GET --> WEBCLIENT["the web client, every 20s<br/>a screen needs nobody,<br/>so it says it said it"]
     GET --> CL{"The client decides<br/>presence lives here"}
 
     CL -- "typed: a screen needs nobody" --> MARK["POST /v1/announcements/id<br/>said"]
@@ -451,9 +451,10 @@ Kept here so it is not rediscovered.
   as they are. Neither is a standing rule, and neither would be
   better as one — see DEVELOPMENT.md. Four producers are in scope,
   not six.
-- No client collects its announcements yet, so what situations
-  publish is written down and never said. The next step, and the
-  one that matters most.
+- The voice client does not collect yet, so an announcement is
+  heard only because the producers still speak directly as well.
+  The web client collects; the satellite is the half that has to
+  judge whether anybody is in the room.
 - Five watchers still speak directly rather than publishing.
   Immediate now publishes, because the engine does.
 - `Asked` is carrying two different ideas: *only the client that

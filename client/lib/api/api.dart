@@ -393,6 +393,30 @@ class AssistantApi {
     ),
   );
 
+  /// listAnnouncements : What this client still owes somebody.
+  ///
+  /// This client, not this person. Two clients of the same person owe
+  /// different things, which is the whole point of collecting rather
+  /// than being pushed to.
+  Future<Owing> listAnnouncements() async =>
+      Owing.fromJson(await _send('GET', '/v1/announcements'));
+
+  /// markAnnouncement : What this client did about one.
+  ///
+  /// "said" or "dropped". Pending is not a state to report: it is what
+  /// a row already is, so a client that cannot say anything says
+  /// nothing and the announcement is still waiting next time.
+  Future<void> markAnnouncement(
+    String id, {
+    String state = 'said',
+    String? why,
+  }) => _send(
+    'POST',
+    '/v1/announcements/$id',
+    body: {'state': state, if (why != null && why.isNotEmpty) 'why': why},
+    expectBody: false,
+  );
+
   /// vocabulary : The proper nouns speech recognition expects.
   Future<Vocabulary> vocabulary() async =>
       Vocabulary.fromJson(await _send('GET', '/v1/vocabulary'));

@@ -111,17 +111,34 @@ func (s *Store) Pending(ctx context.Context, clientID string, limit int) ([]outb
 		limit = outbox.Limit
 	}
 
+	// Flat, and deliberately not the copyRow embedded with the
+	// joined columns beside it. GORM's Scan does not look inside an
+	// embedded struct without being told to, so every field of the
+	// copy came back zero while the joined ones were right: the
+	// announcement had its words and no identifier, and a client
+	// cannot say it has said a thing it cannot name.
+	//
+	// Nothing caught it because nothing collected. The endpoint has
+	// been answering with blank identifiers since it was written.
 	var found []struct {
-		copyRow
-		Kind    string
-		Say     string
-		UserID  string
-		Due     time.Time
-		Expires time.Time
+		ID       string
+		OwedID   string
+		ClientID string
+		State    string
+		Tries    int
+		Why      string
+		At       time.Time
+		Kind     string
+		Say      string
+		UserID   string
+		Due      time.Time
+		Expires  time.Time
 	}
 	err := s.db.WithContext(ctx).
 		Table("owed_clients").
-		Select("owed_clients.*, owed.kind, owed.say, owed.user_id, owed.due, owed.expires").
+		Select("owed_clients.id, owed_clients.owed_id, owed_clients.client_id, "+
+			"owed_clients.state, owed_clients.tries, owed_clients.why, owed_clients.at, "+
+			"owed.kind, owed.say, owed.user_id, owed.due, owed.expires").
 		Joins("JOIN owed ON owed.id = owed_clients.owed_id").
 		Where("owed_clients.client_id = ? AND owed_clients.state = ?", clientID, string(outbox.Pending)).
 		Order("owed.due ASC").
