@@ -104,6 +104,13 @@ type Step struct {
 	// the battery is worth mentioning*. What the earlier steps of
 	// the sequence found is given to the model with it.
 	Ask string `json:"ask,omitempty"`
+	// Tools : What the model may call for itself, on a write.
+	//
+	// Named here rather than left open, so that what a rule can
+	// reach is readable off the row. The model decides whether to
+	// call them and with what arguments, which is the half a rule
+	// cannot know when it is written.
+	Tools []string `json:"tools,omitempty"`
 	// When : The condition, as it was written, for a check.
 	//
 	// Kept as written rather than parsed into fields, for the same

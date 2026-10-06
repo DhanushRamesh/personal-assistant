@@ -2156,18 +2156,32 @@ func (r readings) Latest(ctx context.Context, userID, kind string, n int) ([]job
 	return out, nil
 }
 
+// Rounds : How many times a write step may call tools before it
+// has to answer.
+//
+// A rule runs unattended, possibly every minute. Four rounds is
+// more than any sentence has needed and small enough that a rule
+// which has started arguing with itself stops on its own.
+const Rounds = 4
+
 // write : Asks the model for the sentence, then says it.
 //
-// The model is given the instruction and what the earlier steps of
-// the sequence found, and nothing else. It has no tools of its
-// own: a sequence says what to look at by putting tool steps in
-// front of this one, which keeps what a rule may reach visible in
-// the rule rather than decided in the moment.
+// The model is given the instruction, whatever the earlier steps
+// found, and the tools the rule named -- which it may call for
+// itself, with arguments it works out from the question in front
+// of it.
+//
+// Named tools rather than all of them. What a rule can reach
+// stays readable off the row, which was the point of not handing
+// over the toolbox; what it could not do before was decide at the
+// time, and a rule written on Monday cannot know what Thursday
+// needs.
 func (d doing) write(ctx context.Context, userID string, s job.Step, already []job.Ran) (job.Outcome, error) {
-	model := cmp.Or(d.cfg.PlatformAI.FastModel, d.cfg.PlatformAI.Model)
-	answer, err := askAs(ctx, d.answerer, d.cfg.PlatformAI.Vendor, model,
-		persona.Voice(d.cfg.Assistant.Persona, d.cfg.Assistant.Name),
-		environment.PurposeRemark, writing(s.Ask, already))
+	specs, bad := d.offered(s.Tools)
+	if bad != nil {
+		return job.Outcome{}, bad
+	}
+	answer, err := d.converse(ctx, userID, writing(s.Ask, already), specs)
 	if err != nil {
 		return job.Outcome{}, err
 	}
@@ -2195,6 +2209,109 @@ func (d doing) write(ctx context.Context, userID string, s job.Step, already []j
 	d.written.Announced(ctx, userID, said)
 	d.logger.InfoContext(ctx, "a job wrote what to say", slog.String("ask", s.Ask))
 	return job.Outcome{Said: said}, nil
+}
+
+// offered : The tools a rule named, as the model is shown them.
+//
+// Reading tools only, checked here as well as when the rule was
+// written: a tool can gain a write between the two.
+func (d doing) offered(names []string) ([]environment.ToolSpec, error) {
+	if len(names) == 0 {
+		return nil, nil
+	}
+	address := persona.AddressFor(d.cfg.Assistant.Persona)
+	out := make([]environment.ToolSpec, 0, len(names))
+	for _, name := range names {
+		found, ok := d.tools.Get(name)
+		if !ok {
+			return nil, fmt.Errorf("a rule names %q, which is not a tool", name)
+		}
+		if found.Writes {
+			return nil, fmt.Errorf("a rule names %q, which changes things", name)
+		}
+		schema, err := tool.Narrated(found.Params, address).MarshalJSON()
+		if err != nil {
+			return nil, fmt.Errorf("the schema for %s will not render: %w", name, err)
+		}
+		out = append(out, environment.ToolSpec{
+			Name:        name,
+			Description: tool.NarratedDescription(found.Description(), address),
+			Parameters:  schema,
+		})
+	}
+	return out, nil
+}
+
+// converse : Asks, runs whatever tools come back, and asks again.
+//
+// The question is put once and then lives in the history, because
+// a model asked it twice answers it twice.
+func (d doing) converse(ctx context.Context, userID, ask string,
+	specs []environment.ToolSpec) (string, error) {
+	var (
+		history []environment.Turn
+		ran     []string
+		prompt  = ask
+	)
+
+	for round := 0; round < Rounds; round++ {
+		stream, err := d.answerer.Run(ctx, environment.Request{
+			Prompt:       prompt,
+			History:      history,
+			Purpose:      environment.PurposeRemark,
+			Vendor:       d.cfg.PlatformAI.Vendor,
+			Model:        cmp.Or(d.cfg.PlatformAI.FastModel, d.cfg.PlatformAI.Model),
+			SystemPrompt: persona.Voice(d.cfg.Assistant.Persona, d.cfg.Assistant.Name),
+			Tools:        specs,
+		})
+		if err != nil {
+			return "", err
+		}
+
+		// Drained to the end whatever it says, so the provider's
+		// goroutine is never left blocked on a send.
+		var last *environment.Message
+		for msg := range stream {
+			m := msg
+			last = &m
+		}
+		switch {
+		case last == nil:
+			return "", fmt.Errorf("the provider said nothing")
+		case last.Kind == environment.KindError:
+			return "", fmt.Errorf("%s", last.Text)
+		case last.Kind != environment.KindToolCalls:
+			return last.Text, nil
+		}
+
+		if prompt != "" {
+			history = append(history, environment.Turn{
+				Role: environment.RoleUser, Text: prompt})
+			prompt = ""
+		}
+		history = append(history, environment.Turn{
+			Role: environment.RoleAssistant, ToolCalls: last.ToolCalls})
+
+		results := make([]environment.ToolResult, 0, len(last.ToolCalls))
+		for _, c := range last.ToolCalls {
+			out := d.tools.Call(ctx, c.Name, tool.Invocation{
+				Caller: tool.Caller{UserID: userID, Channel: chat.ChannelDirect},
+				Args:   json.RawMessage(c.Arguments),
+				Ran:    ran,
+			})
+			ran = append(ran, c.Name)
+			d.logger.InfoContext(ctx, "a job's model called a tool",
+				slog.String("tool", c.Name),
+				slog.String("outcome", string(out.Outcome)))
+			results = append(results, environment.ToolResult{ID: c.ID, Content: out.Content})
+		}
+		history = append(history, environment.Turn{
+			Role: environment.RoleTool, ToolResults: results})
+	}
+
+	// Still calling tools after four rounds. Silence rather than a
+	// sentence built on a conversation that never finished.
+	return "", fmt.Errorf("a rule asked for tools %d times without answering", Rounds)
 }
 
 // writing : What the model is asked, for a write step.

@@ -244,3 +244,46 @@ func TestALookupCarriesItsArguments(t *testing.T) {
 		t.Errorf("the step runs with %v", args)
 	}
 }
+
+// A rule written on Monday cannot know what Thursday needs. The
+// tools it names are passed to the model, which decides whether
+// to call them and with what arguments.
+func TestARuleCanBeGivenToolsToDecideWith(t *testing.T) {
+	store, by := made()
+
+	out := call(t, by["rule_add"], `{"name":"anything wrong","schedule":"every 30m",
+		"ask":"say whether anything needs their attention","tools":["calendar_events"]}`)
+	if out.Outcome == conversation.OutcomeFailed {
+		t.Fatalf("rule_add refused: %s", out.Content)
+	}
+
+	mine, _ := store.Mine(context.Background(), "usr_1", "rule", 50)
+	steps := mine[0].Steps
+	if len(steps) != 1 || steps[0].Do != job.Write {
+		t.Fatalf("the sequence is %+v", steps)
+	}
+	if len(steps[0].Tools) != 1 || steps[0].Tools[0] != "calendar_events" {
+		t.Errorf("the write may call %v", steps[0].Tools)
+	}
+
+	// And what it may reach is readable back, which is the reason
+	// for naming them rather than handing over the toolbox.
+	listed := call(t, by["rule_list"], `{}`)
+	if !strings.Contains(listed.Content, "may call calendar_events") {
+		t.Errorf("the listing does not say what it may reach: %s", listed.Content)
+	}
+}
+
+// A tool that changes something is refused here too, not only as
+// a lookup.
+func TestAToolAWriteMayCallMustOnlyRead(t *testing.T) {
+	_, by := made()
+	out := call(t, by["rule_add"], `{"name":"bad","schedule":"every 5m",
+		"ask":"say something","tools":["calendar_cancel"]}`)
+	if out.Outcome != conversation.OutcomeFailed {
+		t.Fatalf("a writing tool was accepted: %s", out.Content)
+	}
+	if !strings.Contains(out.Content, "calendar_cancel") {
+		t.Errorf("it did not say which tool: %s", out.Content)
+	}
+}

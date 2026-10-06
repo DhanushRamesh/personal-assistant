@@ -113,6 +113,16 @@ var howToArgue = prompt.Text(
 	"rather than what that thing says now, and the rule will answer from the wrong row.",
 )
 
+// howToTools : When to let it decide for itself, written for the
+// model.
+var howToTools = prompt.Text(
+	"Tools the rule may call for itself when it runs, choosing whether to and with what arguments.",
+	"Reading tools only, at most three.",
+	"Use this where what is needed depends on what it finds -- \"tell me if anything needs attention\" --",
+	"and look_up where the rule always wants the same thing, which costs one round trip less.",
+	"Giving both is fine: the lookups run first and the tools are there if more is wanted.",
+)
+
 // howToCondition : The condition forms, written for the model.
 var howToCondition = prompt.Lines(
 	"A condition checked each time it runs, which stops it when it does not hold. Leave it out unless they said one.",
@@ -205,6 +215,15 @@ func add(store Store, clock Clock, id func() string, look Lookup) tool.Tool {
 						"and may answer that there is nothing worth saying. Give this or say, never both.",
 				},
 				"when": {Type: "string", Description: howToCondition},
+				"tools": {
+					Type:        "array",
+					Description: howToTools,
+					MaxItems:    &most,
+					Items: &tool.Property{
+						Type:        "string",
+						Description: "A reading tool's name, such as event_recent.",
+					},
+				},
 				"look_up": {
 					Type:        "array",
 					Description: howToLookUp,
@@ -248,6 +267,7 @@ func add(store Store, clock Clock, id func() string, look Lookup) tool.Tool {
 				Ask      string   `json:"ask"`
 				When     string   `json:"when"`
 				LookUp   []lookUp `json:"look_up"`
+				Tools    []string `json:"tools"`
 			}
 			if err := json.Unmarshal(in.Args, &args); err != nil {
 				return tool.Failed("Those arguments could not be read.")
@@ -259,7 +279,7 @@ func add(store Store, clock Clock, id func() string, look Lookup) tool.Tool {
 				return tool.Failed("This request did not come from a known person.")
 			}
 
-			steps, bad := assemble(args.When, args.LookUp, args.Say, args.Ask, look)
+			steps, bad := assemble(args.When, args.LookUp, args.Tools, args.Say, args.Ask, look)
 			if bad != "" {
 				return tool.Failed(bad)
 			}
@@ -349,7 +369,7 @@ type lookUp struct {
 // but the check may be about something a lookup fetched -- so the
 // readings come first and the one thing that can stop the rule
 // comes last before it speaks.
-func assemble(when string, reads []lookUp, say, ask string, look Lookup) ([]job.Step, string) {
+func assemble(when string, reads []lookUp, mayCall []string, say, ask string, look Lookup) ([]job.Step, string) {
 	say, ask = strings.TrimSpace(say), strings.TrimSpace(ask)
 	switch {
 	case say != "" && ask != "":
@@ -396,11 +416,46 @@ func assemble(when string, reads []lookUp, say, ask string, look Lookup) ([]job.
 	}
 
 	if ask != "" {
-		steps = append(steps, job.Step{Do: job.Write, Ask: ask})
+		allowed, bad := reading(mayCall, look)
+		if bad != "" {
+			return nil, bad
+		}
+		steps = append(steps, job.Step{Do: job.Write, Ask: ask, Tools: allowed})
 	} else {
 		steps = append(steps, job.Step{Do: job.Announce, Say: say})
 	}
 	return steps, ""
+}
+
+// reading : The tools a write may call, refusing any that write.
+//
+// A rule runs unattended and may run every few minutes. Reading
+// is safe to repeat; writing is not, and nobody is there to
+// notice the first time it goes wrong.
+func reading(names []string, look Lookup) ([]string, string) {
+	if len(names) == 0 {
+		return nil, ""
+	}
+	if len(names) > Most {
+		return nil, fmt.Sprintf("A rule may be given at most %d tools.", Most)
+	}
+	out := make([]string, 0, len(names))
+	for _, raw := range names {
+		name := strings.TrimSpace(raw)
+		if name == "" {
+			continue
+		}
+		found, ok := look(name)
+		if !ok {
+			return nil, fmt.Sprintf("There is no tool called %q.", name)
+		}
+		if found.Writes {
+			return nil, fmt.Sprintf(
+				"%s changes things, and a rule may only read.", name)
+		}
+		out = append(out, name)
+	}
+	return out, ""
 }
 
 // arguments : A lookup's arguments, checked before they are stored.
@@ -463,7 +518,11 @@ func doing(steps []job.Step) string {
 		case job.Announce:
 			out = append(out, fmt.Sprintf("says %q", s.Say))
 		case job.Write:
-			out = append(out, fmt.Sprintf("works out what to say about %q", s.Ask))
+			said := fmt.Sprintf("works out what to say about %q", s.Ask)
+			if len(s.Tools) > 0 {
+				said += ", and may call " + strings.Join(s.Tools, " or ")
+			}
+			out = append(out, said)
 		case job.Check:
 			out = append(out, "only if "+s.When)
 		case job.Call:

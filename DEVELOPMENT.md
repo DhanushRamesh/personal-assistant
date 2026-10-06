@@ -11163,6 +11163,77 @@ person, and no amount of argument plumbing would have stopped it
 on its own.
 
 
+### A rule that can decide what to look at
+
+Owner, 6 October 2026, on the write step being given no tools:
+*"why is a tool not passed? I think relevant tools must be
+passed."*
+
+Right, and the reasoning it overturned was half sound.
+
+What was sound: **what a rule can reach should be readable off
+the row.** A rule running unattended every minute with the whole
+toolbox is not something anybody can audit by looking at it.
+
+What was wrong: the conclusion. Fixing *what* a rule may reach
+does not require fixing *when and with what arguments*, and those
+are exactly the parts a rule cannot know in advance. A rule
+written on Monday cannot know what Thursday needs.
+
+The cost of getting that wrong had already been paid, an hour
+earlier, by a rule that announced a battery reading from the day
+before. Its arguments were decided once, when it was written, by
+a model guessing at what a question it had not yet been asked
+would need.
+
+#### Named, not open
+
+So a write step carries a list of tool names, and those are
+passed to the model as real tools. It decides whether to call
+them, and with what arguments, against the question actually in
+front of it. The row still says what it may reach:
+
+	"anything wrong" (every 30m); works out what to say about
+	"say whether anything needs their attention", and may call
+	calendar_events
+
+**Reading tools only, checked twice** -- once when the rule is
+written, and again when it runs, because a tool can gain a write
+between the two and the rule would never know.
+
+**Four rounds, then silence.** A rule still calling tools after
+four exchanges has started arguing with itself, and a sentence
+built on a conversation that never finished is worse than none.
+
+#### Both ways of looking, kept apart
+
+`look_up` runs tools before the model is asked anything, every
+time, and hands over what they said. `tools` lets the model
+choose. They are not the same thing and both earn their place:
+
+- `look_up` for a rule that always wants the same thing -- the
+  diary every morning. One round trip fewer, and deterministic:
+  what it looked at is in the row, not in the model's judgement.
+- `tools` for a rule whose need depends on what it finds.
+
+Giving both is sensible: the lookups run first and the tools are
+there if more is wanted.
+
+#### Proved against the real model
+
+A rule with **no lookups at all**, one named tool, and
+`"Say what the phone battery is at right now"`:
+
+	a job's model called a tool   tool=event_recent outcome=ok
+	a job wrote what to say
+	→ "Your phone is at 51 percent, sir."
+
+The battery was 51. The model picked the tool, picked the
+arguments, and got the current row rather than one from
+yesterday -- which is the whole of what the previous design could
+not do.
+
+
 ## 12. Maintaining this file
 
 When the owner states a preference, makes a decision, or corrects something,

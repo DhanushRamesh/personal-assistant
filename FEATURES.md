@@ -285,7 +285,7 @@ flowchart TB
 
     WHAT{"Each step, in order<br/>given what the earlier ones ran and found"}
     WHAT -- "check a condition" --> GATE{"Does it hold?<br/>an event value, how old it is,<br/>or who is in the room"}
-    WHAT -- "ask the model to write one" --> MODEL{"Anything worth saying?"}
+    WHAT -- "ask the model to write one" --> MODEL{"Anything worth saying?<br/>may call the tools<br/>the rule named"}
     WHAT -- "say a fixed sentence" --> OUT["Published to the outbox<br/>section 3 takes it from there"]
     WHAT -- "run a tool" --> TOOL["One of the 55 -- reading ones only<br/>what it returns is kept<br/>for the steps after it"]
 
@@ -339,10 +339,18 @@ whatever the earlier steps found into one sentence. If there is
 nothing worth saying it answers `NOTHING`, and then nothing is said
 and the rest of the sequence does not run.
 
-The model **gets no tools of its own.** A rule says what to look at
-by putting tool steps in front of the write, so what a rule may
-reach can be read off the row rather than decided inside a model
-call.
+**A rule can be given tools of its own.** It names which ones, and
+the model decides whether to call them and with what arguments
+against the question actually in front of it — because a rule
+written on Monday cannot know what Thursday needs. Named rather
+than open, so what a rule may reach is still readable off the row;
+reading tools only, checked when written and again when it runs;
+four rounds, then silence.
+
+Two ways of looking, kept apart: `look_up` runs tools *before* the
+model is asked anything and hands over what they said — one round
+trip fewer, and deterministic — while `tools` lets it choose. A
+rule may have both.
 
 **A check is how a rule says *only if*.** It reads one of the three
 things the server holds as a value — an event's latest reading, how
