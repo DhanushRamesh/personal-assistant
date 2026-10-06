@@ -43,22 +43,23 @@ func (p *Publisher) Publish(ctx context.Context, o Owing) error {
 		return ErrNotAnnouncement
 	}
 
-	var to []string
-	switch rule.Audience {
-	case conversation.Asked:
-		if o.From == "" {
-			// Nothing to deliver it to. Refused rather than sent
-			// to everybody: the whole meaning of Asked is that one
-			// client caused this, and guessing which would put a
-			// conversation's new name on somebody's speaker.
-			return fmt.Errorf("outbox: %s is for the client that caused it, and none is named", o.Kind)
-		}
-		to = []string{o.From}
-	default:
-		var err error
-		if to, err = p.Clients(ctx, o.UserID); err != nil {
-			return fmt.Errorf("outbox: %w", err)
-		}
+	// Asked, and the asker is known: that client and no other.
+	//
+	// Asked with nobody named falls through to everybody, which is
+	// not a tidy answer and is the honest one for now. Asked is
+	// carrying two different ideas -- "only the client that caused
+	// this", which a renaming means, and "the room rather than the
+	// phone", which an immediate announcement means. A device event
+	// has no causing client at all, so refusing here silenced every
+	// situation. Splitting the two is the fix; until then, reaching
+	// too many beats reaching none.
+	if rule.Audience == conversation.Asked && o.From != "" {
+		return p.Store.Publish(ctx, o, []string{o.From})
+	}
+
+	to, err := p.Clients(ctx, o.UserID)
+	if err != nil {
+		return fmt.Errorf("outbox: %w", err)
 	}
 	return p.Store.Publish(ctx, o, to)
 }

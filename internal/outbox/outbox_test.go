@@ -246,18 +246,22 @@ func TestSomethingAClockCausedGoesEverywhere(t *testing.T) {
 	}
 }
 
-// Asked with nobody named is refused rather than sent to
-// everybody. Guessing would put a conversation's new name on
-// somebody's speaker, which is the exact noise this prevents.
-func TestAskedWithNoCauseIsRefused(t *testing.T) {
+// A device event is Asked -- the room rather than the phone -- and
+// has no causing client at all. Refusing it silenced every
+// situation, so nobody named means everybody until Asked is split
+// into the two things it is carrying.
+func TestAskedWithNoCauseStillReachesEverybody(t *testing.T) {
 	s := inmemory.New()
 	p := &outbox.Publisher{Store: s, Clients: everyone}
 
-	o, _ := outbox.New("a", "usr_1", conversation.Renaming, "named it", noon)
-	if err := p.Publish(context.Background(), o); err == nil {
-		t.Fatal("a client-specific announcement with no client was published")
+	o, _ := outbox.New("a", "usr_1", conversation.Immediate, "the charger is doing nothing", noon)
+	if err := p.Publish(context.Background(), o); err != nil {
+		t.Fatalf("Publish: %v", err)
 	}
-	if got, _ := s.Pending(context.Background(), voiced, 0); len(got) != 0 {
-		t.Errorf("it went out anyway, to %d clients", len(got))
+	for _, client := range []string{typed, voiced} {
+		owing, _ := s.Pending(context.Background(), client, 0)
+		if len(owing) != 1 {
+			t.Errorf("%s owes %d, wanted the announcement", client, len(owing))
+		}
 	}
 }

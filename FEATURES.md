@@ -114,9 +114,8 @@ flowchart TB
     EV["One event object<br/>who it is for · the sentence · when it became true<br/>how long it stays worth saying · which client caused it"]
     EV --> PUB{"Publisher<br/>audience looked up from the kind"}
 
-    PUB -- "Asked" --> ONE["Only the client that caused it"]
-    PUB -- "Everywhere" --> ALL["Every client of that person"]
-    PUB -- "Asked with no cause" --> NO["Refused<br/>never broadcast on a guess"]
+    PUB -- "Asked, and the asker is known" --> ONE["Only the client that caused it"]
+    PUB -- "Everywhere, or nobody named" --> ALL["Every client of that person"]
 
     ONE --> DB
     ALL --> DB
@@ -244,6 +243,11 @@ Kept here so it is not rediscovered.
   one that matters most.
 - Five of the six watchers still speak directly rather than
   publishing.
+- `Asked` is carrying two different ideas: *only the client that
+  caused this*, which a renaming means, and *the room rather than
+  the phone*, which an immediate announcement means. A device event
+  has no causing client, so it falls through to everybody. Splitting
+  the two is the fix.
 - `remark` is a kind nothing can raise any more: the branch that
   chose it is unreachable since unasked remarks were removed.
 - The phone answers before it acts, so a successful call is not
