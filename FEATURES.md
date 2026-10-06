@@ -499,4 +499,5 @@ Kept here so it is not rediscovered.
 - A stay longer than 36 hours stops being amended once it outgrows
   the settling window, so an unbroken fortnight at home reads as
   36 hours.
-- The satellite goes deaf after the laptop suspends.
+- The satellite goes deaf after the laptop suspends. A separate
+  cause from the playback wedge, which is fixed.

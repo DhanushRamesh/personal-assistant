@@ -11950,6 +11950,63 @@ client, so nothing is lost today, but a copy is being written for
 it every time and nobody reads them.
 
 
+### The satellite stops wedging on a failed sound
+
+Owner, 7 October 2026: *"do the satellite fix."* The diagnosis was
+written when it happened; this is the applying of it, and the
+thing standing in the way was not the patch.
+
+#### The compose file had been lying for days
+
+`satellite/docker-compose.yml` mounted `./build/satellite.py`. The
+running container was mounting `./patched/satellite.py`. A
+container keeps the mounts it was created with, so the wrong path
+in the file cost nothing at all -- until somebody recreated it,
+which is exactly what applying this patch required.
+
+They had drifted twenty-two lines apart. `./patched` has the chime
+that tells the person it is their turn in a continued
+conversation, with a comment explaining that without it *"asked
+'send you what?', the owner thought it had stopped listening"*.
+`./build` is from two days earlier and has none of it. Recreating
+against the file as written would have deleted that fix in
+silence and left no trace of having done so.
+
+`./patched` is what runs and is newer, so it is canonical and all
+three mounts now point at it. Verified before recreating by
+diffing each file against the copy inside the running container:
+identical, so the recreate changed `libmpv.py` and nothing else.
+
+#### The patch
+
+Upstream fires the finished-playing callback only on a clean end
+of file and returns on everything else. For three of the four
+reasons that is right -- stop, abort and quit are deliberate, and
+firing the callback would claim the speaking finished when it was
+interrupted. For `error` it is not: the track will never play, so
+nothing will ever fire the callback, so the pipeline never ends,
+and every wake word from that moment is refused.
+
+So an error ends the turn exactly as finishing does.
+
+#### Reproduced, which is the part that matters
+
+The original fault was a TTS response that failed to fetch. The
+same thing on purpose: announce a media URL that does not exist.
+
+	_on_end_file: reason=4 (is_eof=False, failed=True), state=ERROR
+	WARNING: playback failed (reason=4); ending the turn anyway
+	_on_end_file: invoking callback
+	Playlist finished, invoking done_callback
+
+The entity went back to `idle` rather than sticking at
+`responding`. Eleven wake words heard since the recreate and none
+refused.
+
+Before the patch the same sequence read *ignoring non-eof event*
+and the satellite was deaf for seventy-three minutes.
+
+
 ## 12. Maintaining this file
 
 When the owner states a preference, makes a decision, or corrects something,
