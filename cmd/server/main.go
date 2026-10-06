@@ -36,6 +36,8 @@ import (
 	"github.com/DhanushRamesh/personal-assistant/internal/embed/tei"
 	"github.com/DhanushRamesh/personal-assistant/internal/environment"
 	"github.com/DhanushRamesh/personal-assistant/internal/environment/platformai"
+	"github.com/DhanushRamesh/personal-assistant/internal/errand"
+	errandmysql "github.com/DhanushRamesh/personal-assistant/internal/errand/mysql"
 	"github.com/DhanushRamesh/personal-assistant/internal/event"
 	eventmysql "github.com/DhanushRamesh/personal-assistant/internal/event/mysql"
 	"github.com/DhanushRamesh/personal-assistant/internal/events"
@@ -255,7 +257,26 @@ func run() error {
 	// A real alarm on the person's phone, beside every reminder. Nil
 	// when there is no address for it, which the answer reports as
 	// not being able to reach the phone rather than as a failure.
-	alarms, keepingAlarms := phoneAlarm(cfg, logger.Logger)
+	// Asking for an alarm and getting it to the phone are two
+	// jobs now, and only the first happens in anybody's turn.
+	sending := &errand.Sender{
+		Store:  errandmysql.New(db.DB),
+		Hands:  errand.Hands{},
+		Now:    cfg.Assistant.Now,
+		Logger: logger.Logger,
+	}
+	if phone := phoneAlarm(cfg, logger.Logger); phone != nil {
+		sending.Hands = alarmHands(phone)
+	}
+	// Untyped nil when there is nowhere to ask, for the usual
+	// reason: the honest answer on a server with no address for
+	// the phone is that it cannot reach the phone at all, which is
+	// a different sentence from the owner having turned alarms
+	// off, and the person deserves the right one.
+	var alarms reminders.Alarms
+	if len(sending.Hands) > 0 {
+		alarms = queue{to: sending, on: cfg.Assistant.Alarms}
+	}
 
 	// One OAuth client for every Google API. Nil when no credentials
 	// are configured, which the endpoints report as "nothing to
@@ -406,7 +427,7 @@ func run() error {
 			Logger: logger.Logger,
 		},
 		Location: cfg.Assistant.Location,
-		Alarm:    alarms,
+		Alarm:    alarming(alarms),
 		Logger:   logger.Logger,
 	}
 	remindCtx, stopReminders := context.WithCancel(context.Background())
@@ -422,18 +443,21 @@ func run() error {
 	defer watching.Wait()
 	defer stopReminders()
 
-	// An alarm the phone would not take is tried again behind the
-	// answer, until it works or its own time arrives. Shares the
-	// reminder loop's context and wait group, so it stops with it.
-	if keepingAlarms != nil {
+	// What is owed to the phone gets there behind the answer,
+	// retrying, and survives a restart. Shares the reminder loop's
+	// context and wait group, so it stops with it.
+	if len(sending.Hands) > 0 {
 		watching.Add(1)
 		go func() {
 			defer watching.Done()
-			keepingAlarms.Run(remindCtx)
+			sending.Run(remindCtx)
 		}()
-		logger.Info("alarms go to the phone",
-			slog.Duration("retry every", alarm.DefaultEvery),
-			slog.Int("tries", alarm.DefaultTries))
+		logger.Info("errands go to the phone",
+			slog.Bool("alarms for reminders", cfg.Assistant.Alarms),
+			slog.Duration("looking every", errand.Tick),
+			slog.Int("tries", errand.Tries))
+	} else {
+		logger.Info("nothing is sent to the phone, with nowhere to send it")
 	}
 
 	logger.Info("watching for reminders",
@@ -609,6 +633,25 @@ func run() error {
 		Now:      cfg.Assistant.Now,
 		Logger:   logger.Logger,
 	}
+	// The one thing the separation must not lose. Nobody is told
+	// at the time that the phone refused, because nobody asked it
+	// then; so when the sender finally gives up, it says so.
+	sending.Told = func(ctx context.Context, userID, said string) {
+		o, err := outbox.New(outboxmysql.ID(), userID, conversation.ReminderAnnouncement, said,
+			cfg.Assistant.Now())
+		if err != nil {
+			logger.Error("cannot write down that an alarm never arrived", slog.Any("error", err))
+			return
+		}
+		if err := publishing.Publish(ctx, o); err != nil {
+			logger.Error("cannot publish that an alarm never arrived", slog.Any("error", err))
+		}
+		if err := announcement.Speak(ctx, speaker, conversation.ReminderAnnouncement, said); err != nil {
+			logger.Error("cannot say that an alarm never arrived", slog.Any("error", err))
+		}
+		announcements.Announced(ctx, userID, said)
+	}
+
 	watching.Add(1)
 	go func() {
 		defer watching.Done()
@@ -761,24 +804,126 @@ func naming(cfg config.Config, logger *slog.Logger) event.Naming {
 // sentence from the alarm having failed, and the person deserves
 // the right one.
 //
-// Wrapped in a Keeper so a phone that is asleep or off the tailnet
-// costs a sentence rather than the alarm. The returned keeper is
-// nil in the same case, and its Run is simply not started.
-func phoneAlarm(cfg config.Config, logger *slog.Logger) (alarm.Setter, *alarm.Keeper) {
+// Retrying is no longer wrapped around this. What is owed to the
+// phone is a row and a sender, so a phone that is asleep or off
+// the tailnet costs nothing at all in the turn that asked.
+func phoneAlarm(cfg config.Config, _ *slog.Logger) alarm.Setter {
 	where := strings.TrimSpace(cfg.HomeAssistant.AlarmURL.Reveal())
 	if where == "" {
-		return nil, nil
+		return nil
 	}
-	keeper := &alarm.Keeper{
-		Setter: alarm.Phone{
-			URL:    where,
-			OffURL: strings.TrimSpace(cfg.HomeAssistant.AlarmOffURL.Reveal()),
-			By:     cfg.Assistant.Name,
+	return alarm.Phone{
+		URL:    where,
+		OffURL: strings.TrimSpace(cfg.HomeAssistant.AlarmOffURL.Reveal()),
+		By:     cfg.Assistant.Name,
+	}
+}
+
+// alarmHands : How an alarm errand reaches the phone.
+func alarmHands(phone alarm.Setter) errand.Hands {
+	return errand.Hands{
+		errand.AlarmSet: func(ctx context.Context, e errand.Errand) error {
+			a, err := unwrap(e)
+			if err != nil {
+				return err
+			}
+			return phone.Set(ctx, a)
 		},
-		Now:    cfg.Assistant.Now,
-		Logger: logger,
+		errand.AlarmClear: func(ctx context.Context, e errand.Errand) error {
+			a, err := unwrap(e)
+			if err != nil {
+				return err
+			}
+			return phone.Clear(ctx, a)
+		},
 	}
-	return keeper, keeper
+}
+
+// unwrap : The alarm an errand carries.
+func unwrap(e errand.Errand) (alarm.Alarm, error) {
+	var a alarm.Alarm
+	if err := json.Unmarshal(e.Body, &a); err != nil {
+		return alarm.Alarm{}, fmt.Errorf("that errand does not describe an alarm: %w", err)
+	}
+	return a, nil
+}
+
+// alarming : The reminder loop's narrower view of the same queue,
+// or nothing when there is nowhere to ask.
+func alarming(alarms reminders.Alarms) remind.Alarms {
+	if alarms == nil {
+		return nil
+	}
+	return alarms
+}
+
+// queue : Asking for an alarm, without waiting on the phone.
+//
+// What the reminder tools and the reminder loop hold instead of
+// the phone itself.
+type queue struct {
+	to *errand.Sender
+	// on : Whether reminders are kept as phone alarms at all.
+	on bool
+}
+
+// On : Whether reminders are kept as phone alarms.
+func (q queue) On() bool { return q.on && q.to != nil }
+
+// Want : Asks for an alarm.
+func (q queue) Want(ctx context.Context, userID string, a alarm.Alarm) error {
+	return q.ask(ctx, userID, errand.AlarmSet, a, q.to.Now())
+}
+
+// Drop : Asks for one to be taken off.
+func (q queue) Drop(ctx context.Context, userID string, a alarm.Alarm) error {
+	return q.ask(ctx, userID, errand.AlarmClear, a, q.to.Now())
+}
+
+// Move : Takes one off and puts another on, in that order.
+//
+// The gap between them is a timestamp rather than a sleep. Two
+// starts of the phone's clock activity back to back and the
+// second is dropped in silence, and the second and a half that
+// costs used to be spent inside somebody's turn.
+func (q queue) Move(ctx context.Context, userID string, was, now alarm.Alarm) error {
+	at := q.to.Now()
+	if err := q.ask(ctx, userID, errand.AlarmClear, was, at); err != nil {
+		return err
+	}
+	return q.ask(ctx, userID, errand.AlarmSet, now, at.Add(alarm.Settle))
+}
+
+// ask : Writes one errand down.
+//
+// Anything still waiting about the same reminder is dropped first:
+// an alarm queued for a time that has since moved must never
+// arrive.
+func (q queue) ask(ctx context.Context, userID string, kind errand.Kind,
+	a alarm.Alarm, after time.Time) error {
+	if !q.On() || userID == "" {
+		return nil
+	}
+	body, err := json.Marshal(a)
+	if err != nil {
+		return err
+	}
+	if kind == errand.AlarmClear {
+		if _, err := q.to.Drop(ctx, userID, a.Key); err != nil {
+			return err
+		}
+	}
+	// Worth trying until the alarm's own moment. After that an
+	// alarm for a time that has passed helps nobody.
+	expires := a.At
+	if !expires.After(after) {
+		expires = after.Add(time.Minute)
+	}
+	made, err := errand.New(errandmysql.ID(), userID, kind, a.Key, body, after, expires)
+	if err != nil {
+		return err
+	}
+	return q.to.Ask(ctx, made)
 }
 
 // mapping : The map, or nothing when there is no key.

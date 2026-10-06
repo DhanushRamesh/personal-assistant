@@ -66,6 +66,29 @@ var layouts = []string{
 	"2006-01-02",
 }
 
+// Alarms : Where a phone alarm is asked for.
+//
+// Asking, not setting. Whether the phone is reachable is not this
+// turn's business and never was: somebody saying "remind me at
+// seven" should not wait on a tailnet round trip, nor on the
+// second and a half the phone's clock needs between being told to
+// forget one alarm and being told the next.
+//
+// Owner, 6 October 2026: *"isolate the process where something
+// from server to phone is happening ... they should be
+// decouplable."*
+type Alarms interface {
+	// On : Whether reminders are kept as phone alarms at all.
+	On() bool
+	// Want : Asks for an alarm.
+	Want(ctx context.Context, userID string, a alarm.Alarm) error
+	// Drop : Asks for one to be taken off.
+	Drop(ctx context.Context, userID string, a alarm.Alarm) error
+	// Move : Asks for one to be taken off and another put on, in
+	// that order and with the gap the phone's clock needs.
+	Move(ctx context.Context, userID string, was, now alarm.Alarm) error
+}
+
 // Clock : What the tools need to know about time.
 type Clock struct {
 	// Now : The moment, in UTC. Nil uses the real clock.
@@ -111,19 +134,19 @@ var WhenUnasked = prompt.Text(
 //
 // Any of them may be said out loud. None destroys anything: a cancelled
 // reminder that was wanted after all is set again in a sentence.
-func All(store remind.Store, clock Clock, phone alarm.Setter) []tool.Tool {
+func All(store remind.Store, clock Clock, alarms Alarms) []tool.Tool {
 	return []tool.Tool{
-		set(store, clock, phone),
+		set(store, clock, alarms),
 		list(store, clock),
 		recent(store, clock),
-		update(store, clock, phone),
-		snooze(store, clock),
-		cancel(store, clock, phone),
+		update(store, clock, alarms),
+		snooze(store, clock, alarms),
+		cancel(store, clock, alarms),
 	}
 }
 
 // update : Changes a reminder that has not happened yet.
-func update(store remind.Store, clock Clock, phone alarm.Setter) tool.Tool {
+func update(store remind.Store, clock Clock, alarms Alarms) tool.Tool {
 	return tool.Tool{
 		Name:    "reminder_update",
 		Domain:  "reminder",
@@ -245,7 +268,7 @@ func update(store remind.Store, clock Clock, phone alarm.Setter) tool.Tool {
 			}
 			_ = changed
 
-			return tool.Changed("Changed the reminder"+moved(ctx, phone, before, after, clock.where()),
+			return tool.Changed("Changed the reminder"+moved(ctx, alarms, in.Caller.UserID, before, after, clock.where()),
 				diff(before, after, clock)...)
 		},
 	}
@@ -412,7 +435,7 @@ func spokenAt(r remind.Reminder) time.Time {
 }
 
 // snooze : Puts off something that has just been said, or is still to come.
-func snooze(store remind.Store, clock Clock) tool.Tool {
+func snooze(store remind.Store, clock Clock, alarms Alarms) tool.Tool {
 	return tool.Tool{
 		Name:    "reminder_snooze",
 		Domain:  "reminder",
@@ -497,9 +520,10 @@ func snooze(store remind.Store, clock Clock) tool.Tool {
 					"%q repeats %s, and a repeating reminder is not moved: putting its time back "+
 						"would put every one after it back too. So it is unchanged, still due at %s, "+
 						"and a single extra one was added for %s. Tell the person both, briefly and "+
-						"in their words.",
+						"in their words.%s",
 					existing.Title, existing.Repeats, spell(existing.DueAt, clock.where()),
-					spell(until, clock.where())))
+					spell(until, clock.where()),
+					again(ctx, alarms, in.Caller.UserID, added, clock.where())))
 			}
 			// Read back rather than reporting the time that was asked
 			// for: what matters is when it will actually go off.
@@ -507,7 +531,8 @@ func snooze(store remind.Store, clock Clock) tool.Tool {
 			if err != nil || after == nil {
 				return tool.Unverified("Putting that reminder off", "it can no longer be read back")
 			}
-			return tool.Changed("Put off "+strconv.Quote(existing.Title), tool.Change{
+			return tool.Changed("Put off "+strconv.Quote(existing.Title)+
+				again(ctx, alarms, in.Caller.UserID, after, clock.where()), tool.Change{
 				What: "the time",
 				From: spell(existing.DueAt, clock.where()),
 				To:   spell(after.DueAt, clock.where()),
@@ -562,7 +587,7 @@ func laterBy(clock Clock, seconds, minutes int, written string) (time.Time, stri
 }
 
 // set : Arranges for something to be said later.
-func set(store remind.Store, clock Clock, phone alarm.Setter) tool.Tool {
+func set(store remind.Store, clock Clock, alarms Alarms) tool.Tool {
 	return tool.Tool{
 		Name:    "reminder_set",
 		Domain:  "reminder",
@@ -706,7 +731,7 @@ func set(store remind.Store, clock Clock, phone alarm.Setter) tool.Tool {
 				"happen, in their words rather than as a date.%s",
 				stored.Title, spell(stored.DueAt, clock.where()), repeating(stored.Repeats), stored.ID,
 				wasWere(before), before, wasWere(before+1), count(ctx, store, in.Caller.UserID),
-				alarmed(ctx, phone, stored, clock.where())))
+				alarmed(ctx, alarms, in.Caller.UserID, stored, clock.where())))
 		},
 	}
 }
@@ -771,7 +796,7 @@ func list(store remind.Store, clock Clock) tool.Tool {
 }
 
 // cancel : Calls one or more off.
-func cancel(store remind.Store, clock Clock, phone alarm.Setter) tool.Tool {
+func cancel(store remind.Store, clock Clock, alarms Alarms) tool.Tool {
 	return tool.Tool{
 		Name:    "reminder_cancel",
 		Domain:  "reminder",
@@ -852,7 +877,7 @@ func cancel(store remind.Store, clock Clock, phone alarm.Setter) tool.Tool {
 						"it is still there and still "+string(still.Status))
 				}
 			}
-			return tool.RemovedMany(calledOff(titles)+dropped(ctx, phone, was, clock.where()), len(titles),
+			return tool.RemovedMany(calledOff(titles)+dropped(ctx, alarms, in.Caller.UserID, was, clock.where()), len(titles),
 				before, count(ctx, store, in.Caller.UserID), "reminder")
 		},
 	}
@@ -1037,54 +1062,52 @@ func repeatWords() []string {
 // alarmed : What to add about the alarm on their phone.
 //
 // Said either way and never silently. An alarm that was asked for
-// is worth one clause; one that could not be is worth saying
-// outright, because somebody who believes an alarm is set and finds
-// it was not has been worse served than somebody told plainly.
+// and not set has to be told outright, because somebody who
+// believes an alarm is set and finds it was not is worse off than
+// somebody who was told.
 //
-// What is claimed is exactly what is known. Home Assistant
-// accepting the message is not the phone having set anything, so
-// the words are that it was asked for.
-func alarmed(ctx context.Context, phone alarm.Setter, r *remind.Reminder, where *time.Location) string {
-	if phone == nil {
-		return " There is no way to reach their phone from here, so no alarm was set: say so."
+// What is told has changed with the channel. The phone is no
+// longer reached inside this turn, so what can honestly be said
+// now is that the alarm has been asked for. If it never arrives
+// the sender says so itself, which is the only place that knows.
+func alarmed(ctx context.Context, alarms Alarms, userID string,
+	r *remind.Reminder, where *time.Location) string {
+	if alarms == nil {
+		return " There is no way to reach their phone from here, so no alarm was asked for: say so."
+	}
+	if !alarms.On() {
+		// Turned off deliberately. Not a failure and not worth a
+		// sentence: they know, they set it.
+		return ""
 	}
 	// In their zone, not the one it is stored in. An alarm clock
-	// holds a wall clock, so a reminder kept as UTC and handed over
-	// unconverted rings five and a half hours early and nothing
-	// anywhere disagrees with it.
-	a := alarmFor(r, where)
-	if err := phone.Set(ctx, a); err != nil {
-		slog.Warn("the phone would not take an alarm", "at", a.At, "error", err)
-		return " Their phone could not be reached, so the alarm is not set yet, though it will " +
-			"keep being tried until the time comes. Tell them that plainly, in one clause, " +
-			"without the reason unless they ask: they may want to set it themselves."
+	// knows nothing about UTC.
+	if err := alarms.Want(ctx, userID, alarmFor(r, where)); err != nil {
+		slog.Warn("the alarm could not be asked for", "title", r.Title, "error", err)
+		return " No alarm could be asked for on their phone: say so plainly, in one clause."
 	}
 	return " An alarm has been asked for on their phone at the same time. Say so in passing, " +
-		"not as a second sentence."
+		"in one clause, as a thing that is being taken care of."
 }
 
 // dropped : What to add about the alarms on their phone.
-//
-// Said only when there is something to say. A one-off goes quietly
-// with the reminder and is not worth a sentence; a repeating one
-// cannot be taken back from here at all, and that has to be said
-// or the person is woken at six by a thing they called off and has
-// no idea why.
-func dropped(ctx context.Context, phone alarm.Setter, was []remind.Reminder,
-	where *time.Location) string {
-	if phone == nil {
+func dropped(ctx context.Context, alarms Alarms, userID string,
+	was []remind.Reminder, where *time.Location) string {
+	if alarms == nil || !alarms.On() {
 		return ""
 	}
 	var standing []string
 	for i := range was {
 		r := &was[i]
 		a := alarmFor(r, where)
+		// A repeating alarm cannot be taken back: nothing outside
+		// the phone can remove one.
 		if alarm.Holds(a) {
 			standing = append(standing, r.Title)
 			continue
 		}
-		if err := phone.Clear(ctx, a); err != nil {
-			slog.Warn("the phone would not drop an alarm", "title", r.Title, "error", err)
+		if err := alarms.Drop(ctx, userID, a); err != nil {
+			slog.Warn("the alarm could not be dropped", "title", r.Title, "error", err)
 			standing = append(standing, r.Title)
 		}
 	}
@@ -1097,15 +1120,10 @@ func dropped(ctx context.Context, phone alarm.Setter, was []remind.Reminder,
 		strconv.Quote(standing[0]))
 }
 
-// moved : Takes the old alarm off the phone and puts the new one
-// on, and says what could not be moved.
-//
-// Nothing happens where nothing an alarm can carry has changed: a
-// reminder renamed in its spoken words alone does not need the
-// phone touched.
-func moved(ctx context.Context, phone alarm.Setter, before, after *remind.Reminder,
-	where *time.Location) string {
-	if phone == nil || before == nil || after == nil {
+// moved : What to add when a reminder's time changed.
+func moved(ctx context.Context, alarms Alarms, userID string,
+	before, after *remind.Reminder, where *time.Location) string {
+	if alarms == nil || !alarms.On() || before == nil || after == nil {
 		return ""
 	}
 	was, now := carried(before, where), carried(after, where)
@@ -1113,9 +1131,9 @@ func moved(ctx context.Context, phone alarm.Setter, before, after *remind.Remind
 		return ""
 	}
 
-	// A repeating alarm cannot be taken back, so setting the new
-	// one would leave two ringing. Say so instead, and leave the
-	// phone alone.
+	// A repeating alarm cannot be taken back, so putting the new
+	// one on would leave two ringing. Say so instead, and leave
+	// the phone alone.
 	old := alarmFor(before, where)
 	if alarm.Holds(old) {
 		return fmt.Sprintf(". The repeating alarm on their phone still says %s and cannot be changed "+
@@ -1123,24 +1141,36 @@ func moved(ctx context.Context, phone alarm.Setter, before, after *remind.Remind
 			"clause", strconv.Quote(before.Title))
 	}
 
-	if err := phone.Clear(ctx, old); err != nil {
-		slog.Warn("the phone would not drop the old alarm", "title", before.Title, "error", err)
-	} else {
-		// Taking one back and putting the next on are two starts of
-		// the clock's own activity, and back to back the second is
-		// dropped in silence. Waiting is the whole fix.
-		select {
-		case <-ctx.Done():
-			return ""
-		case <-time.After(alarm.Settle):
-		}
-	}
-	if err := phone.Set(ctx, alarmFor(after, where)); err != nil {
-		slog.Warn("the phone would not take the new alarm", "title", after.Title, "error", err)
-		return ". Their phone could not be reached, so the alarm still has the old time, though it " +
-			"will keep being tried. Say so plainly, in one clause"
+	if err := alarms.Move(ctx, userID, old, alarmFor(after, where)); err != nil {
+		slog.Warn("the alarm could not be moved", "title", after.Title, "error", err)
+		return ". The alarm on their phone could not be moved with it: say so plainly, in one clause"
 	}
 	return ""
+}
+
+// again : What to add when a reminder was put off.
+//
+// A phone alarm has no snooze anything here can reach, so another
+// one is asked for at the new time rather than the first being
+// moved. Owner: *"since phone has no snooze, another copy should
+// be created."*
+//
+// The first alarm is left alone deliberately. Putting a reminder
+// off is usually something done after it has already gone off, by
+// which time its alarm is spent; and where it has not gone off
+// yet, a spare alarm before the one that matters is a smaller
+// fault than no alarm at the time that matters.
+func again(ctx context.Context, alarms Alarms, userID string,
+	r *remind.Reminder, where *time.Location) string {
+	if alarms == nil || !alarms.On() || r == nil {
+		return ""
+	}
+	if err := alarms.Want(ctx, userID, alarmFor(r, where)); err != nil {
+		slog.Warn("the later alarm could not be asked for", "title", r.Title, "error", err)
+		return " No alarm could be asked for at the new time: say so plainly, in one clause."
+	}
+	return " A second alarm has been asked for on their phone at the new time, since an alarm " +
+		"already on it cannot be put off from here. Say so in passing, in one clause."
 }
 
 // carried : Everything about a reminder that an alarm can hold, as
@@ -1150,7 +1180,6 @@ func carried(r *remind.Reminder, where *time.Location) string {
 	return alarm.Body(a) + "|" + alarm.Numbered(a.Days)
 }
 
-// alarmFor : The alarm a reminder would put on the phone.
 func alarmFor(r *remind.Reminder, where *time.Location) alarm.Alarm {
 	at := alarm.OnTheMinute(r.DueAt.In(where))
 	return alarm.Alarm{At: at, Label: r.Title, Days: remind.AlarmDays(r.Repeats, at), Key: r.ID}

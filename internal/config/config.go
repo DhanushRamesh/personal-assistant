@@ -134,6 +134,16 @@ type Assistant struct {
 	// it is measured and the algorithmic one has to beat something.
 	Greeting string
 
+	// Alarms : Whether a reminder also puts an alarm on the phone.
+	//
+	// On by default, and separable on purpose. Owner, 6 October
+	// 2026: *"it should not be bundled with it, it should be
+	// configurable, but by default it's true."* The two were one
+	// thing in the code and are two things in life -- a reminder
+	// is the assistant saying something, and an alarm is a noise
+	// the phone makes when the assistant is not running.
+	Alarms bool
+
 	// Persona : The manner it starts in, as a persona identifier. The
 	// setting can be changed while the server runs and returns here when it
 	// restarts, so this is what a lasting choice is written into.
@@ -582,6 +592,7 @@ func Load(path string, lookup Lookup) (Config, error) {
 		Assistant: Assistant{
 			Name:     l.str("assistant", "name", ""),
 			Greeting: l.str("assistant", "greeting", "plain"),
+			Alarms:   l.boolean("assistant", "alarms", true),
 			Persona:  l.str("assistant", "persona", ""),
 			Timezone: l.str("assistant", "timezone", ""),
 			Location: l.location("assistant", "timezone"),

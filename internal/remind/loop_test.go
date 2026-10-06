@@ -563,6 +563,11 @@ type clockface struct {
 	dropped []string
 }
 
+// Want : The reminder loop asks rather than sets.
+func (c *clockface) Want(ctx context.Context, _ string, a alarm.Alarm) error {
+	return c.Set(ctx, a)
+}
+
 func (c *clockface) Set(_ context.Context, a alarm.Alarm) error {
 	c.mu.Lock()
 	defer c.mu.Unlock()

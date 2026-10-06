@@ -43,6 +43,16 @@ const (
 // because the cost of the two mistakes is not equal: speaking to an empty
 // room wastes a sentence, and holding a reminder back from somebody who
 // was sitting there loses it for as long as they take to notice.
+// Alarms : Where a phone alarm is asked for.
+//
+// Asking rather than setting: whether the phone is reachable is
+// somebody else's business, and this runs on a two second tick
+// that must not wait on a tailnet.
+type Alarms interface {
+	// Want : Asks for an alarm on this person's phone.
+	Want(ctx context.Context, userID string, a alarm.Alarm) error
+}
+
 type Presence interface {
 	// Away : Whether the person is known to be out of the room. False
 	// when it cannot be told.
@@ -74,14 +84,14 @@ type Loop struct {
 	// speaking of it lands on the moment rather than after it.
 	// Zero selects DefaultLead.
 	Lead time.Duration
-	// Alarm : Where a phone alarm is asked for. Nil sets none, which
-	// is what this did before the phone was reachable.
+	// Alarm : Where a phone alarm is asked for. Nil asks for none,
+	// which is what this did before the phone was reachable.
 	//
 	// Only the repeats the phone cannot hold are re-armed here --
 	// monthly, in practice. A one-off had its alarm set when it was
 	// made, and a daily or weekly one is already repeating on the
 	// phone, where it keeps ringing through this server being down.
-	Alarm alarm.Setter
+	Alarm Alarms
 	// Logger : Where failures go. Required in use; nil is silent.
 	Logger *slog.Logger
 }
@@ -277,8 +287,8 @@ func (l *Loop) rearm(ctx context.Context, r Reminder, next time.Time) {
 		return
 	}
 	at := alarm.OnTheMinute(next.In(l.where()))
-	if err := l.Alarm.Set(ctx, alarm.Alarm{At: at, Label: r.Title, Key: r.ID}); err != nil {
-		l.log(ctx, "cannot set the next alarm for a repeating reminder", err)
+	if err := l.Alarm.Want(ctx, r.UserID, alarm.Alarm{At: at, Label: r.Title, Key: r.ID}); err != nil {
+		l.log(ctx, "cannot ask for the next alarm for a repeating reminder", err)
 	}
 }
 

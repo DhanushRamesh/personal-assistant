@@ -869,28 +869,51 @@ type phone struct {
 	asked   int
 	dropped []string
 	refuses error
+	off     bool
 }
 
-func (p *phone) Set(_ context.Context, a alarm.Alarm) error {
+// On : Whether reminders are kept as phone alarms.
+func (p *phone) On() bool { return !p.off }
+
+// Want : An alarm is asked for, not set. What this records is the
+// asking, which is all the tool does now.
+func (p *phone) Want(_ context.Context, _ string, a alarm.Alarm) error {
 	p.asked++
 	p.got = a
 	return p.refuses
 }
 
-func (p *phone) Clear(_ context.Context, a alarm.Alarm) error {
+// Drop : One is asked to be taken off.
+func (p *phone) Drop(_ context.Context, _ string, a alarm.Alarm) error {
 	p.dropped = append(p.dropped, a.Label)
 	return nil
+}
+
+// Move : Off, then on.
+func (p *phone) Move(ctx context.Context, userID string, was, now alarm.Alarm) error {
+	if err := p.Drop(ctx, userID, was); err != nil {
+		return err
+	}
+	return p.Want(ctx, userID, now)
 }
 
 // withPhone : A registry whose reminders also reach a phone.
 func withPhone(t *testing.T, p *phone) *tool.Registry {
 	t.Helper()
+	r, _ := phoneAnd(t, p)
+	return r
+}
+
+// phoneAnd : The same, and the store behind it.
+func phoneAnd(t *testing.T, p *phone) (*tool.Registry, *inmemory.Store) {
+	t.Helper()
+	store := inmemory.New()
 	clock := reminders.Clock{Now: func() time.Time { return noon }, Location: india}
-	r, err := tool.NewRegistry(reminders.All(inmemory.New(), clock, p)...)
+	r, err := tool.NewRegistry(reminders.All(store, clock, p)...)
 	if err != nil {
 		t.Fatalf("NewRegistry: %v", err)
 	}
-	return r
+	return r, store
 }
 
 // A reminder is a thing the assistant says and an alarm is a thing
@@ -926,27 +949,70 @@ func TestSettingAReminderAsksThePhoneForAnAlarm(t *testing.T) {
 	}
 }
 
-// Owner: *"if it could not reach it should say I could not set the
-// alarm."* Believing an alarm is set and finding it was not is
-// worse than being told plainly, so the failure reaches the words
-// and the reminder itself still stands.
-func TestAPhoneThatRefusesIsSaidOutLoud(t *testing.T) {
-	p := &phone{refuses: errors.New("home assistant answered 401 Unauthorized")}
+// A phone that will not take an alarm is no longer visible here,
+// and that is the change rather than a loss. Nobody asked the
+// phone during this turn: the alarm was written down, and the
+// sender will get it there or give up and say so itself.
+//
+// What must still hold is that the asking succeeded and the
+// reminder stands. The telling moved to internal/errand, which is
+// where the truth is actually known.
+func TestAskingForAnAlarmDoesNotWaitOnThePhone(t *testing.T) {
+	p := &phone{}
 	out := call(t, withPhone(t, p), "reminder_set",
-		`{"title":"take the tablets","say":"Take the tablets.",
-		`+`"say_if_late":"You should have taken them","at":"2026-09-27 06:05"}`)
+		`{"title":"take the tablets","say":"Take the tablets.",`+
+			`"say_if_late":"You should have taken them","at":"2026-09-27 06:05"}`)
+
+	if out.Outcome != conversation.OutcomeOK {
+		t.Fatalf("reminder_set: %s", out.Content)
+	}
+	if p.asked != 1 {
+		t.Errorf("the alarm was asked for %d times, want once", p.asked)
+	}
+	if !strings.Contains(out.Content, "asked for") {
+		t.Errorf("the alarm is not mentioned: %s", out.Content)
+	}
+	if !strings.Contains(out.Content, "Set and read back") {
+		t.Errorf("the reminder itself should still stand: %s", out.Content)
+	}
+}
+
+// Writing the errand down is the one thing that can still fail
+// here, and it is told plainly: somebody who believes an alarm is
+// coming and finds none was ever asked for is worse off than
+// somebody who was told.
+func TestAnAlarmThatCannotEvenBeAskedForIsSaid(t *testing.T) {
+	p := &phone{refuses: errors.New("the database answered: too many connections")}
+	out := call(t, withPhone(t, p), "reminder_set",
+		`{"title":"take the tablets","say":"Take the tablets.",`+
+			`"say_if_late":"You should have taken them","at":"2026-09-27 06:05"}`)
 
 	if out.Outcome != conversation.OutcomeOK {
 		t.Fatalf("a refused alarm lost the reminder: %s", out.Content)
 	}
-	if !strings.Contains(out.Content, "could not be reached") {
+	if !strings.Contains(out.Content, "No alarm could be asked for") {
 		t.Errorf("the failure never reaches the words: %s", out.Content)
 	}
-	if !strings.Contains(out.Content, "keep being tried") {
-		t.Errorf("the retry is not promised, so the failure reads as final: %s", out.Content)
-	}
-	if strings.Contains(out.Content, "401") {
+	if strings.Contains(out.Content, "too many connections") {
 		t.Errorf("the raw reason is being handed to the model: %s", out.Content)
+	}
+	if !strings.Contains(out.Content, "Set and read back") {
+		t.Errorf("the reminder itself should still stand: %s", out.Content)
+	}
+}
+
+// Alarms turned off is a setting, not a fault, and gets no
+// sentence at all. The reminder is still set and still said.
+func TestAlarmsTurnedOffSayNothingAboutAlarms(t *testing.T) {
+	out := call(t, withPhone(t, &phone{off: true}), "reminder_set",
+		`{"title":"take the tablets","say":"Take the tablets.",`+
+			`"say_if_late":"You should have taken them","at":"2026-09-27 06:05"}`)
+
+	if out.Outcome != conversation.OutcomeOK {
+		t.Fatalf("reminder_set: %s", out.Content)
+	}
+	if strings.Contains(out.Content, "alarm") {
+		t.Errorf("alarms are off, so they should not be mentioned: %s", out.Content)
 	}
 	if !strings.Contains(out.Content, "Set and read back") {
 		t.Errorf("the reminder itself should still stand: %s", out.Content)
@@ -956,17 +1022,48 @@ func TestAPhoneThatRefusesIsSaidOutLoud(t *testing.T) {
 // A server with no phone configured cannot set alarms and should
 // not imply it did. Untyped nil, because a typed one satisfies the
 // interface and then fails on every call.
+//
+// Different from the owner having turned alarms off, which is
+// silent: one is a fault to report, the other a choice they made.
 func TestNoPhoneAtAllIsSaidToo(t *testing.T) {
 	r, _ := harness(t)
 	out := call(t, r, "reminder_set",
-		`{"title":"take the tablets","say":"Take the tablets.",
-		`+`"say_if_late":"You should have taken them","at":"2026-09-27 06:05"}`)
+		`{"title":"take the tablets","say":"Take the tablets.",`+
+			`"say_if_late":"You should have taken them","at":"2026-09-27 06:05"}`)
 
 	if out.Outcome != conversation.OutcomeOK {
 		t.Fatalf("reminder_set: %s", out.Content)
 	}
-	if !strings.Contains(out.Content, "no alarm was set") {
+	if !strings.Contains(out.Content, "no alarm was asked for") {
 		t.Errorf("silence about the alarm, which reads as success: %s", out.Content)
+	}
+}
+
+// Putting a reminder off asks for another alarm at the new time,
+// because nothing here can reach an alarm already on the phone to
+// move it. Owner: "since phone has no snooze, another copy should
+// be created."
+func TestPuttingOneOffAsksForAnotherAlarm(t *testing.T) {
+	p := &phone{}
+	r, store := phoneAnd(t, p)
+	rang(t, store, "Tablets", "Time to take your tablets.", remind.Once)
+	was := noon
+
+	out := call(t, r, "reminder_snooze", `{"minutes_from_now":25}`)
+	if out.Outcome == conversation.OutcomeFailed {
+		t.Fatalf("reminder_snooze: %s", out.Content)
+	}
+	if p.asked != 1 {
+		t.Fatalf("the alarm was asked for %d times, want one for the new time", p.asked)
+	}
+	if !p.got.At.After(was) {
+		t.Errorf("the second alarm is at %s, not after the first at %s", p.got.At, was)
+	}
+	if len(p.dropped) != 0 {
+		t.Errorf("the first alarm was taken back, and nothing here can do that: %v", p.dropped)
+	}
+	if !strings.Contains(out.Content, "second alarm") {
+		t.Errorf("the extra alarm is never mentioned: %s", out.Content)
 	}
 }
 

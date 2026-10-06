@@ -46,7 +46,7 @@ flowchart TB
     CORE -- "an answer" --> HA
 
     UNASKED["Speaking unasked<br/>section 3"]
-    ALARMS["The phone<br/>alarms over the tailnet"]
+    ALARMS["Errands for the phone<br/>a row, a sender, retried<br/>alarms over the tailnet"]
 
     DB --> UNASKED
     UNASKED --> HA
@@ -200,16 +200,22 @@ The piece with the most moving parts, so it gets its own picture.
 ```mermaid
 flowchart TB
     SET["They ask for a reminder"] --> STORE[("Stored as UTC")]
-    STORE --> MK{"Does it repeat?"}
+    STORE --> OFF{"Alarms on?"}
+    OFF -- "no, by setting" --> QUIET["Nothing on the phone,<br/>and nothing said about it"]
+    OFF -- "yes" --> MK
+    MK{"Does it repeat?"}
 
     MK -- "daily, weekdays, weekly" --> NATIVE["Alarm set with its days<br/>the phone holds the repeat itself"]
     MK -- "monthly, or once" --> ONEOFF["Alarm set for<br/>the next occurrence only"]
 
     NATIVE --> PH["Phone<br/>rounded up to the minute,<br/>signed 'by Jarvis'"]
     ONEOFF --> PH
-    PH --> OK{"Did the<br/>phone take it?"}
-    OK -- "yes" --> SAID["Said in passing"]
-    OK -- "no" --> KEEP["Told plainly, and retried<br/>every 2 min until its time"]
+    PH --> ROW[("errands<br/>a row per thing owed")]
+    ROW --> SEND{"Sender, behind the answer"}
+    SEND -- "got there" --> SAID["Nothing more to say"]
+    SEND -- "not yet" --> KEEP["Tried again until its own time"]
+    KEEP --> SEND
+    SEND -- "gave up" --> TOLD["Says so: the only<br/>thing that knows"]
 
     STORE --> DUE["Its time comes"]
     DUE --> LEAD["Picked up 4s early,<br/>so the voice lands on the moment"]
@@ -223,6 +229,21 @@ flowchart TB
 alarm repeats, which Android gives no way to remove from outside.
 Then Jarvis says so rather than leaving it to wake them for
 something called off.
+
+**Putting one off asks for a second alarm** at the new time rather
+than moving the first. There is no snooze on a phone alarm that
+anything here can reach.
+
+**Nothing waits on the phone.** Asking for an alarm writes a row;
+one sender gets it there, in order, retrying, and survives a
+restart. The second and a half the phone's clock needs between
+forgetting one alarm and being told the next is a timestamp on the
+row, not a pause in the conversation. If it never gets there, the
+sender says so — that is the only thing that knows.
+
+**Alarms can be turned off** with `[assistant] alarms`, which is
+true by default. Off is silent; *no phone configured* is a fault
+and is said.
 
 ---
 
@@ -239,6 +260,7 @@ possible.
 | a day | **Forgetting** — raw position readings older than a week |
 | always | **Events** — the phone reports what it noticed: battery, calls, apps, music, screen, places |
 | always | **Places** — raw fixes settled into arrivals, stays and departures |
+| 30 s | **Errands** — what is owed to the phone, got there in order and retried |
 
 ---
 
@@ -433,6 +455,9 @@ Kept here so it is not rediscovered.
   raise one, and the kind exists so those six still load.
 - The phone answers before it acts, so a successful call is not
   proof the alarm exists.
+- A snoozed reminder leaves two alarms on the phone with the same
+  label, and `Clear` dismisses by label. Whether Android removes
+  one or both is untested.
 - A repeating phone alarm cannot be cancelled or moved from here.
 - `place.entered home` never fires, and some stay durations are wrong.
 - The satellite goes deaf after the laptop suspends.

@@ -10992,6 +10992,125 @@ is proved by the listing; the first real one will be the first time
 the battery actually drops.
 
 
+### The phone gets a channel of its own
+
+Owner, 6 October 2026: *"the alarm moving with it should not be
+bundled with it, it should be configurable, but by default it's
+true. And moreover, isolate the process where something from server
+to phone is happening. It's a separate process and channel, they
+should be decouplable. And since the phone has no snooze, another
+copy should be created."*
+
+Three things, and the middle one is the reason the other two were
+awkward.
+
+#### Asking is not getting there
+
+A reminder tool reached the phone itself, inside the model's turn.
+Three faults came out of that one fact.
+
+**A turn waited on a phone.** Moving a reminder meant a POST, then
+`time.Sleep(1500ms)` because the phone's clock drops a second
+request that arrives on the heels of the first, then another POST.
+Nearly two seconds of a thirty second budget, spent on something
+that has nothing to do with answering anybody.
+
+**The retries were in memory.** `alarm.Keeper` held what was still
+owed in a map. Restarting the server emptied it without a word --
+including alarms a person had already been told would keep being
+tried. That is the worst kind of loss: the promise survived and the
+thing promised did not.
+
+**And nothing else could ever use the path.** It was a reminder
+tool holding an `alarm.Setter`, not a way out of the building.
+
+So `internal/errand`: what the server owes a device, as rows. The
+asking writes one and returns. One sender gets them there, in
+order, retrying, and a restart changes nothing. Nothing in it knows
+what an alarm is -- a kind names what is being asked and the body
+carries that kind's arguments, so the next thing the server wants a
+device to do is a row rather than another path out.
+
+**The gap is a column, not a sleep.** `after_at` says *not before
+this*. Moving an alarm writes the clear at now and the set at now
+plus `alarm.Settle`, and the sender respects both. Measured on a
+real move: clear ready at 13:08:15.058, set at 13:08:16.558,
+exactly the gap apart, with neither in anybody's turn.
+
+#### What the separation nearly lost
+
+The owner's standing rule is that an alarm which was not set is
+said outright, *because somebody who believes an alarm is set and
+finds it was not is worse off than somebody told*. With the phone
+no longer reached in the turn, that sentence has nobody to speak
+it: the turn does not know, and cannot.
+
+So the telling moved to where the truth is. The sender gives up
+after twenty tries and announces it. Nothing is swallowed; it is
+said later, by the only thing that ever knows.
+
+What the turn can still honestly say is that the alarm has been
+**asked for**, which is what it now says.
+
+#### Three states that were one
+
+`alarms == nil` and `alarms.On() == false` mean different things
+and get different sentences, which the first draft collapsed:
+
+- **no phone configured** -- a fault worth reporting: *there is no
+  way to reach their phone from here*.
+- **alarms turned off** -- a setting they chose, and silent. Saying
+  anything would be the assistant commenting on its own
+  configuration.
+- **asked for and queued** -- said in passing.
+
+The setting is `[assistant] alarms`, true by default.
+
+#### A second alarm, not a moved one
+
+Putting a reminder off asks for **another** alarm at the new time
+rather than moving the first. Nothing here can reach an alarm
+already ringing on the phone to postpone it -- there is no snooze
+to reach.
+
+The first alarm is left alone deliberately. Putting a reminder off
+is usually something done after it has gone off, by which time its
+alarm is spent; and where it has not gone off yet, a spare alarm
+before the one that matters is a smaller fault than no alarm at the
+time that matters.
+
+This also closes a hole that was there before any of this.
+`reminder_snooze` was the one reminder tool `All()` never handed
+the phone to, so snoozing moved the reminder and left the alarm
+where it was -- and a snooze of a repeating reminder created a
+whole new one-off with no alarm at all. Found by reading the
+wiring, not by anything failing.
+
+`alarm.Keeper` is deleted. It was the in-memory retry queue, and
+everything it did the sender now does from a table.
+
+#### Proved end to end
+
+Set, moved and cancelled through `/api/chat`, watching the rows:
+
+| said | errands | state |
+|---|---|---|
+| *"remind me at 11:55 pm tomorrow"* | `alarm.set` | done |
+| *"move it to 11:40"* | `alarm.clear`, then `alarm.set` 1.5s later | both done |
+| *"cancel it"* | `alarm.clear` | done |
+
+No stray alarm left on the phone.
+
+#### Not proved, and why not
+
+The snooze path has unit tests and was **not** run against the real
+phone. A snoozed reminder would put a second alarm there carrying
+the same label, and `Clear` dismisses by label: whether Android
+removes one or both is untested, and finding out costs a stray
+alarm on somebody's phone. It is a real open question, written down
+rather than answered by experiment on a live device.
+
+
 ## 12. Maintaining this file
 
 When the owner states a preference, makes a decision, or corrects something,
