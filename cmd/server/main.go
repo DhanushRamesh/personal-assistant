@@ -2216,6 +2216,14 @@ func writing(ask string, already []job.Ran) string {
 	return prompt.Block(
 		prompt.Text("You are writing one sentence to be said out loud, now.", ask),
 		what,
+		// A rule asking for the battery every minute was handed a
+		// week of every kind of event and read out a reading from
+		// the day before, as though it were current. Silence is
+		// always available and a wrong number never is.
+		prompt.Text("Say only what is in front of you, and nothing you have worked out around it.",
+			"Readings carry the time they arrived: one from yesterday does not say what is true now.",
+			"If what you were asked for is not there, answer with "+prompt.Silence+" rather than",
+			"the nearest thing that is."),
 		prompt.Text("Answer with the sentence and nothing else.",
 			"If there is nothing worth saying, answer with "+prompt.Silence+"."),
 	)

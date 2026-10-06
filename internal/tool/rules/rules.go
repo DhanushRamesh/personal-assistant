@@ -87,6 +87,32 @@ var howToSchedule = prompt.Lines(
 	`  "when battery.level < 20" -- no clock at all; it runs the moment a reading from their device crosses that line`,
 )
 
+// most : [Most], addressable, for a schema bound.
+var most = Most
+
+// howToLookUp : What a lookup is for, written for the model.
+var howToLookUp = prompt.Text(
+	"Things to look up first, so that ask has something to work from.",
+	"Reading tools only, at most three, and leave it out entirely unless ask needs them.",
+	"Give each one its arguments: a lookup runs once a minute with nobody watching,",
+	"and the tool's defaults are usually everything rather than the one thing the rule is about.",
+)
+
+// howToArgue : Why the arguments matter, written for the model.
+//
+// A rule asking for the battery every minute was given
+// event_recent with no arguments, got a week of everything, and
+// read out a reading from the day before. The tool could have
+// answered it exactly -- a kind and a limit of one is how a thing
+// stands now -- and nothing here let the rule say so.
+var howToArgue = prompt.Text(
+	"The tool's own arguments, as a JSON object written as a string:",
+	`"{\"kind\":\"battery.level\",\"limit\":1}".`,
+	"Work them out the same way you would for calling that tool yourself, for the question in ask.",
+	"Without them the tool runs on its defaults, which for a reading means a week of every kind",
+	"rather than what that thing says now, and the rule will answer from the wrong row.",
+)
+
 // howToCondition : The condition forms, written for the model.
 var howToCondition = prompt.Lines(
 	"A condition checked each time it runs, which stops it when it does not hold. Leave it out unless they said one.",
@@ -180,21 +206,34 @@ func add(store Store, clock Clock, id func() string, look Lookup) tool.Tool {
 				},
 				"when": {Type: "string", Description: howToCondition},
 				"look_up": {
-					Type: "string",
-					Description: "Tools to call first, so that ask has something to work from -- " +
-						"\"calendar_events\" for a rule about the diary. Comma separated, at most three, " +
-						"reading tools only. Leave out unless ask needs them.",
+					Type:        "array",
+					Description: howToLookUp,
+					MaxItems:    &most,
+					Items: &tool.Property{
+						Type:     "object",
+						Required: []string{"tool"},
+						Properties: map[string]tool.Property{
+							"tool": {
+								Type:        "string",
+								Description: "The tool's name, such as event_recent or calendar_events.",
+							},
+							"args": {
+								Type:        "string",
+								Description: howToArgue,
+							},
+						},
+					},
 				},
 			},
 		},
 		Examples: []tool.Example{
 			{
 				Ask:  "every morning at eight tell me what is coming up",
-				Args: `{"saying":"setting that up","name":"the morning diary","schedule":"at 08:00","ask":"say what is coming up in their diary today","look_up":"calendar_events"}`,
+				Args: `{"saying":"setting that up","name":"the morning diary","schedule":"at 08:00","ask":"say what is coming up in their diary today","look_up":[{"tool":"calendar_events","args":"{\"days\":1}"}]}`,
 			},
 			{
 				Ask:  "whenever my battery drops below twenty say something",
-				Args: `{"saying":"setting that up","name":"low battery warning","schedule":"when battery.level < 20","ask":"say that the battery is getting low, and what it is at","look_up":"event_recent"}`,
+				Args: `{"saying":"setting that up","name":"low battery warning","schedule":"when battery.level < 20","ask":"say that the battery is getting low, and what it is at","look_up":[{"tool":"event_recent","args":"{\"kind\":\"battery.level\",\"limit\":5}"}]}`,
 			},
 			{
 				Ask:  "every two hours remind me to stand up, but only when I am here",
@@ -203,12 +242,12 @@ func add(store Store, clock Clock, id func() string, look Lookup) tool.Tool {
 		},
 		Run: func(ctx context.Context, in tool.Invocation) tool.Result {
 			var args struct {
-				Name     string `json:"name"`
-				Schedule string `json:"schedule"`
-				Say      string `json:"say"`
-				Ask      string `json:"ask"`
-				When     string `json:"when"`
-				LookUp   string `json:"look_up"`
+				Name     string   `json:"name"`
+				Schedule string   `json:"schedule"`
+				Say      string   `json:"say"`
+				Ask      string   `json:"ask"`
+				When     string   `json:"when"`
+				LookUp   []lookUp `json:"look_up"`
 			}
 			if err := json.Unmarshal(in.Args, &args); err != nil {
 				return tool.Failed("Those arguments could not be read.")
@@ -295,6 +334,14 @@ func cancel(store Store) tool.Tool {
 	}
 }
 
+// lookUp : One thing a rule reads before it speaks.
+type lookUp struct {
+	// Tool : Which tool to run.
+	Tool string `json:"tool"`
+	// Args : Its arguments, as JSON written in a string.
+	Args string `json:"args"`
+}
+
 // assemble : The sequence a rule's arguments describe.
 //
 // The order is fixed and not the model's to choose: look things up,
@@ -302,7 +349,7 @@ func cancel(store Store) tool.Tool {
 // but the check may be about something a lookup fetched -- so the
 // readings come first and the one thing that can stop the rule
 // comes last before it speaks.
-func assemble(when, lookUp, say, ask string, look Lookup) ([]job.Step, string) {
+func assemble(when string, reads []lookUp, say, ask string, look Lookup) ([]job.Step, string) {
 	say, ask = strings.TrimSpace(say), strings.TrimSpace(ask)
 	switch {
 	case say != "" && ask != "":
@@ -315,7 +362,11 @@ func assemble(when, lookUp, say, ask string, look Lookup) ([]job.Step, string) {
 	}
 
 	var steps []job.Step
-	for _, name := range names(lookUp) {
+	for _, read := range reads {
+		name := strings.TrimSpace(read.Tool)
+		if name == "" {
+			continue
+		}
 		if len(steps) >= Most {
 			return nil, fmt.Sprintf("A rule may look up at most %d things.", Most)
 		}
@@ -330,7 +381,11 @@ func assemble(when, lookUp, say, ask string, look Lookup) ([]job.Step, string) {
 			return nil, fmt.Sprintf(
 				"%s changes things, and a rule may only look things up.", name)
 		}
-		steps = append(steps, job.Step{Do: job.Call, Tool: name})
+		args, bad := arguments(name, read.Args)
+		if bad != "" {
+			return nil, bad
+		}
+		steps = append(steps, job.Step{Do: job.Call, Tool: name, Args: args})
 	}
 
 	if w := strings.TrimSpace(when); w != "" {
@@ -348,15 +403,21 @@ func assemble(when, lookUp, say, ask string, look Lookup) ([]job.Step, string) {
 	return steps, ""
 }
 
-// names : The tool names in a comma separated list.
-func names(list string) []string {
-	var out []string
-	for _, part := range strings.Split(list, ",") {
-		if name := strings.TrimSpace(part); name != "" {
-			out = append(out, name)
-		}
+// arguments : A lookup's arguments, checked before they are stored.
+//
+// Refused here rather than at three in the morning, when the only
+// sign would be a rule quietly answering from the wrong row.
+func arguments(name, raw string) (json.RawMessage, string) {
+	raw = strings.TrimSpace(raw)
+	if raw == "" {
+		return nil, ""
 	}
-	return out
+	var into map[string]any
+	if err := json.Unmarshal([]byte(raw), &into); err != nil {
+		return nil, fmt.Sprintf(
+			"The arguments for %s are not a JSON object: %s", name, raw)
+	}
+	return json.RawMessage(raw), ""
 }
 
 // readable : An engine error as something worth saying back.

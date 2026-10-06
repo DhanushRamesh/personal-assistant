@@ -62,7 +62,7 @@ func TestARuleCanBeSetUpAndListedAndCalledOff(t *testing.T) {
 	store, by := made()
 
 	out := call(t, by["rule_add"], `{"name":"the morning diary","schedule":"at 08:00",
-		"ask":"say what is coming up today","look_up":"calendar_events"}`)
+		"ask":"say what is coming up today","look_up":[{"tool":"calendar_events","args":"{\"days\":1}"}]}`)
 	if out.Outcome == conversation.OutcomeFailed {
 		t.Fatalf("rule_add refused: %s", out.Content)
 	}
@@ -129,7 +129,7 @@ func TestARuleMayNotRunSomethingThatChangesThings(t *testing.T) {
 	_, by := made()
 
 	out := call(t, by["rule_add"], `{"name":"bad","schedule":"every 5m",
-		"ask":"say something","look_up":"calendar_cancel"}`)
+		"ask":"say something","look_up":[{"tool":"calendar_cancel"}]}`)
 	if out.Outcome != conversation.OutcomeFailed {
 		t.Fatalf("a writing tool was accepted into a rule: %s", out.Content)
 	}
@@ -152,10 +152,13 @@ func TestAnUnworkableRuleIsRefused(t *testing.T) {
 		{"nothing to say", `{"name":"x","schedule":"every 5m"}`},
 		{"both ways of saying", `{"name":"x","schedule":"every 5m","say":"a","ask":"b"}`},
 		{"a condition nobody can read", `{"name":"x","schedule":"every 5m","say":"a","when":"nonsense"}`},
-		{"a tool that does not exist", `{"name":"x","schedule":"every 5m","ask":"a","look_up":"nope"}`},
+		{"a tool that does not exist", `{"name":"x","schedule":"every 5m","ask":"a","look_up":[{"tool":"nope"}]}`},
+		{"arguments that are not JSON", `{"name":"x","schedule":"every 5m","ask":"a",` +
+			`"look_up":[{"tool":"calendar_events","args":"kind=battery"}]}`},
 		{"waiting on presence, which never arrives", `{"name":"x","schedule":"when presence is away","say":"a"}`},
-		{"too many lookups", `{"name":"x","schedule":"every 5m","ask":"a",
-			"look_up":"calendar_events,calendar_events,calendar_events,calendar_events"}`},
+		{"too many lookups", `{"name":"x","schedule":"every 5m","ask":"a","look_up":[` +
+			`{"tool":"calendar_events"},{"tool":"calendar_events"},` +
+			`{"tool":"calendar_events"},{"tool":"calendar_events"}]}`},
 	} {
 		if out := call(t, by["rule_add"], c.args); out.Outcome != conversation.OutcomeFailed {
 			t.Errorf("%s was accepted: %s", c.why, out.Content)
@@ -207,5 +210,37 @@ func TestWritingRulesInsistsOnReadingThemFirst(t *testing.T) {
 	}
 	if writes != 2 {
 		t.Errorf("%d tools write rules, want add and cancel", writes)
+	}
+}
+
+// A lookup with no arguments runs on the tool's defaults, which
+// for a reading is a week of every kind rather than what that
+// thing says now.
+//
+// Owner, 6 October 2026, on a rule that reported the battery every
+// minute: *"but the battery is now 56."* It had been saying 34,
+// which was a real reading from the day before -- the tool could
+// have answered exactly, and nothing let the rule ask it to.
+func TestALookupCarriesItsArguments(t *testing.T) {
+	store, by := made()
+
+	out := call(t, by["rule_add"], `{"name":"battery","schedule":"every 1m",
+		"ask":"say what the battery is at now",
+		"look_up":[{"tool":"calendar_events","args":"{\"kind\":\"battery.level\",\"limit\":1}"}]}`)
+	if out.Outcome == conversation.OutcomeFailed {
+		t.Fatalf("rule_add refused: %s", out.Content)
+	}
+
+	mine, _ := store.Mine(context.Background(), "usr_1", "rule", 50)
+	steps := mine[0].Steps
+	if len(steps) != 2 || steps[0].Do != job.Call {
+		t.Fatalf("the sequence is %+v", steps)
+	}
+	var args map[string]any
+	if err := json.Unmarshal(steps[0].Args, &args); err != nil {
+		t.Fatalf("the arguments were not kept: %v (%s)", err, steps[0].Args)
+	}
+	if args["kind"] != "battery.level" || args["limit"] != float64(1) {
+		t.Errorf("the step runs with %v", args)
 	}
 }

@@ -11111,6 +11111,58 @@ alarm on somebody's phone. It is a real open question, written down
 rather than answered by experiment on a live device.
 
 
+### A lookup that could not say what it wanted
+
+Owner, 6 October 2026, on a rule set up by voice to report the
+battery every minute: *"but the battery is now 56."* It had
+announced thirty-four, twice.
+
+Thirty-four was real. It was a reading from the day before.
+
+The rule was `[event_recent, write]`, and the tool step carried
+**no arguments**, because `rule_add` had no way to give it any.
+`assemble` built `job.Step{Do: Call, Tool: name}` and nothing
+else, so every lookup ran on that tool's defaults. For
+`event_recent` the default is a week of every kind, so the model
+was handed hundreds of rows -- positions, stays, screen locks --
+and picked a battery row out of it that was twenty-three hours
+old.
+
+The tool could have answered the question exactly. Its own
+description says so: *"a limit of 1 with a kind gives how that
+thing stands now."* Nothing let the rule ask for that.
+
+So `look_up` stopped being a comma separated list of names and
+became a list of `{tool, args}`, with the arguments as JSON the
+model writes the same way it writes them when calling the tool
+itself. Checked when the rule is written, because the only
+symptom of bad arguments is a rule quietly answering from the
+wrong row at three in the morning.
+
+Asked again afterwards, the model wrote
+`{"kind":"battery.level","limit":1}` without being told to, and
+the rule said fifty-six.
+
+#### And it should have said nothing instead
+
+The deeper fault is that the model answered at all. Handed a week
+of events with no current battery reading in reach, the honest
+answer was silence, and it reached for the nearest number
+instead.
+
+The write step is now told that readings carry the time they
+arrived, that one from yesterday does not say what is true now,
+and that `NOTHING` is the answer when what was asked for is not
+there. A wrong number is worse than no sentence: the sentence
+nobody hears costs nothing, and the number gets believed.
+
+Worth remembering which half of this was the real defect. The
+missing arguments were a gap in what a rule could express. The
+confident wrong number was the thing that made it reach the
+person, and no amount of argument plumbing would have stopped it
+on its own.
+
+
 ## 12. Maintaining this file
 
 When the owner states a preference, makes a decision, or corrects something,
