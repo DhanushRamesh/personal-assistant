@@ -36,7 +36,7 @@ flowchart TB
 
     CORE["The core<br/>persona, memory, tool loop"]
     MODEL["Model<br/>PlatformAI"]
-    TOOLS["52 tools<br/>section 2"]
+    TOOLS["55 tools<br/>section 2"]
     DB[("MySQL<br/>reminders, memories, events,<br/>conversations, places, profile")]
 
     CORE <--> MODEL
@@ -57,7 +57,7 @@ flowchart TB
 
 ## 2. What it can do when asked
 
-52 tools, grouped by what they are about. The model picks; nothing
+55 tools, grouped by what they are about. The model picks; nothing
 here is keyword matched.
 
 ```mermaid
@@ -66,13 +66,14 @@ flowchart LR
 
     CORE --- REM["Reminders<br/>set, list, recent,<br/>update, snooze, cancel"]
     CORE --- CAL["Calendar<br/>events, add, update, cancel,<br/>rename, free, calendars"]
-    CORE --- TASK["Tasks<br/>add, done, remove, update, move,<br/>find, clear, list, lists"]
+    CORE --- TASK["Tasks<br/>add, done, remove, update, move,<br/>find, clear, list, lists,<br/>list_add, list_remove, list_rename"]
     CORE --- MEM["Memory<br/>remember, list, search,<br/>update, forget"]
     CORE --- EV["Events<br/>recent, kinds"]
     CORE --- PLACE["Places<br/>find, near, distance, visits"]
     CORE --- MAIL["Mail<br/>inbox, unread, read,<br/>search, thread"]
     CORE --- WEB["Web<br/>search, read"]
     CORE --- CONV["Conversations<br/>new, list, find, switch,<br/>rename, archive, delete"]
+    CORE --- RULE["Rules<br/>add, list, cancel"]
     CORE --- MISC["Other<br/>coming_settled, tool_describe"]
 ```
 
@@ -258,7 +259,7 @@ flowchart TB
     WHAT -- "check a condition" --> GATE{"Does it hold?<br/>an event value, how old it is,<br/>or who is in the room"}
     WHAT -- "ask the model to write one" --> MODEL{"Anything worth saying?"}
     WHAT -- "say a fixed sentence" --> OUT["Published to the outbox<br/>section 3 takes it from there"]
-    WHAT -- "run a tool" --> TOOL["One of the 52<br/>what it returns is kept<br/>for the steps after it"]
+    WHAT -- "run a tool" --> TOOL["One of the 55 -- reading ones only<br/>what it returns is kept<br/>for the steps after it"]
 
     GATE -- "no, or nothing is known" --> STOP["Nothing after it runs<br/>not a failure; the row<br/>says what stopped it"]
     MODEL -- "NOTHING" --> STOP
@@ -360,8 +361,20 @@ comparison and names for things.
 are *say the words* and *set the phone alarm*, which is what
 `reminder_set` already does inside one function.
 
-**Nothing runs on this yet.** New rules only. The watchers in
-section 3 move over one at a time, reminders last.
+**Rules are made by speaking.** `rule_add`, `rule_list`,
+`rule_cancel` — *"every morning at seven thirty, look at my calendar
+and tell me what is coming up"* becomes `at 07:30` with
+`[calendar_events, write]`, and *"whenever my battery drops below
+fifteen, tell me how fast it is draining"* becomes `when
+battery.level < 15` with `[event_recent, write]`.
+
+A rule may only **read**. A tool that changes something is refused:
+a rule runs unattended and possibly every few minutes, and nobody is
+there to notice the first time it goes wrong.
+
+**Nothing of the old machinery runs on this yet.** The watchers in
+section 3 are still loops in Go and move over one at a time,
+reminders last.
 
 ---
 
@@ -373,8 +386,6 @@ Kept here so it is not rediscovered.
   still loops in Go. All seven could now be written as rules —
   the clock, the event trigger and a model-written sentence are
   all there — but none has been moved, and reminders move last.
-- There is no way to create a job by voice, so rules can only be
-  inserted directly.
 - No client collects its announcements yet, so what situations
   publish is written down and never said. The next step, and the
   one that matters most.

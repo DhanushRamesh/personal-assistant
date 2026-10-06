@@ -10811,6 +10811,91 @@ MySQL's `next_at IS NOT NULL` correctly skipped them. The test
 caught it, which is the argument for having written it.
 
 
+### Rules by voice
+
+Owner, 6 October 2026, choosing it over moving a producer: *"rules
+by voice first."*
+
+Until this, the engine was unreachable. Everything it could do had
+to be put in by hand with a throwaway Go program, which meant the
+schedule, the gate and the write step were all built and none of
+them was usable.
+
+`rule_add`, `rule_list`, `rule_cancel`, in the `rule` domain, so a
+write reads its own listing first like every other domain here.
+
+#### The arguments are not the row
+
+A step is a structure, and handing the model an array of them would
+have been handing it the internals. What it fills in instead is the
+shape a rule actually takes when somebody says one out loud: a
+**schedule**, optionally a **condition**, optionally things to
+**look up**, and then either **say** (words they dictated) or
+**ask** (an instruction to work the words out). The sequence is
+assembled from those, in a fixed order the model does not choose --
+look things up, then check, then speak.
+
+That order is deliberate: a condition is cheap and a lookup is not,
+but the check may be about something only a lookup can show, so the
+readings go first and the one thing that can stop the rule comes
+last before it speaks.
+
+#### A rule may only read
+
+A tool that writes is refused outright. A rule runs unattended and
+may run every few minutes; reading is safe to repeat and writing is
+not, and nobody is there to notice the first time it goes wrong.
+This is checked against the live registry rather than a list here,
+so a tool added tomorrow is classified by its own `Writes` flag and
+nothing in this package needs to know it exists.
+
+The lookups are capped at three. A rule is a sequence, not a
+program, and three is more than any sentence has needed.
+
+#### rule_add is described in full, before any measurement
+
+`internal/tool/deferred.go` normally earns a place on the hot list
+with numbers. This one is there on the strength of the two
+precedents already recorded in that file: `event_recent` and
+`place_visits` were both named-but-not-described, and in both cases
+the model answered that it had no tool for the thing while the name
+sat in its own catalogue. A standing rule is a kind of doing the
+assistant has never had, which is exactly that shape. Its arguments
+are also the part that cannot be guessed -- four schedule forms
+written exactly, and a condition grammar.
+
+`rule_list` and `rule_cancel` stay deferred. The listing is run for
+the model by the read-before-write rule rather than chosen by it,
+and cancelling takes one identifier out of what that returned.
+
+#### Proved by speaking to it
+
+Four sentences through `/api/chat`, nothing hand-written:
+
+| said | stored |
+|---|---|
+| *"every morning at seven thirty, look at my calendar and tell me what is coming up that day"* | `at 07:30` · `[calendar_events, write]` · next run 07:30 tomorrow |
+| *"what standing rules do I have set up"* | *"Just the one, sir — the morning calendar briefing..."* |
+| *"whenever my battery drops below fifteen, tell me how fast it has been draining"* | `when battery.level < 15` · `[event_recent, write]` |
+| *"turn off the morning calendar briefing"* | cancelled |
+
+#### What it chose, and one thing it did not
+
+Asked to *"say something about"* the battery dropping, it chose
+**say** with fixed words -- so that rule would read the same
+sentence out for ever, which is the thing the write step exists to
+avoid. Narrowing the `say` description to warn that the words are
+fixed did not change it: the model is honouring "say something"
+literally, and it is not wrong to.
+
+Asked instead to *"tell me how fast it has been draining"* it chose
+**ask** and added the `event_recent` lookup unprompted. So the
+capability is reachable and the phrasing decides. Left alone rather
+than forced: a fixed sentence is legitimate -- *"when I get home,
+say welcome back"* -- and there is no rule here to enforce, only a
+judgement. Worth a measured look if it turns out to matter.
+
+
 ## 12. Maintaining this file
 
 When the owner states a preference, makes a decision, or corrects something,

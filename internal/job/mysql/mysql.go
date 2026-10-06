@@ -103,6 +103,27 @@ func (s *Store) Due(ctx context.Context, at time.Time, limit int) ([]job.Job, er
 }
 
 // Ran : Records that a job ran and when it next runs.
+// Stop : Calls a rule off.
+//
+// Scoped to its owner, so an identifier from somewhere else stops
+// nothing rather than stopping somebody's.
+func (s *Store) Stop(ctx context.Context, userID, id string) (bool, error) {
+	if s == nil || s.db == nil {
+		return false, fmt.Errorf("job: there is nowhere to read jobs")
+	}
+	out := s.db.WithContext(ctx).Model(&row{}).
+		Where("id = ? AND user_id = ? AND state = ?", id, userID, string(job.Active)).
+		Updates(map[string]any{
+			"state":      string(job.Cancelled),
+			"next_at":    nil,
+			"updated_at": time.Now().UTC(),
+		})
+	if out.Error != nil {
+		return false, fmt.Errorf("job: %w", out.Error)
+	}
+	return out.RowsAffected > 0, nil
+}
+
 // Watching : This person's active rules that wait for something to
 // happen rather than for a time.
 //

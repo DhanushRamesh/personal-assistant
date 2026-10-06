@@ -94,6 +94,19 @@ var hot = []string{
 	// Dhanush_EXT networks". A tool it has only been told the name of is
 	// a tool it will work around.
 	"place_visits",
+
+	// By the same reasoning, 6 October 2026, and not yet by
+	// measurement: a standing rule is a kind of doing the assistant
+	// has never had, so the evidence above applies to it before any
+	// of its own exists. Its arguments are also the thing that
+	// cannot be guessed -- four schedule forms written exactly, and
+	// a condition grammar -- which a one-line purpose cannot carry.
+	//
+	// rule_list and rule_cancel stay deferred: a write reads its own
+	// domain first, so the listing is run for the model rather than
+	// chosen by it, and cancelling takes one identifier out of what
+	// that returned.
+	"rule_add",
 }
 
 // hotSet : hot, for looking up.

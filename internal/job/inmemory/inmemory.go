@@ -26,6 +26,30 @@ func (s *Store) Add(j job.Job) {
 	s.jobs[j.ID] = j
 }
 
+// Keep : Writes one, as the real store does.
+func (s *Store) Keep(_ context.Context, j job.Job) error {
+	s.Add(j)
+	return nil
+}
+
+// Mine : This person's rules of a kind, newest first.
+func (s *Store) Mine(_ context.Context, userID, kind string, limit int) ([]job.Job, error) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+
+	var out []job.Job
+	for _, j := range s.jobs {
+		if j.UserID == userID && (kind == "" || j.Kind == kind) {
+			out = append(out, j)
+		}
+	}
+	sort.Slice(out, func(i, k int) bool { return out[i].ID > out[k].ID })
+	if limit > 0 && len(out) > limit {
+		out = out[:limit]
+	}
+	return out, nil
+}
+
 // Get : One job, for a test to look at how it ended.
 func (s *Store) Get(id string) (job.Job, bool) {
 	s.mu.Lock()
@@ -72,6 +96,20 @@ func (s *Store) Watching(_ context.Context, userID string, limit int) ([]job.Job
 		out = out[:limit]
 	}
 	return out, nil
+}
+
+// Stop : Calls a rule off.
+func (s *Store) Stop(_ context.Context, userID, id string) (bool, error) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+
+	j, ok := s.jobs[id]
+	if !ok || j.UserID != userID || j.State != job.Active {
+		return false, nil
+	}
+	j.State, j.Next = job.Cancelled, time.Time{}
+	s.jobs[id] = j
+	return true, nil
 }
 
 // Ran : Records that a job ran.

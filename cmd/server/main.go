@@ -78,6 +78,7 @@ import (
 	"github.com/DhanushRamesh/personal-assistant/internal/tool/memories"
 	placestool "github.com/DhanushRamesh/personal-assistant/internal/tool/places"
 	"github.com/DhanushRamesh/personal-assistant/internal/tool/reminders"
+	"github.com/DhanushRamesh/personal-assistant/internal/tool/rules"
 	taskstool "github.com/DhanushRamesh/personal-assistant/internal/tool/tasks"
 	webtool "github.com/DhanushRamesh/personal-assistant/internal/tool/web"
 	"github.com/DhanushRamesh/personal-assistant/internal/vocabulary"
@@ -264,8 +265,24 @@ func run() error {
 	// What the assistant can do as well as say. A registry that will not
 	// build is a programming mistake, not a configuration one, so it stops
 	// the server rather than quietly offering nothing.
+	// A rule may run a tool, so the rule tools have to be able to
+	// look one up -- including the ones registered beside them.
+	// Resolved through a variable set just below, because the
+	// registry cannot be an argument to its own contents, and
+	// nothing calls a tool before it exists.
+	var registry *tool.Registry
+	known := func(name string) (tool.Tool, bool) {
+		if registry == nil {
+			return tool.Tool{}, false
+		}
+		return registry.Get(name)
+	}
+
 	tools, err := tool.NewRegistry(slices.Concat(
 		conversations.All(chats),
+		rules.All(jobmysql.New(db.DB), rules.Clock{
+			Now: cfg.Assistant.Now, Location: cfg.Assistant.Location,
+		}, jobmysql.ID, known),
 		memories.All(remembering),
 		reminders.All(reminderStore, clock, alarms),
 		taskstool.All(listsOf(googleLink), taskstool.Clock{
@@ -294,6 +311,7 @@ func run() error {
 	if err != nil {
 		return err
 	}
+	registry = tools
 	manner := persona.NewSetting(startingPersona(context.Background(), chats, cfg, logger.Logger))
 
 	// Added after the rest, because it describes them and so has to be
