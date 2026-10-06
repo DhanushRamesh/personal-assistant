@@ -249,8 +249,8 @@ Kept here so it is not rediscovered.
   the phone*, which an immediate announcement means. A device event
   has no causing client, so it falls through to everybody. Splitting
   the two is the fix.
-- `remark` is a kind nothing can raise any more: the branch that
-  chose it is unreachable since unasked remarks were removed.
+- `remark` is history only: six were really said, nothing can
+  raise one, and the kind exists so those six still load.
 - The phone answers before it acts, so a successful call is not
   proof the alarm exists.
 - A repeating phone alarm cannot be cancelled or moved from here.

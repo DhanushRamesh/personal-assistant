@@ -180,7 +180,6 @@ func TestEveryAnnouncementHasARule(t *testing.T) {
 	for _, k := range []conversation.Kind{
 		conversation.ReminderAnnouncement,
 		conversation.PresenceAnnouncement,
-		conversation.Remark,
 		conversation.Immediate,
 		conversation.Coming,
 		conversation.Renaming,
@@ -276,7 +275,6 @@ func TestNobodyThereHasOnlyTwoAnswers(t *testing.T) {
 		conversation.Coming:               conversation.Hold,
 		conversation.PresenceAnnouncement: conversation.Drop,
 		conversation.Immediate:            conversation.Drop,
-		conversation.Remark:               conversation.Drop,
 		// A name nobody was there to hear is not worth keeping: it
 		// shows in the listing the moment it is set.
 		conversation.Renaming: conversation.Drop,

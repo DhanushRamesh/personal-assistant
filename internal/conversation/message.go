@@ -80,14 +80,21 @@ const (
 	// said as somebody came into the room.
 	PresenceAnnouncement Kind = "presence"
 
-	// Remark : Something said about what just happened, unasked.
+	// Remark : The assistant noticing something and mentioning it.
 	//
-	// Not a reminder, which is a time coming round, and not a
-	// greeting, which is somebody arriving. This is the assistant
-	// noticing: a number that has rung three times, a thing it has
-	// never seen before. Told apart from the other two for the same
-	// reason they are told apart from each other -- somebody reading
-	// the conversation back wants to know why it spoke.
+	// **History only. Nothing can raise one.** It was the assistant
+	// judging for itself that something was worth interrupting for
+	// -- a number that had rung three times, a thing never seen
+	// before -- and the owner removed it on 5 October 2026 looking
+	// at *"your phone has been unlocked three times in the last few
+	// minutes"*: an unusual event and an event worth interrupting
+	// somebody for are not the same thing, and nothing here could
+	// tell which it had.
+	//
+	// The constant stays because six of them were really said, in
+	// conversations somebody can still scroll back to, and a stored
+	// kind the server does not recognise is a message it refuses to
+	// read. It carries no policy, so nothing can publish one.
 	Remark Kind = "remark"
 
 	// Immediate : Something a device said to announce at once.
@@ -216,7 +223,6 @@ var announcements = map[Kind]Policy{
 	// company, which is a thing that belongs where the person is
 	// standing; followed onto a phone in a meeting it is an
 	// interruption from something that was not asked a question.
-	Remark: {Asked, Drop, 5 * time.Minute, 3},
 	// Wherever they are. A warning held back because they stepped
 	// into the next room is a warning that did not happen.
 	// The room, like a remark. It is said at once rather than said
@@ -268,7 +274,12 @@ func (k Kind) Rule() (Policy, bool) {
 // interruption was rejected by the store for a morning without anything
 // louder than a line in the log.
 func (k Kind) known() bool {
-	return k == Chat || k == Failure || k == Interruption || k.Announcement()
+	// Remark by name rather than through the table: nothing may
+	// raise one any more, so it carries no policy, but six of them
+	// are stored and a kind the store refuses is a conversation
+	// that will not load.
+	return k == Chat || k == Failure || k == Interruption ||
+		k == Remark || k.Announcement()
 }
 
 // Role : Who said something.

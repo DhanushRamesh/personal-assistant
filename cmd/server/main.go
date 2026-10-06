@@ -1804,22 +1804,14 @@ func noticing(
 				persona.Voice(cfg.Assistant.Persona, cfg.Assistant.Name),
 				environment.PurposeRemark, ask)
 		},
-		Say: func(ctx context.Context, userID, text string, immediate bool) error {
-			kind := conversation.Remark
-			if immediate {
-				kind = conversation.Immediate
-			}
-			if err := announcement.Speak(ctx, speaker, kind, text); err != nil {
+		Say: func(ctx context.Context, userID, text string, _ bool) error {
+			if err := announcement.Speak(ctx, speaker, conversation.Immediate, text); err != nil {
 				return err
 			}
 			// Written down after it was said, like every other
-			// announcement: they answer in the room, and the answer
-			// needs the remark to be there to make sense of.
-			if immediate {
-				announcements.Announced(ctx, userID, text)
-			} else {
-				announcements.Remarked(ctx, userID, text)
-			}
+			// announcement: they answer it in the room, and the
+			// answer needs the thing said to make sense of.
+			announcements.Announced(ctx, userID, text)
 			return nil
 		},
 		Notes:  remarked,

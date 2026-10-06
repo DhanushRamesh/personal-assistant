@@ -94,16 +94,6 @@ func (w *Writer) Arrived(ctx context.Context, userID, text string) {
 	w.said(ctx, userID, "", conversation.PresenceAnnouncement, text)
 }
 
-// Remarked : Notes something said about what just happened, unasked.
-//
-// Asked, and the asker is the room, like a greeting. Written down for
-// the same reason the others are: the person answers "who was it?" in
-// the room, and the answer only makes sense to a turn that can see
-// what was said to provoke it.
-func (w *Writer) Remarked(ctx context.Context, userID, text string) {
-	w.said(ctx, userID, "", conversation.Remark, text)
-}
-
 // Coming : Notes a warning about something in the diary.
 func (w *Writer) Coming(ctx context.Context, userID, text string) {
 	w.said(ctx, userID, "", conversation.Coming, text)

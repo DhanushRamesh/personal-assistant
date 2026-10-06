@@ -307,7 +307,6 @@ func TestEveryAnnouncementHasAnAudience(t *testing.T) {
 	kinds := []conversation.Kind{
 		conversation.ReminderAnnouncement,
 		conversation.PresenceAnnouncement,
-		conversation.Remark,
 		conversation.Immediate,
 		conversation.Coming,
 		conversation.Renaming,
@@ -358,5 +357,28 @@ func TestRepliesHaveNoAudience(t *testing.T) {
 		if k.Announcement() {
 			t.Errorf("%s is a reply and should not be an announcement", k)
 		}
+	}
+}
+
+// Remark was the assistant judging for itself that something was
+// worth interrupting for, and the owner removed it. Nothing may
+// raise one -- but six were really said, and a stored kind the
+// store refuses is a conversation that will not load.
+func TestARemarkCanBeReadBackAndNeverMade(t *testing.T) {
+	if conversation.Remark.Announcement() {
+		t.Error("something can still raise a remark")
+	}
+	if _, ok := conversation.Remark.Rule(); ok {
+		t.Error("remark still carries a policy, so it could be published")
+	}
+
+	// The six that exist have to keep loading.
+	m := conversation.Message{
+		ID: "msg_01M3Z3V2DSZ62FMYGE1K551NXH", ConversationID: "cnv_1",
+		Kind: conversation.Remark, Role: conversation.Assistant,
+		Content: "That is the first time Spotify has appeared, sir.",
+	}
+	if err := m.Valid(); err != nil {
+		t.Errorf("a remark already in the transcript will not load: %v", err)
 	}
 }

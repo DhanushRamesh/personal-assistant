@@ -10144,6 +10144,32 @@ all intact. Every test alarm was deleted afterwards and the owner's
 own two were left alone.
 
 
+### Remark is gone, and its six messages are not
+
+The kind the assistant used to raise by its own judgement --
+*"your phone has been unlocked three times in the last few
+minutes"* -- had been unreachable since the judging was removed on
+5 October. The branch that chose it still compiled and could never
+run.
+
+Removed from everything that can raise one: the policy table, the
+writer's `Remarked`, and the branch in the notice watcher, which
+now always says `Immediate` because that is the only thing it can
+be.
+
+**The constant stays, listed in `known()` by name.** Six remarks
+were really said, in conversations somebody can still scroll back
+to, and a stored kind the store does not recognise is a message it
+refuses to read -- which is the exact fault the comment above
+`known()` already records, where an interruption was rejected for a
+morning. A kind that cannot be raised and can be read is the
+smallest honest residue.
+
+Relabelling those six as `immediate` was the alternative and is
+worse: it would assert a device asked for them, which is false.
+They were the assistant's own idea, and that is the thing worth
+remembering about them.
+
 ### A device that stops talking
 
 Events stopped reaching the server at 11:56 on 6 October 2026 and
