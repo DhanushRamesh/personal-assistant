@@ -265,3 +265,30 @@ func TestAskedWithNoCauseStillReachesEverybody(t *testing.T) {
 		}
 	}
 }
+
+// Every kind says what to do when nobody is there, and the only
+// two answers are to keep it or let it go. There was a third --
+// say it anyway -- which for a voice client meant talking to an
+// empty room; what it stood for was the audience's business.
+func TestNobodyThereHasOnlyTwoAnswers(t *testing.T) {
+	want := map[conversation.Kind]conversation.Away{
+		conversation.ReminderAnnouncement: conversation.Hold,
+		conversation.Coming:               conversation.Hold,
+		conversation.PresenceAnnouncement: conversation.Drop,
+		conversation.Immediate:            conversation.Drop,
+		conversation.Remark:               conversation.Drop,
+		// A name nobody was there to hear is not worth keeping: it
+		// shows in the listing the moment it is set.
+		conversation.Renaming: conversation.Drop,
+	}
+	for kind, away := range want {
+		rule, ok := kind.Rule()
+		if !ok {
+			t.Errorf("%s has no policy", kind)
+			continue
+		}
+		if rule.Away != away {
+			t.Errorf("%s does %q with an empty room, wanted %q", kind, rule.Away, away)
+		}
+	}
+}

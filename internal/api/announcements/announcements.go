@@ -86,6 +86,17 @@ type Announcement struct {
 	// see for itself that a thing is past, rather than reading out
 	// a queue of yesterday.
 	Expires time.Time `json:"expires"`
+	// Away : What to do with it when nobody is there to hear it --
+	// "hold" to keep it for when they come back, "drop" to let it
+	// go.
+	//
+	// Sent to the client because the client is what decides. It
+	// knows whether anybody is in front of it, which the server
+	// cannot; this is the only half the server knows, which is
+	// whether the thing is still true later. Kept here rather than
+	// compiled into each client, so that changing the rule is one
+	// edit on the server and not a release of three clients.
+	Away string `json:"away"`
 	// Tries : How many times this client has already tried.
 	Tries int `json:"tries"`
 }
@@ -121,14 +132,18 @@ func (h *Handler) Pending(w http.ResponseWriter, r *http.Request) {
 
 	out := make([]Announcement, 0, len(owing))
 	for _, d := range owing {
-		out = append(out, Announcement{
+		a := Announcement{
 			ID:      d.Owing.ID,
 			Kind:    string(d.Owing.Kind),
 			Say:     d.Owing.Text,
 			Due:     d.Owing.Due,
 			Expires: d.Owing.Expires,
 			Tries:   d.Tries,
-		})
+		}
+		if rule, ok := d.Owing.Kind.Rule(); ok {
+			a.Away = string(rule.Away)
+		}
+		out = append(out, a)
 	}
 	httpx.WriteJSON(ctx, w, http.StatusOK, PendingResponse{Announcements: out})
 }

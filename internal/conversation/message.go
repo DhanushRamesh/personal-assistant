@@ -152,8 +152,16 @@ const (
 	Everywhere Audience = "everywhere"
 )
 
-// Away : What to do with an announcement when nobody is there to
-// hear it.
+// Away : What a client does with an announcement when nobody is
+// there to hear it.
+//
+// Two answers, because there are only two. A thing still true
+// later is kept; a thing only true now is let go. There was a
+// third -- say it anyway -- and it was nonsense once delivery
+// moved to the clients: for a voice client "say it anyway" means
+// talking to an empty room. What it had been standing for was
+// "this does not need the room because it also reaches a phone",
+// which is the audience's business and not this one's.
 type Away string
 
 const (
@@ -164,12 +172,6 @@ const (
 	// reminders have had this behaviour since before anything else
 	// did.
 	Hold Away = "hold"
-
-	// Anyway : Say it regardless, because it does not need the room.
-	//
-	// Everything with an Everywhere audience reaches the phone, so
-	// an empty room is not a reason to wait.
-	Anyway Away = "anyway"
 
 	// Drop : Let it go.
 	//
@@ -221,10 +223,10 @@ var announcements = map[Kind]Policy{
 	// anywhere: it is only made when somebody is there to hear it,
 	// and a phone reports its own battery without help.
 	Immediate: {Asked, Drop, 5 * time.Minute, 3},
-	Renaming:  {Asked, Anyway, time.Hour, 1},
+	Renaming:  {Asked, Drop, time.Hour, 1},
 	// Nothing asked for it and it is about something hours or days
 	// away, so where they happen to be standing decides nothing.
-	Coming: {Everywhere, Anyway, 6 * time.Hour, 5},
+	Coming: {Everywhere, Hold, 6 * time.Hour, 5},
 }
 
 // Announcement : Whether this is the assistant having spoken unprompted.
