@@ -231,12 +231,20 @@ class _Table extends StatelessWidget {
     required this.columns,
     required this.rows,
     required this.empty,
+    this.tall = false,
   });
 
   final String summary;
   final List<String> columns;
   final List<List<Widget>> rows;
   final Widget empty;
+
+  /// tall : Whether a row may grow to fit what is in it.
+  ///
+  /// For the one table whose point is the detail. Everywhere else a
+  /// row is a single line on purpose, so that rows of the same
+  /// shape can be compared down the page.
+  final bool tall;
 
   @override
   Widget build(BuildContext context) {
@@ -254,16 +262,15 @@ class _Table extends StatelessWidget {
           child: DataTable(
             headingRowHeight: 38,
             dataRowMinHeight: 36,
-            dataRowMaxHeight: 72,
+            dataRowMaxHeight: tall ? double.infinity : 72,
             columnSpacing: AppSpacing.xl,
             columns: [
               for (final c in columns)
-                DataColumn(
-                  label: Text(c, style: theme.textTheme.labelMedium),
-                ),
+                DataColumn(label: Text(c, style: theme.textTheme.labelMedium)),
             ],
             rows: [
-              for (final r in rows) DataRow(cells: [for (final c in r) DataCell(c)]),
+              for (final r in rows)
+                DataRow(cells: [for (final c in r) DataCell(c)]),
             ],
           ),
         ),
@@ -309,11 +316,19 @@ class _Memories extends StatelessWidget {
         '${m.always} in every prompt',
         if (m.unused > 0) '${m.unused} never used',
       ].join(' · '),
-      columns: const ['Subject', 'Memory', 'Tier', 'Used', 'Last used', 'By meaning'],
+      columns: const [
+        'Subject',
+        'Memory',
+        'Tier',
+        'Used',
+        'Last used',
+        'By meaning',
+      ],
       empty: const AppEmptyState(
         icon: Icons.psychology_outlined,
         title: 'Nothing to show',
-        body: 'Memories are written during a conversation, when something '
+        body:
+            'Memories are written during a conversation, when something '
             'is worth keeping.',
       ),
       rows: [
@@ -385,10 +400,15 @@ class _EventsState extends State<_Events> {
   /// of a phone's events read "via: phone" beside "tasker", which is
   /// one fact taking two columns and crowding out the ones that
   /// differ.
+  ///
+  /// Named with a colon and shown in full. Every field is here on
+  /// purpose: the number a call came from and how long it lasted
+  /// were the two most useful things on the page and both were
+  /// behind an ellipsis.
   static String _rest(Map<String, dynamic> p) => p.entries
       .where((x) => x.key != 'value' && x.key != 'via')
-      .map((x) => '${x.key} ${x.value}')
-      .join('  ·  ');
+      .map((x) => '${x.key}: ${x.value}')
+      .join('   ·   ');
 
   @override
   Widget build(BuildContext context) {
@@ -458,31 +478,43 @@ class _EventsState extends State<_Events> {
             if (_since != _Since.ever) _since.label.toLowerCase(),
             if (widget.kind.isNotEmpty) widget.kind,
           ].join(' · '),
-          columns: const ['When', 'What', 'Kind', 'Detail', 'From', 'Arrived'],
+          columns: const [
+            '',
+            'When',
+            'What',
+            'Kind',
+            'Detail',
+            'From',
+            'Arrived',
+          ],
+          tall: true,
           empty: const AppEmptyState(
             icon: Icons.sensors_outlined,
             title: 'Nothing to show',
-            body: 'Events arrive from your own devices. Nobody has to ask '
+            body:
+                'Events arrive from your own devices. Nobody has to ask '
                 'for them.',
           ),
           rows: [
             for (final x in items)
               [
-                _cell(context, _when(x.occurredAt), width: 92),
+                Icon(
+                  _icon(x.kind),
+                  size: 18,
+                  color: _tint(context, x.kind, _value(x.payload)),
+                ),
+                _cell(context, _when(x.occurredAt), width: 104),
                 // The thing itself, in the reading weight of the
                 // page rather than the muted weight of a detail.
-                SizedBox(
-                  width: 210,
-                  child: Text(
-                    _value(x.payload).isEmpty ? '—' : _value(x.payload),
-                    overflow: TextOverflow.ellipsis,
-                    style: Theme.of(context).textTheme.bodyMedium?.copyWith(
-                      fontWeight: FontWeight.w600,
-                    ),
-                  ),
+                _wrapped(
+                  context,
+                  _value(x.payload).isEmpty ? '—' : _value(x.payload),
+                  width: 200,
+                  strong: true,
+                  colour: _tint(context, x.kind, _value(x.payload)),
                 ),
                 _cell(context, x.kind, width: 150),
-                _cell(context, _rest(x.payload), width: 260),
+                _wrapped(context, _rest(x.payload), width: 320),
                 _cell(
                   context,
                   x.device.isEmpty ? x.source : '${x.source} · ${x.device}',
@@ -620,10 +652,7 @@ class _Unasked extends StatelessWidget {
     final spoke = r.remarks.where((x) => x.outcome == 'said').length;
 
     return _Table(
-      summary: [
-        '${rows.length} considered',
-        '$spoke said aloud',
-      ].join(' · '),
+      summary: ['${rows.length} considered', '$spoke said aloud'].join(' · '),
       columns: const ['When', 'About', 'Why', 'Outcome', 'What happened'],
       empty: const AppEmptyState(
         icon: Icons.hearing_outlined,
@@ -639,11 +668,7 @@ class _Unasked extends StatelessWidget {
             _cell(context, x.label, width: 240),
             _cell(context, x.reason, width: 90),
             _cell(context, x.outcome, width: 100),
-            _cell(
-              context,
-              x.said.isNotEmpty ? x.said : x.because,
-              width: 420,
-            ),
+            _cell(context, x.said.isNotEmpty ? x.said : x.because, width: 420),
           ],
       ],
     );
@@ -653,12 +678,140 @@ class _Unasked extends StatelessWidget {
 /// _when : A short, local rendering of a moment.
 String _when(DateTime at) {
   final now = DateTime.now();
-  final hhmm =
-      '${at.hour.toString().padLeft(2, '0')}:${at.minute.toString().padLeft(2, '0')}';
   if (at.year == now.year && at.month == now.month && at.day == now.day) {
-    return hhmm;
+    return _clock(at);
   }
-  return '${at.day}/${at.month} $hhmm';
+  return '${at.day}/${at.month} ${_clock(at)}';
+}
+
+/// _clock : The time the way it is said, not the way a timetable
+/// prints it. Twenty past ten at night is 10:20 pm here.
+String _clock(DateTime at) {
+  final hour = at.hour % 12 == 0 ? 12 : at.hour % 12;
+  final minute = at.minute.toString().padLeft(2, '0');
+  return '$hour:$minute ${at.hour < 12 ? 'am' : 'pm'}';
+}
+
+/// _icon : What the event was, at a glance.
+///
+/// Keyed off the family rather than the whole kind, so a new
+/// battery or music event arrives with the right picture and
+/// nothing here has to be edited. An unknown family gets the
+/// generic one rather than nothing, which would make the column
+/// ragged.
+Color _tint(BuildContext context, String kind, String value) {
+  final t = context.tokens.palette;
+  switch (kind) {
+    case 'call.missed':
+    case 'call.unanswered':
+    case 'battery.low':
+      return t.danger;
+    case 'battery.full':
+    case 'power.plugged':
+    case 'call.received':
+      return t.success;
+    case 'power.unplugged':
+      return t.warning;
+  }
+  switch (kind.split('.').first) {
+    // A level is read as a level: the number decides the colour, so
+    // a glance down the column shows the day draining.
+    case 'battery':
+      final level = int.tryParse(value);
+      if (level == null) return t.textSecondary;
+      if (level <= 20) return t.danger;
+      if (level <= 40) return t.warning;
+      return t.success;
+    case 'call':
+      return t.accent;
+    case 'music':
+    case 'place':
+    case 'location':
+      return t.accent;
+    case 'app':
+      return t.textSecondary;
+  }
+  // Screen, wifi, bluetooth: the background noise of a phone. Kept
+  // quiet so the rows that mean something stand out.
+  return t.textMuted;
+}
+
+IconData _icon(String kind) {
+  final family = kind.split('.').first;
+  switch (kind) {
+    case 'screen.locked':
+      return Icons.lock_outline;
+    case 'screen.unlocked':
+      return Icons.lock_open_outlined;
+    case 'call.missed':
+      return Icons.phone_missed_outlined;
+    case 'call.received':
+      return Icons.phone_callback_outlined;
+    case 'call.outgoing':
+      return Icons.phone_forwarded_outlined;
+    case 'battery.low':
+      return Icons.battery_alert_outlined;
+    case 'battery.full':
+      return Icons.battery_full_outlined;
+  }
+  switch (family) {
+    case 'battery':
+      return Icons.battery_std_outlined;
+    case 'power':
+      return Icons.power_outlined;
+    case 'screen':
+      return Icons.smartphone_outlined;
+    case 'call':
+      return Icons.call_outlined;
+    case 'music':
+      return Icons.music_note_outlined;
+    case 'place':
+      return Icons.place_outlined;
+    case 'location':
+      return Icons.my_location_outlined;
+    case 'app':
+      return Icons.apps_outlined;
+    case 'network':
+    case 'wifi':
+      return Icons.wifi_outlined;
+    case 'message':
+    case 'sms':
+      return Icons.sms_outlined;
+    case 'reminder':
+      return Icons.alarm_outlined;
+  }
+  return Icons.sensors_outlined;
+}
+
+/// _wrapped : A cell that grows to fit rather than cutting the
+/// value off.
+///
+/// The whole point of the detail column is the part that was being
+/// hidden behind an ellipsis: a caller's number, how long a call
+/// lasted. A row that is one line taller is a cheap price for
+/// being able to read it.
+Widget _wrapped(
+  BuildContext context,
+  String text, {
+  required double width,
+  bool strong = false,
+  Color? colour,
+}) {
+  final style = Theme.of(context).textTheme.bodyMedium;
+  return SizedBox(
+    width: width,
+    child: Padding(
+      padding: const EdgeInsets.symmetric(vertical: AppSpacing.sm),
+      child: Text(
+        text,
+        softWrap: true,
+        style: style?.copyWith(
+          fontWeight: strong ? FontWeight.w600 : null,
+          color: colour,
+        ),
+      ),
+    ),
+  );
 }
 
 /// _late : How long a device had been unable to reach anything.
