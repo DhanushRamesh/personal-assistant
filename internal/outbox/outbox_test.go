@@ -195,3 +195,69 @@ func TestEveryAnnouncementHasARule(t *testing.T) {
 		}
 	}
 }
+
+// everyone : A person with both clients.
+func everyone(context.Context, string) ([]string, error) {
+	return []string{typed, voiced}, nil
+}
+
+// Owner: *"this event is client specific only, not all clients
+// should get that."* A conversation renamed on a laptop is that
+// laptop's business. Put on a speaker it is noise about a thing
+// nobody in that room did.
+func TestSomethingOneClientCausedGoesOnlyToIt(t *testing.T) {
+	s := inmemory.New()
+	p := &outbox.Publisher{Store: s, Clients: everyone}
+
+	o, err := outbox.New("a", "usr_1", conversation.Renaming, `Named it "Gunalan call check"`, noon)
+	if err != nil {
+		t.Fatalf("outbox.New: %v", err)
+	}
+	o.From = typed
+	if err := p.Publish(context.Background(), o); err != nil {
+		t.Fatalf("Publish: %v", err)
+	}
+
+	mine, _ := s.Pending(context.Background(), typed, 0)
+	if len(mine) != 1 {
+		t.Errorf("the client that caused it owes %d, wanted 1", len(mine))
+	}
+	theirs, _ := s.Pending(context.Background(), voiced, 0)
+	if len(theirs) != 0 {
+		t.Errorf("another client was given %d copies of somebody else's rename", len(theirs))
+	}
+}
+
+// A reminder's whole point is to arrive when they are somewhere
+// else, so every client gets it whoever caused it.
+func TestSomethingAClockCausedGoesEverywhere(t *testing.T) {
+	s := inmemory.New()
+	p := &outbox.Publisher{Store: s, Clients: everyone}
+
+	o, _ := outbox.New("a", "usr_1", conversation.ReminderAnnouncement, "take the tablets", noon)
+	if err := p.Publish(context.Background(), o); err != nil {
+		t.Fatalf("Publish: %v", err)
+	}
+	for _, client := range []string{typed, voiced} {
+		owing, _ := s.Pending(context.Background(), client, 0)
+		if len(owing) != 1 {
+			t.Errorf("%s owes %d, wanted the reminder", client, len(owing))
+		}
+	}
+}
+
+// Asked with nobody named is refused rather than sent to
+// everybody. Guessing would put a conversation's new name on
+// somebody's speaker, which is the exact noise this prevents.
+func TestAskedWithNoCauseIsRefused(t *testing.T) {
+	s := inmemory.New()
+	p := &outbox.Publisher{Store: s, Clients: everyone}
+
+	o, _ := outbox.New("a", "usr_1", conversation.Renaming, "named it", noon)
+	if err := p.Publish(context.Background(), o); err == nil {
+		t.Fatal("a client-specific announcement with no client was published")
+	}
+	if got, _ := s.Pending(context.Background(), voiced, 0); len(got) != 0 {
+		t.Errorf("it went out anyway, to %d clients", len(got))
+	}
+}

@@ -321,10 +321,21 @@ func run() error {
 		Logger:        logger.Logger,
 	}
 
+	// Where an announcement waits for the clients that should hear
+	// it. Built here because the runner publishes one too: a
+	// conversation's new name belongs to the client whose
+	// conversation it is, and to no other.
+	owed := outboxmysql.New(db.DB)
+	publishing := &outbox.Publisher{
+		Store:   owed,
+		Clients: func(ctx context.Context, userID string) ([]string, error) { return subscribers(ctx, chats, userID) },
+	}
+
 	chatRunner, err := runner.New(runner.Options{
 		Repository:    chats,
 		Messages:      chats,
 		Announcements: announcements,
+		Publish:       announcing{publishing, cfg.Assistant.Now},
 		Environment:   answerer,
 		Logger:        logger.Logger,
 		Publisher:     bus,
@@ -543,7 +554,6 @@ func run() error {
 	// a thing has gone past being worth saying at all. Without it a
 	// voice client switched off for a week comes back to a hundred
 	// stale warnings.
-	owed := outboxmysql.New(db.DB)
 	sweeping := &outbox.Sweeper{
 		Store:   owed,
 		Clients: everyClient(chats, cfg, logger.Logger),
@@ -564,7 +574,7 @@ func run() error {
 	go func() {
 		defer watching.Done()
 		watchingFor(remindCtx, cfg, deviceEvents, chats, speaker,
-			owed, logger.Logger)
+			publishing, logger.Logger)
 	}()
 
 	handler := api.New(api.Options{
@@ -1456,7 +1466,7 @@ func watchingFor(
 	reported situation.Events,
 	talkers subscribed,
 	speaker announce.Announcer,
-	owed outbox.Store,
+	publishing *outbox.Publisher,
 	logger *slog.Logger,
 ) {
 	here, err := hass.NewPresence(hass.PresenceConfig{
@@ -1490,11 +1500,7 @@ func watchingFor(
 			if err != nil {
 				return err
 			}
-			subscribed, err := subscribers(ctx, talkers, userID)
-			if err != nil {
-				return err
-			}
-			return owed.Publish(ctx, o, subscribed)
+			return publishing.Publish(ctx, o)
 		},
 		Here: func(userID string) (bool, bool) {
 			present, known := here.Here(ctx, userID)
@@ -1876,4 +1882,27 @@ func everyClient(talkers subscribed, cfg config.Config, logger *slog.Logger,
 		}
 		return out, nil
 	}
+}
+
+// announcing : Turns what a piece of logic decided into an
+// announcement, and publishes it.
+//
+// The adapter between the two halves. A piece of logic says what
+// happened, which kind it is and which client caused it; it never
+// learns what an outbox is, who else has a client, or whether
+// anybody is in the room.
+type announcing struct {
+	to  *outbox.Publisher
+	now func() time.Time
+}
+
+// Publish : Puts one announcement out.
+func (a announcing) Publish(ctx context.Context, from, userID string,
+	kind conversation.Kind, text string) error {
+	o, err := outbox.New(outboxmysql.ID(), userID, kind, text, a.now())
+	if err != nil {
+		return err
+	}
+	o.From = from
+	return a.to.Publish(ctx, o)
 }

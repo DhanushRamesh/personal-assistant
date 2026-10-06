@@ -91,34 +91,64 @@ everywhere here.
 
 ```mermaid
 flowchart TB
-    subgraph W["Watchers -- is this worth saying?"]
-        direction TB
-        RL["Reminders"]
-        GR["The greeting"]
-        CO["The diary"]
+    subgraph L["The logic -- is there something to say?"]
+        direction LR
+        SI["Situations"]
+        RN["Renaming"]
+        RM["Reminders"]
+        GR["Greeting"]
+        CO["Diary"]
         LV["Leave by"]
-        SIT["Situations"]
-        NOT["Immediate"]
+        IM["Immediate"]
     end
 
-    W --> PUB[("Published once<br/>to the outbox")]
-    PUB --> FAN{"A copy for<br/>every client"}
+    SI --> EV
+    RN --> EV
+    RM -.-> OLD
+    GR -.-> OLD
+    CO -.-> OLD
+    LV -.-> OLD
+    IM -.-> OLD
+    RN -.-> OLD
 
-    FAN --> TY["Typed client<br/>a screen needs nobody in front of it"]
-    FAN --> VO["Voice client<br/>knows its own room"]
+    EV["One event object<br/>who it is for · the sentence · when it became true<br/>how long it stays worth saying · which client caused it"]
+    EV --> PUB{"Publisher<br/>audience looked up from the kind"}
 
-    TY --> SAID1["Marked said"]
-    VO --> P{"Anybody<br/>there?"}
-    P -- "yes" --> SAID2["Said aloud, marked said"]
-    P -- "no" --> PEND["Left pending<br/>collected when the watch returns"]
-    PEND --> VO
+    PUB -- "Asked" --> ONE["Only the client that caused it"]
+    PUB -- "Everywhere" --> ALL["Every client of that person"]
+    PUB -- "Asked with no cause" --> NO["Refused<br/>never broadcast on a guess"]
 
-    PUB -.-> SW["The server sweeps<br/>what went stale"]
+    ONE --> DB
+    ALL --> DB
+    DB[("owed + owed_clients<br/>one copy per client, pending")]
+
+    DB --> GET["GET /v1/announcements<br/>what THIS client owes"]
+    GET -.-> NOBODY["nothing collects yet"]
+    GET --> CL{"The client decides<br/>presence lives here"}
+
+    CL -- "typed: a screen needs nobody" --> MARK["POST /v1/announcements/id<br/>said"]
+    CL -- "voice: somebody is there" --> SAY["Say it aloud, then said"]
+    CL -- "voice: empty room" --> KEEP["Write nothing<br/>the copy stays pending"]
+    KEEP --> GET
+
+    MARK --> DB
+    SAY --> DB
+    DB --> SW["Sweeper<br/>what went stale is marked expired"]
+
+    OLD["Spoken directly to the satellite<br/>the old path, still in place so nothing went quiet"]
 ```
 
 **The rule underneath all of it:** nothing is said unless something
 asked for it to be said. There is no chatter watcher, by decision —
 only the six above.
+
+**The logic and the event object are different things.** Greeting,
+renaming, reminders, situations, leave-by and the diary are *logic*:
+each watches something different and answers one question, *is there
+something to say*. What each produces is the same **event object**,
+and everything after that is one path that does not care which logic
+made it. The name on it -- reminder, renamed, immediate -- is
+provenance, not a species.
 
 **Published once, delivered per client.** An announcement goes into
 the outbox before anything is said, and every client of that person

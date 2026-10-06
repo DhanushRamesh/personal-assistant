@@ -91,6 +91,15 @@ type Owing struct {
 	// model that wrote it is not asked twice.
 	Text string
 
+	// From : The client that caused it, where one did.
+	//
+	// Not who it is for: that is worked out from the kind's
+	// audience. A conversation renamed on a laptop is the laptop's
+	// business and nobody else's, and this is how the publisher
+	// knows which laptop. Empty for anything a clock caused, which
+	// belongs to no client.
+	From string
+
 	// Due : When it became worth saying.
 	Due time.Time
 	// Expires : When it stops being worth saying, from the kind's

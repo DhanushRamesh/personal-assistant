@@ -77,6 +77,7 @@ func (r *Runner) title(ctx context.Context, t *chat.Chat) {
 		slog.String("conversation_id", t.ConversationID), slog.String("title", name))
 
 	r.noteTitle(ctx, t, name)
+	r.publishTitle(ctx, t, c, name)
 	r.announceTitle(ctx, t, name)
 }
 
@@ -115,6 +116,44 @@ func (r *Runner) noteTitle(ctx context.Context, t *chat.Chat, name string) {
 type Announcements interface {
 	// Renamed : Notes that this conversation was given a name.
 	Renamed(ctx context.Context, conversationID, text string)
+}
+
+// Publishing : Where an announcement goes for the clients that
+// should hear it.
+//
+// Narrow on purpose. The runner says what happened and which
+// client caused it; who should hear that is worked out from the
+// kind, in one table, somewhere else entirely.
+type Publishing interface {
+	// Publish : Puts one announcement out. from is the client that
+	// caused it, which for a naming is the client whose
+	// conversation was named.
+	Publish(ctx context.Context, from, userID string,
+		kind conversation.Kind, text string) error
+}
+
+// publishTitle : Puts the naming where that client will find it.
+//
+// Owner: *"this event is client specific only, not all clients
+// should get that."* A conversation renamed on a laptop is that
+// laptop's business -- read on a phone it is a line about a thing
+// nobody there did, and said on a speaker it is noise. The kind is
+// Asked and the asker is named here, so it reaches one client and
+// no others.
+//
+// Logged and dropped on failure, like everything else in here. The
+// conversation has its name; failing to publish the fact costs a
+// notification and is not worth failing the turn over.
+func (r *Runner) publishTitle(ctx context.Context, t *chat.Chat, c *chat.Conversation, name string) {
+	if r.publishing == nil || t.ClientID == "" || c == nil {
+		return
+	}
+	err := r.publishing.Publish(ctx, t.ClientID, c.UserID,
+		conversation.Renaming, conversation.TitleAnnouncement(name))
+	if err != nil {
+		r.logger.WarnContext(ctx, "cannot publish the conversation's new name",
+			slog.String("conversation_id", t.ConversationID), slog.Any("error", err))
+	}
 }
 
 // announceTitle : Says the new name aloud, when the person had no way to see

@@ -76,6 +76,11 @@ type Options struct {
 	// and only the note in the conversation is lost.
 	Announcements Announcements
 
+	// Publish : Where an announcement goes for the clients that
+	// should hear it. Nil publishes nothing, which is how this
+	// behaved before clients collected anything.
+	Publish Publishing
+
 	// Publisher : Receives a chat's messages as they happen, for clients
 	// listening to it. Optional; without one a chat still runs and is still
 	// recorded, but nothing hears it until it is read back.
@@ -148,6 +153,7 @@ type Runner struct {
 	repo            chat.Repository
 	messages        conversation.Repository
 	announcements   Announcements
+	publishing      Publishing
 	environment     environment.Environment
 	publisher       Publisher
 	logger          *slog.Logger
@@ -227,6 +233,7 @@ func New(opts Options) (*Runner, error) {
 		repo:            opts.Repository,
 		messages:        opts.Messages,
 		announcements:   opts.Announcements,
+		publishing:      opts.Publish,
 		environment:     opts.Environment,
 		publisher:       opts.Publisher,
 		logger:          opts.Logger,
