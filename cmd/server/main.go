@@ -334,6 +334,19 @@ func run() error {
 		comingtool.Tools(comingmysql.New(db.DB), comingtool.Clock{
 			Now: cfg.Assistant.Now, Location: cfg.Assistant.Location,
 		}),
+		[]tool.Tool{comingtool.Due(comingtool.Looking{
+			Diary: comingDiary(googleLink, cfg),
+			Store: comingmysql.New(db.DB),
+			Ask: func(ctx context.Context, _, ask string) (string, error) {
+				return askAs(ctx, answerer, cfg.PlatformAI.Vendor,
+					cmp.Or(cfg.PlatformAI.FastModel, cfg.PlatformAI.Model),
+					persona.Voice(cfg.Assistant.Persona, cfg.Assistant.Name),
+					environment.PurposeRemark, ask)
+			},
+			Location: cfg.Assistant.Location,
+			Now:      cfg.Assistant.Now,
+			Logger:   logger.Logger,
+		})},
 		webtool.Tools(searchingFast(cfg, logger.Logger)),
 		mapstool.Tools(mapping(cfg), deviceEvents, mapstool.Clock{
 			Now: cfg.Assistant.Now, Location: cfg.Assistant.Location,
@@ -583,14 +596,6 @@ func run() error {
 		logger.Info("greeting them with a fixed salutation",
 			slog.String("greeting", cfg.Assistant.Greeting))
 	}
-
-	// The diary, which until now never spoke first.
-	watching.Add(1)
-	go func() {
-		defer watching.Done()
-		lookingAhead(remindCtx, cfg, comingDiary(googleLink, cfg), comingmysql.New(db.DB),
-			chats, answerer, speaker, announcements, logger.Logger)
-	}()
 
 	// And when to set off for it, which is the half the diary cannot
 	// say on its own: it knows the hour and not the road.
@@ -1608,63 +1613,6 @@ func askAs(
 	return last.Text, nil
 }
 
-// lookingAhead : Says what is in the diary before it arrives.
-//
-// Everything that decides when to speak lives in internal/coming.
-// This is only the wiring: where the diary comes from, how the model
-// is asked to judge an entry, and where the words go.
-func lookingAhead(
-	ctx context.Context,
-	cfg config.Config,
-	diary coming.Diary,
-	judgements coming.Store,
-	talkers interface {
-		Talkers(ctx context.Context, since time.Time) ([]string, error)
-	},
-	answerer environment.Environment,
-	speaker announce.Announcer,
-	announcements *announcement.Writer,
-	logger *slog.Logger,
-) {
-	// No diary, or nowhere to say it. Said once at startup, because a
-	// silent assistant and a broken one look identical.
-	if diary == nil || speaker == nil || !speaker.Available() {
-		logger.Info("saying nothing about what is coming, " +
-			"with no diary or nowhere to say it")
-		return
-	}
-
-	model := cmp.Or(cfg.PlatformAI.FastModel, cfg.PlatformAI.Model)
-	ahead := &coming.Loop{
-		Diary: diary,
-		Store: judgements,
-		Ask: func(ctx context.Context, _, ask string) (string, error) {
-			return askAs(ctx, answerer, cfg.PlatformAI.Vendor, model,
-				persona.Voice(cfg.Assistant.Persona, cfg.Assistant.Name),
-				environment.PurposeRemark, ask)
-		},
-		Say: func(ctx context.Context, userID, text string) error {
-			if err := announcement.Speak(ctx, speaker, conversation.Coming, text); err != nil {
-				return err
-			}
-			announcements.Coming(ctx, userID, text)
-			return nil
-		},
-		Location: cfg.Assistant.Location,
-		Now:      cfg.Assistant.Now,
-		Logger:   logger,
-	}
-
-	logger.Info("saying what is coming",
-		slog.String("model", model),
-		slog.Duration("every", coming.Every),
-		slog.Duration("ahead", coming.Ahead))
-
-	ahead.Run(ctx, func(ctx context.Context) ([]string, error) {
-		return talkers.Talkers(ctx, cfg.Assistant.Now().Add(-chat.Active))
-	})
-}
-
 // settingOff : Says when to leave for something with an address.
 //
 // Everything that decides lives in internal/leaving. This is only
@@ -2004,6 +1952,9 @@ func (d doing) Do(ctx context.Context, run job.Turn, s job.Step) (job.Outcome, e
 		d.written.Announced(ctx, run.UserID, s.Say)
 		return job.Outcome{Said: s.Say}, nil
 
+	case job.Relay:
+		return d.relay(ctx, run)
+
 	case job.Write:
 		return d.write(ctx, run, s)
 
@@ -2118,6 +2069,50 @@ func (r readings) Latest(ctx context.Context, userID, kind string, n int) ([]job
 // more than any sentence has needed and small enough that a rule
 // which has started arguing with itself stops on its own.
 const Rounds = 4
+
+// relay : Says what the tool before it returned.
+//
+// No model. The words are already settled by whatever produced
+// them, and a rule whose tool writes its own sentence should not
+// pay for that sentence twice.
+func (d doing) relay(ctx context.Context, run job.Turn) (job.Outcome, error) {
+	var said string
+	for _, r := range run.Already {
+		if text := strings.TrimSpace(r.Got); text != "" {
+			said = text
+		}
+	}
+	if said == "" || prompt.Nothing(said) {
+		return job.Outcome{Stop: true, Why: "there was nothing to pass on", Said: run.Before}, nil
+	}
+	if same(said, run.Before) {
+		d.logger.InfoContext(ctx, "a job had nothing new to pass on")
+		return job.Outcome{Stop: true, Why: "it had already said that", Said: said}, nil
+	}
+	if err := d.publish(ctx, run.UserID, said); err != nil {
+		return job.Outcome{}, err
+	}
+	d.logger.InfoContext(ctx, "a job passed on what it found")
+	return job.Outcome{Said: said}, nil
+}
+
+// publish : Writes an announcement down, says it, and records it.
+//
+// The speaking is the half that goes when every client collects.
+func (d doing) publish(ctx context.Context, userID, said string) error {
+	o, err := outbox.New(outboxmysql.ID(), userID, conversation.Immediate, said, d.now())
+	if err != nil {
+		return err
+	}
+	if err := d.to.Publish(ctx, o); err != nil {
+		return err
+	}
+	if err := announcement.Speak(ctx, d.speaker, conversation.Immediate, said); err != nil {
+		return err
+	}
+	d.written.Announced(ctx, userID, said)
+	return nil
+}
 
 // write : Asks the model for the sentence, then says it.
 //

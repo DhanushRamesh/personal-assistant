@@ -36,7 +36,7 @@ flowchart TB
 
     CORE["The core<br/>persona, memory, tool loop"]
     MODEL["Model<br/>PlatformAI"]
-    TOOLS["56 tools<br/>section 2"]
+    TOOLS["57 tools<br/>section 2"]
     DB[("MySQL<br/>reminders, memories, events,<br/>conversations, places, profile")]
 
     CORE <--> MODEL
@@ -57,7 +57,7 @@ flowchart TB
 
 ## 2. What it can do when asked
 
-56 tools, grouped by what they are about. The model picks; nothing
+57 tools, grouped by what they are about. The model picks; nothing
 here is keyword matched.
 
 ```mermaid
@@ -75,7 +75,7 @@ flowchart LR
     CORE --- CONV["Conversations<br/>new, list, find, switch,<br/>rename, archive, delete"]
     CORE --- RULE["Rules<br/>add, list, cancel"]
     CORE --- SIT["Situations<br/>find"]
-    CORE --- MISC["Other<br/>coming_settled, tool_describe"]
+    CORE --- MISC["Other<br/>coming_settled, coming_due, tool_describe"]
 ```
 
 **Where to look first.** Anything about this person's own life is
@@ -99,7 +99,7 @@ flowchart TB
         RN["Renaming"]
         RM["Reminders"]
         GR["Greeting"]
-        CO["Diary"]
+        CO["Diary<br/>a rule and a tool, section 6"]
         LV["Leave by"]
         IM["Immediate<br/>six standing rules, section 6<br/>no longer a watcher"]
     end
@@ -108,7 +108,7 @@ flowchart TB
     RN --> EV
     RM -.-> OLD
     GR -.-> OLD
-    CO -.-> OLD
+    CO --> EV
     LV -.-> OLD
     IM --> EV
     RN -.-> OLD
@@ -288,7 +288,7 @@ flowchart TB
     WHAT -- "check a condition" --> GATE{"Does it hold?<br/>an event value, how old it is,<br/>or who is in the room"}
     WHAT -- "ask the model to write one" --> MODEL{"Anything worth saying?<br/>may call the tools<br/>the rule named"}
     WHAT -- "say a fixed sentence" --> OUT["Published to the outbox<br/>section 3 takes it from there"]
-    WHAT -- "run a tool" --> TOOL["One of the 56 -- reading ones only<br/>what it returns is kept<br/>for the steps after it"]
+    WHAT -- "run a tool" --> TOOL["One of the 57 -- reading ones only<br/>what it returns is kept<br/>for the steps after it"]
 
     GATE -- "no, or nothing is known" --> STOP["Nothing after it runs<br/>not a failure; the row<br/>says what stopped it"]
     MODEL -- "NOTHING" --> STOP
@@ -334,10 +334,16 @@ for something every two minutes without asking a model to say
 nothing seven hundred times a day: the looking is cheap and
 deterministic, the sentence is neither.
 
-**Four things a step can do:** say a fixed sentence, run one of the
+**Five things a step can do:** say a fixed sentence, run one of the
 tools that already exist, check a condition, or ask the model to
 write the sentence. The verbs were never missing; a rule just needed
 a way to point at one.
+
+**A relay step says what the tool before it returned, as it
+stands, with no model.** For a tool that has already settled the
+words — the diary works out its own sentence when it judges an
+entry, often weeks before saying it. *Write is for when the words
+do not exist yet; relay is for when they do.*
 
 **A write step is how a rule says something it could not know in
 advance.** It carries an instruction rather than words — *say what
@@ -454,9 +460,9 @@ staying where they are.
 
 Kept here so it is not rediscovered.
 
-- Five of the seven watchers are still loops in Go. Immediate and
-  situations have moved; reminders move last. The diary and
-  leave-by are no longer blocked and have not been moved.
+- Four of the seven watchers are still loops in Go. Immediate,
+  situations and the diary have moved; reminders move last.
+  Leave-by is no longer blocked and has not been moved.
 - **Greeting and renaming are not moving, by decision.** They stay
   as they are. Neither is a standing rule, and neither would be
   better as one — see DEVELOPMENT.md. Four producers are in scope,

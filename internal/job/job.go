@@ -79,6 +79,16 @@ const (
 	// sentence fixed when the rule was written can only ever be
 	// the same sentence.
 	Write Task = "write"
+	// Relay : Say what the tool before it returned, as it stands.
+	//
+	// For a tool that has already settled the words. The diary
+	// works out its own sentence when it judges an entry, months
+	// ahead of saying it; handing that to a model to say again
+	// would be a second model call that can only lose fidelity.
+	//
+	// [Write] is for when the words do not exist yet. This is for
+	// when they do.
+	Relay Task = "relay"
 	// Check : Read a condition and stop the rest of the sequence
 	// unless it holds.
 	//
@@ -337,6 +347,10 @@ func (s Step) Valid() error {
 		if strings.TrimSpace(s.Tool) == "" {
 			return errors.New("job: a tool step naming no tool")
 		}
+	case Relay:
+		// Nothing of its own to check: what it says comes from the
+		// step before it, and a relay with no tool in front of it
+		// simply finds nothing and stops.
 	case Write:
 		if strings.TrimSpace(s.Ask) == "" {
 			return errors.New("job: a write with nothing to write about")

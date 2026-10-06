@@ -11758,6 +11758,70 @@ written into the test file that replaced them, so that nobody
 looks for them in the old place.
 
 
+### The diary moves, and a step that only passes words on
+
+Owner, 6 October 2026: *"do the diary."* The same shape as
+situations, and it needed one thing situations did not.
+
+#### A sentence that already exists
+
+Situations needed a model to put its finding into words. The
+diary does not. When an entry is first seen it is judged -- how
+much warning this particular thing needs, and why -- and that
+judgement is a model call made once and stored, often weeks
+before the warning is due. `Judged.Sentence` builds the words
+from it deterministically.
+
+Handing that to a `write` step would be asking a model to say
+again what a model already said, at the cost of a second call and
+whatever it lost in the retelling.
+
+So `relay`: say what the tool before it returned, as it stands.
+No model. **`write` is for when the words do not exist yet; this
+is for when they do.**
+
+That was the one real gap in the engine's vocabulary. A tool could
+find something and nothing could simply pass it on.
+
+#### What moved and what did not
+
+The judging is untouched. `coming.Loop` is still what reads ahead,
+decides what is new, works out the leads, marks what was said and
+forgets what left the diary. The tool builds one per call and
+gives it somewhere to put the words instead of a way to say them:
+
+	Say: func(_ context.Context, _, text string) error {
+	        said = append(said, text)
+	        return nil
+	}
+
+Everything else about a pass is the loop's own and unchanged, down
+to marking a lead spoken before saying it rather than after.
+
+What moved is the five minute cadence, into a row, and the
+delivery: the diary **spoke directly** before this and now
+publishes to the outbox like everything else, so it gets per
+client copies and presence on the client for nothing.
+
+#### Two warnings at one minute
+
+Rare, and one announcement rather than two interruptions. The
+sentences are joined. Situations takes the opposite line -- first
+found wins -- because those are three unrelated faults and the
+diary's are two parts of the same morning.
+
+#### Proved
+
+`coming_due` ran, found nothing due, and ended the sequence
+before the model was asked -- the same economy the situations
+move bought, and the reason a rule can look every five minutes.
+
+The relay step was proved separately, since nothing in the diary
+was due: a rule of `[event_recent, relay]` published the tool's
+words verbatim, recorded them as what it last said, and made no
+model call.
+
+
 ## 12. Maintaining this file
 
 When the owner states a preference, makes a decision, or corrects something,
