@@ -24,6 +24,33 @@ type Store interface {
 	Ran(ctx context.Context, id string, next time.Time, state State, why string, at time.Time) error
 }
 
+// Ran : What a step earlier in the same sequence did.
+//
+// Carried forward because a sequence is one turn. The tool names
+// are what the tools themselves need, to satisfy their rule about
+// reading before writing; what the tools returned is what a
+// [Write] step needs, because the sentence it composes is about
+// whatever the sequence just found.
+//
+// This is a transcript of the turn, not variables passed between
+// steps. Nothing here is compared or branched on -- only read by a
+// model, and only ever appended to.
+type Ran struct {
+	// Tool : Which tool ran.
+	Tool string
+	// Got : What it returned, as the prose it returns.
+	Got string
+}
+
+// Tools : The names of the tools that ran, in order.
+func Tools(already []Ran) []string {
+	names := make([]string, 0, len(already))
+	for _, r := range already {
+		names = append(names, r.Tool)
+	}
+	return names
+}
+
 // Outcome : What carrying out one step came to.
 type Outcome struct {
 	// Stop : Whether the rest of the sequence should not run.
@@ -31,6 +58,8 @@ type Outcome struct {
 	// Why : Why it stopped, for the record. Not a failure -- a
 	// check that did not pass is the engine working.
 	Why string
+	// Got : What a tool returned, for the steps after it to read.
+	Got string
 }
 
 // Doer : Carries out one step.
@@ -54,7 +83,7 @@ type Doer interface {
 	// that forgot its own first step could never satisfy that. It
 	// is also what makes [list, add] mean anything, which is the
 	// reason sequences exist.
-	Do(ctx context.Context, userID string, s Step, already []string) (Outcome, error)
+	Do(ctx context.Context, userID string, s Step, already []Ran) (Outcome, error)
 }
 
 // Runner : Runs jobs when their time comes.
@@ -139,11 +168,11 @@ func (r *Runner) one(ctx context.Context, j Job, now time.Time, pass *Pass) {
 	// recorded as it happens, so that one run leaves one record
 	// however many of its steps failed.
 	var why string
-	var already []string
+	var already []Ran
 	for _, step := range j.Steps {
 		done, err := r.Doer.Do(ctx, j.UserID, step, already)
 		if step.Do == Call && step.Tool != "" {
-			already = append(already, step.Tool)
+			already = append(already, Ran{Tool: step.Tool, Got: done.Got})
 		}
 		if err != nil {
 			// The rest still runs. A phone alarm that could not be

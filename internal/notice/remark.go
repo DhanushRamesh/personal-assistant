@@ -14,7 +14,7 @@ import (
 // nothing tends to produce something anyway -- an apology, or a
 // sentence about having nothing to say, which would then be spoken
 // aloud. Given something to return it returns it.
-const Silence = "NOTHING"
+const Silence = prompt.Silence
 
 // Nothing : Whether the model declined.
 //

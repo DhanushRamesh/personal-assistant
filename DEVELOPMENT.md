@@ -10619,6 +10619,97 @@ The presence one passed against the real `sensor.owner_presence`,
 not a nil fallback.
 
 
+### A step that writes its own sentence
+
+Owner, 6 October 2026, after seeing that none of the seven talking
+producers could move onto the engine: *"do the ai sentence one."*
+
+The blocker was never the schedule. It was that an announce step
+says a string fixed when the rule was written, and almost nothing
+this assistant says unasked is fixed -- *you tried to reach them
+twice*, *leave in twenty minutes*, *the battery has been draining
+steadily* are all composed out of whatever was just found. A rule
+that could only ever say the same sentence could not replace any
+of them.
+
+So a fourth kind of step: **write**. It carries an instruction
+rather than words, and the model turns the instruction and what
+the sequence just found into one sentence.
+
+#### The model gets no tools of its own
+
+It would have been easy to hand the write step an allow-list and
+let the model look things up. It does not get one. **A sequence
+says what to look at by putting tool steps in front of the
+write**, and the model is given their results and nothing else.
+
+What that buys is that what a rule may reach is visible *in the
+rule*. A rule that reads the diary has a diary step in it, which
+can be read off the row by somebody asking what this thing is
+allowed to see. The allow-list version decides that in the moment,
+inside a model call, where nobody can see it. It also avoids a
+second tool loop in a server that already has one.
+
+#### A transcript is not variables
+
+This engine refused values passed between steps, and now a step
+reads what an earlier step returned. The distinction is real and
+worth keeping straight.
+
+What is carried is a **transcript**: tool names and the prose they
+returned, appended to and never rewritten. Nothing compares it,
+nothing branches on it, and **a gate still cannot read it** -- a
+check reads the world, not the sequence. The moment a condition
+could test a previous step's output, the engine would need types,
+comparison and names for things, which is the language it is
+refusing to become.
+
+A transcript is also what the engine already claimed to be. *A
+sequence is one turn, not several* was the reason tool names were
+carried in the first place; carrying what they said is the same
+fact, used by a model instead of by the read-before-write rule.
+
+#### Silence is an answer
+
+A write step may produce nothing, and then nothing is said and the
+rest of the sequence does not run. Most looks find nothing -- that
+was true of every watcher this replaces -- and a rule obliged to
+speak every time it ran would be worse than no rule.
+
+The convention is the existing one: the model is told to answer
+`NOTHING`, because a model asked for nothing tends to produce an
+apology instead, which would then be spoken aloud.
+
+**`Silence` and `Nothing` now live in `internal/prompt`,** with
+`notice` and `coming` aliasing them. Both already had their own
+copy of the same word and the same lenient parse; a third was
+about to be written. The same move as `event.Value`: the
+convention belongs where it is shared from, not in each package
+that needs it.
+
+#### Proved against the real model
+
+Two jobs, ten seconds out:
+
+| the rule | what happened |
+|---|---|
+| `[event_recent battery.level, write "say what the battery has been doing"]` | *"The battery has been draining steadily, losing one percent roughly every ten minutes, and now sits at sixty-six percent, sir."* |
+| `[write "only speak if the dishwasher reported a fault", tool event_kinds]` | nothing said, the tool after it did not run, row reads *there was nothing worth saying* |
+
+The first was checked against the rows rather than believed: 66
+per cent, and one point every eight to thirteen minutes. The
+sentence was right, in persona, and composed from readings no
+fixed string could have held.
+
+#### What this does and does not unlock
+
+Situations, the diary, leave-by and immediate's wording were all
+blocked on this one thing, and are now blocked only on being
+written as rules. Greeting and renaming are not: they do not
+happen at a *time* at all, and need an event trigger, which is the
+next piece.
+
+
 ## 12. Maintaining this file
 
 When the owner states a preference, makes a decision, or corrects something,

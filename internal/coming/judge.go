@@ -133,14 +133,7 @@ func Read(answer string) []Lead {
 }
 
 // Nothing : Whether the model said this needs no warning.
-func Nothing(answer string) bool {
-	trimmed := strings.TrimSpace(answer)
-	if trimmed == "" {
-		return true
-	}
-	first := strings.TrimSpace(strings.SplitN(trimmed, "\n", 2)[0])
-	return strings.EqualFold(strings.Trim(first, ".!\"' "), Silence)
-}
+func Nothing(answer string) bool { return prompt.Nothing(answer) }
 
 // tidy : A reason as it will be said, with the model's punctuation
 // taken off the front and a full stop put on the end.

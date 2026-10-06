@@ -249,12 +249,15 @@ flowchart TB
     TICK -- "more than an hour late" --> SKIP["Skipped, and the row says why<br/>yesterday's 8am at noon is worse<br/>than not done"]
     TICK -- "due" --> WHAT
 
-    WHAT{"Each step, in order<br/>told which tools the earlier ones ran"}
+    WHAT{"Each step, in order<br/>given what the earlier ones ran and found"}
     WHAT -- "check a condition" --> GATE{"Does it hold?<br/>an event value, how old it is,<br/>or who is in the room"}
-    WHAT -- "say something" --> OUT["Published to the outbox<br/>section 3 takes it from there"]
-    WHAT -- "run a tool" --> TOOL["One of the 52"]
+    WHAT -- "ask the model to write one" --> MODEL{"Anything worth saying?"}
+    WHAT -- "say a fixed sentence" --> OUT["Published to the outbox<br/>section 3 takes it from there"]
+    WHAT -- "run a tool" --> TOOL["One of the 52<br/>what it returns is kept<br/>for the steps after it"]
 
-    GATE -- "no, or nothing is known" --> STOP["Nothing after it runs<br/>not a failure; the row says<br/>which check stopped it"]
+    GATE -- "no, or nothing is known" --> STOP["Nothing after it runs<br/>not a failure; the row<br/>says what stopped it"]
+    MODEL -- "NOTHING" --> STOP
+    MODEL -- "a sentence" --> OUT
     GATE -- "yes" --> ON
     OUT --> ON
     TOOL -- "ok, or failed -- the rest still runs" --> ON
@@ -270,9 +273,22 @@ flowchart TB
 **Three ways to write when:** `every 5m`, `at 08:00`, `once
 2026-10-07 06:40`. No cron — these are meant to be dictated aloud.
 
-**Three things a step can do:** say something, run one of the tools
-that already exist, or check a condition. The verbs were never
-missing; a rule just needed a way to point at one.
+**Four things a step can do:** say a fixed sentence, run one of the
+tools that already exist, check a condition, or ask the model to
+write the sentence. The verbs were never missing; a rule just needed
+a way to point at one.
+
+**A write step is how a rule says something it could not know in
+advance.** It carries an instruction rather than words — *say what
+the battery has been doing* — and the model turns that plus
+whatever the earlier steps found into one sentence. If there is
+nothing worth saying it answers `NOTHING`, and then nothing is said
+and the rest of the sequence does not run.
+
+The model **gets no tools of its own.** A rule says what to look at
+by putting tool steps in front of the write, so what a rule may
+reach can be read off the row rather than decided inside a model
+call.
 
 **A check is how a rule says *only if*.** It reads one of the three
 things the server holds as a value — an event's latest reading, how
@@ -296,16 +312,18 @@ day-of-week is not a check: "at eight on weekdays" is a *when*, and
 the schedule grammar is where that will go.
 
 **A sequence is one turn.** Each step is told which tools the ones
-before it ran, so `[list the task lists, add a task]` satisfies the
-read-before-write rule the tools enforce. Without that, more than
-one step would be decoration.
+before it ran and what they returned, so `[list the task lists, add
+a task]` satisfies the read-before-write rule the tools enforce, and
+`[read the diary, write a sentence]` has something to write about.
+It is a transcript, not variables: nothing compares it or branches
+on it, and a check cannot read it.
 
 **Linear, on purpose.** A check stops the steps after it, and that
 is the whole of the conditional. No branching, no loops, no
-variables — Tasker and Home Assistant already exist for that. It is
-also why a check cannot read what a previous tool call returned:
-tool results are prose written for a model, and comparing them
-would mean values passed between steps.
+variables — Tasker and Home Assistant already exist for that. A
+check reads the world, never the sequence: the moment a condition
+could test an earlier step's output, this would need types,
+comparison and names for things.
 
 **A reminder is not a special thing here.** It is a job whose steps
 are *say the words* and *set the phone alarm*, which is what
@@ -321,8 +339,12 @@ section 3 move over one at a time, reminders last.
 Kept here so it is not rediscovered.
 
 - The job engine runs nothing real yet: the seven watchers are
-  still loops in Go, and moving them over is the work after a
-  client collects.
+  still loops in Go. Situations, the diary, leave-by and immediate
+  could now be written as rules; greeting and renaming cannot,
+  because they are not triggered by a clock — that needs an event
+  trigger, which does not exist yet.
+- There is no way to create a job by voice, so rules can only be
+  inserted directly.
 - No client collects its announcements yet, so what situations
   publish is written down and never said. The next step, and the
   one that matters most.

@@ -25,6 +25,8 @@ import (
 	"fmt"
 	"strings"
 	"time"
+
+	"github.com/DhanushRamesh/personal-assistant/internal/prompt"
 )
 
 const (
@@ -64,7 +66,7 @@ const (
 	//
 	// Most of the diary is like this. A holiday, a birthday, a block
 	// somebody else put there: nothing is owed and nothing is said.
-	Silence = "NOTHING"
+	Silence = prompt.Silence
 )
 
 // Lead : One moment before something, worth a word of its own.

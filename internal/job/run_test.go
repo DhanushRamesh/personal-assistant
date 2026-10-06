@@ -20,13 +20,18 @@ var noon = time.Date(2026, 10, 6, 12, 0, 0, 0, india)
 type hands struct {
 	did     []string
 	saw     []int
+	heard   [][]string
+	carried [][]job.Ran
+	got     map[string]string
 	stopAt  string
 	failAt  string
 	failure error
 }
 
-func (h *hands) Do(_ context.Context, _ string, s job.Step, already []string) (job.Outcome, error) {
+func (h *hands) Do(_ context.Context, _ string, s job.Step, already []job.Ran) (job.Outcome, error) {
 	h.saw = append(h.saw, len(already))
+	h.heard = append(h.heard, job.Tools(already))
+	h.carried = append(h.carried, already)
 	what := string(s.Do) + ":" + s.Say + s.Tool + s.When
 	h.did = append(h.did, what)
 	if h.failAt != "" && strings.Contains(what, h.failAt) {
@@ -35,7 +40,7 @@ func (h *hands) Do(_ context.Context, _ string, s job.Step, already []string) (j
 	if h.stopAt != "" && strings.Contains(what, h.stopAt) {
 		return job.Outcome{Stop: true, Why: "the check " + what + " did not pass"}, nil
 	}
-	return job.Outcome{}, nil
+	return job.Outcome{Got: h.got[s.Tool]}, nil
 }
 
 // runner : A runner over a store, with the clock held still.

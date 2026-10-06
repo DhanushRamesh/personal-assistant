@@ -57,6 +57,7 @@ import (
 	"github.com/DhanushRamesh/personal-assistant/internal/persona"
 	"github.com/DhanushRamesh/personal-assistant/internal/place"
 	"github.com/DhanushRamesh/personal-assistant/internal/profile"
+	"github.com/DhanushRamesh/personal-assistant/internal/prompt"
 	"github.com/DhanushRamesh/personal-assistant/internal/remind"
 	remindmysql "github.com/DhanushRamesh/personal-assistant/internal/remind/mysql"
 	"github.com/DhanushRamesh/personal-assistant/internal/runner"
@@ -591,6 +592,7 @@ func run() error {
 		Doer: doing{
 			tools: tools, speaker: speaker, written: announcements,
 			to: publishing, events: deviceEvents, here: here,
+			answerer: answerer, cfg: cfg,
 			now: cfg.Assistant.Now, logger: logger.Logger,
 		},
 		Where:  cfg.Assistant.Location,
@@ -1956,19 +1958,21 @@ func (a announcing) Publish(ctx context.Context, from, userID string,
 // before it is safe to add: a scheduled task with all fifty-two
 // could cancel reminders at three in the morning.
 type doing struct {
-	tools   *tool.Registry
-	speaker announce.Announcer
-	written *announcement.Writer
-	to      *outbox.Publisher
-	events  *eventmysql.Store
-	here    remind.Presence
-	now     func() time.Time
-	logger  *slog.Logger
+	tools    *tool.Registry
+	speaker  announce.Announcer
+	written  *announcement.Writer
+	to       *outbox.Publisher
+	events   *eventmysql.Store
+	here     remind.Presence
+	answerer environment.Environment
+	cfg      config.Config
+	now      func() time.Time
+	logger   *slog.Logger
 }
 
 // Do : Carries out one step. Never stops the sequence yet -- the
 // step that can is the checking one, which comes with prompts.
-func (d doing) Do(ctx context.Context, userID string, s job.Step, already []string) (job.Outcome, error) {
+func (d doing) Do(ctx context.Context, userID string, s job.Step, already []job.Ran) (job.Outcome, error) {
 	if err := s.Valid(); err != nil {
 		return job.Outcome{}, err
 	}
@@ -1992,6 +1996,9 @@ func (d doing) Do(ctx context.Context, userID string, s job.Step, already []stri
 		d.written.Announced(ctx, userID, s.Say)
 		return job.Outcome{}, nil
 
+	case job.Write:
+		return d.write(ctx, userID, s, already)
+
 	case job.Check:
 		return d.check(ctx, userID, s)
 
@@ -2006,16 +2013,83 @@ func (d doing) Do(ctx context.Context, userID string, s job.Step, already []stri
 			// What the sequence has already run. The tools refuse
 			// to write something they have not read in this turn,
 			// and a sequence is one turn.
-			Ran: already,
+			Ran: job.Tools(already),
 		})
 		if out.Outcome == conversation.OutcomeFailed {
 			return job.Outcome{}, fmt.Errorf("%s: %s", s.Tool, out.Content)
 		}
 		d.logger.InfoContext(ctx, "a job ran a tool",
 			slog.String("tool", s.Tool), slog.String("outcome", string(out.Outcome)))
-		return job.Outcome{}, nil
+		// Kept for the steps after it. A write step composes its
+		// sentence out of whatever the sequence just found.
+		return job.Outcome{Got: out.Content}, nil
 	}
 	return job.Outcome{}, fmt.Errorf("job: nothing carries out %q", s.Do)
+}
+
+// write : Asks the model for the sentence, then says it.
+//
+// The model is given the instruction and what the earlier steps of
+// the sequence found, and nothing else. It has no tools of its
+// own: a sequence says what to look at by putting tool steps in
+// front of this one, which keeps what a rule may reach visible in
+// the rule rather than decided in the moment.
+func (d doing) write(ctx context.Context, userID string, s job.Step, already []job.Ran) (job.Outcome, error) {
+	model := cmp.Or(d.cfg.PlatformAI.FastModel, d.cfg.PlatformAI.Model)
+	answer, err := askAs(ctx, d.answerer, d.cfg.PlatformAI.Vendor, model,
+		persona.Voice(d.cfg.Assistant.Persona, d.cfg.Assistant.Name),
+		environment.PurposeRemark, writing(s.Ask, already))
+	if err != nil {
+		return job.Outcome{}, err
+	}
+
+	// Silence is an answer. Most looks find nothing, and a rule
+	// that had to say something every time it ran would be worse
+	// than no rule.
+	if prompt.Nothing(answer) {
+		d.logger.InfoContext(ctx, "a job had nothing to say",
+			slog.String("ask", s.Ask))
+		return job.Outcome{Stop: true, Why: "there was nothing worth saying"}, nil
+	}
+
+	said := strings.TrimSpace(answer)
+	o, err := outbox.New(outboxmysql.ID(), userID, conversation.Immediate, said, d.now())
+	if err != nil {
+		return job.Outcome{}, err
+	}
+	if err := d.to.Publish(ctx, o); err != nil {
+		return job.Outcome{}, err
+	}
+	if err := announcement.Speak(ctx, d.speaker, conversation.Immediate, said); err != nil {
+		return job.Outcome{}, err
+	}
+	d.written.Announced(ctx, userID, said)
+	d.logger.InfoContext(ctx, "a job wrote what to say", slog.String("ask", s.Ask))
+	return job.Outcome{}, nil
+}
+
+// writing : What the model is asked, for a write step.
+func writing(ask string, already []job.Ran) string {
+	found := make([]string, 0, len(already))
+	for _, r := range already {
+		if strings.TrimSpace(r.Got) == "" {
+			continue
+		}
+		found = append(found, prompt.Lines(r.Tool+":", r.Got))
+	}
+
+	var what string
+	if len(found) > 0 {
+		what = prompt.Block(prompt.Text("This is what was looked up just now,",
+			"and it is everything you have:"), prompt.Block(found...))
+	}
+
+	return prompt.Block(
+		prompt.Text("You are writing one sentence to be said out loud, now.", ask),
+		what,
+		prompt.Text("Answer with the sentence and nothing else.",
+			"If there is nothing worth saying, answer with "+prompt.Silence+"."),
+	)
 }
 
 // check : Reads a condition and stops the sequence unless it holds.

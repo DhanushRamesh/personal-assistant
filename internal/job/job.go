@@ -72,6 +72,13 @@ const (
 	// The verbs were never missing. There are fifty-two of them and
 	// a rule needs a way to point at one, not a new vocabulary.
 	Call Task = "tool"
+	// Write : Ask the model for the sentence, then say it.
+	//
+	// What [Announce] cannot do. Most of what this assistant says
+	// unasked is composed from whatever was just found, and a
+	// sentence fixed when the rule was written can only ever be
+	// the same sentence.
+	Write Task = "write"
 	// Check : Read a condition and stop the rest of the sequence
 	// unless it holds.
 	//
@@ -91,6 +98,12 @@ type Step struct {
 	Tool string `json:"tool,omitempty"`
 	// Args : What to run it with, as the tool's own arguments.
 	Args json.RawMessage `json:"args,omitempty"`
+	// Ask : What to write about, for a write.
+	//
+	// An instruction rather than words: *say whether anything about
+	// the battery is worth mentioning*. What the earlier steps of
+	// the sequence found is given to the model with it.
+	Ask string `json:"ask,omitempty"`
 	// When : The condition, as it was written, for a check.
 	//
 	// Kept as written rather than parsed into fields, for the same
@@ -242,6 +255,10 @@ func (s Step) Valid() error {
 	case Call:
 		if strings.TrimSpace(s.Tool) == "" {
 			return errors.New("job: a tool step naming no tool")
+		}
+	case Write:
+		if strings.TrimSpace(s.Ask) == "" {
+			return errors.New("job: a write with nothing to write about")
 		}
 	case Check:
 		if strings.TrimSpace(s.When) == "" {

@@ -43,3 +43,26 @@ func join(sep string, parts []string) string {
 	}
 	return strings.Join(kept, sep)
 }
+
+// Silence : What the model answers when there is nothing worth
+// saying.
+//
+// A word rather than an empty reply, because a model asked for
+// nothing tends to produce something anyway -- an apology, or a
+// sentence about having nothing to say, which would then be spoken
+// aloud. Given something to return it returns it.
+const Silence = "NOTHING"
+
+// Nothing : Whether an answer is the model declining to say
+// anything.
+//
+// Lenient about what comes back around the word: a model told to
+// answer NOTHING will sometimes answer "NOTHING." or quote it.
+func Nothing(answer string) bool {
+	trimmed := strings.TrimSpace(answer)
+	if trimmed == "" {
+		return true
+	}
+	first := strings.TrimSpace(strings.SplitN(trimmed, "\n", 2)[0])
+	return strings.EqualFold(strings.Trim(first, ".!\"' "), Silence)
+}

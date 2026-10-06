@@ -162,3 +162,54 @@ func TestACheckAtTheFrontGatesTheWholeJob(t *testing.T) {
 		t.Error("nothing records which check stopped it")
 	}
 }
+
+// A sequence is a transcript, not variables: a write step is given
+// what the tools before it returned, so the sentence can be about
+// whatever was just found.
+func TestAWriteStepIsGivenWhatTheToolsFound(t *testing.T) {
+	s := inmemory.New()
+	h := &hands{got: map[string]string{"calendar_events": "Dentist at 4pm"}}
+	put(t, s, "at 08:00",
+		job.Step{Do: job.Call, Tool: "calendar_events"},
+		job.Step{Do: job.Write, Ask: "say what is coming up"})
+
+	runner(s, h, noon).Once(context.Background())
+	if len(h.saw) != 2 {
+		t.Fatalf("ran %d steps", len(h.saw))
+	}
+	if len(h.carried) != 2 || len(h.carried[1]) != 1 {
+		t.Fatalf("the write step was given %v", h.carried)
+	}
+	if h.carried[1][0].Got != "Dentist at 4pm" {
+		t.Errorf("it was given %q", h.carried[1][0].Got)
+	}
+}
+
+// Silence is an answer. A rule that had to say something every
+// time it ran would be worse than no rule.
+func TestAWriteWithNothingToSayStopsTheRest(t *testing.T) {
+	s, h := inmemory.New(), &hands{stopAt: "write"}
+	put(t, s, "every 5m",
+		job.Step{Do: job.Write, Ask: "anything worth saying?"},
+		job.Step{Do: job.Call, Tool: "alarm_set"})
+
+	got := runner(s, h, noon).Once(context.Background())
+	if got.Stopped != 1 || got.Failed != 0 {
+		t.Fatalf("pass = %+v, want stopped and not failed", got)
+	}
+	if len(h.did) != 1 {
+		t.Errorf("it carried on past the silence: %v", h.did)
+	}
+}
+
+// A write with no instruction cannot work, and should fail in
+// front of whoever wrote it.
+func TestAWriteNeedsSomethingToWriteAbout(t *testing.T) {
+	if err := (job.Step{Do: job.Write}).Valid(); err == nil {
+		t.Error("a write with nothing to write about was accepted")
+	}
+	if _, err := job.New("j", "u", "n", "rule", "every 5m",
+		[]job.Step{{Do: job.Write}}, noon); err == nil {
+		t.Error("a job carrying an empty write was accepted")
+	}
+}
