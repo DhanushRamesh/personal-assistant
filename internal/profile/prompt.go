@@ -16,7 +16,7 @@ import (
 // Exported so an eval builds the same thing the server does. That was a
 // separate copy once elsewhere in this codebase, and the eval went on
 // passing against wording the server had stopped using.
-func Prompt(said []conversation.Message, rhythm, asking string, replies []conversation.Reply, was string) string {
+func Prompt(said []conversation.Message, rhythm, asking, planned string, replies []conversation.Reply, was string) string {
 	return prompt.Block(
 		prompt.Text(
 			"Below is one person talking to their assistant over the past week, in the order they said it,",
@@ -100,6 +100,15 @@ func Prompt(said []conversation.Message, rhythm, asking string, replies []conver
 			"That is not the same as saying where they live: a name they gave a place is not an address, a city or a country, and none of those follow from it.",
 		),
 		prompt.Text(
+			"Their diary is below as well, and it is a different kind of thing from the rest.",
+			"An entry says they meant to be somewhere. It is not evidence they were, and it never becomes one however ordinary it looks.",
+			"What says whether they went is the readings, if anything does.",
+			"Where a plan and the readings agree, that is worth saying and worth saying as agreement: they had a dentist at four and were somewhere else from ten until five.",
+			"Where a plan has nothing beside it, say nothing about it at all rather than assuming it happened or assuming it did not.",
+			"An entry marked invited is somebody else's plan that they were asked to, which is a weaker thing than one they made.",
+			"What a diary is good for here is the pattern of it -- what recurs, what hour it tends to be, how much of it is theirs -- and that is a fact about them whether or not they turned up.",
+		),
+		prompt.Text(
 			"Hedging is not a way round either of those.",
 			"'Almost certainly' and 'likely' are still claims, and a hedged guess in a description that is read before every answer is acted on exactly as a plain one is.",
 		),
@@ -108,6 +117,7 @@ func Prompt(said []conversation.Message, rhythm, asking string, replies []conver
 		"Here is what they said:",
 		heard(said),
 		rhythm,
+		planned,
 		asking,
 		spoke(replies),
 	)

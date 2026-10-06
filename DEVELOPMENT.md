@@ -11463,6 +11463,77 @@ them the real labels sort properly again: Daft Punk 14, Shankar
 Mahadevan 9.
 
 
+### The description had never seen the diary
+
+Of the two ideas worth taking from the outside review of how
+profiling should work, one turned out to be already done and the
+other was not a prompt change at all.
+
+**Observation against inference is structural here already.** The
+description is written in three parts. `WHAT IS SO` takes a count
+on every line -- *a line you cannot put a count on does not belong
+in this part* -- and `WHAT THEY ARE LIKE` "may say things the
+counts only imply, **and it is the only part that may**." Tagging
+each line OBSERVATION or INFERENCE would restate the headings and
+widen a prompt for nothing, which is the trade this codebase has
+measured and lost before.
+
+**Planned against observed could not be added to the prompt,
+because the prompt had nothing to compare.** `Builder` is given
+what the person said, what their devices reported, what they had
+the assistant do, and their memories. No calendar. A description
+of somebody's weeks was being written without ever seeing what
+they had meant to do with them.
+
+#### A diary is a different kind of fact
+
+So `profile.Diary`, four weeks of entries, in a part of its own
+and labelled as plans. The rule matters more than the data:
+
+> An entry says they meant to be somewhere. It is not evidence
+> they were, and it never becomes one however ordinary it looks.
+> Where a plan and the readings agree, that is worth saying and
+> worth saying as agreement. Where a plan has nothing beside it,
+> say nothing about it at all rather than assuming it happened or
+> assuming it did not.
+
+The pairing is the whole point and neither half could say it
+alone. A dentist at four and a stay near a clinic from ten to five
+is a sentence; either on its own is not.
+
+An entry they were **invited** to is marked, because somebody
+else's plan is a weaker statement of intent than one they made. An
+all-day entry is given no hour, because midnight is not when a
+birthday happens and inventing one is the description
+manufacturing precision.
+
+#### What it found on the first read
+
+Eight entries over four weeks, no calendar unread. Five birthdays
+and two public holidays -- which is most of what a diary is for
+this person, and goes straight to a thing the prompt already asks
+for and could not previously answer: *the people in their life, by
+name*.
+
+And one worth the whole change: a film at ten past six on a Sunday
+evening, against readings that have them at home from half past
+three onwards. The plan and the behaviour disagree. Before this
+the description could not have known there was a plan; now it is
+told, and told not to decide.
+
+#### Two smaller decisions
+
+**A calendar that will not be read is logged, not swallowed.**
+`Everywhere` reports the ones it could not reach, and a diary that
+has quietly stopped being readable looks exactly like a person
+with nothing on -- the one way this could be wrong rather than
+merely thin.
+
+**A failed diary costs the diary, not the description.** The same
+trade `rhythm` already makes: the calendar is a network call away
+and the rest of this is not.
+
+
 ## 12. Maintaining this file
 
 When the owner states a preference, makes a decision, or corrects something,

@@ -33,7 +33,7 @@ func TestAReplyToSomethingVolunteeredIsWeighed(t *testing.T) {
 		At:    when, After: 14 * time.Second,
 	}}
 
-	got := profile.Prompt(said, "", "", replies, "")
+	got := profile.Prompt(said, "", "", "", replies, "")
 	for _, want := range []string{
 		"The movie was quite good", "Good evening, sir",
 		"14 seconds", "Nobody asked for any of those sentences",
@@ -52,7 +52,7 @@ func TestAReplyToSomethingVolunteeredIsWeighed(t *testing.T) {
 // TestNoRepliesAddsNothing : Most weeks there are none, and an
 // empty heading is a question the model will try to answer.
 func TestNoRepliesAddsNothing(t *testing.T) {
-	got := profile.Prompt([]conversation.Message{{Content: "hello", At: when}}, "", "", nil, "")
+	got := profile.Prompt([]conversation.Message{{Content: "hello", At: when}}, "", "", "", nil, "")
 	if strings.Contains(got, "said back when the assistant spoke first") {
 		t.Error("an empty section was written anyway")
 	}
@@ -89,7 +89,7 @@ func TestRenamingIsNotAnswered(t *testing.T) {
 // from an ordinary one is the whole of that job, and the ordinary
 // one was scattered across two parts written for other purposes.
 func TestTheDayHasASectionOfItsOwn(t *testing.T) {
-	asked := profile.Prompt(nil, "", "", nil, "")
+	asked := profile.Prompt(nil, "", "", "", nil, "")
 	for _, want := range []string{
 		"Write three parts",
 		"AN ORDINARY DAY",

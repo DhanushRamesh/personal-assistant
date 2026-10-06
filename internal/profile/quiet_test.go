@@ -115,7 +115,7 @@ func TestOneSilenceIsStillListed(t *testing.T) {
 // TestTheSmallCountRuleIsInThePrompt : What stops one silence
 // becoming a routine is said to the model, not decided here.
 func TestTheSmallCountRuleIsInThePrompt(t *testing.T) {
-	p := profile.Prompt(said(3), "", "", nil, "")
+	p := profile.Prompt(said(3), "", "", "", nil, "")
 	for _, want := range []string{
 		"Two occurrences are a coincidence",
 		"Where the count is small",

@@ -476,6 +476,7 @@ func run() error {
 	describing := &profile.Builder{
 		Said:     chats,
 		Did:      deviceEvents,
+		Diary:    describingDiary(googleLink, cfg),
 		Asked:    chats,
 		Replies:  chats,
 		Where:    cfg.Assistant.Location,
@@ -1057,6 +1058,18 @@ func searchingFast(cfg config.Config, logger *slog.Logger) search.Service {
 // comingDiary : The diary as the look-ahead wants it, or nothing when
 // Google is not configured. Untyped nil for the reason given above.
 func comingDiary(link *google.Link, cfg config.Config) coming.Diary {
+	if link == nil {
+		return nil
+	}
+	return calendar.New(link, cfg.Assistant.Location, cfg.Assistant.Now)
+}
+
+// describingDiary : The calendar the description reads, or nothing.
+//
+// Untyped nil without Google, so a description is written from what
+// happened rather than from a diary that answers every call with an
+// error.
+func describingDiary(link *google.Link, cfg config.Config) profile.Diary {
 	if link == nil {
 		return nil
 	}

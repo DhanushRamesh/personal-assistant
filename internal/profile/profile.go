@@ -131,6 +131,10 @@ type Builder struct {
 	// none, they are described from their words alone, which is how
 	// this worked before anything was watching.
 	Did Did
+	// Diary : What they had planned over the same stretch. Optional:
+	// without it the description is written from what happened and
+	// never from what was meant to.
+	Diary Diary
 	// Asked : Where the tools run for them come from. Optional, like
 	// Did.
 	Asked Asked
@@ -197,7 +201,7 @@ func (b *Builder) Build(ctx context.Context, userID string) error {
 	was, _ := b.previously(ctx, userID)
 
 	answer, err := b.Ask(ctx, Prompt(Folded(said), b.rhythm(ctx, userID),
-		b.asking(ctx, userID), b.replies(ctx, userID), was))
+		b.asking(ctx, userID), b.planned(ctx, userID), b.replies(ctx, userID), was))
 	if err != nil {
 		return fmt.Errorf("profile: asking for the description: %w", err)
 	}
@@ -275,6 +279,37 @@ func (b *Builder) warn(ctx context.Context, msg string, err error) {
 	if b.Logger != nil {
 		b.Logger.WarnContext(ctx, msg, slog.Any("error", err))
 	}
+}
+
+// planned : What they had in their diary over the same stretch.
+//
+// A failure here costs the description its diary and not the
+// description, the same trade rhythm makes: the calendar is a
+// network call away and the rest of this is not.
+func (b *Builder) planned(ctx context.Context, userID string) string {
+	if b.Diary == nil {
+		return ""
+	}
+	now := b.clock()
+	entries, missed, err := b.Diary.Everywhere(ctx, userID, now.Add(-Habits), now)
+	if err != nil {
+		if b.Logger != nil {
+			b.Logger.WarnContext(ctx, "describing somebody without their diary",
+				slog.Any("error", err))
+		}
+		return ""
+	}
+	if len(missed) > 0 && b.Logger != nil {
+		// A calendar that has stopped being readable looks exactly
+		// like a person with nothing on, which is the one way this
+		// could be wrong rather than thin.
+		b.Logger.WarnContext(ctx, "describing somebody without all of their diary",
+			slog.Any("calendars", missed))
+	}
+	if len(entries) > Entries {
+		entries = entries[:Entries]
+	}
+	return Planned(entries, b.Where)
 }
 
 // rhythm : What their devices reported over the same week, counted.
