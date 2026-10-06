@@ -11276,6 +11276,82 @@ schedule grammar widened and an alarm step, and which moves last
 by an earlier decision.
 
 
+### One night at home, written down three hundred times
+
+Found while writing up what data exists, so that somebody could be
+asked how profiling ought to work. The answer to that question
+barely matters while this is true:
+
+	621 place.stayed rows   =   13 actual stays
+
+The worst single stay -- at home, ending 3 October 11:45 -- is
+**319 rows**. Summing their `minutes`, which is the obvious thing
+for anything counting where somebody spends their time to do,
+gives **4,691 hours of home inside a six day window**. A hundred
+and ninety-five days.
+
+#### Why
+
+`Settle` reads a fixed window back -- `Looking`, thirty-six hours
+-- and works the stays out again from scratch every run. Its own
+comment explains why that is safe:
+
+> *The same readings produce the same stays and the same keys, so
+> a stay already written is recognised as a resend and the work is
+> wasted rather than wrong.*
+
+True, and only while the stay is wholly inside the window. A
+stay's key is made from its **start**. Once the back edge of the
+window crawls past that start, the stay is recomputed **cut**: a
+later start, a different key, a new row. Five minutes later the
+edge has moved another five minutes and it happens again.
+
+So every past stay is rewritten once per settle run for as long as
+the window is passing through it, each copy a shorter fragment of
+the same hours, every one of them ending at the same minute:
+
+	starts 00:00  mins 325  ends 05:25
+	starts 00:05  mins 320  ends 05:25
+	starts 00:10  mins 315  ends 05:25
+	... thirty-one more ...
+
+Nothing was wrong with any individual row. Each is an honest
+account of what the server could see.
+
+#### The fix
+
+A cut stay is **dropped, not mended**. It was written whole while
+it was whole, and the fragment in front of us is less true than
+the row already recorded. `Whole` takes the stays, the readings
+they came from and the moment, and returns the ones that began
+where the person stopped rather than where the window ended.
+
+Knowing whether the window cut anything is the only subtle part.
+If the oldest reading is well inside the window there is less than
+a window of history and nothing was cut -- dropping the first stay
+then would lose somebody's first morning, every morning, until
+they had been using this for two days.
+
+#### What it costs, stated plainly
+
+A stay longer than `Looking` stops being amended once it outgrows
+the window, so an unbroken fortnight at home will read as
+thirty-six hours. That is a bounded and visible wrong answer in
+place of an unbounded and invisible one, and the alternative --
+reaching back into what was already written to recover the real
+start -- is more machinery than the fault deserves today.
+
+#### Proved against the running server
+
+Deployed mid-afternoon with 621 rows in the table. Two settle runs
+later: still 621, and the open office stay had gone from 495
+minutes to 515 **in the same row**. Amended, which is what was
+always intended, rather than duplicated.
+
+The 608 fragments already written are still there. They are
+history now, and deleting somebody's records is their call.
+
+
 ## 12. Maintaining this file
 
 When the owner states a preference, makes a decision, or corrects something,

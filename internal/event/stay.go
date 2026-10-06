@@ -600,6 +600,66 @@ func SoFar(fixes []Fix) []Stay {
 	return append(out, open)
 }
 
+// Clipped : How close to the edge of the window a reading has to be
+// for the window, rather than the person, to be what began a stay.
+//
+// One reading's worth and a little. A phone reports where it is
+// every five minutes, so the first reading of a stay that began
+// before the window sits within that of the edge.
+const Clipped = 6 * time.Minute
+
+// Whole : The stays that began where the person stopped, rather
+// than where the window ended.
+//
+// Settling reads a fixed window back and works the stays out again
+// from scratch every time. For a stay wholly inside the window
+// that is harmless and deliberate: the same readings give the same
+// stay and the same key, so the write is recognised as a resend
+// and the work is wasted rather than wrong.
+//
+// For a stay the window has cut it is neither. The start moves
+// forward with the edge on every run, and a start is what the key
+// is made of, so each run writes a new row -- one night at home
+// became thirty-four of them, each a shorter fragment of the same
+// night, every one ending at the same minute. Anything counting
+// where somebody spends their time then counts that night
+// thirty-four times.
+//
+// A cut stay is dropped rather than mended. It was written whole
+// while it was whole, and the fragment in front of us is less true
+// than the row already recorded.
+//
+// What this costs is a stay longer than [Looking]: once it outgrows
+// the window it stops being amended, so an unbroken fortnight at
+// home reads as thirty-six hours. A bounded and visible wrong
+// answer, against an unbounded and invisible one.
+func Whole(stays []Stay, fixes []Fix, now time.Time) []Stay {
+	if len(stays) == 0 || len(fixes) == 0 {
+		return stays
+	}
+
+	oldest := fixes[0].At
+	for _, f := range fixes {
+		if f.At.Before(oldest) {
+			oldest = f.At
+		}
+	}
+	// Less than a full window of history, so the window cut nothing
+	// and the oldest reading really is the oldest there is.
+	if oldest.After(now.Add(-Looking).Add(Clipped)) {
+		return stays
+	}
+
+	kept := make([]Stay, 0, len(stays))
+	for _, s := range stays {
+		if !s.From.After(oldest) {
+			continue
+		}
+		kept = append(kept, s)
+	}
+	return kept
+}
+
 // Looking : How far back settling reads for readings.
 //
 // Long enough to hold a whole stay, including an afternoon somewhere
@@ -698,7 +758,7 @@ func (st Settler) Settle(ctx context.Context, userID string, now time.Time) ([]N
 	// Including the one still going on. Somebody who has been at their
 	// desk since ten is the most describable thing about today, and
 	// until this they were invisible until they got up.
-	stays := SoFar(fixes)
+	stays := Whole(SoFar(fixes), fixes, now)
 	if len(stays) == 0 {
 		return nil, nil
 	}

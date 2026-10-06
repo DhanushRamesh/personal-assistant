@@ -658,3 +658,83 @@ func TestACrossingElsewhereDoesNotSplitThem(t *testing.T) {
 		t.Errorf("a crossing four hours earlier split the morning into %d", len(got))
 	}
 }
+
+// A night at home was written down thirty-four times: the window
+// cut the stay a little later on every run, and a start is what
+// the key is made of, so every run wrote a new row. Each was a
+// shorter fragment of the same night and all of them ended at the
+// same minute.
+func TestAStayTheWindowCutIsNotWrittenAgain(t *testing.T) {
+	now := time.Date(2026, 10, 6, 14, 25, 0, 0, time.UTC)
+	edge := now.Add(-event.Looking)
+
+	// Readings every five minutes from the edge onwards: the night
+	// began before the window and is seen in part.
+	var fixes []event.Fix
+	for at := edge; at.Before(edge.Add(3 * time.Hour)); at = at.Add(5 * time.Minute) {
+		fixes = append(fixes, event.Fix{At: at, Lat: 12.91091, Lon: 80.06239})
+	}
+	// And a second, later stay somewhere else, wholly inside.
+	for at := edge.Add(5 * time.Hour); at.Before(edge.Add(9 * time.Hour)); at = at.Add(5 * time.Minute) {
+		fixes = append(fixes, event.Fix{At: at, Lat: 12.83137, Lon: 80.04928})
+	}
+
+	all := event.SoFar(fixes)
+	if len(all) < 2 {
+		t.Fatalf("the readings make %d stays, wanted the cut one and the whole one", len(all))
+	}
+
+	kept := event.Whole(all, fixes, now)
+	if len(kept) != len(all)-1 {
+		t.Fatalf("kept %d of %d stays, want the cut one dropped", len(kept), len(all))
+	}
+	for _, s := range kept {
+		if !s.From.After(fixes[0].At) {
+			t.Errorf("a stay beginning at the edge of the window survived: %s", s.From)
+		}
+	}
+}
+
+// With less than a window of history behind them, nothing is cut
+// and the oldest reading really is the oldest there is. Dropping
+// the first stay then would lose somebody's first morning.
+func TestNothingIsDroppedBeforeThereIsAWindowToCut(t *testing.T) {
+	now := time.Date(2026, 10, 6, 14, 25, 0, 0, time.UTC)
+
+	var fixes []event.Fix
+	for at := now.Add(-4 * time.Hour); at.Before(now.Add(-time.Hour)); at = at.Add(5 * time.Minute) {
+		fixes = append(fixes, event.Fix{At: at, Lat: 12.91091, Lon: 80.06239})
+	}
+
+	all := event.SoFar(fixes)
+	if len(all) == 0 {
+		t.Fatal("the readings make no stay at all")
+	}
+	if kept := event.Whole(all, fixes, now); len(kept) != len(all) {
+		t.Errorf("kept %d of %d stays, want all of them", len(kept), len(all))
+	}
+}
+
+// The same readings, settled again a few minutes later, must give
+// the same stay and the same start -- which is the whole reason a
+// resend is recognised rather than duplicated.
+func TestSettlingTwiceGivesTheSameStarts(t *testing.T) {
+	now := time.Date(2026, 10, 6, 14, 25, 0, 0, time.UTC)
+	edge := now.Add(-event.Looking)
+
+	var fixes []event.Fix
+	for at := edge.Add(2 * time.Hour); at.Before(edge.Add(6 * time.Hour)); at = at.Add(5 * time.Minute) {
+		fixes = append(fixes, event.Fix{At: at, Lat: 12.91091, Lon: 80.06239})
+	}
+
+	first := event.Whole(event.SoFar(fixes), fixes, now)
+	later := event.Whole(event.SoFar(fixes), fixes, now.Add(10*time.Minute))
+	if len(first) != len(later) {
+		t.Fatalf("%d stays then %d", len(first), len(later))
+	}
+	for i := range first {
+		if !first[i].From.Equal(later[i].From) {
+			t.Errorf("stay %d began at %s and then at %s", i, first[i].From, later[i].From)
+		}
+	}
+}

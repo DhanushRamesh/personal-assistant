@@ -469,5 +469,8 @@ Kept here so it is not rediscovered.
   label, and `Clear` dismisses by label. Whether Android removes
   one or both is untested.
 - A repeating phone alarm cannot be cancelled or moved from here.
-- `place.entered home` never fires, and some stay durations are wrong.
+- `place.entered home` never fires.
+- 608 of the 621 `place.stayed` rows are fragments of 13 real stays,
+  written before the settling fix. Anything summing their minutes
+  over history will be wildly wrong until they are cleared.
 - The satellite goes deaf after the laptop suspends.
