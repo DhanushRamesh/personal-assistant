@@ -11348,8 +11348,31 @@ later: still 621, and the open office stay had gone from 495
 minutes to 515 **in the same row**. Amended, which is what was
 always intended, rather than duplicated.
 
-The 608 fragments already written are still there. They are
-history now, and deleting somebody's records is their call.
+#### And the fragments already written
+
+Cleared, with the owner's say-so, on the day. Not by the end
+minute, which was the obvious grouping and the wrong one: two
+copies of the same night ended at 11:44 and 11:45 and fell either
+side of every bucket boundary tried. By overlap instead -- a stay
+is redundant when another at the same place begins no later and
+ends no earlier, within five minutes -- which merged that pair
+and everything else in one rule.
+
+	621 rows  ->  12 stays
+	609 deleted, dumped first to
+	~/.local/share/jarvis-backups/
+
+What four and a half days of someone's life actually looks like,
+now that it can be added up:
+
+	home                        6 stays   76.0 h
+	office                      3 stays   18.1 h
+	Ammaniammal School          1 stay     3.1 h
+	Flavors non veg restaurant  1 stay     2.8 h
+	Muthu Supermarket           1 stay     0.2 h
+
+A hundred hours in a hundred and eight. Before this it was four
+thousand six hundred.
 
 
 ## 12. Maintaining this file

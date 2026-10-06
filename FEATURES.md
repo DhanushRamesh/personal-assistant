@@ -470,7 +470,7 @@ Kept here so it is not rediscovered.
   one or both is untested.
 - A repeating phone alarm cannot be cancelled or moved from here.
 - `place.entered home` never fires.
-- 608 of the 621 `place.stayed` rows are fragments of 13 real stays,
-  written before the settling fix. Anything summing their minutes
-  over history will be wildly wrong until they are cleared.
+- A stay longer than 36 hours stops being amended once it outgrows
+  the settling window, so an unbroken fortnight at home reads as
+  36 hours.
 - The satellite goes deaf after the laptop suspends.
