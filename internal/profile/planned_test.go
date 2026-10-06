@@ -31,7 +31,7 @@ func TestTheDiaryIsGivenAsPlansAndNotAsFacts(t *testing.T) {
 	}
 
 	// And the rule that makes it safe to show at all.
-	p := profile.Prompt(nil, "", "", got, nil, "")
+	p := profile.Prompt(profile.SoFar, profile.Evidence{Planned: got})
 	for _, want := range []string{
 		"not evidence they were",
 		"say nothing about it at all",

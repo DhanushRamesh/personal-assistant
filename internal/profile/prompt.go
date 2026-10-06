@@ -10,13 +10,64 @@ import (
 	"github.com/DhanushRamesh/personal-assistant/internal/prompt"
 )
 
-// Prompt : What the model is asked, to describe somebody from what they
-// said.
+// Part : One section of the description.
+//
+// Written one call at a time. Asked for all three at once the
+// gateway gave up: forty six calls came back empty after between
+// fifty four and sixty seven seconds each -- a minute of
+// generation cut off rather than an answer. Our own timeout is
+// two minutes and never came into it.
+//
+// Three shorter calls each finish well inside that, and the parts
+// were already independent: the headings are fixed and the
+// instructions for each never mentioned the others.
+type Part string
+
+const (
+	// SoFar : What is so, with a count on every line.
+	SoFar Part = "WHAT IS SO"
+	// Day : The shape of an ordinary one.
+	Day Part = "AN ORDINARY DAY"
+	// Like : What the counts add up to, in prose.
+	Like Part = "WHAT THEY ARE LIKE"
+)
+
+// Parts : The sections, in the order they are written and read.
+//
+// [Like] is last and not by accident: it is given what [SoFar]
+// found, because its own instructions say it is what the first
+// part adds up to.
+var Parts = []Part{SoFar, Day, Like}
+
+// Evidence : Everything the three calls are written from.
+//
+// A struct rather than the seven parameters this had grown to.
+// The same evidence goes to every part: it is the writing that is
+// split, not the reading.
+type Evidence struct {
+	// Said : What they said, folded.
+	Said []conversation.Message
+	// Rhythm : What their devices reported, counted.
+	Rhythm string
+	// Asking : What they had the assistant do.
+	Asking string
+	// Planned : What was in their diary.
+	Planned string
+	// Replies : How they answered what it said unasked.
+	Replies []conversation.Reply
+	// Was : The description written last time, as a draft.
+	Was string
+	// SoFar : What the first part said this time, for the last
+	// part. Empty for the others.
+	SoFar string
+}
+
+// Prompt : What the model is asked, for one part of a description.
 //
 // Exported so an eval builds the same thing the server does. That was a
 // separate copy once elsewhere in this codebase, and the eval went on
 // passing against wording the server had stopped using.
-func Prompt(said []conversation.Message, rhythm, asking, planned string, replies []conversation.Reply, was string) string {
+func Prompt(part Part, e Evidence) string {
 	return prompt.Block(
 		prompt.Text(
 			"Below is one person talking to their assistant over the past week, in the order they said it,",
@@ -30,34 +81,12 @@ func Prompt(said []conversation.Message, rhythm, asking, planned string, replies
 			"The assistant reads this before it answers them, so a thing you leave out is a thing it will not know.",
 		),
 		prompt.Text(
-			"Write three parts, in this order and with these headings exactly.",
+			"Write one part of it and only that part:", string(part)+".",
+			"Do not write the heading, and do not write any of the others.",
+			"The rest are being written separately and the three are put together afterwards.",
 		),
-		prompt.Text(
-			"WHAT IS SO",
-			"One line per thing, as many lines as the evidence supports.",
-			"Every line carries how many times and over what stretch of days, because that is what makes it arguable.",
-			"A line you cannot put a count on does not belong in this part.",
-			"Order them by how well established they are, not by how interesting.",
-		),
-		prompt.Text(
-			"AN ORDINARY DAY",
-			"The shape of one, in the order it happens, from waking to sleeping. Ten lines at most.",
-			"Each line is an hour or a stretch of hours and what is usually true of it -- when they are first about, when they leave if they leave, where they go, how long they are gone, when they are back, when they settle, when they stop.",
-			"Hours as they would be said, and a range where it is a range: around nine, between seven and ten, not 09:00.",
-			"Say which days it is true of. If weekdays and the weekend are different days, say so and give whichever you have the evidence for; if you cannot tell them apart, say that instead of averaging them into a day nobody has.",
-			"Mark every line with how sure it is -- most days, usually, sometimes, once or twice -- and leave out anything you would have to invent to fill the gap. An hour nothing is known about is said to be unknown, which is worth more than a guess at it.",
-			"The point of this part is to be the thing an unusual day is measured against, so a line that is nearly always true is worth more than an interesting one.",
-		),
-		prompt.Text(
-			"WHAT THEY ARE LIKE",
-			"Plain sentences, third person, under a hundred and fifty words, no headings and no lists.",
-			"What the first part adds up to.",
-			"What they talk about, and which of it keeps coming back rather than having come up once.",
-			"The people in their life, by name, and who those people are to them.",
-			"How they behave: how they ask for things, what they want more of and less of, what they lose patience with.",
-			"Their weeks rather than their days -- which days differ from the others and how -- since the day itself is the part above.",
-			"This part may say things the counts only imply, and it is the only part that may.",
-		),
+		section(part),
+		adding(part, e.SoFar),
 		prompt.Text(
 			"How to read the evidence. These are the whole method and they do not need repeating for each sort of thing you find.",
 			"Anything that repeats is a pattern: say when, how often, and how long it lasts.",
@@ -112,15 +141,98 @@ func Prompt(said []conversation.Message, rhythm, asking, planned string, replies
 			"Hedging is not a way round either of those.",
 			"'Almost certainly' and 'likely' are still claims, and a hedged guess in a description that is read before every answer is acted on exactly as a plain one is.",
 		),
-		answering(replies),
-		previously(was),
+		answering(e.Replies),
+		previously(e.Was),
 		"Here is what they said:",
-		heard(said),
-		rhythm,
-		planned,
-		asking,
-		spoke(replies),
+		heard(e.Said),
+		e.Rhythm,
+		e.Planned,
+		e.Asking,
+		spoke(e.Replies),
 	)
+}
+
+// section : What this part is, and how it is written.
+func section(part Part) string {
+	switch part {
+	case SoFar:
+		return prompt.Text(
+			"WHAT IS SO",
+			"One line per thing, as many lines as the evidence supports.",
+			"Every line carries how many times and over what stretch of days, because that is what makes it arguable.",
+			"A line you cannot put a count on does not belong in this part.",
+			"Order them by how well established they are, not by how interesting.",
+		)
+	case Day:
+		return prompt.Text(
+			"AN ORDINARY DAY",
+			"The shape of one, in the order it happens, from waking to sleeping. Ten lines at most.",
+			"Each line is an hour or a stretch of hours and what is usually true of it -- when they are first about, when they leave if they leave, where they go, how long they are gone, when they are back, when they settle, when they stop.",
+			"Hours as they would be said, and a range where it is a range: around nine, between seven and ten, not 09:00.",
+			"Say which days it is true of. If weekdays and the weekend are different days, say so and give whichever you have the evidence for; if you cannot tell them apart, say that instead of averaging them into a day nobody has.",
+			"Mark every line with how sure it is -- most days, usually, sometimes, once or twice -- and leave out anything you would have to invent to fill the gap. An hour nothing is known about is said to be unknown, which is worth more than a guess at it.",
+			"The point of this part is to be the thing an unusual day is measured against, so a line that is nearly always true is worth more than an interesting one.",
+		)
+	case Like:
+		return prompt.Text(
+			"WHAT THEY ARE LIKE",
+			"Plain sentences, third person, under a hundred and fifty words, no headings and no lists.",
+			"What the first part adds up to.",
+			"What they talk about, and which of it keeps coming back rather than having come up once.",
+			"The people in their life, by name, and who those people are to them.",
+			"How they behave: how they ask for things, what they want more of and less of, what they lose patience with.",
+			"Their weeks rather than their days -- which days differ from the others and how -- since the day itself is the part above.",
+			"This part may say things the counts only imply, and it is the only part that may.",
+		)
+	}
+	return ""
+}
+
+// adding : What the last part is told the first one found.
+//
+// Its instructions say it is what the first part adds up to, so
+// it has to be given it. The other two are written from the
+// evidence alone and are told nothing about each other.
+func adding(part Part, sofar string) string {
+	if part != Like || strings.TrimSpace(sofar) == "" {
+		return ""
+	}
+	return prompt.Block(
+		prompt.Text("This is what you wrote for the first part, a moment ago.",
+			"It is what this part has to add up to, and you may not contradict it."),
+		strings.TrimSpace(sofar),
+	)
+}
+
+// Split : A description taken back apart into its sections.
+//
+// For a rebuild where one part failed: the others are new and
+// that one keeps what it said last time, which is worth more than
+// no description at all. The headings are fixed and written by
+// this package, so this is reading back what it wrote.
+func Split(description string) map[Part]string {
+	out := map[Part]string{}
+	at := make(map[Part]int, len(Parts))
+	for _, part := range Parts {
+		at[part] = strings.Index(description, string(part))
+	}
+	for _, part := range Parts {
+		from := at[part]
+		if from < 0 {
+			continue
+		}
+		from += len(part)
+		to := len(description)
+		for _, other := range Parts {
+			if next := at[other]; next > at[part] && next < to {
+				to = next
+			}
+		}
+		if body := strings.TrimSpace(description[from:to]); body != "" {
+			out[part] = body
+		}
+	}
+	return out
 }
 
 // previously : The description written last time, to be corrected.

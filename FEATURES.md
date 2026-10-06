@@ -257,7 +257,7 @@ possible.
 | every | what |
 |---|---|
 | 2 min | **Watching** — three checks over what the devices reported: somebody trying twice to reach you, a charger doing nothing, and a device that reports every few minutes and has stopped |
-| an hour | **Profile** — a standing description of the person, in prose, from what they said, what their devices reported, and what they had planned |
+| an hour | **Profile** — a standing description of the person, from what they said, what their devices reported, and what they had planned. Three parts, written one model call each; a part that fails keeps what it said last time |
 | a day | **Vocabulary** — the proper nouns they actually say, fed to both speech engines |
 | a day | **Forgetting** — raw position readings older than a week |
 | always | **Events** — the phone reports what it noticed: battery, calls, apps, music, screen, places |

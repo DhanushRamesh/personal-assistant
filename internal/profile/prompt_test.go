@@ -33,7 +33,7 @@ func TestAReplyToSomethingVolunteeredIsWeighed(t *testing.T) {
 		At:    when, After: 14 * time.Second,
 	}}
 
-	got := profile.Prompt(said, "", "", "", replies, "")
+	got := profile.Prompt(profile.SoFar, profile.Evidence{Said: said, Replies: replies})
 	for _, want := range []string{
 		"The movie was quite good", "Good evening, sir",
 		"14 seconds", "Nobody asked for any of those sentences",
@@ -52,7 +52,7 @@ func TestAReplyToSomethingVolunteeredIsWeighed(t *testing.T) {
 // TestNoRepliesAddsNothing : Most weeks there are none, and an
 // empty heading is a question the model will try to answer.
 func TestNoRepliesAddsNothing(t *testing.T) {
-	got := profile.Prompt([]conversation.Message{{Content: "hello", At: when}}, "", "", "", nil, "")
+	got := profile.Prompt(profile.SoFar, profile.Evidence{Said: []conversation.Message{{Content: "hello", At: when}}})
 	if strings.Contains(got, "said back when the assistant spoke first") {
 		t.Error("an empty section was written anyway")
 	}
@@ -89,9 +89,8 @@ func TestRenamingIsNotAnswered(t *testing.T) {
 // from an ordinary one is the whole of that job, and the ordinary
 // one was scattered across two parts written for other purposes.
 func TestTheDayHasASectionOfItsOwn(t *testing.T) {
-	asked := profile.Prompt(nil, "", "", "", nil, "")
+	asked := profile.Prompt(profile.Day, profile.Evidence{})
 	for _, want := range []string{
-		"Write three parts",
 		"AN ORDINARY DAY",
 		"in the order it happens, from waking to sleeping",
 		"If weekdays and the weekend are different days, say so",
@@ -124,5 +123,61 @@ func TestTheDescriptionMayBeLongerThanAMemory(t *testing.T) {
 	tooLong := strings.Repeat("a", memory.MaxWritten+1)
 	if _, err := memory.Written("usr_1", memory.TierAlways, profile.Subject, tooLong); err == nil {
 		t.Error("there is no limit at all on what the server writes")
+	}
+}
+
+// A description is taken back apart so that a rebuild where one
+// part failed can keep what that part said last time. The
+// headings are written by this package, so this is reading back
+// what it wrote.
+func TestADescriptionComesApartIntoItsParts(t *testing.T) {
+	whole := "WHAT IS SO\n- goes to the office, 11 times over 14 days\n\n" +
+		"AN ORDINARY DAY\nUp around seven.\n\n" +
+		"WHAT THEY ARE LIKE\nHe asks for things plainly."
+
+	got := profile.Split(whole)
+	if len(got) != 3 {
+		t.Fatalf("%d parts out of three: %v", len(got), got)
+	}
+	if !strings.Contains(got[profile.SoFar], "11 times over 14 days") {
+		t.Errorf("what is so came out as %q", got[profile.SoFar])
+	}
+	if got[profile.Day] != "Up around seven." {
+		t.Errorf("the day came out as %q", got[profile.Day])
+	}
+	if got[profile.Like] != "He asks for things plainly." {
+		t.Errorf("what they are like came out as %q", got[profile.Like])
+	}
+}
+
+// Nothing to take apart, and a description missing a part, both
+// come back as what is there rather than as an error.
+func TestSplittingWhatIsNotThere(t *testing.T) {
+	if got := profile.Split(""); len(got) != 0 {
+		t.Errorf("an empty description gave %v", got)
+	}
+	got := profile.Split("WHAT IS SO\n- goes to the office\n\nWHAT THEY ARE LIKE\nQuiet.")
+	if len(got) != 2 {
+		t.Errorf("a description of two parts gave %d: %v", len(got), got)
+	}
+	if _, had := got[profile.Day]; had {
+		t.Error("a part that was not there came back anyway")
+	}
+}
+
+// The last part is what the first adds up to, so it is given what
+// the first just said. The other two are told nothing about each
+// other.
+func TestOnlyTheLastPartIsToldWhatTheFirstFound(t *testing.T) {
+	e := profile.Evidence{SoFar: "- goes to the office, 11 times over 14 days"}
+	for _, part := range profile.Parts {
+		asked := profile.Prompt(part, e)
+		has := strings.Contains(asked, "11 times over 14 days")
+		if part == profile.Like && !has {
+			t.Error("the prose part was not told what the counted one found")
+		}
+		if part != profile.Like && has {
+			t.Errorf("%q was told what the counted part found", part)
+		}
 	}
 }

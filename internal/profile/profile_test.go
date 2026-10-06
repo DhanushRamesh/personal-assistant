@@ -183,7 +183,8 @@ func TestItReadsAWeek(t *testing.T) {
 // TestThePromptAsksForWhatWasWanted : the things they talk about, the
 // people they know, and how they behave -- the owner's three.
 func TestThePromptAsksForWhatWasWanted(t *testing.T) {
-	p := profile.Prompt(said(3), "", "", "", nil, "")
+	// The owner's three are what the prose part is for.
+	p := profile.Prompt(profile.Like, profile.Evidence{Said: said(3)})
 
 	for _, want := range []string{"talk about", "people in their life", "behave"} {
 		if !strings.Contains(p, want) {
@@ -210,7 +211,7 @@ func TestThePromptAsksForWhatWasWanted(t *testing.T) {
 // said. A hedge is not a defence: a guess in a description read before
 // every answer is acted on exactly as a fact is.
 func TestItIsToldNotToGuessOriginOrRecordHealth(t *testing.T) {
-	p := profile.Prompt(said(3), "", "", "", nil, "")
+	p := profile.Prompt(profile.SoFar, profile.Evidence{Said: said(3)})
 
 	for _, want := range []string{
 		"Where they live, where they are from, their nationality",
@@ -353,18 +354,29 @@ func TestDifferentThingsAreKept(t *testing.T) {
 // line in prose lives until somebody notices and says so. A line
 // carrying a count can be argued with.
 func TestThePromptAsksForTwoLayers(t *testing.T) {
-	p := profile.Prompt(said(3), "", "", "", nil, "")
-
-	for _, want := range []string{"WHAT IS SO", "AN ORDINARY DAY", "WHAT THEY ARE LIKE"} {
-		if !strings.Contains(p, want) {
-			t.Errorf("the prompt does not ask for the %q part", want)
+	// One call per part since 7 October, so each asks for its own
+	// and is told not to write the others.
+	for _, part := range profile.Parts {
+		asked := profile.Prompt(part, profile.Evidence{Said: said(3)})
+		if !strings.Contains(asked, string(part)) {
+			t.Errorf("the prompt for %q does not name it", part)
+		}
+		if !strings.Contains(asked, "do not write any of the others") {
+			t.Errorf("the prompt for %q does not keep to its own part", part)
+		}
+		for _, other := range profile.Parts {
+			if other != part && strings.Contains(asked, "\n"+string(other)) {
+				t.Errorf("the prompt for %q also asks for %q", part, other)
+			}
 		}
 	}
-	if !strings.Contains(p, "cannot put a count on does not belong") {
+
+	counted := profile.Prompt(profile.SoFar, profile.Evidence{Said: said(3)})
+	if !strings.Contains(counted, "cannot put a count on does not belong") {
 		t.Error("a fact without a count is not refused")
 	}
 	// The brief is the job, and "summary" was the old one.
-	if !strings.Contains(p, "Not a summary") {
+	if !strings.Contains(counted, "Not a summary") {
 		t.Error("the prompt still reads as a request for a summary")
 	}
 }
@@ -373,7 +385,7 @@ func TestThePromptAsksForTwoLayers(t *testing.T) {
 // events describe themselves, so a prompt that names kinds rots the
 // day a new sender is added.
 func TestTheMethodNamesNoKindOfThing(t *testing.T) {
-	p := profile.Prompt(said(3), "", "", "", nil, "")
+	p := profile.Prompt(profile.SoFar, profile.Evidence{Said: said(3)})
 
 	for _, named := range []string{
 		"wifi", "bluetooth", "calendar", "music", "call.", "location",
@@ -391,7 +403,7 @@ func TestTheMethodNamesNoKindOfThing(t *testing.T) {
 // says it in words as well, because the fold only catches repetition
 // inside half an hour.
 func TestUsingTheAssistantIsNotTheSubject(t *testing.T) {
-	p := profile.Prompt(said(3), "", "", "", nil, "")
+	p := profile.Prompt(profile.SoFar, profile.Evidence{Said: said(3)})
 	if !strings.Contains(p, "not their use of the assistant") {
 		t.Error("the prompt does not say to describe the person rather than the usage")
 	}

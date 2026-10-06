@@ -12007,6 +12007,69 @@ Before the patch the same sequence read *ignoring non-eof event*
 and the satellite was deaf for seventy-three minutes.
 
 
+### The description is written in three calls
+
+Asked what the state of profiling was, and found it had not been
+written since nine in the morning. It runs hourly.
+
+	"cannot describe them"  error="profile: asking for the
+	   description: I am having some difficulty reaching the server."
+
+That is the persona covering for something more specific:
+
+	platformai: the reply was empty    after=1m7.668429272s
+
+Forty six of those, every one taking between fifty four and sixty
+seven seconds. Our own timeout is two minutes and never came into
+it: the gateway gives up at about a minute and answers with
+nothing. It is not an empty reply, it is a cut-off.
+
+Going back to 29 September, so none of it is new. What is new is
+that it used to finish in time and now does not, because the
+prompt grows with the history: a week of messages, four weeks of
+events, nine hundred tool calls, and since yesterday the diary.
+
+#### Three calls, one per part
+
+The description was always three parts under three fixed
+headings, and the instructions for each never mentioned the
+others. So they are three calls now. The evidence is the same for
+each -- it is the writing that is split, not the reading -- and
+each has about a third as much to generate, which is the half
+that was running out of time.
+
+The cost is honest: the evidence goes up three times, about
+five and a half thousand tokens a call against six for the one.
+Input is cheap and was never what the gateway was cutting.
+
+**The parts are written in order and the last is given the
+first.** `WHAT THEY ARE LIKE` says in its own instructions that
+it is what the first part adds up to, so it is handed what
+`WHAT IS SO` just wrote and told it may not contradict it. The
+other two are told nothing about each other.
+
+**The headings are written here, not asked for.** Each call is
+told to write its part and not the heading. One place decides how
+they are spelt, which is what lets them be read back.
+
+#### A part that fails keeps yesterday's
+
+Three calls are three chances to fail, and the gateway also
+refuses for being busy -- sixteen of those today. A description
+missing a third of itself is worth less than one where a third is
+a day old, so a failed part keeps what it said last time and the
+others are still rewritten. The parts are about different things
+and go stale at different rates anyway.
+
+`Split` reads a description back into its sections to do that,
+which is only possible because the headings are written by this
+package rather than by a model.
+
+Nothing is kept at all when no part is new. A description rebuilt
+entirely out of yesterday is yesterday's, and writing it again
+would only move its date.
+
+
 ## 12. Maintaining this file
 
 When the owner states a preference, makes a decision, or corrects something,

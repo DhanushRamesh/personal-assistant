@@ -200,17 +200,74 @@ func (b *Builder) Build(ctx context.Context, userID string) error {
 	}
 	was, _ := b.previously(ctx, userID)
 
-	answer, err := b.Ask(ctx, Prompt(Folded(said), b.rhythm(ctx, userID),
-		b.asking(ctx, userID), b.planned(ctx, userID), b.replies(ctx, userID), was))
-	if err != nil {
-		return fmt.Errorf("profile: asking for the description: %w", err)
-	}
-	body := strings.TrimSpace(answer)
-	if body == "" {
-		return fmt.Errorf("profile: the model described nobody")
+	evidence := Evidence{
+		Said:    Folded(said),
+		Rhythm:  b.rhythm(ctx, userID),
+		Asking:  b.asking(ctx, userID),
+		Planned: b.planned(ctx, userID),
+		Replies: b.replies(ctx, userID),
+		Was:     was,
 	}
 
+	body, err := b.write(ctx, evidence, Split(was))
+	if err != nil {
+		return err
+	}
 	return b.keep(ctx, userID, body)
+}
+
+// write : The three parts, in order, put together.
+//
+// One call each. Asked for all three at once the gateway cut the
+// generation off at about a minute and answered with nothing, so
+// the description had not been rewritten for fifteen hours by the
+// time anybody looked.
+//
+// A part that fails keeps what it said last time rather than
+// taking the other two down with it. Three calls are three
+// chances to fail, and a description missing a third of itself is
+// worth less than one where a third is a day old -- the parts are
+// about different things and age at different rates anyway.
+//
+// Nothing is kept at all if no part is new. That is the honest
+// failure: a description rebuilt entirely from yesterday is
+// yesterday's, and writing it again would only move its date.
+func (b *Builder) write(ctx context.Context, e Evidence, before map[Part]string) (string, error) {
+	written := make([]string, 0, len(Parts))
+	fresh := 0
+
+	for _, part := range Parts {
+		answer, err := b.Ask(ctx, Prompt(part, e))
+		body := strings.TrimSpace(answer)
+		switch {
+		case err != nil || body == "":
+			kept := before[part]
+			if kept == "" {
+				return "", fmt.Errorf("profile: asking for %q: %w", part, err)
+			}
+			b.warn(ctx, "keeping what the last description said for "+string(part), err)
+			body = kept
+		default:
+			fresh++
+		}
+
+		// Its own heading, written here rather than asked for.
+		// The model is told to write the part and not the heading,
+		// so there is one place the spelling of these comes from
+		// and Split can rely on it.
+		written = append(written, string(part)+"\n"+body)
+
+		// The last part is what the first adds up to, so it is
+		// given what the first just said.
+		if part == SoFar {
+			e.SoFar = body
+		}
+	}
+
+	if fresh == 0 {
+		return "", fmt.Errorf("profile: no part of the description could be written")
+	}
+	return strings.Join(written, "\n\n"), nil
 }
 
 // previously : The description as it stands, and when it was written.
