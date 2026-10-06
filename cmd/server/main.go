@@ -533,25 +533,30 @@ func run() error {
 			deviceEvents, chats, speaker, announcements, logger.Logger)
 	}()
 
-	// What is owed, said. Every announcement is written down before
-	// anything is spoken, and this is the only thing that speaks:
-	// the room, the retry and the expiry are decided here once
-	// rather than in each watcher that happens to raise something.
+	// Announcements are published to clients, which collect them
+	// and decide for themselves whether anybody heard. The server
+	// keeps no opinion about rooms: a client knows whether somebody
+	// is in front of it and the server cannot.
+	//
+	// What is left here is the one question a client cannot answer,
+	// because it is about a moment rather than a device -- whether
+	// a thing has gone past being worth saying at all. Without it a
+	// voice client switched off for a week comes back to a hundred
+	// stale warnings.
 	owed := outboxmysql.New(db.DB)
-	delivering := &outbox.Deliverer{
-		Store:    owed,
-		Speaker:  saying(speaker, announcements),
-		Presence: whereabouts(cfg, logger.Logger),
-		Now:      cfg.Assistant.Now,
-		Logger:   logger.Logger,
+	sweeping := &outbox.Sweeper{
+		Store:   owed,
+		Clients: everyClient(chats, cfg, logger.Logger),
+		Now:     cfg.Assistant.Now,
+		Logger:  logger.Logger,
 	}
 	watching.Add(1)
 	go func() {
 		defer watching.Done()
-		delivering.Run(remindCtx)
+		sweeping.Run(remindCtx)
 	}()
-	logger.Info("delivering what is owed",
-		slog.Duration("every", outbox.Every))
+	logger.Info("publishing announcements to clients",
+		slog.Duration("sweeping stale ones every", outbox.Every))
 
 	// And what several of them together mean, which no single one
 	// of them does.
@@ -594,6 +599,7 @@ func run() error {
 		Cut:            cutOff,
 		DeviceEvents:   deviceEvents,
 		Remarks:        remarked,
+		Owed:           owed,
 		Naming:         naming(cfg, logger.Logger),
 		Tools:          tools,
 		RequestTimeout: cfg.Server.RequestTimeout,
@@ -1448,9 +1454,7 @@ func watchingFor(
 	ctx context.Context,
 	cfg config.Config,
 	reported situation.Events,
-	talkers interface {
-		Talkers(ctx context.Context, since time.Time) ([]string, error)
-	},
+	talkers subscribed,
 	speaker announce.Announcer,
 	owed outbox.Store,
 	logger *slog.Logger,
@@ -1486,7 +1490,11 @@ func watchingFor(
 			if err != nil {
 				return err
 			}
-			return owed.Owe(ctx, o)
+			subscribed, err := subscribers(ctx, talkers, userID)
+			if err != nil {
+				return err
+			}
+			return owed.Publish(ctx, o, subscribed)
 		},
 		Here: func(userID string) (bool, bool) {
 			present, known := here.Here(ctx, userID)
@@ -1816,30 +1824,56 @@ func noticing(
 	})
 }
 
-// saying : The one mouth the deliverer speaks through.
+// subscribed : Who has spoken lately, and what they speak through.
 //
-// Two things, because they are one thing from the person's side:
-// the announcement is said aloud and written into the conversation.
-// Separating them is how the assistant came to rename a
-// conversation and then deny having done it.
-func saying(to announce.Announcer, written *announcement.Writer) outbox.Speaker {
-	return mouth{to: to, written: written}
+// The two questions the announcement plumbing asks, and nothing
+// else from the repository behind them.
+type subscribed interface {
+	Talkers(ctx context.Context, since time.Time) ([]string, error)
+	ListClients(ctx context.Context, userID string, revoked bool) ([]chat.Client, error)
 }
 
-// mouth : Says an announcement and records it.
-type mouth struct {
-	to      announce.Announcer
-	written *announcement.Writer
+// subscribers : Every client of this person, which is every client
+// subscribed to their announcements.
+//
+// All of them, rather than a list somebody maintains. A client that
+// is registered is a thing the person uses, and an announcement it
+// cannot act on costs one row and is swept up later -- cheaper than
+// the first time something is published to nobody because a new
+// client was not added to a list.
+func subscribers(ctx context.Context, clients subscribed, userID string) ([]string, error) {
+	known, err := clients.ListClients(ctx, userID, false)
+	if err != nil {
+		return nil, err
+	}
+	out := make([]string, 0, len(known))
+	for _, c := range known {
+		out = append(out, c.ID)
+	}
+	return out, nil
 }
 
-// Say : Speaks one announcement, wherever its kind is heard.
-func (m mouth) Say(ctx context.Context, userID string,
-	kind conversation.Kind, text string) error {
-	if err := announcement.Speak(ctx, m.to, kind, text); err != nil {
-		return err
+// everyClient : Which clients the sweeper looks over.
+//
+// Every client of everybody who has spoken lately, which is the
+// same reach the watchers have. A client belonging to somebody who
+// has not been here in a month has nothing pending worth sweeping.
+func everyClient(talkers subscribed, cfg config.Config, logger *slog.Logger,
+) func(context.Context) ([]string, error) {
+	return func(ctx context.Context) ([]string, error) {
+		people, err := talkers.Talkers(ctx, cfg.Assistant.Now().Add(-notice.Since))
+		if err != nil {
+			return nil, err
+		}
+		var out []string
+		for _, person := range people {
+			ids, err := subscribers(ctx, talkers, person)
+			if err != nil {
+				logger.Warn("cannot list a person's clients", slog.Any("error", err))
+				continue
+			}
+			out = append(out, ids...)
+		}
+		return out, nil
 	}
-	if m.written != nil {
-		m.written.Announced(ctx, userID, text)
-	}
-	return nil
 }

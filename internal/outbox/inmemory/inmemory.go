@@ -7,6 +7,7 @@ package inmemory
 
 import (
 	"context"
+	"fmt"
 	"sort"
 	"sync"
 	"time"
@@ -16,58 +17,75 @@ import (
 
 // Store : What is owed, in memory.
 type Store struct {
-	mu    sync.Mutex
-	owing map[string]outbox.Owing
+	mu        sync.Mutex
+	announced map[string]outbox.Owing
+	copies    []outbox.Delivery
 }
 
 // New : An empty store.
-func New() *Store { return &Store{owing: map[string]outbox.Owing{}} }
+func New() *Store { return &Store{announced: map[string]outbox.Owing{}} }
 
-// Owe : Writes one down.
-func (s *Store) Owe(_ context.Context, o outbox.Owing) error {
+// Publish : Writes an announcement down and gives every named
+// client its own copy.
+func (s *Store) Publish(_ context.Context, o outbox.Owing, clients []string) error {
+	if len(clients) == 0 {
+		return fmt.Errorf("outbox: nothing is subscribed to announcements")
+	}
 	s.mu.Lock()
 	defer s.mu.Unlock()
-	s.owing[o.ID] = o
+
+	s.announced[o.ID] = o
+	for _, c := range clients {
+		s.copies = append(s.copies, outbox.Delivery{
+			ID:       o.ID + ":" + c,
+			Owing:    o,
+			ClientID: c,
+			State:    outbox.Pending,
+			At:       o.At,
+		})
+	}
 	return nil
 }
 
-// Outstanding : Everything still to be delivered, oldest first.
-func (s *Store) Outstanding(_ context.Context, _ time.Time, limit int) ([]outbox.Owing, error) {
+// Pending : What one client still owes somebody, oldest first.
+func (s *Store) Pending(_ context.Context, clientID string, limit int) ([]outbox.Delivery, error) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 
-	var out []outbox.Owing
-	for _, o := range s.owing {
-		if o.State == outbox.Owed || o.State == outbox.Held {
-			out = append(out, o)
+	var out []outbox.Delivery
+	for _, d := range s.copies {
+		if d.ClientID == clientID && d.State == outbox.Pending {
+			out = append(out, d)
 		}
 	}
-	sort.Slice(out, func(i, j int) bool { return out[i].Due.Before(out[j].Due) })
+	sort.Slice(out, func(i, j int) bool { return out[i].Owing.Due.Before(out[j].Owing.Due) })
 	if limit > 0 && len(out) > limit {
 		out = out[:limit]
 	}
 	return out, nil
 }
 
-// Settle : Records how one ended.
-func (s *Store) Settle(_ context.Context, id string, state outbox.State,
-	tries int, why string, at time.Time) error {
+// Mark : Records what one client did about one announcement.
+func (s *Store) Mark(_ context.Context, clientID, owedID string,
+	state outbox.State, tries int, why string, at time.Time) error {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 
-	o, ok := s.owing[id]
-	if !ok {
+	for i := range s.copies {
+		if s.copies[i].ClientID != clientID || s.copies[i].Owing.ID != owedID {
+			continue
+		}
+		s.copies[i].State, s.copies[i].Tries = state, tries
+		s.copies[i].Why, s.copies[i].At = why, at
 		return nil
 	}
-	o.State, o.Tries, o.Why, o.At = state, tries, why, at
-	s.owing[id] = o
 	return nil
 }
 
-// Get : One record, for a test to look at how it ended.
-func (s *Store) Get(id string) (outbox.Owing, bool) {
+// Copies : Every client's copy, for a test to look at how each
+// one ended.
+func (s *Store) Copies() []outbox.Delivery {
 	s.mu.Lock()
 	defer s.mu.Unlock()
-	o, ok := s.owing[id]
-	return o, ok
+	return append([]outbox.Delivery(nil), s.copies...)
 }

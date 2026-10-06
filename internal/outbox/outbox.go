@@ -30,33 +30,41 @@ import (
 	"github.com/DhanushRamesh/personal-assistant/internal/conversation"
 )
 
-// State : Where an announcement is in its life.
+// State : What one client has done about one announcement.
+//
+// Per client, not per announcement. The same warning can be read on
+// a laptop and missed by a speaker in an empty room, and a single
+// verdict for both was the wrong shape: it had to be decided
+// centrally, from a sensor that describes one room and knows
+// nothing about where the laptop is.
 type State string
 
 const (
-	// Owed : Decided on, not yet said.
+	// Pending : Published to this client, not yet said by it.
 	//
-	// Written before anything is spoken, which is the whole point.
-	// A record written afterwards cannot describe a failure.
-	Owed State = "owed"
+	// The default, and not something a client reports. A voice
+	// client in an empty room says nothing and writes nothing, and
+	// the announcement is still waiting for it when the watch comes
+	// back into range.
+	Pending State = "pending"
 
-	// Said : Spoken, and to whom the policy asked for.
+	// Said : This client delivered it.
+	//
+	// For a typed client that is the moment it arrives: a screen
+	// does not need anybody to be in front of it, and presence
+	// there is always true.
 	Said State = "said"
 
-	// Held : Nobody was there and it is worth keeping. Said when
-	// they come back, while it is still worth saying.
-	Held State = "held"
-
-	// Expired : Its moment passed before it could be said.
+	// Expired : Its moment passed before this client could say it.
 	//
 	// Kept rather than deleted. "Nothing was announced" and "six
 	// things were owed and all of them went stale" look identical
 	// from an empty table, and the second one is a fault.
 	Expired State = "expired"
 
-	// Dropped : Not worth keeping once it could not be said.
-	//
-	// For the kinds that are only true at the moment they happen.
+	// Dropped : This client could not say it and will not try
+	// again, either because its kind is only true now or because it
+	// has tried as often as it may.
 	Dropped State = "dropped"
 )
 
@@ -90,14 +98,28 @@ type Owing struct {
 	// which is worse than silence.
 	Expires time.Time
 
-	// State : Where it is in its life.
-	State State
-	// Tries : How many attempts have been made.
-	Tries int
-	// Why : What went wrong on the last attempt, for somebody
-	// reading back why they never heard it.
-	Why string
+	// At : When it was published.
+	At time.Time
+}
 
+// Delivery : One client's copy of one announcement.
+//
+// Written when the announcement is published rather than when it is
+// delivered. A row that does not exist cannot be asked "why did
+// nobody hear this", which is the whole reason any of this exists.
+type Delivery struct {
+	// ID : This row.
+	ID string
+	// Owing : The announcement it is a copy of.
+	Owing Owing
+	// ClientID : Whose copy it is.
+	ClientID string
+	// State : What this client has done about it.
+	State State
+	// Tries : How many times this client has tried.
+	Tries int
+	// Why : What the client said went wrong, in its own words.
+	Why string
 	// At : When it was last moved on.
 	At time.Time
 }
@@ -108,12 +130,24 @@ type Owing struct {
 // exists for is the server having been off, and an in-memory queue
 // is empty at exactly the moment it is needed.
 type Store interface {
-	// Owe : Writes one down, before anything is said.
-	Owe(ctx context.Context, o Owing) error
-	// Outstanding : Everything still to be delivered, oldest first.
-	Outstanding(ctx context.Context, at time.Time, limit int) ([]Owing, error)
-	// Settle : Records how one ended, and why if it went wrong.
-	Settle(ctx context.Context, id string, state State, tries int, why string, at time.Time) error
+	// Publish : Writes an announcement down and gives every named
+	// client its own copy, before anything is said.
+	//
+	// Both together, because an announcement nobody is subscribed
+	// to is a row that can never be delivered or explained.
+	Publish(ctx context.Context, o Owing, clients []string) error
+
+	// Pending : What one client still owes somebody, oldest first.
+	//
+	// Stale ones are included. Whether a thing is past saying is
+	// the caller's judgement and it needs to see them to make it --
+	// and to record that they went stale rather than leaving them
+	// pending for ever.
+	Pending(ctx context.Context, clientID string, limit int) ([]Delivery, error)
+
+	// Mark : Records what one client did about one announcement.
+	Mark(ctx context.Context, clientID, owedID string, state State,
+		tries int, why string, at time.Time) error
 }
 
 // Limit : How many are taken in one pass.
@@ -145,7 +179,6 @@ func New(id, userID string, kind conversation.Kind, text string, at time.Time) (
 		Text:    text,
 		Due:     at,
 		Expires: at.Add(rule.Worth),
-		State:   Owed,
 		At:      at,
 	}, nil
 }
@@ -153,8 +186,8 @@ func New(id, userID string, kind conversation.Kind, text string, at time.Time) (
 // Stale : Whether its moment has passed.
 func (o Owing) Stale(at time.Time) bool { return !at.Before(o.Expires) }
 
-// Spent : Whether it has been tried as often as its kind allows.
-func (o Owing) Spent() bool {
-	rule, ok := o.Kind.Rule()
-	return ok && o.Tries >= rule.Tries
+// Spent : Whether this client has tried as often as the kind allows.
+func (d Delivery) Spent() bool {
+	rule, ok := d.Owing.Kind.Rule()
+	return ok && d.Tries >= rule.Tries
 }

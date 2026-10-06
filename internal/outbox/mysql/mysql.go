@@ -29,14 +29,25 @@ type row struct {
 	Say     string    `gorm:"column:say"`
 	Due     time.Time `gorm:"column:due"`
 	Expires time.Time `gorm:"column:expires"`
-	State   string    `gorm:"column:state"`
-	Tries   int       `gorm:"column:tries"`
-	Why     string    `gorm:"column:why"`
 	At      time.Time `gorm:"column:at"`
 }
 
 // TableName : Names the table this row maps to.
 func (row) TableName() string { return "owed" }
+
+// copy : One client's copy of one announcement.
+type copyRow struct {
+	ID       string    `gorm:"column:id;primaryKey"`
+	OwedID   string    `gorm:"column:owed_id"`
+	ClientID string    `gorm:"column:client_id"`
+	State    string    `gorm:"column:state"`
+	Tries    int       `gorm:"column:tries"`
+	Why      string    `gorm:"column:why"`
+	At       time.Time `gorm:"column:at"`
+}
+
+// TableName : Names the table this row maps to.
+func (copyRow) TableName() string { return "owed_clients" }
 
 // Store : What is owed, in MySQL.
 type Store struct{ db *gorm.DB }
@@ -47,80 +58,109 @@ func New(db *gorm.DB) *Store { return &Store{db: db} }
 // ID : A new identifier for something owed.
 func ID() string { return Prefix + ulid.Make().String() }
 
-// Owe : Writes one down, before anything is said.
-func (s *Store) Owe(ctx context.Context, o outbox.Owing) error {
+// Publish : Writes an announcement down and gives every named
+// client its own copy.
+//
+// One transaction. An announcement with no copies can never be
+// delivered or explained, and a copy with no announcement is a row
+// pointing at nothing -- neither half is worth having alone.
+func (s *Store) Publish(ctx context.Context, o outbox.Owing, clients []string) error {
 	if s == nil || s.db == nil {
 		return fmt.Errorf("outbox: there is nowhere to keep what is owed")
+	}
+	if len(clients) == 0 {
+		// Nobody is subscribed. Said out loud rather than written
+		// down and forgotten: an announcement with no audience is
+		// a watcher shouting into a server with no clients, and
+		// the silence that follows should have a reason.
+		return fmt.Errorf("outbox: nothing is subscribed to announcements")
 	}
 	if o.ID == "" {
 		o.ID = ID()
 	}
-	r := row{
-		ID:      o.ID,
-		UserID:  o.UserID,
-		Kind:    string(o.Kind),
-		Say:     clip(o.Text, 2000),
-		Due:     o.Due.UTC(),
-		Expires: o.Expires.UTC(),
-		State:   string(o.State),
-		Tries:   o.Tries,
-		Why:     clip(o.Why, 500),
-		At:      o.At.UTC(),
-	}
-	if err := s.db.WithContext(ctx).Create(&r).Error; err != nil {
-		return fmt.Errorf("outbox: %w", err)
-	}
-	return nil
+
+	return s.db.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
+		r := row{
+			ID: o.ID, UserID: o.UserID, Kind: string(o.Kind),
+			Say: clip(o.Text, 2000), Due: o.Due.UTC(),
+			Expires: o.Expires.UTC(), At: o.At.UTC(),
+		}
+		if err := tx.Create(&r).Error; err != nil {
+			return fmt.Errorf("outbox: %w", err)
+		}
+		copies := make([]copyRow, 0, len(clients))
+		for _, c := range clients {
+			copies = append(copies, copyRow{
+				ID: ID(), OwedID: o.ID, ClientID: c,
+				State: string(outbox.Pending), At: o.At.UTC(),
+			})
+		}
+		if err := tx.Create(&copies).Error; err != nil {
+			return fmt.Errorf("outbox: %w", err)
+		}
+		return nil
+	})
 }
 
-// Outstanding : Everything still to be delivered, oldest first.
-//
-// Held ones come back as well as owed ones: a thing kept because
-// nobody was in the room is still owed, and the only difference is
-// that it has been looked at once.
-func (s *Store) Outstanding(ctx context.Context, _ time.Time, limit int) ([]outbox.Owing, error) {
+// Pending : What one client still owes somebody, oldest first.
+func (s *Store) Pending(ctx context.Context, clientID string, limit int) ([]outbox.Delivery, error) {
 	if s == nil || s.db == nil {
 		return nil, fmt.Errorf("outbox: there is nowhere to read what is owed")
 	}
 	if limit <= 0 {
 		limit = outbox.Limit
 	}
-	var rows []row
+
+	var found []struct {
+		copyRow
+		Kind    string
+		Say     string
+		UserID  string
+		Due     time.Time
+		Expires time.Time
+	}
 	err := s.db.WithContext(ctx).
-		Where("state IN ?", []string{string(outbox.Owed), string(outbox.Held)}).
-		Order("due ASC").
+		Table("owed_clients").
+		Select("owed_clients.*, owed.kind, owed.say, owed.user_id, owed.due, owed.expires").
+		Joins("JOIN owed ON owed.id = owed_clients.owed_id").
+		Where("owed_clients.client_id = ? AND owed_clients.state = ?", clientID, string(outbox.Pending)).
+		Order("owed.due ASC").
 		Limit(limit).
-		Find(&rows).Error
+		Scan(&found).Error
 	if err != nil {
 		return nil, fmt.Errorf("outbox: %w", err)
 	}
 
-	out := make([]outbox.Owing, 0, len(rows))
-	for _, r := range rows {
-		out = append(out, outbox.Owing{
-			ID:      r.ID,
-			UserID:  r.UserID,
-			Kind:    conversation.Kind(r.Kind),
-			Text:    r.Say,
-			Due:     r.Due.UTC(),
-			Expires: r.Expires.UTC(),
-			State:   outbox.State(r.State),
-			Tries:   r.Tries,
-			Why:     r.Why,
-			At:      r.At.UTC(),
+	out := make([]outbox.Delivery, 0, len(found))
+	for _, f := range found {
+		out = append(out, outbox.Delivery{
+			ID:       f.ID,
+			ClientID: f.ClientID,
+			State:    outbox.State(f.State),
+			Tries:    f.Tries,
+			Why:      f.Why,
+			At:       f.At.UTC(),
+			Owing: outbox.Owing{
+				ID:      f.OwedID,
+				UserID:  f.UserID,
+				Kind:    conversation.Kind(f.Kind),
+				Text:    f.Say,
+				Due:     f.Due.UTC(),
+				Expires: f.Expires.UTC(),
+			},
 		})
 	}
 	return out, nil
 }
 
-// Settle : Records how one ended, and why if it went wrong.
-func (s *Store) Settle(ctx context.Context, id string, state outbox.State,
-	tries int, why string, at time.Time) error {
+// Mark : Records what one client did about one announcement.
+func (s *Store) Mark(ctx context.Context, clientID, owedID string,
+	state outbox.State, tries int, why string, at time.Time) error {
 	if s == nil || s.db == nil {
 		return fmt.Errorf("outbox: there is nowhere to record what was said")
 	}
-	err := s.db.WithContext(ctx).Model(&row{}).
-		Where("id = ?", id).
+	err := s.db.WithContext(ctx).Model(&copyRow{}).
+		Where("owed_id = ? AND client_id = ?", owedID, clientID).
 		Updates(map[string]any{
 			"state": string(state),
 			"tries": tries,

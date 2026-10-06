@@ -10144,6 +10144,67 @@ all intact. Every test alarm was deleted afterwards and the owner's
 own two were left alone.
 
 
+### An announcement is published, not delivered
+
+Owner, 6 October 2026, a few hours after the outbox was built:
+*"one event announcement model, we will rewrite a new one. An
+announcement has to be published to the client, like a pub sub.
+Each client is subscribed ... the typed clients receive it, the
+voice client also receives it but to say or not depends on the
+presence, and presence logic should reside on the client."*
+
+This supersedes the deliverer below, and the reason is worth
+keeping because the first version was wrong in a way that looked
+right.
+
+**"Was it announced" is not one fact about one person.** The outbox
+held a single verdict per announcement, and decided it centrally
+from a presence sensor that describes **one room**. But the same
+warning can be read on a laptop and missed by a speaker in an empty
+room, and both are true at once. A single answer could not say so,
+and the server was the wrong place to decide: it knows about a
+sensor, and a client knows whether anybody is in front of **it**.
+
+So the state moved to where the knowledge is. An announcement is
+published once; every client gets its own copy with its own
+verdict. `owed` is the announcement, `owed_clients` is what each
+client did about it.
+
+| | |
+|---|---|
+| typed client | presence is always true -- a screen needs nobody in front of it. Marks its copy said on arrival. |
+| voice client | decides from its own trigger, the watch. Says it, or leaves its copy pending. |
+
+**Pending is the default, not a report.** A voice client in an empty
+room says nothing and writes nothing, and the announcement is still
+waiting when the watch comes back into range. One fewer call, and
+nothing is lost if that call never arrives.
+
+`GET /v1/announcements` returns what *this* client owes -- this
+client, not this person, which is the whole point. `POST
+/v1/announcements/{id}` takes back `said` or `dropped`. The attempt
+count is kept by the server rather than sent by the client, because
+a client that reports its own count can report anything and the
+count is what bounds a thing that fails every time.
+
+**What is left on the server** is the one question a client cannot
+answer, because it is about a moment rather than a device: has this
+gone past being worth saying at all. A voice client switched off
+for a week otherwise comes back to a hundred stale warnings. That
+is all the Sweeper does; it never speaks.
+
+Published to nobody is refused loudly rather than written down and
+forgotten. An announcement with no audience is a watcher shouting
+into a server with no clients, and the silence that follows should
+have a reason.
+
+No model call anywhere in this path, by the owner's instruction.
+The sentence is settled when the announcement is published.
+
+**The honest state after this change:** situations publish, and
+**nothing collects yet**, so they are recorded and not heard. That
+is the next step and the one that matters most.
+
 ### Announcements have one way out
 
 Owner, 6 October 2026: *"it feels like everything is scattered ...

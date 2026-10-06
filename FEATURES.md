@@ -93,37 +93,51 @@ everywhere here.
 flowchart TB
     subgraph W["Watchers -- is this worth saying?"]
         direction TB
-        RL["Reminders<br/>its time came"]
-        GR["The greeting<br/>what happened while they were out"]
-        CO["The diary<br/>something coming that needs doing"]
-        LV["Leave by<br/>when to set off"]
-        SIT["Situations<br/>missed calls, a charger doing nothing"]
-        NOT["Immediate<br/>a device said to say it now"]
+        RL["Reminders"]
+        GR["The greeting"]
+        CO["The diary"]
+        LV["Leave by"]
+        SIT["Situations"]
+        NOT["Immediate"]
     end
 
-    W --> OUT[("The outbox<br/>written down before anything is said")]
-    OUT --> D{"The deliverer<br/>one policy per kind"}
+    W --> PUB[("Published once<br/>to the outbox")]
+    PUB --> FAN{"A copy for<br/>every client"}
 
-    D -- "nobody there, still true later" --> HELD["Held<br/>said when they return"]
-    D -- "nobody there, only true now" --> DROP["Dropped"]
-    D -- "its moment passed" --> EXP["Expired<br/>and the reason kept"]
-    D -- "said" --> SPEAK["Aloud in the room"]
-    D -- "said, and it travels" --> PHONE["The phone as well"]
+    FAN --> TY["Typed client<br/>a screen needs nobody in front of it"]
+    FAN --> VO["Voice client<br/>knows its own room"]
 
-    HELD --> D
+    TY --> SAID1["Marked said"]
+    VO --> P{"Anybody<br/>there?"}
+    P -- "yes" --> SAID2["Said aloud, marked said"]
+    P -- "no" --> PEND["Left pending<br/>collected when the watch returns"]
+    PEND --> VO
+
+    PUB -.-> SW["The server sweeps<br/>what went stale"]
 ```
 
 **The rule underneath all of it:** nothing is said unless something
 asked for it to be said. There is no chatter watcher, by decision —
 only the six above.
 
-**Deciding and delivering are separate.** *Is this worth saying* is
-genuinely different per watcher and stays with the watcher. *Did it
-get said, to whom, and what if it did not* is one job, done once, in
-the outbox. Every announcement is written down **before** anything is
-spoken, so a server that was off over the moment comes back knowing
-what it owes -- and the expiry decides whether it is still worth
-saying rather than announcing breakfast at lunchtime.
+**Published once, delivered per client.** An announcement goes into
+the outbox before anything is said, and every client of that person
+gets its own copy with its own verdict. *Was it announced* is not one
+fact about one person: the same warning can be read on a laptop and
+missed by a speaker in an empty room, and a single answer could not
+say so.
+
+**Presence lives on the client, not the server.** A screen needs
+nobody in front of it, so a typed client marks its copy said the
+moment it arrives. A voice client knows its own room -- and only it
+can -- so it says the announcement or leaves its copy pending and
+collects it when the watch comes back. The server keeps no opinion
+about rooms.
+
+The server answers the one question a client cannot, because it is
+about a moment rather than a device: **has this gone past being
+worth saying at all.** Without that, a voice client switched off for
+a week comes back to a hundred stale warnings.
 
 | kind | nobody there | worth saying for | tries |
 |---|---|---|---|
@@ -133,8 +147,13 @@ saying rather than announcing breakfast at lunchtime.
 | presence | dropped | 20 seconds | 1 |
 | renamed | said anyway, never aloud | 1 hour | 1 |
 
-Only **situations** goes through the outbox so far. The other five
-still speak directly, and are being moved over one at a time.
+`GET /v1/announcements` is what a client collects; `POST
+/v1/announcements/{id}` is how it says what it did.
+
+Only **situations** publishes this way so far, and **no client
+collects yet** -- so situations are recorded and not heard. The other
+five watchers still speak the old way. Both halves are being moved
+over one at a time.
 
 ---
 
@@ -190,8 +209,11 @@ possible.
 
 Kept here so it is not rediscovered.
 
-- Five of the six watchers still speak directly instead of through
-  the outbox, so only situations survive a restart or a failure.
+- No client collects its announcements yet, so what situations
+  publish is written down and never said. The next step, and the
+  one that matters most.
+- Five of the six watchers still speak directly rather than
+  publishing.
 - `remark` is a kind nothing can raise any more: the branch that
   chose it is unreachable since unasked remarks were removed.
 - The phone answers before it acts, so a successful call is not

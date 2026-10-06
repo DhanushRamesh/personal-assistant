@@ -20,6 +20,7 @@ import (
 	chimw "github.com/go-chi/chi/v5/middleware"
 
 	"github.com/DhanushRamesh/personal-assistant/internal/announce"
+	announcementsapi "github.com/DhanushRamesh/personal-assistant/internal/api/announcements"
 	"github.com/DhanushRamesh/personal-assistant/internal/api/assist"
 	"github.com/DhanushRamesh/personal-assistant/internal/api/authn"
 	"github.com/DhanushRamesh/personal-assistant/internal/api/chats"
@@ -138,6 +139,12 @@ type Options struct {
 	// watching the room should show.
 	Remarks remarksapi.Store
 
+	// Owed : What each client still owes somebody to say, which it
+	// collects for itself. Named apart from Announcements above:
+	// that one is where a spoken thing is written into the
+	// conversation, this one is the queue it came out of.
+	Owed announcementsapi.Store
+
 	// DeviceEvents : Where the person's own devices report what happened
 	// to them, which is what lets the assistant say something first.
 	//
@@ -213,6 +220,7 @@ type Server struct {
 	memories      *memories.Handler
 	tools         *toolsapi.Handler
 	remarks       *remarksapi.Handler
+	announcements *announcementsapi.Handler
 }
 
 // New : Builds a Server from opts and registers its routes.
@@ -237,15 +245,16 @@ func New(opts Options) *Server {
 			opts.Announcements, opts.Location, opts.Now).
 			Writes(opts.Greeting, opts.Spoke, opts.Reported, opts.Known, opts.ThisMachine).
 			Expects(opts.Diary, opts.Chores),
-		profile:    profileapi.New(opts.Memories, opts.Now, opts.Logger),
-		vocabulary: vocabularyapi.New(opts.Vocabulary, opts.Logger),
-		google:     googleapi.New(opts.Logger, opts.Google, opts.SettingsURL),
-		assist:     assist.New(opts.Logger, opts.Chats, opts.Runner, opts.Events),
-		speech:     speechapi.New(opts.Logger, opts.Cut),
-		events:     events.New(opts.Logger, opts.DeviceEvents, opts.Now).Naming(opts.Naming),
-		memories:   memories.New(opts.Logger, opts.Memories),
-		tools:      toolsapi.New(opts.Logger, opts.Tools),
-		remarks:    remarksapi.New(opts.Logger, opts.Remarks),
+		profile:       profileapi.New(opts.Memories, opts.Now, opts.Logger),
+		vocabulary:    vocabularyapi.New(opts.Vocabulary, opts.Logger),
+		google:        googleapi.New(opts.Logger, opts.Google, opts.SettingsURL),
+		assist:        assist.New(opts.Logger, opts.Chats, opts.Runner, opts.Events),
+		speech:        speechapi.New(opts.Logger, opts.Cut),
+		events:        events.New(opts.Logger, opts.DeviceEvents, opts.Now).Naming(opts.Naming),
+		memories:      memories.New(opts.Logger, opts.Memories),
+		tools:         toolsapi.New(opts.Logger, opts.Tools),
+		remarks:       remarksapi.New(opts.Logger, opts.Remarks),
+		announcements: announcementsapi.New(opts.Logger, opts.Owed, nil),
 	}
 	s.routes()
 	return s
@@ -300,5 +309,6 @@ func (s *Server) routes() {
 		s.memories.Mount(r)
 		s.tools.Mount(r)
 		s.remarks.Mount(r)
+		s.announcements.Mount(r)
 	})
 }
