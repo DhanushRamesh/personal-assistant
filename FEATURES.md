@@ -245,45 +245,67 @@ asked for rather than something built.
 ```mermaid
 flowchart TB
     ASK["A rule is asked for<br/>when, and what to do"] --> ROW[("jobs<br/>schedule · steps · next_at")]
-
     ROW --> TICK{"Runner, every 2s<br/>what is due?"}
     TICK -- "more than an hour late" --> SKIP["Skipped, and the row says why<br/>yesterday's 8am at noon is worse<br/>than not done"]
-    TICK -- "due" --> SEQ
+    TICK -- "due" --> WHAT
 
-    subgraph SEQ["The sequence, in order -- one turn, not several"]
-        direction LR
-        S1["Step 1"] --> S2["Step 2"] --> S3["Step 3"]
-    end
-
-    SEQ --> WHAT{"What kind of step?"}
+    WHAT{"Each step, in order<br/>told which tools the earlier ones ran"}
+    WHAT -- "check a condition" --> GATE{"Does it hold?<br/>an event value, how old it is,<br/>or who is in the room"}
     WHAT -- "say something" --> OUT["Published to the outbox<br/>section 3 takes it from there"]
-    WHAT -- "run a tool" --> TOOL["One of the 52<br/>told what the sequence already ran"]
+    WHAT -- "run a tool" --> TOOL["One of the 52"]
 
-    TOOL -- "stop" --> END
-    TOOL -- "failed" --> ON["The rest still runs<br/>one record per run"]
-    ON --> END
-    OUT --> END
+    GATE -- "no, or nothing is known" --> STOP["Nothing after it runs<br/>not a failure; the row says<br/>which check stopped it"]
+    GATE -- "yes" --> ON
+    OUT --> ON
+    TOOL -- "ok, or failed -- the rest still runs" --> ON
 
-    END{"Does it repeat?"} -- "every 5m · at 08:00" --> AGAIN["next_at moved on,<br/>still active"]
+    ON["On to the next step<br/>one record per run"] --> END
+    STOP --> END
+
+    END{"Does it repeat?"}
+    END -- "every 5m · at 08:00" --> AGAIN["next_at moved on, still active<br/>picked up again on a later tick"]
     END -- "once" --> DONE["done"]
-    AGAIN --> ROW
 ```
 
 **Three ways to write when:** `every 5m`, `at 08:00`, `once
 2026-10-07 06:40`. No cron — these are meant to be dictated aloud.
 
-**Two things a step can do:** say something, or run one of the
-tools that already exist. The verbs were never missing; a rule just
-needed a way to point at one.
+**Three things a step can do:** say something, run one of the tools
+that already exist, or check a condition. The verbs were never
+missing; a rule just needed a way to point at one.
+
+**A check is how a rule says *only if*.** It reads one of the three
+things the server holds as a value — an event's latest reading, how
+long ago that reading came, or whether anybody is in the room — and
+stops everything after it when the condition does not hold.
+
+| | |
+|---|---|
+| `battery.level < 20` | the number the phone last reported |
+| `battery.level is not 100` | or the word, when it is not a number |
+| `battery.level older than 2h` | the phone has stopped reporting |
+| `presence is away` | nobody in the room |
+
+A check as the **first** step is a condition on the whole job; one
+in the middle is a condition on what follows. **Nothing known means
+it does not pass** — a kind that has never arrived stops the
+sequence rather than guessing.
+
+**The schedule says *when*, a check says *whether*.** Which is why
+day-of-week is not a check: "at eight on weekdays" is a *when*, and
+the schedule grammar is where that will go.
 
 **A sequence is one turn.** Each step is told which tools the ones
 before it ran, so `[list the task lists, add a task]` satisfies the
 read-before-write rule the tools enforce. Without that, more than
 one step would be decoration.
 
-**Linear, on purpose.** A step may stop the ones after it, and that
+**Linear, on purpose.** A check stops the steps after it, and that
 is the whole of the conditional. No branching, no loops, no
-variables — Tasker and Home Assistant already exist for that.
+variables — Tasker and Home Assistant already exist for that. It is
+also why a check cannot read what a previous tool call returned:
+tool results are prose written for a model, and comparing them
+would mean values passed between steps.
 
 **A reminder is not a special thing here.** It is a job whose steps
 are *say the words* and *set the phone alarm*, which is what

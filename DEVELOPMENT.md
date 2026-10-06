@@ -10515,6 +10515,110 @@ last**, because reminders are the feature most used and a new
 engine is wrong in small ways for a week.
 
 
+### A gate is a step, not a column
+
+Owner, 6 October 2026: *"now we need gates/checks like run it when
+condition passes."*
+
+The shape was already waiting. `Doer.Do` returned a `stop` that
+nothing produced, and the package comment promised *a step that
+checks and stops*. A check step is what makes that real, and the
+runner did not change at all.
+
+**A gate is a step rather than a `when` column on the job.** A
+check as the first step *is* a condition on the whole job, and a
+check in the middle is a condition on what follows -- which the
+column could not express. One concept covers both, and the
+alternative was two places that both say *whether*.
+
+**The schedule says when; the gate says whether.** This is the line
+that keeps either from growing into the other. It has an immediate
+consequence: **day-of-week is not a gate.** "At eight on weekdays"
+is a *when*, so it belongs to the schedule grammar, and putting it
+in gates would have meant two places answering the same question.
+Extending the schedule is its own slice.
+
+#### Three sources, because there are three
+
+A gate reads an event's latest value, how old that reading is, or
+presence. Not because three is tidy, but because those are the
+things the server holds as **structured values**. The obvious
+fourth -- *check what the previous tool call returned* -- cannot
+work: tool results are prose written for a model, so there is
+nothing to compare. Reaching for it would have meant values passed
+between steps, which is variables, which is the language this
+engine refuses to become.
+
+	battery.level < 20
+	battery.level is not 100
+	battery.level older than 2h
+	presence is away
+
+One string, kept as written, the same as the schedule and for the
+same reason: it is read back to the person who said it.
+
+**Timed by when the server was told,** not by the device's clock.
+So `older than 2h` means what it sounds like when a phone has
+stopped talking, which is the quiet-device check written as a rule.
+
+#### An unknown reading never passes
+
+Nothing is known, so nothing is proved. The same answer
+`notice.worth` gives when it cannot tell which way a value was
+moving, and for the same reason: between a sequence that does
+nothing and a sequence that fires on an assumption, the first is
+the cheaper mistake. A gate on an event kind that has never
+arrived stops, every time.
+
+A word where the rule expected a number is the same: not an error,
+simply something the gate cannot order.
+
+#### A check that stops is not a failure
+
+It does not count as failed, the job reschedules normally, and
+nothing is spoken. But **it is recorded.** `why` was *what went
+wrong last time*, and is now *what happened last run* -- the
+failure, or which check stopped it. Without that, "why did my rule
+not fire" has no answer anywhere, and a gate that silently does
+nothing is indistinguishable from a gate that is broken. A real
+failure earlier in the sequence keeps the field; it is the more
+important thing to have kept.
+
+#### Three smaller things it turned up
+
+**`job.New` never validated its steps.** The doc comment claimed a
+rule that cannot work fails in front of whoever wrote it, and only
+`Step.Valid` did that, which nothing called on creation. Harmless
+while a step was a tool name; with gates, an unreadable condition
+would have become a job that silently never passed. Now `New`
+checks every step.
+
+**`event.Value` is exported and `notice.valueOf` delegates to it.**
+The payload's `value` field is the one convention agreed across
+senders, so it belongs to `event` rather than being copied into
+each package that reads it. One duplicate removed, not one added.
+
+**One presence client, shared with the reminder loop.** The server
+was already building four. A gate asking the room is the same
+question the reminder loop asks, and `whereabouts` returning nil
+means *nothing can tell*, which the gate reads the way the loop
+does rather than inventing a second convention.
+
+#### Proved against the real thing
+
+Four jobs, each a check then a tool call, due eight seconds out:
+
+| condition | passed | what followed |
+|---|---|---|
+| `battery.level < 90` (it was 68) | yes | the tool ran, row clean |
+| `battery.level < 20` | no | nothing after it, reason recorded |
+| `nosuch.kind is 1` | no | nothing after it, reason recorded |
+| `presence is here` | yes | the tool ran, row clean |
+
+The presence one passed against the real `sensor.owner_presence`,
+not a nil fallback.
+
+
 ## 12. Maintaining this file
 
 When the owner states a preference, makes a decision, or corrects something,

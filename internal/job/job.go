@@ -72,6 +72,13 @@ const (
 	// The verbs were never missing. There are fifty-two of them and
 	// a rule needs a way to point at one, not a new vocabulary.
 	Call Task = "tool"
+	// Check : Read a condition and stop the rest of the sequence
+	// unless it holds.
+	//
+	// A check as the first step is a condition on the whole job; a
+	// check in the middle is a condition on what follows. One kind
+	// of step covers both.
+	Check Task = "check"
 )
 
 // Step : One thing to do.
@@ -84,6 +91,12 @@ type Step struct {
 	Tool string `json:"tool,omitempty"`
 	// Args : What to run it with, as the tool's own arguments.
 	Args json.RawMessage `json:"args,omitempty"`
+	// When : The condition, as it was written, for a check.
+	//
+	// Kept as written rather than parsed into fields, for the same
+	// reason as [Job.Schedule]: it is read back to the person who
+	// said it.
+	When string `json:"when,omitempty"`
 }
 
 // Job : A schedule and the sequence it runs.
@@ -112,7 +125,8 @@ type Job struct {
 	State State
 	// Last : When it last ran.
 	Last time.Time
-	// Why : What went wrong last time, empty when nothing did.
+	// Why : What happened last run -- what went wrong, or which
+	// check stopped it. Empty when it simply ran.
 	Why string
 }
 
@@ -146,6 +160,11 @@ func New(id, userID, name, kind, schedule string, steps []Step, from time.Time) 
 	}
 	if len(steps) == 0 {
 		return Job{}, ErrNoSteps
+	}
+	for _, step := range steps {
+		if err := step.Valid(); err != nil {
+			return Job{}, err
+		}
 	}
 	next, err := Following(schedule, from, from.Location())
 	if err != nil {
@@ -223,6 +242,13 @@ func (s Step) Valid() error {
 	case Call:
 		if strings.TrimSpace(s.Tool) == "" {
 			return errors.New("job: a tool step naming no tool")
+		}
+	case Check:
+		if strings.TrimSpace(s.When) == "" {
+			return errors.New("job: a check with no condition")
+		}
+		if _, err := ParseGate(s.When); err != nil {
+			return err
 		}
 	default:
 		return fmt.Errorf("job: %q is not something a step can do", s.Do)

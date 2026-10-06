@@ -24,6 +24,15 @@ type Store interface {
 	Ran(ctx context.Context, id string, next time.Time, state State, why string, at time.Time) error
 }
 
+// Outcome : What carrying out one step came to.
+type Outcome struct {
+	// Stop : Whether the rest of the sequence should not run.
+	Stop bool
+	// Why : Why it stopped, for the record. Not a failure -- a
+	// check that did not pass is the engine working.
+	Why string
+}
+
 // Doer : Carries out one step.
 //
 // One interface rather than one per task, so that adding a kind of
@@ -31,13 +40,13 @@ type Store interface {
 // The runner's business is order, lateness and failure; what a step
 // actually does is somebody else's.
 type Doer interface {
-	// Do : Carries out one step for one person. Returns stop when
+	// Do : Carries out one step for one person. Returns a stop when
 	// the rest of the sequence should not run.
 	//
 	// Stop is not failure. It is how a sequence says *only if*: a
-	// step that checks the battery and stops when it is fine. That
-	// is the whole of the conditional in this engine, and
-	// deliberately the whole of it.
+	// check step whose condition does not hold. That is the whole
+	// of the conditional in this engine, and deliberately the whole
+	// of it.
 	//
 	// already names the tools earlier steps have run. A sequence
 	// is one turn, not several: the tools refuse to write
@@ -45,7 +54,7 @@ type Doer interface {
 	// that forgot its own first step could never satisfy that. It
 	// is also what makes [list, add] mean anything, which is the
 	// reason sequences exist.
-	Do(ctx context.Context, userID string, s Step, already []string) (stop bool, err error)
+	Do(ctx context.Context, userID string, s Step, already []string) (Outcome, error)
 }
 
 // Runner : Runs jobs when their time comes.
@@ -132,7 +141,7 @@ func (r *Runner) one(ctx context.Context, j Job, now time.Time, pass *Pass) {
 	var why string
 	var already []string
 	for _, step := range j.Steps {
-		stop, err := r.Doer.Do(ctx, j.UserID, step, already)
+		done, err := r.Doer.Do(ctx, j.UserID, step, already)
 		if step.Do == Call && step.Tool != "" {
 			already = append(already, step.Tool)
 		}
@@ -146,8 +155,14 @@ func (r *Runner) one(ctx context.Context, j Job, now time.Time, pass *Pass) {
 			r.note("a step failed and the sequence went on", j, why)
 			continue
 		}
-		if stop {
+		if done.Stop {
 			pass.Stopped++
+			// A failure earlier in the sequence is the more
+			// important thing to have recorded, so it keeps the
+			// field.
+			if why == "" {
+				why = done.Why
+			}
 			break
 		}
 	}

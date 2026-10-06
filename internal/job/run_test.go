@@ -25,14 +25,17 @@ type hands struct {
 	failure error
 }
 
-func (h *hands) Do(_ context.Context, _ string, s job.Step, already []string) (bool, error) {
+func (h *hands) Do(_ context.Context, _ string, s job.Step, already []string) (job.Outcome, error) {
 	h.saw = append(h.saw, len(already))
-	what := string(s.Do) + ":" + s.Say + s.Tool
+	what := string(s.Do) + ":" + s.Say + s.Tool + s.When
 	h.did = append(h.did, what)
 	if h.failAt != "" && strings.Contains(what, h.failAt) {
-		return false, h.failure
+		return job.Outcome{}, h.failure
 	}
-	return h.stopAt != "" && strings.Contains(what, h.stopAt), nil
+	if h.stopAt != "" && strings.Contains(what, h.stopAt) {
+		return job.Outcome{Stop: true, Why: "the check " + what + " did not pass"}, nil
+	}
+	return job.Outcome{}, nil
 }
 
 // runner : A runner over a store, with the clock held still.

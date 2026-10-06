@@ -373,9 +373,10 @@ func run() error {
 	// The first work here that happens because of the clock rather than
 	// because somebody asked. Stopped with the server, so a reminder is
 	// never half said during a shutdown.
+	here := whereabouts(cfg, logger.Logger)
 	reminding := &remind.Loop{
 		Store:    reminderStore,
-		Presence: whereabouts(cfg, logger.Logger),
+		Presence: here,
 		Speaker: remind.Everywhere{
 			To: []remind.Speaker{remind.Aloud{
 				Announcer:     speaker,
@@ -589,7 +590,8 @@ func run() error {
 		Store: scheduled,
 		Doer: doing{
 			tools: tools, speaker: speaker, written: announcements,
-			to: publishing, now: cfg.Assistant.Now, logger: logger.Logger,
+			to: publishing, events: deviceEvents, here: here,
+			now: cfg.Assistant.Now, logger: logger.Logger,
 		},
 		Where:  cfg.Assistant.Location,
 		Now:    cfg.Assistant.Now,
@@ -1958,15 +1960,17 @@ type doing struct {
 	speaker announce.Announcer
 	written *announcement.Writer
 	to      *outbox.Publisher
+	events  *eventmysql.Store
+	here    remind.Presence
 	now     func() time.Time
 	logger  *slog.Logger
 }
 
 // Do : Carries out one step. Never stops the sequence yet -- the
 // step that can is the checking one, which comes with prompts.
-func (d doing) Do(ctx context.Context, userID string, s job.Step, already []string) (bool, error) {
+func (d doing) Do(ctx context.Context, userID string, s job.Step, already []string) (job.Outcome, error) {
 	if err := s.Valid(); err != nil {
-		return false, err
+		return job.Outcome{}, err
 	}
 
 	switch s.Do {
@@ -1977,16 +1981,19 @@ func (d doing) Do(ctx context.Context, userID string, s job.Step, already []stri
 		o, err := outbox.New(outboxmysql.ID(), userID,
 			conversation.Immediate, s.Say, d.now())
 		if err != nil {
-			return false, err
+			return job.Outcome{}, err
 		}
 		if err := d.to.Publish(ctx, o); err != nil {
-			return false, err
+			return job.Outcome{}, err
 		}
 		if err := announcement.Speak(ctx, d.speaker, conversation.Immediate, s.Say); err != nil {
-			return false, err
+			return job.Outcome{}, err
 		}
 		d.written.Announced(ctx, userID, s.Say)
-		return false, nil
+		return job.Outcome{}, nil
+
+	case job.Check:
+		return d.check(ctx, userID, s)
 
 	case job.Call:
 		// As the person, on the typed channel. A job is not a
@@ -2002,11 +2009,50 @@ func (d doing) Do(ctx context.Context, userID string, s job.Step, already []stri
 			Ran: already,
 		})
 		if out.Outcome == conversation.OutcomeFailed {
-			return false, fmt.Errorf("%s: %s", s.Tool, out.Content)
+			return job.Outcome{}, fmt.Errorf("%s: %s", s.Tool, out.Content)
 		}
 		d.logger.InfoContext(ctx, "a job ran a tool",
 			slog.String("tool", s.Tool), slog.String("outcome", string(out.Outcome)))
-		return false, nil
+		return job.Outcome{}, nil
 	}
-	return false, fmt.Errorf("job: nothing carries out %q", s.Do)
+	return job.Outcome{}, fmt.Errorf("job: nothing carries out %q", s.Do)
+}
+
+// check : Reads a condition and stops the sequence unless it holds.
+//
+// The reading is the latest event of that kind, timed by when this
+// server was told rather than by the device's own clock, so that
+// "older than" means what it says when a phone has stopped talking.
+func (d doing) check(ctx context.Context, userID string, s job.Step) (job.Outcome, error) {
+	gate, err := job.ParseGate(s.When)
+	if err != nil {
+		return job.Outcome{}, err
+	}
+
+	var reading job.Reading
+	if kind := gate.Needs(); kind != "" {
+		latest, err := d.events.Recent(ctx, userID, event.Query{Kind: kind, Limit: 1})
+		if err != nil {
+			return job.Outcome{}, err
+		}
+		if len(latest) > 0 {
+			reading = job.Reading{
+				Value: event.Value(latest[0].Payload),
+				At:    latest[0].ReceivedAt,
+				Known: true,
+			}
+		}
+	}
+
+	// Nil presence is the convention the reminder loop already
+	// uses: nothing can tell, so nobody is held to be away.
+	away := d.here != nil && d.here.Away(ctx, userID)
+
+	passed := gate.Passes(reading, away, d.now())
+	d.logger.InfoContext(ctx, "a job checked a condition",
+		slog.String("when", s.When), slog.Bool("passed", passed))
+	if passed {
+		return job.Outcome{}, nil
+	}
+	return job.Outcome{Stop: true, Why: "the check " + s.When + " did not pass"}, nil
 }

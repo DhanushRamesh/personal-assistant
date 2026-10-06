@@ -162,18 +162,7 @@ func skip(e event.Event) bool {
 }
 
 // valueOf : The value a sender gave, if it gave one.
-func valueOf(payload json.RawMessage) string {
-	if len(payload) == 0 {
-		return ""
-	}
-	var into struct {
-		Value any `json:"value"`
-	}
-	if err := json.Unmarshal(payload, &into); err != nil || into.Value == nil {
-		return ""
-	}
-	return strings.TrimSpace(fmt.Sprint(into.Value))
-}
+func valueOf(payload json.RawMessage) string { return event.Value(payload) }
 
 // Beside : Whatever a sender said about a thing apart from its value,
 // as one readable line.

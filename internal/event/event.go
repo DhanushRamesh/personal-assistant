@@ -374,3 +374,21 @@ func Number(value string) bool {
 	}
 	return digits >= 7 && digits <= 15
 }
+
+// Value : The value a sender gave, if it gave one.
+//
+// The one payload field with a meaning agreed across senders: what
+// the thing was, as text. Everything else a sender puts in a
+// payload is its own business.
+func Value(payload json.RawMessage) string {
+	if len(payload) == 0 {
+		return ""
+	}
+	var into struct {
+		Value any `json:"value"`
+	}
+	if err := json.Unmarshal(payload, &into); err != nil || into.Value == nil {
+		return ""
+	}
+	return strings.TrimSpace(fmt.Sprint(into.Value))
+}
