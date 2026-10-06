@@ -93,7 +93,7 @@ everywhere here.
 flowchart TB
     subgraph L["The logic -- is there something to say?"]
         direction LR
-        SI["Situations"]
+        SI["Situations<br/>missed calls, a dead charger,<br/>a device gone quiet"]
         RN["Renaming"]
         RM["Reminders"]
         GR["Greeting"]
@@ -226,6 +226,7 @@ possible.
 
 | every | what |
 |---|---|
+| 2 min | **Watching** — three checks over what the devices reported: somebody trying twice to reach you, a charger doing nothing, and a device that reports every few minutes and has stopped |
 | a day | **Profile** — a standing description of the person, in prose, from what they said and did |
 | a day | **Vocabulary** — the proper nouns they actually say, fed to both speech engines |
 | a day | **Forgetting** — raw position readings older than a week |
