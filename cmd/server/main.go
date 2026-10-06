@@ -50,6 +50,8 @@ import (
 	memorymysql "github.com/DhanushRamesh/personal-assistant/internal/memory/mysql"
 	"github.com/DhanushRamesh/personal-assistant/internal/notice"
 	noticemysql "github.com/DhanushRamesh/personal-assistant/internal/notice/mysql"
+	"github.com/DhanushRamesh/personal-assistant/internal/outbox"
+	outboxmysql "github.com/DhanushRamesh/personal-assistant/internal/outbox/mysql"
 	"github.com/DhanushRamesh/personal-assistant/internal/persona"
 	"github.com/DhanushRamesh/personal-assistant/internal/place"
 	"github.com/DhanushRamesh/personal-assistant/internal/profile"
@@ -531,13 +533,33 @@ func run() error {
 			deviceEvents, chats, speaker, announcements, logger.Logger)
 	}()
 
+	// What is owed, said. Every announcement is written down before
+	// anything is spoken, and this is the only thing that speaks:
+	// the room, the retry and the expiry are decided here once
+	// rather than in each watcher that happens to raise something.
+	owed := outboxmysql.New(db.DB)
+	delivering := &outbox.Deliverer{
+		Store:    owed,
+		Speaker:  saying(speaker, announcements),
+		Presence: whereabouts(cfg, logger.Logger),
+		Now:      cfg.Assistant.Now,
+		Logger:   logger.Logger,
+	}
+	watching.Add(1)
+	go func() {
+		defer watching.Done()
+		delivering.Run(remindCtx)
+	}()
+	logger.Info("delivering what is owed",
+		slog.Duration("every", outbox.Every))
+
 	// And what several of them together mean, which no single one
 	// of them does.
 	watching.Add(1)
 	go func() {
 		defer watching.Done()
 		watchingFor(remindCtx, cfg, deviceEvents, chats, speaker,
-			announcements, logger.Logger)
+			owed, logger.Logger)
 	}()
 
 	handler := api.New(api.Options{
@@ -1430,7 +1452,7 @@ func watchingFor(
 		Talkers(ctx context.Context, since time.Time) ([]string, error)
 	},
 	speaker announce.Announcer,
-	announcements *announcement.Writer,
+	owed outbox.Store,
 	logger *slog.Logger,
 ) {
 	here, err := hass.NewPresence(hass.PresenceConfig{
@@ -1454,12 +1476,17 @@ func watchingFor(
 			// arm's length away.
 			situation.NotCharging,
 		},
+		// Written down rather than said. What a situation adds up
+		// to is this watcher's business; whether it reaches
+		// anybody, and what happens if it does not, is the
+		// deliverer's.
 		Say: func(ctx context.Context, userID, text string) error {
-			if err := announcement.Speak(ctx, speaker, conversation.Immediate, text); err != nil {
+			o, err := outbox.New(outboxmysql.ID(), userID,
+				conversation.Immediate, text, cfg.Assistant.Now())
+			if err != nil {
 				return err
 			}
-			announcements.Announced(ctx, userID, text)
-			return nil
+			return owed.Owe(ctx, o)
 		},
 		Here: func(userID string) (bool, bool) {
 			present, known := here.Here(ctx, userID)
@@ -1787,4 +1814,32 @@ func noticing(
 	watcher.Run(ctx, func(ctx context.Context) ([]string, error) {
 		return talkers.Talkers(ctx, cfg.Assistant.Now().Add(-notice.Since))
 	})
+}
+
+// saying : The one mouth the deliverer speaks through.
+//
+// Two things, because they are one thing from the person's side:
+// the announcement is said aloud and written into the conversation.
+// Separating them is how the assistant came to rename a
+// conversation and then deny having done it.
+func saying(to announce.Announcer, written *announcement.Writer) outbox.Speaker {
+	return mouth{to: to, written: written}
+}
+
+// mouth : Says an announcement and records it.
+type mouth struct {
+	to      announce.Announcer
+	written *announcement.Writer
+}
+
+// Say : Speaks one announcement, wherever its kind is heard.
+func (m mouth) Say(ctx context.Context, userID string,
+	kind conversation.Kind, text string) error {
+	if err := announcement.Speak(ctx, m.to, kind, text); err != nil {
+		return err
+	}
+	if m.written != nil {
+		m.written.Announced(ctx, userID, text)
+	}
+	return nil
 }

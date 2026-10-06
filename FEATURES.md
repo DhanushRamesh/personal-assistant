@@ -91,26 +91,50 @@ everywhere here.
 
 ```mermaid
 flowchart TB
-    subgraph W["Watchers"]
+    subgraph W["Watchers -- is this worth saying?"]
         direction TB
-        RL["Reminders<br/>says one when its time comes"]
-        GR["The greeting<br/>written at the door from<br/>what happened while they were out"]
-        CO["The diary<br/>speaks first about what is<br/>coming that needs doing"]
-        LV["Leave by<br/>when to set off, with<br/>a battery caution if low"]
-        SIT["Situations<br/>repeated missed calls,<br/>charging but not rising"]
-        NOT["Immediate<br/>an event marked urgent,<br/>the moment it lands"]
+        RL["Reminders<br/>its time came"]
+        GR["The greeting<br/>what happened while they were out"]
+        CO["The diary<br/>something coming that needs doing"]
+        LV["Leave by<br/>when to set off"]
+        SIT["Situations<br/>missed calls, a charger doing nothing"]
+        NOT["Immediate<br/>a device said to say it now"]
     end
 
-    W --> PRES{"Are they<br/>in the room?"}
-    PRES -- "away" --> HOLD["Held back,<br/>or not said at all"]
-    PRES -- "here" --> SPEAK["Said aloud<br/>through the satellite"]
+    W --> OUT[("The outbox<br/>written down before anything is said")]
+    OUT --> D{"The deliverer<br/>one policy per kind"}
 
-    RL --> ALARM["And a real alarm<br/>on the phone"]
+    D -- "nobody there, still true later" --> HELD["Held<br/>said when they return"]
+    D -- "nobody there, only true now" --> DROP["Dropped"]
+    D -- "its moment passed" --> EXP["Expired<br/>and the reason kept"]
+    D -- "said" --> SPEAK["Aloud in the room"]
+    D -- "said, and it travels" --> PHONE["The phone as well"]
+
+    HELD --> D
 ```
 
 **The rule underneath all of it:** nothing is said unless something
 asked for it to be said. There is no chatter watcher, by decision —
 only the six above.
+
+**Deciding and delivering are separate.** *Is this worth saying* is
+genuinely different per watcher and stays with the watcher. *Did it
+get said, to whom, and what if it did not* is one job, done once, in
+the outbox. Every announcement is written down **before** anything is
+spoken, so a server that was off over the moment comes back knowing
+what it owes -- and the expiry decides whether it is still worth
+saying rather than announcing breakfast at lunchtime.
+
+| kind | nobody there | worth saying for | tries |
+|---|---|---|---|
+| reminder | held | 1 hour | 5 |
+| coming | said anyway, it reaches the phone | 6 hours | 5 |
+| immediate | dropped, a device meant *now* | 5 minutes | 3 |
+| presence | dropped | 20 seconds | 1 |
+| renamed | said anyway, never aloud | 1 hour | 1 |
+
+Only **situations** goes through the outbox so far. The other five
+still speak directly, and are being moved over one at a time.
 
 ---
 
@@ -166,6 +190,10 @@ possible.
 
 Kept here so it is not rediscovered.
 
+- Five of the six watchers still speak directly instead of through
+  the outbox, so only situations survive a restart or a failure.
+- `remark` is a kind nothing can raise any more: the branch that
+  chose it is unreachable since unasked remarks were removed.
 - The phone answers before it acts, so a successful call is not
   proof the alarm exists.
 - A repeating phone alarm cannot be cancelled or moved from here.

@@ -10144,6 +10144,62 @@ all intact. Every test alarm was deleted afterwards and the owner's
 own two were left alone.
 
 
+### Announcements have one way out
+
+Owner, 6 October 2026: *"it feels like everything is scattered ...
+there should be a framework on how these should be done, like what
+if an event is not announced due to any issue -- the server is off
+or the phone is off."*
+
+The scatter was real, and uneven. Six watchers decided to speak,
+and each **recorded that it had spoken afterwards**. So a failure
+between deciding and speaking left nothing behind at all: the
+situation, the leave-by, the thing a device said to announce at
+once were simply gone, and nothing anywhere knew they had been
+owed. Only reminders behaved properly, because they alone had a
+lifecycle in a table.
+
+**The line: deciding is not delivering.** *Is this worth saying* is
+genuinely different per watcher and stays there -- a diary entry
+three weeks out and a battery at fifteen per cent have nothing in
+common and never will. *Did it get said, to whom, and what if it
+did not* is one job, and is now done once.
+
+So `internal/outbox`. Every announcement is written down **before**
+anything is spoken, and one deliverer is the only thing that
+speaks. The reminder lifecycle, promoted to cover everything.
+
+**Expiry is fixed when the thing was true,** not when delivery is
+attempted. This is the whole point and the easiest thing to get
+wrong later: measured from whenever the server came back, nothing
+would ever expire, and the answer to being off overnight would be
+announcing breakfast at lunchtime.
+
+**Settled rows are kept, not deleted.** "Nothing was announced" and
+"six things were owed and every one went stale" look identical from
+an empty table, and the second is a fault somebody should be able
+to find.
+
+**Presence has one convention here, the existing one.** The first
+draft gave the deliverer a two-answer sensor -- away, and whether
+that is known. That is a second opinion about the same room:
+presence in this house fails closed by the owner's decision, every
+fault is away, and `remind.Presence` already says so in one bool.
+Reusing it beat inventing a third convention.
+
+The policy table lives beside the audience table in
+`internal/conversation`, extended rather than added to, because
+that file already argues the case: *one table rather than a
+condition in each place that needs to know*.
+
+Done one watcher at a time by the owner's choice. **Situations
+first**, because it loses things today and is small. The other five
+still speak directly. Each move is its own change, and the outbox
+is proved against the real schema rather than only in memory: a
+fresh announcement said, one the server was an hour late for
+expired with the reason kept.
+
+
 ## 12. Maintaining this file
 
 When the owner states a preference, makes a decision, or corrects something,

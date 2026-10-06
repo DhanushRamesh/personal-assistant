@@ -152,6 +152,53 @@ const (
 	Everywhere Audience = "everywhere"
 )
 
+// Away : What to do with an announcement when nobody is there to
+// hear it.
+type Away string
+
+const (
+	// Hold : Keep it and say it when they come back.
+	//
+	// For the ones that are still true later. A reminder to take
+	// tablets is worth hearing at twenty past, which is why
+	// reminders have had this behaviour since before anything else
+	// did.
+	Hold Away = "hold"
+
+	// Anyway : Say it regardless, because it does not need the room.
+	//
+	// Everything with an Everywhere audience reaches the phone, so
+	// an empty room is not a reason to wait.
+	Anyway Away = "anyway"
+
+	// Drop : Let it go.
+	//
+	// For things that are only true now. "Welcome back" said to an
+	// empty room and kept until morning is not a greeting, and a
+	// device that said to announce something at once meant at once.
+	Drop Away = "drop"
+)
+
+// Policy : How one kind of announcement is delivered.
+//
+// One row per kind, in the table below, so that adding a kind is
+// one edit and so that nothing has to go looking for the rule in
+// the watcher that happened to raise it.
+type Policy struct {
+	// Audience : Where it is said.
+	Audience Audience
+	// Away : What to do when nobody is in the room.
+	Away Away
+	// Worth : How long it stays worth saying.
+	//
+	// The gap this closes: a server that was off over the moment
+	// comes back owing something, and the alternative to a limit is
+	// announcing breakfast at lunchtime.
+	Worth time.Duration
+	// Tries : How many attempts at saying it before giving up.
+	Tries int
+}
+
 // announcements : Every kind the assistant says unasked, and who it is for.
 //
 // One table rather than a condition in each place that needs to know.
@@ -160,24 +207,24 @@ const (
 // the announcement writer, by different reasoning, and a fourth kind
 // meant reading both to find out what it should do. This is the same
 // lesson as known() below -- adding a kind should be one edit.
-var announcements = map[Kind]Audience{
-	ReminderAnnouncement: Everywhere,
-	PresenceAnnouncement: Asked,
+var announcements = map[Kind]Policy{
+	ReminderAnnouncement: {Everywhere, Hold, time.Hour, 5},
+	PresenceAnnouncement: {Asked, Drop, 20 * time.Second, 1},
 	// The room, and only the room. A remark is the assistant being
 	// company, which is a thing that belongs where the person is
 	// standing; followed onto a phone in a meeting it is an
 	// interruption from something that was not asked a question.
-	Remark: Asked,
+	Remark: {Asked, Drop, 5 * time.Minute, 3},
 	// Wherever they are. A warning held back because they stepped
 	// into the next room is a warning that did not happen.
 	// The room, like a remark. It is said at once rather than said
 	// anywhere: it is only made when somebody is there to hear it,
 	// and a phone reports its own battery without help.
-	Immediate: Asked,
-	Renaming:  Asked,
+	Immediate: {Asked, Drop, 5 * time.Minute, 3},
+	Renaming:  {Asked, Anyway, time.Hour, 1},
 	// Nothing asked for it and it is about something hours or days
 	// away, so where they happen to be standing decides nothing.
-	Coming: Everywhere,
+	Coming: {Everywhere, Anyway, 6 * time.Hour, 5},
 }
 
 // Announcement : Whether this is the assistant having spoken unprompted.
@@ -198,8 +245,18 @@ func Announcements() int { return len(announcements) }
 // False for anything that is not an announcement, so a caller cannot
 // quietly treat a reply as something to broadcast.
 func (k Kind) Audience() (Audience, bool) {
-	a, ok := announcements[k]
-	return a, ok
+	p, ok := announcements[k]
+	return p.Audience, ok
+}
+
+// Rule : Everything that decides how this announcement is delivered.
+//
+// False for anything that is not an announcement, for the same
+// reason as Audience: a reply is not a thing to broadcast, hold or
+// retry.
+func (k Kind) Rule() (Policy, bool) {
+	p, ok := announcements[k]
+	return p, ok
 }
 
 // known : Whether this is a kind the store will accept.
