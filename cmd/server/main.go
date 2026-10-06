@@ -501,21 +501,31 @@ func run() error {
 	// standing in a doorway: the budget is a couple of seconds, and a
 	// better greeting that arrives after the moment has passed is not a
 	// better greeting.
-	greeting := &greet.Writer{
-		Logger: logger.Logger,
-		Ask: func(ctx context.Context, ask string) (string, error) {
-			model := cfg.PlatformAI.FastModel
-			if model == "" {
-				model = cfg.PlatformAI.Model
-			}
-			return askAs(ctx, answerer, cfg.PlatformAI.Vendor, model,
-				persona.Voice(cfg.Assistant.Persona, cfg.Assistant.Name),
-				environment.PurposeGreeting, ask)
-		},
+	// How the greeting is made. Nil is the plain one: a salutation
+	// for the time of day with anything held back behind it, which
+	// is what this said before a model was put in it and what it
+	// says again now.
+	var greeting *greet.Writer
+	if strings.EqualFold(cfg.Assistant.Greeting, "written") {
+		greeting = &greet.Writer{
+			Logger: logger.Logger,
+			Ask: func(ctx context.Context, ask string) (string, error) {
+				model := cfg.PlatformAI.FastModel
+				if model == "" {
+					model = cfg.PlatformAI.Model
+				}
+				return askAs(ctx, answerer, cfg.PlatformAI.Vendor, model,
+					persona.Voice(cfg.Assistant.Persona, cfg.Assistant.Name),
+					environment.PurposeGreeting, ask)
+			},
+		}
+		logger.Info("writing the greeting at the door",
+			slog.String("model", cmp.Or(cfg.PlatformAI.FastModel, cfg.PlatformAI.Model)),
+			slog.Duration("within", greet.Within))
+	} else {
+		logger.Info("greeting them with a fixed salutation",
+			slog.String("greeting", cfg.Assistant.Greeting))
 	}
-	logger.Info("writing the greeting at the door",
-		slog.String("model", cmp.Or(cfg.PlatformAI.FastModel, cfg.PlatformAI.Model)),
-		slog.Duration("within", greet.Within))
 
 	// Someone in the room rather than something reading events out.
 	// Most looks find nothing, most of what they find is refused by

@@ -10144,6 +10144,37 @@ all intact. Every test alarm was deleted afterwards and the owner's
 own two were left alone.
 
 
+### The greeting goes back to a fixed sentence
+
+Owner, 6 October 2026: *"currently the greeting is fully dependent
+on AI, let's make it simple as hardcoded string. We will move it to
+an algorithmic structure rather than full reliance on the model."*
+
+This turns off the greeting measured earlier the same day from five
+of twenty to twenty-four of forty. It is a setting, not a deletion:
+
+    [assistant]
+    greeting = plain | written
+
+Plain is the default now. It was never removed from the code --
+`compose` has always fallen back to it when there is no writer, so
+this switch is the path that was already there and already tested,
+not a new one.
+
+**Why keep the written one at all.** Whatever replaces it has to
+beat something, and "the model wrote it" is the only measured
+baseline there is. Deleting it would leave the algorithmic greeting
+with nothing to be compared against, and the evals in
+`internal/greet/evals` with nothing to run.
+
+What plain says: a salutation for the band of the day -- *Good
+morning, sir* or *Morning, sir*, never the one used last -- then
+*Welcome back*, then anything that was held back while they were
+out, in words rather than as a count.
+
+The next step is the algorithmic one, which is a third value for
+that setting rather than another reversal.
+
 ### The server decides which readings matter
 
 Owner, 6 October 2026: *"the urgent shouldn't be coming from the
@@ -10167,8 +10198,11 @@ kind-and-value a sender describes itself with, and the same one
 the counted half of the profile uses -- so nothing in Go names an
 event kind. `config.ini` does:
 
-    at_once = battery.level 25 falling, battery.level 20 falling,
-              battery.level 15 falling, battery.level 100 rising
+    at_once = battery.level 25 falling, battery.level 20 falling, ...
+
+One line, always. config.ini has no line continuation, and a
+wrapped value is read as a key with no delimiter and stops the
+server on the next restart.
 
 **Direction, not a charging check.** A phone charging up through
 fifteen per cent is not a phone running out, which the Tasker

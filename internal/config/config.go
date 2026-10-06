@@ -119,6 +119,21 @@ type Assistant struct {
 	// it nameless, which is a working assistant that simply never says what
 	// it is called.
 	Name string
+	// Greeting : How the greeting at the door is made.
+	//
+	//	plain    one of the fixed salutations for the time of day,
+	//	         with anything held back read out behind it
+	//	written  a model writes it from what happened while they
+	//	         were out
+	//
+	// Plain by default, by the owner's decision on 6 October 2026:
+	// *"currently the greeting is fully dependent on AI, let's make
+	// it simple as hardcoded string. We will move it to an
+	// algorithmic structure rather than full reliance on the
+	// model."* The written one is kept rather than deleted, because
+	// it is measured and the algorithmic one has to beat something.
+	Greeting string
+
 	// AtOnce : What is worth saying the moment it happens, as
 	// labels -- the kind and value a sender describes itself with
 	// -- with an optional direction.
@@ -583,6 +598,7 @@ func Load(path string, lookup Lookup) (Config, error) {
 		Assistant: Assistant{
 			Name:     l.str("assistant", "name", ""),
 			AtOnce:   l.list("assistant", "at_once"),
+			Greeting: l.str("assistant", "greeting", "plain"),
 			Persona:  l.str("assistant", "persona", ""),
 			Timezone: l.str("assistant", "timezone", ""),
 			Location: l.location("assistant", "timezone"),
