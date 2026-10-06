@@ -495,7 +495,13 @@ Kept here so it is not rediscovered.
   label, and `Clear` dismisses by label. Whether Android removes
   one or both is untested.
 - A repeating phone alarm cannot be cancelled or moved from here.
-- `place.entered home` never fires.
+- Geofence crossings are missed, not absent. Over five days:
+  entered home 4 against exited home 5, entered office 3 against
+  exited office 3. The note here said `place.entered home` never
+  fires, which the events disprove — it fires and sometimes does
+  not. Several arrive in backlog flushes, dozens sharing one
+  received_at, so the phone is spooling them rather than losing
+  them.
 - A stay longer than 36 hours stops being amended once it outgrows
   the settling window, so an unbroken fortnight at home reads as
   36 hours.
