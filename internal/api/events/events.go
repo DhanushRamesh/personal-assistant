@@ -375,6 +375,15 @@ func (h *Handler) settle(ctx context.Context, userID string, taken []*event.Even
 // that already carries more was built by something that did not need
 // this, and a value that happens to look like a number or a list is
 // left exactly as it is: "42" is a reading, not a structure.
+//
+// What comes out need not carry a value of its own. It used to have
+// to, on the reasoning that something keyed on a value is what every
+// reader expects -- true, and already guaranteed by [labelled], which
+// runs next and calls an absent value unknown. Insisting on it here
+// as well meant power.plugged, which reports only a level, was left
+// wrapped: its value became the literal text {"level":"54"}, so the
+// level was unreachable and the label was a different piece of
+// nonsense every time the battery differed.
 func unpacked(payload json.RawMessage) json.RawMessage {
 	if len(payload) == 0 {
 		return payload
@@ -397,14 +406,38 @@ func unpacked(payload json.RawMessage) json.RawMessage {
 	}
 	var inner map[string]any
 	if err := json.Unmarshal([]byte(text), &inner); err != nil || len(inner) == 0 {
-		return payload
-	}
-	// It has to still be a payload afterwards: something keyed on a
-	// value is what every reader here expects to find.
-	if _, ok := inner["value"]; !ok {
+		// Brackets at both ends: somebody was building an object and
+		// did not finish. A value that merely begins with one --
+		// "{not json" -- is a value, and is left exactly as it is.
+		if strings.HasSuffix(text, "}") {
+			return unparsed(text)
+		}
 		return payload
 	}
 	return json.RawMessage(text)
+}
+
+// unparsed : A structure the phone meant to send and did not finish
+// building.
+//
+// Tasker assembles this JSON by joining strings, so a field holding
+// a quotation mark ends it early and the rest is not JSON at all. A
+// search for `"ramin djawadi ironm" in Search` did exactly that, and
+// the whole broken object stayed in the value -- which made the
+// label a sentence of its own, unique to that one song, counted as
+// a thing the person had done once.
+//
+// Kept rather than dropped, beside the reading instead of as the
+// reading: the same treatment [labelled] gives a telephone number
+// that has no business being a name. Nothing is lost, and nothing
+// that cannot identify anything is allowed to become a label.
+func unparsed(text string) json.RawMessage {
+	out, err := json.Marshal(map[string]string{"unparsed": text})
+	if err != nil {
+		// Unreachable: a string always marshals.
+		return nil
+	}
+	return out
 }
 
 // labelled : A payload whose value can actually identify something.

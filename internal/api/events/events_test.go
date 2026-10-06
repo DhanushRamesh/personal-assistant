@@ -571,3 +571,70 @@ func TestATimeNobodyCanExplainIsIgnored(t *testing.T) {
 		}
 	}
 }
+
+// TestAValueWithNoValueInsideIsStillUnfolded : power.plugged reports
+// only a level. Insisting the unfolded object carry a value of its
+// own left it wrapped, so the level was unreachable and the label
+// was the literal text {"level":"54"} -- a different piece of
+// nonsense at every battery percentage.
+func TestAValueWithNoValueInsideIsStillUnfolded(t *testing.T) {
+	store := inmemory.New()
+	e := apitest.NewWith(t, apitest.Options{DeviceEvents: store})
+
+	code, _ := post(t, e, `{"source":"tasker","device":"pixel-7","events":[
+		{"kind":"power.plugged",
+		 "payload":{"value":"{\"level\":\"54\"}"},
+		 "dedupe_key":"p1"}]}`)
+	if code != http.StatusOK {
+		t.Fatalf("expected 200, got %d", code)
+	}
+
+	got, _ := store.Recent(context.Background(), e.User.ID, event.Query{})
+	if len(got) != 1 {
+		t.Fatalf("expected one event, got %d", len(got))
+	}
+	var into map[string]any
+	if err := json.Unmarshal(got[0].Payload, &into); err != nil {
+		t.Fatalf("the payload is not an object: %s", got[0].Payload)
+	}
+	if into["level"] != "54" {
+		t.Errorf("level = %v, want 54", into["level"])
+	}
+	// labelled runs next and is what guarantees a value exists.
+	if into["value"] != event.Unknown {
+		t.Errorf("value = %v, want %q", into["value"], event.Unknown)
+	}
+}
+
+// TestAStructureThatWillNotParseIsSetAside : Tasker joins strings to
+// make this JSON, so a field holding a quotation mark ends it early.
+// A search for `"ramin djawadi ironm" in Search` did that, and the
+// whole broken object became the label -- unique to one song, counted
+// as something the person had done once.
+func TestAStructureThatWillNotParseIsSetAside(t *testing.T) {
+	store := inmemory.New()
+	e := apitest.NewWith(t, apitest.Options{DeviceEvents: store})
+
+	broken := `{"value":"Geek Music","from":""ramin djawadi" in Search"}`
+	code, _ := post(t, e, `{"source":"tasker","events":[
+		{"kind":"music.state","payload":{"value":`+quoted(broken)+`},
+		 "dedupe_key":"m1"}]}`)
+	if code != http.StatusOK {
+		t.Fatalf("expected 200, got %d", code)
+	}
+
+	got, _ := store.Recent(context.Background(), e.User.ID, event.Query{})
+	if len(got) != 1 {
+		t.Fatalf("expected one event, got %d", len(got))
+	}
+	var into map[string]any
+	if err := json.Unmarshal(got[0].Payload, &into); err != nil {
+		t.Fatalf("the payload is not an object: %s", got[0].Payload)
+	}
+	if into["value"] != event.Unknown {
+		t.Errorf("value = %v, so the broken text is still the label", into["value"])
+	}
+	if into["unparsed"] != broken {
+		t.Errorf("the text was not kept: %v", into["unparsed"])
+	}
+}

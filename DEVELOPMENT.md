@@ -11375,6 +11375,78 @@ A hundred hours in a hundred and eight. Before this it was four
 thousand six hundred.
 
 
+### A sender that could only say one thing, and the two ways it broke
+
+`unpacked` exists because the phone's one working sender can write
+only `{"value": one string}`: Tasker's Perform Task passes two
+parameters and the snippet has no third. So a reading with
+anything besides a name to report puts JSON inside the string, and
+the server unfolds it.
+
+A good trade, and it was failing silently on thirty-one events in
+six days. Both failures turned a reading into a worse thing than a
+missing one: the broken text became the **label**, and a label is
+what everything here counts by.
+
+#### Insisting on a value it did not need
+
+`power.plugged` reports a level and nothing else. `unpacked`
+refused to unfold it, on the reasoning that *something keyed on a
+value is what every reader expects to find*.
+
+True, and already guaranteed one line later. `labelled` runs next
+and calls an absent value `unknown` -- which is exactly what
+`battery.full` relies on. Insisting on it in both places meant
+seventeen events kept the shape
+
+	{"value": "{\"level\":\"54\"}"}
+
+so the level was unreachable by the one convention every reader
+uses, and the label was a different piece of nonsense at every
+battery percentage. The check is gone and the payload comes out as
+
+	{"level": "54", "value": "unknown"}
+
+#### JSON built by joining strings
+
+The other fourteen are `music.state`, and the cause is in the
+data:
+
+	"from":""ramin djawadi ironm" in Search"
+
+Tasker assembles that JSON by concatenation, so a field holding a
+quotation mark ends the string early and what arrives is not JSON
+at all. It cannot be parsed and it should not be a label: that one
+is unique to a single search for a single song, counted for ever
+as a thing the person did once.
+
+Kept beside the reading instead of as the reading, under
+`unparsed`, which is the treatment `labelled` already gives a
+telephone number with no business being a name. Nothing is lost
+and nothing unusable becomes a label.
+
+**Narrowed deliberately.** Only text with a brace at *both* ends
+is treated as an unfinished object. An existing test says a value
+that merely begins with one -- `"{not json"` -- must come through
+untouched, and it is right: that is a value, not a broken
+structure. The test passed either way, because it only checked
+that the payload still parsed; the suffix is what actually keeps
+its promise.
+
+**The real fault is on the phone**, which should escape what it
+joins. That is a code field edited with a thumb and the only thing
+standing between this server and every event it gets, so the
+server is made to survive it instead.
+
+#### Proved through the endpoint
+
+	{"value":"{\"level\":\"54\"}"}
+	  -> {"level": "54", "value": "unknown"}
+
+	{"value":"{\"value\":\"Geek Music\",\"from\":\"\"q\" in Search\"}"}
+	  -> {"value": "unknown", "unparsed": "{\"value\":\"Geek Music\",…"}
+
+
 ## 12. Maintaining this file
 
 When the owner states a preference, makes a decision, or corrects something,
