@@ -84,6 +84,41 @@ type Outcome struct {
 	Why string
 	// Got : What a tool returned, for the steps after it to read.
 	Got string
+	// Said : What was spoken, for the record of the run.
+	Said string
+}
+
+// Record : One run of one rule, as somebody reading back would want
+// it.
+//
+// The ordinary output of most rules is silence, and silence has
+// several causes: it never came round, its condition did not hold,
+// or the model found nothing worth saying. From outside those look
+// identical, and so does a runner that has stopped. The row tells
+// them apart.
+type Record struct {
+	// UserID : Whose rule it was.
+	UserID string
+	// Name : What the rule is called.
+	Name string
+	// At : When it ran.
+	At time.Time
+	// Said : What was spoken, empty when nothing was.
+	Said string
+	// Why : What stopped it or went wrong, empty when it simply ran.
+	Why string
+	// Stopped : Whether a step ended the sequence early.
+	Stopped bool
+	// Failed : Whether a step failed.
+	Failed bool
+}
+
+// Journal : Where each run is written down.
+//
+// Optional. Nil keeps the engine silent about itself, which is
+// what the tests want and nothing else should.
+type Journal interface {
+	Wrote(ctx context.Context, r Record) error
 }
 
 // Doer : Carries out one step.
@@ -119,6 +154,8 @@ type Runner struct {
 	// Readings : What an event kind has lately said, for rules
 	// that wait on one. Nil means no rule ever fires.
 	Readings Readings
+	// Journal : Where each run is written down. Optional.
+	Journal Journal
 	// Where : The person's zone, for a schedule written as a clock
 	// time. Nil is UTC.
 	Where *time.Location
@@ -320,7 +357,8 @@ func (r *Runner) one(ctx context.Context, j Job, now time.Time, pass *Pass) {
 	// What went wrong, if anything did. Collected rather than
 	// recorded as it happens, so that one run leaves one record
 	// however many of its steps failed.
-	var why string
+	var why, said string
+	var stopped, failed bool
 	var already []Ran
 	for _, step := range j.Steps {
 		done, err := r.Doer.Do(ctx, j.UserID, step, already)
@@ -333,12 +371,17 @@ func (r *Runner) one(ctx context.Context, j Job, now time.Time, pass *Pass) {
 			// which is the rule the reminder and its alarm already
 			// follow.
 			pass.Failed++
+			failed = true
 			why = err.Error()
 			r.note("a step failed and the sequence went on", j, why)
 			continue
 		}
+		if done.Said != "" {
+			said = done.Said
+		}
 		if done.Stop {
 			pass.Stopped++
+			stopped = true
 			// A failure earlier in the sequence is the more
 			// important thing to have recorded, so it keeps the
 			// field.
@@ -349,7 +392,26 @@ func (r *Runner) one(ctx context.Context, j Job, now time.Time, pass *Pass) {
 		}
 	}
 	pass.Ran++
+	if j.Speaks() {
+		// Only a rule that might have spoken belongs in the record
+		// of what was considered saying. One that only ever runs a
+		// tool considered nothing.
+		r.wrote(ctx, Record{
+			UserID: j.UserID, Name: j.Name, At: now,
+			Said: said, Why: why, Stopped: stopped, Failed: failed,
+		})
+	}
 	r.settle(ctx, j, now, why)
+}
+
+// wrote : Writes down one run, if anybody is keeping the record.
+func (r *Runner) wrote(ctx context.Context, rec Record) {
+	if r.Journal == nil {
+		return
+	}
+	if err := r.Journal.Wrote(ctx, rec); err != nil {
+		r.log("cannot write down that a rule ran", err)
+	}
 }
 
 // settle : Works out when the job runs next and records it.

@@ -301,3 +301,15 @@ func (t *Chat) transitionTo(next Status) error {
 	}
 	return nil
 }
+
+// Active : How far back somebody counts as somebody to speak to.
+//
+// What [Repository.Talkers] is asked for, by every loop that
+// decides whose events or diary to read at all. Four weeks, so a
+// person who has been away a fortnight is still announced to when
+// they come back.
+//
+// Here rather than in any one watcher, because it is a fact about
+// a person being around and not about what any watcher does with
+// that.
+const Active = 28 * 24 * time.Hour

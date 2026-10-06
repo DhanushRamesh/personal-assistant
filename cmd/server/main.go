@@ -549,16 +549,6 @@ func run() error {
 			slog.String("greeting", cfg.Assistant.Greeting))
 	}
 
-	// Someone in the room rather than something reading events out.
-	// Most looks find nothing, most of what they find is refused by
-	// the model, and what survives both is said once and not again.
-	watching.Add(1)
-	go func() {
-		defer watching.Done()
-		noticing(remindCtx, cfg, deviceEvents, chats, answerer, speaker,
-			announcements, remarked, logger.Logger)
-	}()
-
 	// The diary, which until now never spoke first.
 	watching.Add(1)
 	go func() {
@@ -614,6 +604,7 @@ func run() error {
 			now: cfg.Assistant.Now, logger: logger.Logger,
 		},
 		Readings: readings{events: deviceEvents},
+		Journal:  keeping{notes: remarked},
 		Where:    cfg.Assistant.Location,
 		Now:      cfg.Assistant.Now,
 		Logger:   logger.Logger,
@@ -1511,7 +1502,7 @@ func lookingAhead(
 		slog.Duration("ahead", coming.Ahead))
 
 	ahead.Run(ctx, func(ctx context.Context) ([]string, error) {
-		return talkers.Talkers(ctx, cfg.Assistant.Now().Add(-notice.Since))
+		return talkers.Talkers(ctx, cfg.Assistant.Now().Add(-chat.Active))
 	})
 }
 
@@ -1581,7 +1572,7 @@ func watchingFor(
 		slog.Duration("behind", situation.Behind))
 
 	watch.Run(ctx, func(ctx context.Context) ([]string, error) {
-		return talkers.Talkers(ctx, cfg.Assistant.Now().Add(-notice.Since))
+		return talkers.Talkers(ctx, cfg.Assistant.Now().Add(-chat.Active))
 	})
 }
 
@@ -1670,7 +1661,7 @@ func settingOff(
 		slog.Duration("door", leaving.Door))
 
 	off.Run(ctx, func(ctx context.Context) ([]string, error) {
-		return talkers.Talkers(ctx, cfg.Assistant.Now().Add(-notice.Since))
+		return talkers.Talkers(ctx, cfg.Assistant.Now().Add(-chat.Active))
 	})
 }
 
@@ -1798,98 +1789,6 @@ func lastSeenAt(ctx context.Context, reported interface {
 	return event.LatLon(into.At)
 }
 
-// noticeFirst : How long after startup the watcher starts looking.
-//
-// Long enough that a restart during an evening of changes does not
-// produce a remark about whatever happened to be arriving at the
-// time. Nothing here is urgent: the whole feature is about things
-// worth mentioning, and anything worth mentioning will still be
-// worth it in a few minutes.
-const noticeFirst = 5 * time.Minute
-
-// noticing : Says something about what just happened, occasionally.
-//
-// Everything that decides whether to speak lives in internal/notice.
-// This is only the wiring: where events come from, who is in the
-// room, how the model is asked, and where the words go.
-func noticing(
-	ctx context.Context,
-	cfg config.Config,
-	events *eventmysql.Store,
-	talkers interface {
-		Talkers(ctx context.Context, since time.Time) ([]string, error)
-	},
-	answerer environment.Environment,
-	speaker announce.Announcer,
-	announcements *announcement.Writer,
-	remarked notice.Notes,
-	logger *slog.Logger,
-) {
-	// Nothing to say it with, or nothing watching the room: the
-	// feature is off rather than half on. Said once, at startup,
-	// because a silent assistant and a broken one look identical.
-	here, err := hass.NewPresence(hass.PresenceConfig{
-		URL:    cfg.HomeAssistant.URL,
-		Token:  cfg.HomeAssistant.Token,
-		Entity: cfg.HomeAssistant.PresenceEntity,
-	})
-	if err != nil || speaker == nil || !speaker.Available() {
-		logger.Info("announcing nothing, " +
-			"with nothing watching the room or nowhere to say it")
-		return
-	}
-
-	model := cmp.Or(cfg.PlatformAI.FastModel, cfg.PlatformAI.Model)
-	watcher := &notice.Watcher{
-		Events: events,
-		// What is worth saying at once, decided here rather than
-		// by the device that noticed it.
-		Rules: notice.ParseRules(cfg.Assistant.AtOnce),
-		Gate: &notice.Gate{Away: func(userID string) (bool, bool) {
-			present, known := here.Here(ctx, userID)
-			return !present, known
-		}},
-		Ask: func(ctx context.Context, _, ask string) (string, error) {
-			return askAs(ctx, answerer, cfg.PlatformAI.Vendor, model,
-				persona.Voice(cfg.Assistant.Persona, cfg.Assistant.Name),
-				environment.PurposeRemark, ask)
-		},
-		Say: func(ctx context.Context, userID, text string, _ bool) error {
-			if err := announcement.Speak(ctx, speaker, conversation.Immediate, text); err != nil {
-				return err
-			}
-			// Written down after it was said, like every other
-			// announcement: they answer it in the room, and the
-			// answer needs the thing said to make sense of.
-			announcements.Announced(ctx, userID, text)
-			return nil
-		},
-		Notes:  remarked,
-		Now:    cfg.Assistant.Now,
-		Logger: logger,
-	}
-
-	logger.Info("announcing what devices mark as needing to be said",
-		slog.String("model", model),
-		slog.Duration("every", notice.Every),
-		slog.Duration("behind", notice.Behind))
-
-	// The watcher catches up over this wait on its first look, so
-	// tell it how long the wait was. Without that the two windows
-	// meet exactly and anything arriving during the hold is lost --
-	// which it was, on 5 October, for a battery at 25 per cent.
-	notice.Waited = noticeFirst
-
-	select {
-	case <-ctx.Done():
-		return
-	case <-time.After(noticeFirst):
-	}
-	watcher.Run(ctx, func(ctx context.Context) ([]string, error) {
-		return talkers.Talkers(ctx, cfg.Assistant.Now().Add(-notice.Since))
-	})
-}
-
 // subscribed : Who has spoken lately, and what they speak through.
 //
 // The two questions the announcement plumbing asks, and nothing
@@ -1927,7 +1826,7 @@ func subscribers(ctx context.Context, clients subscribed, userID string) ([]stri
 func everyClient(talkers subscribed, cfg config.Config, logger *slog.Logger,
 ) func(context.Context) ([]string, error) {
 	return func(ctx context.Context) ([]string, error) {
-		people, err := talkers.Talkers(ctx, cfg.Assistant.Now().Add(-notice.Since))
+		people, err := talkers.Talkers(ctx, cfg.Assistant.Now().Add(-chat.Active))
 		if err != nil {
 			return nil, err
 		}
@@ -2014,7 +1913,7 @@ func (d doing) Do(ctx context.Context, userID string, s job.Step, already []job.
 			return job.Outcome{}, err
 		}
 		d.written.Announced(ctx, userID, s.Say)
-		return job.Outcome{}, nil
+		return job.Outcome{Said: s.Say}, nil
 
 	case job.Write:
 		return d.write(ctx, userID, s, already)
@@ -2045,6 +1944,47 @@ func (d doing) Do(ctx context.Context, userID string, s job.Step, already []job.
 		return job.Outcome{Got: out.Content}, nil
 	}
 	return job.Outcome{}, fmt.Errorf("job: nothing carries out %q", s.Do)
+}
+
+// keeping : Writes each run of a rule where the person can see it.
+//
+// The same record the unasked remarks already had, and the page
+// built on it: *"I should see in UI when it triggered, why it
+// didn't speak, if spoken what it spoke."* That question is the
+// same one whether the thing deciding was a watcher written in Go
+// or a rule in a row, so it is answered from the same table.
+type keeping struct{ notes notice.Notes }
+
+// Wrote : Records one run.
+func (k keeping) Wrote(ctx context.Context, r job.Record) error {
+	if k.notes == nil {
+		return nil
+	}
+	return k.notes.Note(ctx, notice.Noted{
+		UserID:  r.UserID,
+		At:      r.At,
+		Label:   r.Name,
+		Reason:  notice.Immediate,
+		Outcome: came(r),
+		Said:    r.Said,
+		Because: r.Why,
+	})
+}
+
+// came : What a run came to, in the words the record already uses.
+func came(r job.Record) notice.Outcome {
+	switch {
+	case r.Failed:
+		return notice.Failed
+	case r.Said != "":
+		return notice.Said
+	case r.Stopped:
+		// Nothing was said and nothing went wrong: a condition did
+		// not hold, or the model found nothing worth saying. Which
+		// of the two is in Because.
+		return notice.Declined
+	}
+	return notice.Held
 }
 
 // readings : What an event kind has lately said.
@@ -2109,7 +2049,7 @@ func (d doing) write(ctx context.Context, userID string, s job.Step, already []j
 	}
 	d.written.Announced(ctx, userID, said)
 	d.logger.InfoContext(ctx, "a job wrote what to say", slog.String("ask", s.Ask))
-	return job.Outcome{}, nil
+	return job.Outcome{Said: said}, nil
 }
 
 // writing : What the model is asked, for a write step.

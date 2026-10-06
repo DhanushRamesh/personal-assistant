@@ -10896,6 +10896,102 @@ say welcome back"* -- and there is no rule here to enforce, only a
 judgement. Worth a measured look if it turns out to matter.
 
 
+### The first producer moves: Immediate
+
+Owner, 6 October 2026: *"move."*
+
+`internal/notice` was a watcher on a thirty second tick, a table of
+thresholds parsed out of `config.ini`, a gate asking whether anybody
+was in the room, and a prompt. All of it is now six rows and none of
+it is Go.
+
+	when battery.level < 25   only if >= 20   read the readings   write
+	when battery.level < 20   only if >= 15   read the readings   write
+	when battery.level < 15   only if >= 10   read the readings   write
+	when battery.level < 10   only if >= 5    read the readings   write
+	when battery.level < 5                    read the readings   write
+	when battery.level is 100                                     write
+
+#### What the move fixed on its own
+
+**The old rules matched an exact value.** `battery.level 25 falling`
+fired when a reading *was* twenty-five and lower than the last one.
+A phone switched off at twenty-six and turned on again at four
+reported four, matched nothing, and said nothing -- precisely when
+there was most to say. A crossing has no such hole.
+
+**And the crossing replaced the direction keyword.** `falling` and
+`rising` existed to stop a phone charging through fifteen per cent
+announcing fifteen per cent. A rule firing on the transition from
+false to true does that for every comparison without a keyword.
+
+#### What the move created, and the check that fixes it
+
+Five bands and one reading of four means all five conditions become
+true at once, which is five sentences where the watcher said one.
+The fix is the gate, doing exactly what gates are for: each band is
+**bounded below**, so only the lowest band gets past its own check.
+
+Measured on a kind nothing listens to, so that nothing untrue was
+said aloud about a battery that was actually at sixty-six per cent.
+Thirty, then four, in one step:
+
+	probe band 25   ran, stopped: the check probe.level >= 20 did not pass
+	probe band 20   ran, stopped: the check probe.level >= 15 did not pass
+	probe band 5    ran, and acted
+
+#### The page had to keep working
+
+`/v1/remarks` exists because of a request: *"I should see in UI when
+it triggered, why it didn't speak, if spoken what it spoke."* Its
+whole point is that silence has several causes and they look
+identical from outside. Deleting the watcher would have frozen it.
+
+A run of a rule turns out to be the same record. `Noted` already
+carried a label, an outcome, what was said and why not; a run
+carries a name, whether it spoke, the sentence and what stopped it.
+So the runner gained a **Journal**, main.go maps a run onto a
+`Noted`, and the table, the endpoint and the Flutter client are
+untouched. The page now covers every rule rather than one watcher.
+
+**Only a rule that might speak is written down.** The first version
+recorded a tool-only rule as having *held* its tongue, which is a
+lie: it was never going to say anything. The record is of what the
+assistant **considered saying**, and a rule with no announce or
+write step considered nothing.
+
+#### One guard turned out to be unnecessary
+
+The watcher waited five minutes after startup before looking, so
+that restarting during an evening of changes did not produce a
+remark about whatever happened to be arriving. The constant is
+gone and nothing replaces it, because a pushed rule cannot have
+that fault: it fires on a reading arriving and crossing a line it
+was not across before. A restart replays nothing, so there is
+nothing to hold back.
+
+#### What was kept out of the bonfire
+
+`notice.Since` -- four weeks, how far back somebody counts as
+somebody to speak to -- was never about remarks. Its own comment
+said so: *"not used here ... but by whoever runs the watcher."*
+Three other loops ask for it. It is now `chat.Active`, next to the
+`Talkers` query that consumes it, which is a fact about a person
+being around rather than about any watcher.
+
+What is left of `internal/notice` is the record and nothing else,
+and its package comment now says that.
+
+#### What this does not prove
+
+The six battery rules were created and read back -- asked what
+rules he has, the assistant described all six and their thresholds
+correctly -- but they have not fired, because the battery has not
+been low. The mechanism is proved on the probe kind and the wiring
+is proved by the listing; the first real one will be the first time
+the battery actually drops.
+
+
 ## 12. Maintaining this file
 
 When the owner states a preference, makes a decision, or corrects something,

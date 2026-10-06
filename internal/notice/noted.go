@@ -1,3 +1,23 @@
+// Package notice keeps the record of what the assistant decided to
+// say without being asked, and what came of it.
+//
+// The deciding used to live here too: a watcher on a thirty second
+// tick, a table of thresholds read from config.ini, and a gate
+// asking whether anybody was in the room. All of it is gone. A
+// standing rule says the same thing in a row -- "when battery.level
+// < 20" -- and the engine in internal/job runs it, so the last
+// watcher of this kind stopped being a special case written in Go.
+//
+// What is left is the half that was never about batteries. The
+// ordinary output of anything speaking unasked is silence, and
+// silence has several causes: nothing arrived, the condition did
+// not hold, the model found nothing worth saying, or the thing
+// that decides has stopped running. From outside all four look
+// identical. Owner: *"I should see in UI when it triggered, why it
+// didn't speak, if spoken what it spoke."*
+//
+// So every run of every rule is written here, and /v1/remarks
+// reads it.
 package notice
 
 import (
@@ -20,6 +40,17 @@ const (
 	// Failed : Something went wrong asking or speaking.
 	Failed Outcome = "failed"
 )
+
+// Reason : Why something was worth saying.
+//
+// One value, and kept as a type with one value on purpose: it is
+// written down with every row, and a column that has only ever
+// held one word is how the next person reading the page knows
+// there was never a second kind.
+type Reason string
+
+// Immediate : The rule that fired said this was to be said now.
+const Immediate Reason = "immediate"
 
 // Noted : One thing the assistant considered saying.
 type Noted struct {

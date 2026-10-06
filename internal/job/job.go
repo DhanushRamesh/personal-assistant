@@ -208,6 +208,20 @@ func New(id, userID, name, kind, schedule string, steps []Step, from time.Time) 
 	}, nil
 }
 
+// Speaks : Whether any of this rule's steps says anything.
+//
+// What tells a rule that found nothing worth saying from one that
+// was never going to say anything. Only the first belongs in the
+// record of what the assistant considered saying.
+func (j Job) Speaks() bool {
+	for _, s := range j.Steps {
+		if s.Do == Announce || s.Do == Write {
+			return true
+		}
+	}
+	return false
+}
+
 // Watches : Whether this schedule waits for something to happen
 // rather than for a time.
 func Watches(schedule string) bool {

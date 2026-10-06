@@ -100,7 +100,7 @@ flowchart TB
         GR["Greeting"]
         CO["Diary"]
         LV["Leave by"]
-        IM["Immediate"]
+        IM["Immediate<br/>six standing rules, section 6<br/>no longer a watcher"]
     end
 
     SI --> EV
@@ -109,7 +109,7 @@ flowchart TB
     GR -.-> OLD
     CO -.-> OLD
     LV -.-> OLD
-    IM -.-> OLD
+    IM --> EV
     RN -.-> OLD
 
     EV["One event object<br/>who it is for · the sentence · when it became true<br/>how long it stays worth saying · which client caused it"]
@@ -140,7 +140,13 @@ flowchart TB
 
 **The rule underneath all of it:** nothing is said unless something
 asked for it to be said. There is no chatter watcher, by decision —
-only the six above.
+only the seven above.
+
+**Immediate is no longer one of them.** It was the first to move onto
+the engine in section 6: six rows saying `when battery.level < 25`
+and so on, instead of a watcher on a thirty-second tick reading
+thresholds out of `config.ini`. The thresholds are changed by saying
+so now, not by editing a file and restarting.
 
 **The logic and the event object are different things.** Greeting,
 renaming, reminders, situations, leave-by and the diary are *logic*:
@@ -372,9 +378,31 @@ A rule may only **read**. A tool that changes something is refused:
 a rule runs unattended and possibly every few minutes, and nobody is
 there to notice the first time it goes wrong.
 
-**Nothing of the old machinery runs on this yet.** The watchers in
-section 3 are still loops in Go and move over one at a time,
-reminders last.
+**The first watcher has moved.** `internal/notice` was a
+thirty-second tick, a threshold table in `config.ini` and a
+presence gate; it is now six rows:
+
+| rule | and then |
+|---|---|
+| `when battery.level < 25` | only if still ≥ 20 → read the recent readings → write a sentence |
+| `when battery.level < 20` | only if still ≥ 15 → … |
+| `when battery.level < 15` | only if still ≥ 10 → … |
+| `when battery.level < 10` | only if still ≥ 5 → … |
+| `when battery.level < 5` | → … |
+| `when battery.level is 100` | → write a sentence |
+
+Each band is **bounded below by a check**, so a phone coming back
+from being switched off at four per cent crosses all five lines at
+once and still says one thing, not five. The old watcher said
+nothing at all in that case, because it matched the exact value.
+
+**Every run is written down** — what it was, whether it spoke, what
+it said, and why it did not. That is the same record `/v1/remarks`
+already showed, so the page did not change and now covers every
+rule rather than one watcher.
+
+The rest of section 3 is still loops in Go and moves over one at a
+time, reminders last.
 
 ---
 
@@ -382,15 +410,20 @@ reminders last.
 
 Kept here so it is not rediscovered.
 
-- The job engine runs nothing real yet: the seven watchers are
-  still loops in Go. All seven could now be written as rules —
-  the clock, the event trigger and a model-written sentence are
-  all there — but none has been moved, and reminders move last.
+- Six of the seven watchers are still loops in Go. Immediate has
+  moved; reminders move last. Situations, the diary and leave-by
+  cannot move yet for one shared reason: a rule has no memory of
+  having already said a thing, so each would repeat itself. The
+  diary knows it has already given the one-hour warning for
+  Thursday; a rule does not.
+- Greeting and renaming need different things again — presence
+  does not arrive as a reading, and a rule publishes by audience
+  rather than to one client.
 - No client collects its announcements yet, so what situations
   publish is written down and never said. The next step, and the
   one that matters most.
-- Five of the six watchers still speak directly rather than
-  publishing.
+- Five watchers still speak directly rather than publishing.
+  Immediate now publishes, because the engine does.
 - `Asked` is carrying two different ideas: *only the client that
   caused this*, which a renaming means, and *the room rather than
   the phone*, which an immediate announcement means. A device event

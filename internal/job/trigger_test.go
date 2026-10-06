@@ -183,3 +183,46 @@ func TestArrivedNeverBlocks(t *testing.T) {
 		t.Error("nothing was counted as dropped, so the backlog is unbounded")
 	}
 }
+
+// The record is of what the assistant considered saying. A rule
+// that only ever runs a tool considered nothing, and writing it
+// down as having held its tongue would be a lie.
+func TestOnlyARuleThatMightSpeakIsWrittenDown(t *testing.T) {
+	for _, c := range []struct {
+		why  string
+		step job.Step
+		want int
+	}{
+		{"it speaks", job.Step{Do: job.Announce, Say: "hello"}, 1},
+		{"it writes", job.Step{Do: job.Write, Ask: "say something"}, 1},
+		{"it only runs a tool", job.Step{Do: job.Call, Tool: "task_lists"}, 0},
+	} {
+		t.Run(c.why, func(t *testing.T) {
+			s, h := inmemory.New(), &hands{}
+			kept := &written{}
+			j, err := job.New("job_1", "usr_1", "a rule", "rule", "every 5m",
+				[]job.Step{c.step}, noon)
+			if err != nil {
+				t.Fatalf("job.New: %v", err)
+			}
+			j.Next = noon
+			s.Add(j)
+
+			run := runner(s, h, noon)
+			run.Journal = kept
+			run.Once(context.Background())
+
+			if len(kept.records) != c.want {
+				t.Errorf("%d rows written, want %d", len(kept.records), c.want)
+			}
+		})
+	}
+}
+
+// written : A journal that keeps what it was given.
+type written struct{ records []job.Record }
+
+func (w *written) Wrote(_ context.Context, r job.Record) error {
+	w.records = append(w.records, r)
+	return nil
+}
