@@ -11883,6 +11883,73 @@ call. That is nine hundred and thirty six looks a day between
 them and not one model call unless there is something to say.
 
 
+### The voice client collects, at the door
+
+Owner, 6 October 2026, on the shape of all this: *"when next time
+presence is true, the call is made to server and get the pending
+announcements."*
+
+The call was already being made. `rest_command.assistant_arrived`
+has been posting to `/v1/presence/arrived` since the greeting was
+built, triggered by an automation that waits for the watch to
+cross -65 dBm and debounces two minutes against a restart being
+mistaken for a homecoming. Everything hard about knowing somebody
+has walked in was already solved, in Home Assistant, by the thing
+that can actually tell.
+
+What the endpoint did not do was look in the outbox. It gathered
+held reminders and never-said ones, composed a greeting behind
+them, and anything a producer had published while nobody was home
+sat pending until the sweeper expired it. Eight of them had,
+against this one client, by the time this was written.
+
+#### So the greeting collects
+
+`Welcome` now asks what the **calling client** owes, puts it
+behind the greeting with the reminders, and marks it said only
+after the speaking succeeded -- the rule the held reminders have
+always followed, for the reason written beside them: *said and
+not recorded is heard twice; recorded and not said is lost.*
+
+The client is whichever one is asking. The request arrives with
+its own token and the copy it owes is its own, which is the whole
+point of a copy per client: another client of the same person
+still owes it and will say it in its own time.
+
+Nothing is collected when the caller is not a client. The
+internal greeter has no token and nothing is owed to it.
+
+#### Why this is not a timer
+
+A screen collects every twenty seconds because it is always in
+front of somebody. A room is not. Polling would mean deciding, on
+the server, whether anybody is there -- which is the thing the
+design exists to avoid, and which Home Assistant answers far
+better than anything here could.
+
+So the two clients collect in the two ways that suit them, and
+neither needed the server to hold an opinion about rooms.
+
+#### Not proved aloud
+
+The logic is tested through the real route: what was published
+while out is said at the door and marked; a failure to read what
+is owed costs the greeting that and not the greeting, and marks
+nothing.
+
+What has not happened is a live arrival, because by the time this
+worked it was past midnight and triggering one would have made
+the house talk. The next real arrival proves it, and there is
+nothing pending to be wrongly said when it does.
+
+#### Still not collecting
+
+The phone. Tasker holds a client and has six expired copies
+against it, having never collected anything. It is not a speaking
+client, so nothing is lost today, but a copy is being written for
+it every time and nobody reads them.
+
+
 ## 12. Maintaining this file
 
 When the owner states a preference, makes a decision, or corrects something,

@@ -34,6 +34,7 @@ import (
 	"github.com/DhanushRamesh/personal-assistant/internal/conversation"
 	"github.com/DhanushRamesh/personal-assistant/internal/event"
 	"github.com/DhanushRamesh/personal-assistant/internal/greet"
+	"github.com/DhanushRamesh/personal-assistant/internal/outbox"
 	"github.com/DhanushRamesh/personal-assistant/internal/remind"
 	"github.com/DhanushRamesh/personal-assistant/internal/tasks"
 )
@@ -155,10 +156,36 @@ type Handler struct {
 	// the person. The one the assistant runs on, where it is named.
 	notFrom []string
 
+	// owed : What the voice client has been published and has not
+	// said. Optional: without it a greeting carries the reminders
+	// it always did and nothing else.
+	owed Owed
+
 	mu sync.Mutex
 	// lastGreeting : So the same words are not used twice running.
 	lastGreeting string
 }
+
+// Owed : What a client still owes somebody.
+//
+// The voice half of collecting. A screen collects on a timer
+// because it is always in front of somebody; a room is not, so
+// this one is asked at the door -- by Home Assistant, which is
+// the only thing that knows when somebody has walked in, and
+// which already calls here to be greeted.
+//
+// That is the design as it was asked for: *"when next time
+// presence is true, the call is made to server and get the
+// pending announcements."* The call is the client's, and it is
+// already being made.
+type Owed interface {
+	Pending(ctx context.Context, clientID string, limit int) ([]outbox.Delivery, error)
+	Mark(ctx context.Context, clientID, owedID string, state outbox.State,
+		tries int, why string, at time.Time) error
+}
+
+// Collects : Sets where what this client owes is read from.
+func (h *Handler) Collects(o Owed) *Handler { h.owed = o; return h }
 
 // New : Builds the handler. A nil announcer says nothing, which is what a
 // server with no satellite has.
@@ -238,6 +265,33 @@ func (h *Handler) Greet(ctx context.Context, user string) {
 		slog.Bool("spoke", said.Spoke), slog.String("why", said.Why),
 		slog.Bool("written", said.Written),
 		slog.Int("delivered", said.Delivered), slog.Int("missed", said.Missed))
+}
+
+// collect : What this client owes, oldest first.
+//
+// This client, which is whichever one is asking: the request
+// comes in with its own token, and the copy it owes is its own.
+// Nothing is collected when the caller is not a client -- the
+// internal greeter has no token and nothing owed to it.
+//
+// A failure here costs the greeting its held announcements and
+// not the greeting. The rows stay pending and come back at the
+// next arrival, which is the right way for this to fail.
+func (h *Handler) collect(ctx context.Context) []outbox.Delivery {
+	if h.owed == nil {
+		return nil
+	}
+	client := authn.Of(ctx).Client
+	if client == nil {
+		return nil
+	}
+	waiting, err := h.owed.Pending(ctx, client.ID, outbox.Limit)
+	if err != nil {
+		h.Logger.WarnContext(ctx, "greeting somebody without what is owed to them",
+			slog.Any("error", err))
+		return nil
+	}
+	return waiting
 }
 
 // compose : The greeting itself, written for the moment if it can be.
@@ -605,12 +659,21 @@ func (h *Handler) Welcome(ctx context.Context, user string) ArrivedResponse {
 	held := h.waiting(ctx, user)
 	unsaid := h.neverSaid(ctx, user)
 
-	owed := make([]string, 0, 2)
+	owed := make([]string, 0, 3)
 	if len(held) > 0 {
 		owed = append(owed, remind.Delivered(held, h.clock(), h.where()))
 	}
 	if len(unsaid) > 0 {
 		owed = append(owed, missedText(unsaid, h.where()))
+	}
+
+	// And whatever was published to this client while nobody was
+	// here to hear it. Collected rather than pushed, by the client
+	// that is about to speak, at the one moment it knows somebody
+	// has walked in.
+	waiting := h.collect(ctx)
+	for _, one := range waiting {
+		owed = append(owed, one.Owing.Text)
 	}
 
 	said, written := h.compose(ctx, user, owed)
@@ -651,6 +714,17 @@ func (h *Handler) Welcome(ctx context.Context, user string) ArrivedResponse {
 	// and the question needs the sentence it is about.
 	if h.announcements != nil {
 		h.announcements.Arrived(speak, user, said)
+	}
+
+	// Only now, and for the same reason. An announcement this
+	// client has said is this client's to mark: another client of
+	// the same person still owes it.
+	for _, one := range waiting {
+		if err := h.owed.Mark(speak, one.ClientID, one.Owing.ID,
+			outbox.Said, 1, "", h.clock()); err != nil {
+			h.Logger.WarnContext(speak, "said an announcement but could not record it",
+				slog.String("announcement_id", one.Owing.ID), slog.Any("error", err))
+		}
 	}
 
 	// Only now. Said and not recorded is better than recorded and not

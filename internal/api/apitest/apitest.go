@@ -18,6 +18,7 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	announcementsapi "github.com/DhanushRamesh/personal-assistant/internal/api/announcements"
 	"log/slog"
 	"net/http"
 	"net/http/httptest"
@@ -106,6 +107,10 @@ type Options struct {
 	// Announcer : Where the server speaks of its own accord. Nil says
 	// nowhere, which is what a server with no satellite has.
 	Announcer announce.Announcer
+
+	// Owed : What each client has been published and not said.
+	// Nil greets without anything behind it.
+	Owed announcementsapi.Store
 
 	// DeviceEvents : Where what the person's devices saw is kept. Nil
 	// selects a store that keeps them in memory.
@@ -199,6 +204,7 @@ func NewWith(t *testing.T, opts Options) *Env {
 			Messages:         repo,
 			Reminders:        opts.Reminders,
 			Announcer:        opts.Announcer,
+			Owed:             opts.Owed,
 			DeviceEvents:     deviceEvents(opts.DeviceEvents),
 			Memories:         opts.Memories,
 			Tools:            opts.Tools,

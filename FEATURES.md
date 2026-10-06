@@ -129,7 +129,7 @@ flowchart TB
     GET --> CL{"The client decides<br/>presence lives here"}
 
     CL -- "typed: a screen needs nobody" --> MARK["POST /v1/announcements/id<br/>said"]
-    CL -- "voice: somebody is there" --> SAY["Say it aloud, then said"]
+    CL -- "voice: they walk in<br/>/v1/presence/arrived" --> SAY["Said behind the greeting,<br/>then marked said"]
     CL -- "voice: empty room" --> KEEP["Write nothing<br/>the copy stays pending"]
     KEEP --> GET
 
@@ -473,10 +473,12 @@ Kept here so it is not rediscovered.
   as they are. Neither is a standing rule, and neither would be
   better as one — see DEVELOPMENT.md. Four producers are in scope,
   not six.
-- The voice client does not collect yet, so an announcement is
-  heard only because the producers still speak directly as well.
-  The web client collects; the satellite is the half that has to
-  judge whether anybody is in the room.
+- The phone does not collect. Tasker holds a client and a copy is
+  written for it every time; nothing has ever read one. It is not
+  a speaking client, so nothing is lost today.
+- A live arrival has not yet proved the voice collector. The
+  logic is tested through the route; the next time somebody walks
+  in will prove the rest.
 - Reminders and the greeting still speak directly rather than
   publishing. Everything on the engine publishes, because the
   engine does.

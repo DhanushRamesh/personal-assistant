@@ -143,6 +143,9 @@ type Options struct {
 	// collects for itself. Named apart from Announcements above:
 	// that one is where a spoken thing is written into the
 	// conversation, this one is the queue it came out of.
+	//
+	// Read by two: the endpoint a screen polls, and the greeting,
+	// where the voice client collects its own at the door.
 	Owed announcementsapi.Store
 
 	// DeviceEvents : Where the person's own devices report what happened
@@ -247,7 +250,8 @@ func New(opts Options) *Server {
 		presence: presence.New(opts.Logger, opts.Announcer, opts.Reminders,
 			opts.Announcements, opts.Location, opts.Now).
 			Writes(opts.Greeting, opts.Spoke, opts.Reported, opts.Known, opts.ThisMachine).
-			Expects(opts.Diary, opts.Chores),
+			Expects(opts.Diary, opts.Chores).
+			Collects(opts.Owed),
 		profile:    profileapi.New(opts.Memories, opts.Now, opts.Logger),
 		vocabulary: vocabularyapi.New(opts.Vocabulary, opts.Logger),
 		google:     googleapi.New(opts.Logger, opts.Google, opts.SettingsURL),

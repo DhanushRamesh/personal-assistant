@@ -16,6 +16,7 @@ import (
 	"github.com/DhanushRamesh/personal-assistant/internal/api/apitest"
 	"github.com/DhanushRamesh/personal-assistant/internal/api/presence"
 	"github.com/DhanushRamesh/personal-assistant/internal/greet"
+	"github.com/DhanushRamesh/personal-assistant/internal/outbox"
 	"github.com/DhanushRamesh/personal-assistant/internal/remind"
 	"github.com/DhanushRamesh/personal-assistant/internal/remind/inmemory"
 )
@@ -424,4 +425,61 @@ func TestAGreetingStaysInTheRoom(t *testing.T) {
 	if len(sat.reached) != 0 {
 		t.Errorf("the greeting was sent to the phone: %v", sat.reached)
 	}
+}
+
+// The voice half of collecting. A screen collects on a timer
+// because it is always in front of somebody; a room is not, so
+// the voice client is asked at the door -- by the thing that
+// knows somebody has walked in, which already calls here.
+//
+// Owner: "when next time presence is true, the call is made to
+// server and get the pending announcements."
+func TestWhatWasPublishedWhileOutIsSaidAtTheDoor(t *testing.T) {
+	sat := &satellite{}
+	owed := &waitingFor{pending: []outbox.Delivery{{
+		ClientID: "cli_1",
+		Owing:    outbox.Owing{ID: "owe_1", Text: "Your phone has gone quiet, sir."},
+	}}}
+	e := apitest.NewWith(t, apitest.Options{Announcer: sat, Owed: owed})
+
+	arrive(t, e)
+
+	if !strings.Contains(strings.Join(sat.spoken(), " "), "gone quiet") {
+		t.Errorf("what was waiting was not said: %v", sat.spoken())
+	}
+	if len(owed.marked) != 1 || owed.marked[0] != "owe_1" {
+		t.Errorf("it was said and not marked: %v", owed.marked)
+	}
+}
+
+// A failure reading what is owed costs the greeting that and not
+// the greeting. The rows stay pending and come back next time.
+func TestAGreetingSurvivesNotKnowingWhatIsOwed(t *testing.T) {
+	sat := &satellite{}
+	owed := &waitingFor{refuses: errors.New("the database is away")}
+	e := apitest.NewWith(t, apitest.Options{Announcer: sat, Owed: owed})
+
+	if got := arrive(t, e); !got.Spoke {
+		t.Errorf("the greeting was lost with what was owed: %+v", got)
+	}
+	if len(owed.marked) != 0 {
+		t.Errorf("something was marked: %v", owed.marked)
+	}
+}
+
+// waitingFor : What a client owes, for a test.
+type waitingFor struct {
+	pending []outbox.Delivery
+	marked  []string
+	refuses error
+}
+
+func (w *waitingFor) Pending(context.Context, string, int) ([]outbox.Delivery, error) {
+	return w.pending, w.refuses
+}
+
+func (w *waitingFor) Mark(_ context.Context, _, owedID string, _ outbox.State,
+	_ int, _ string, _ time.Time) error {
+	w.marked = append(w.marked, owedID)
+	return nil
 }
