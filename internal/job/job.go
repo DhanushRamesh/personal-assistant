@@ -1,0 +1,231 @@
+// Package job runs a sequence of tasks on a schedule.
+//
+// Owner, 6 October 2026: *"I will give the AI when to do what, how
+// frequently to do what, so a timer control I should be able to
+// give, and the what might be an already available task function or
+// hand it off to AI to do a custom task. The custom task will be
+// just announce too, as it is also a task."* And: *"we don't need
+// separate reminders, because it will also be a schedule timer with
+// a task -- just to talk. To keep an alarm too will be a task,
+// because not just a single task, a sequence of tasks can be
+// done."*
+//
+// What this replaces is seven loops in Go, each watching one thing
+// and each ending in the same place: say something. Announcing
+// stops being the shape of the system and becomes one task among
+// several, which is what it always was.
+//
+// The proof that this is the right shape was already in the code.
+// `reminder_set` does two things -- says the words and sets a phone
+// alarm -- which is a two step sequence with the steps written into
+// a function. Here it is a row.
+//
+// # Where this stops
+//
+// Linear sequences. No branching, no nesting, no else. A step may
+// stop the ones after it, which covers the conditional cases -- *do
+// this only if the battery is low* is a step that checks and stops
+// -- without the next question being loops and variables. That line
+// is held on purpose: Tasker exists, Home Assistant exists, and a
+// third automation language in this house would be a mistake.
+package job
+
+import (
+	"encoding/json"
+	"errors"
+	"fmt"
+	"strings"
+	"time"
+)
+
+// State : Where a job is in its life.
+type State string
+
+const (
+	// Active : Due to run again.
+	Active State = "active"
+	// Done : A one-off that has run.
+	Done State = "done"
+	// Cancelled : Called off before it ran again.
+	Cancelled State = "cancelled"
+)
+
+// Errors a caller can act on.
+var (
+	// ErrNoSchedule : Nothing says when to run it.
+	ErrNoSchedule = errors.New("job: there is no schedule")
+	// ErrNoSteps : A schedule with nothing to do.
+	ErrNoSteps = errors.New("job: there is nothing to do")
+	// ErrUnreadable : The schedule is not one of the forms.
+	ErrUnreadable = errors.New("job: that schedule could not be read")
+)
+
+// Task : What one step does.
+type Task string
+
+const (
+	// Announce : Say something. A task like any other, which is the
+	// whole point of the rewrite.
+	Announce Task = "announce"
+	// Call : Run one of the tools the assistant already has.
+	//
+	// The verbs were never missing. There are fifty-two of them and
+	// a rule needs a way to point at one, not a new vocabulary.
+	Call Task = "tool"
+)
+
+// Step : One thing to do.
+type Step struct {
+	// Do : Which kind of task.
+	Do Task `json:"do"`
+	// Say : The words, for an announce.
+	Say string `json:"say,omitempty"`
+	// Tool : Which tool to run, for a call.
+	Tool string `json:"tool,omitempty"`
+	// Args : What to run it with, as the tool's own arguments.
+	Args json.RawMessage `json:"args,omitempty"`
+}
+
+// Job : A schedule and the sequence it runs.
+type Job struct {
+	// ID : This job.
+	ID string
+	// UserID : Whose it is.
+	UserID string
+	// Name : What to call it when listing them.
+	Name string
+	// Kind : What it is in the person's own words.
+	//
+	// So that somebody asking what reminders they have is not told
+	// they have fourteen jobs including a battery check. The engine
+	// does not read this; the listing does.
+	Kind string
+
+	// Schedule : When to run, as it was written.
+	Schedule string
+	// Next : When it next runs.
+	Next time.Time
+	// Steps : What to do, in order.
+	Steps []Step
+
+	// State : Active, done or cancelled.
+	State State
+	// Last : When it last ran.
+	Last time.Time
+	// Why : What went wrong last time, empty when nothing did.
+	Why string
+}
+
+// Every, At, Once : How a schedule may be written.
+//
+//	every 5m          every five minutes, from now
+//	at 08:00          every day at eight in the morning
+//	once 2026-10-07 06:40   one time, then done
+//
+// Three forms and no more. A cron expression is unreadable to
+// somebody dictating it out loud, which is how these are meant to
+// be made.
+const (
+	Every = "every"
+	At    = "at"
+	Once  = "once"
+)
+
+// Stale : How late a run may be and still happen.
+//
+// A server that was off over the moment comes back owing runs, and
+// doing yesterday's eight o'clock at noon is worse than skipping
+// it. The same judgement the outbox makes about announcements, for
+// the same reason.
+const Stale = time.Hour
+
+// New : A job, with its first run worked out.
+func New(id, userID, name, kind, schedule string, steps []Step, from time.Time) (Job, error) {
+	if strings.TrimSpace(schedule) == "" {
+		return Job{}, ErrNoSchedule
+	}
+	if len(steps) == 0 {
+		return Job{}, ErrNoSteps
+	}
+	next, err := Following(schedule, from, from.Location())
+	if err != nil {
+		return Job{}, err
+	}
+	return Job{
+		ID: id, UserID: userID, Name: name, Kind: kind,
+		Schedule: schedule, Next: next, Steps: steps, State: Active,
+	}, nil
+}
+
+// Following : When a schedule next comes round after a moment.
+//
+// In the person's own zone, because "at 08:00" means eight where
+// they are standing and nowhere else.
+func Following(schedule string, after time.Time, where *time.Location) (time.Time, error) {
+	if where == nil {
+		where = time.UTC
+	}
+	fields := strings.Fields(strings.ToLower(strings.TrimSpace(schedule)))
+	if len(fields) < 2 {
+		return time.Time{}, ErrUnreadable
+	}
+
+	switch fields[0] {
+	case Every:
+		gap, err := time.ParseDuration(fields[1])
+		if err != nil || gap <= 0 {
+			return time.Time{}, ErrUnreadable
+		}
+		return after.Add(gap), nil
+
+	case At:
+		clock, err := time.Parse("15:04", fields[1])
+		if err != nil {
+			return time.Time{}, ErrUnreadable
+		}
+		here := after.In(where)
+		next := time.Date(here.Year(), here.Month(), here.Day(),
+			clock.Hour(), clock.Minute(), 0, 0, where)
+		if !next.After(here) {
+			next = next.AddDate(0, 0, 1)
+		}
+		return next, nil
+
+	case Once:
+		when := strings.Join(fields[1:], " ")
+		for _, layout := range []string{time.RFC3339, "2006-01-02 15:04", "2006-01-02t15:04"} {
+			if at, err := time.ParseInLocation(layout, when, where); err == nil {
+				return at, nil
+			}
+		}
+		return time.Time{}, ErrUnreadable
+	}
+	return time.Time{}, fmt.Errorf("%w: %q", ErrUnreadable, fields[0])
+}
+
+// Repeats : Whether this schedule comes round again.
+func Repeats(schedule string) bool {
+	fields := strings.Fields(strings.ToLower(strings.TrimSpace(schedule)))
+	return len(fields) > 0 && (fields[0] == Every || fields[0] == At)
+}
+
+// Valid : Whether a step is one the runner can carry out.
+//
+// Checked when a job is written rather than when it runs. A rule
+// that cannot work should fail in front of whoever wrote it, not
+// silently at three in the morning.
+func (s Step) Valid() error {
+	switch s.Do {
+	case Announce:
+		if strings.TrimSpace(s.Say) == "" {
+			return errors.New("job: an announcement with nothing to say")
+		}
+	case Call:
+		if strings.TrimSpace(s.Tool) == "" {
+			return errors.New("job: a tool step naming no tool")
+		}
+	default:
+		return fmt.Errorf("job: %q is not something a step can do", s.Do)
+	}
+	return nil
+}

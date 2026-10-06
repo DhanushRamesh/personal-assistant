@@ -42,6 +42,8 @@ import (
 	"github.com/DhanushRamesh/personal-assistant/internal/google"
 	googlemysql "github.com/DhanushRamesh/personal-assistant/internal/google/mysql"
 	"github.com/DhanushRamesh/personal-assistant/internal/greet"
+	"github.com/DhanushRamesh/personal-assistant/internal/job"
+	jobmysql "github.com/DhanushRamesh/personal-assistant/internal/job/mysql"
 	"github.com/DhanushRamesh/personal-assistant/internal/leaving"
 	"github.com/DhanushRamesh/personal-assistant/internal/llm"
 	"github.com/DhanushRamesh/personal-assistant/internal/logging"
@@ -577,6 +579,30 @@ func run() error {
 	}()
 	logger.Info("publishing announcements to clients",
 		slog.Duration("sweeping stale ones every", outbox.Every))
+
+	// A schedule, and the sequence of tasks it runs. New rules
+	// only so far: nothing existing has been moved onto it, and
+	// reminders move last because they are the feature most used
+	// and a new engine is wrong in small ways for a week.
+	scheduled := jobmysql.New(db.DB)
+	running := &job.Runner{
+		Store: scheduled,
+		Doer: doing{
+			tools: tools, speaker: speaker, written: announcements,
+			to: publishing, now: cfg.Assistant.Now, logger: logger.Logger,
+		},
+		Where:  cfg.Assistant.Location,
+		Now:    cfg.Assistant.Now,
+		Logger: logger.Logger,
+	}
+	watching.Add(1)
+	go func() {
+		defer watching.Done()
+		running.Run(remindCtx)
+	}()
+	logger.Info("running what is scheduled",
+		slog.Duration("every", job.Tick),
+		slog.Duration("too late to bother", job.Stale))
 
 	// And what several of them together mean, which no single one
 	// of them does.
@@ -1915,4 +1941,72 @@ func (a announcing) Publish(ctx context.Context, from, userID string,
 	}
 	o.From = from
 	return a.to.Publish(ctx, o)
+}
+
+// doing : Carries out one step of a job.
+//
+// The runner owns order, lateness and failure; what a step actually
+// does is here, because it is the only place that holds both the
+// tool registry and the way out to a room.
+//
+// Two kinds of step for now. A prompt handed to the model is the
+// next one, and it needs a list of the tools such a step may use
+// before it is safe to add: a scheduled task with all fifty-two
+// could cancel reminders at three in the morning.
+type doing struct {
+	tools   *tool.Registry
+	speaker announce.Announcer
+	written *announcement.Writer
+	to      *outbox.Publisher
+	now     func() time.Time
+	logger  *slog.Logger
+}
+
+// Do : Carries out one step. Never stops the sequence yet -- the
+// step that can is the checking one, which comes with prompts.
+func (d doing) Do(ctx context.Context, userID string, s job.Step, already []string) (bool, error) {
+	if err := s.Valid(); err != nil {
+		return false, err
+	}
+
+	switch s.Do {
+	case job.Announce:
+		// Published, which is where announcements go now, and
+		// spoken, which is the only way one is currently heard.
+		// The second half goes when a client collects.
+		o, err := outbox.New(outboxmysql.ID(), userID,
+			conversation.Immediate, s.Say, d.now())
+		if err != nil {
+			return false, err
+		}
+		if err := d.to.Publish(ctx, o); err != nil {
+			return false, err
+		}
+		if err := announcement.Speak(ctx, d.speaker, conversation.Immediate, s.Say); err != nil {
+			return false, err
+		}
+		d.written.Announced(ctx, userID, s.Say)
+		return false, nil
+
+	case job.Call:
+		// As the person, on the typed channel. A job is not a
+		// voice turn: nothing is waiting in a room for it, and the
+		// tools that withhold themselves from a speaker should not
+		// withhold themselves here.
+		out := d.tools.Call(ctx, s.Tool, tool.Invocation{
+			Caller: tool.Caller{UserID: userID, Channel: chat.ChannelDirect},
+			Args:   s.Args,
+			// What the sequence has already run. The tools refuse
+			// to write something they have not read in this turn,
+			// and a sequence is one turn.
+			Ran: already,
+		})
+		if out.Outcome == conversation.OutcomeFailed {
+			return false, fmt.Errorf("%s: %s", s.Tool, out.Content)
+		}
+		d.logger.InfoContext(ctx, "a job ran a tool",
+			slog.String("tool", s.Tool), slog.String("outcome", string(out.Outcome)))
+		return false, nil
+	}
+	return false, fmt.Errorf("job: nothing carries out %q", s.Do)
 }

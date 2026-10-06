@@ -235,10 +235,72 @@ possible.
 
 ---
 
-## 6. What is known to be missing
+## 6. Rules on a schedule
+
+Everything in section 3 is a loop written in Go: a schedule and a
+sequence of tasks, with both of them written into a function. This
+is the same shape kept in a row instead, so a new rule is something
+asked for rather than something built.
+
+```mermaid
+flowchart TB
+    ASK["A rule is asked for<br/>when, and what to do"] --> ROW[("jobs<br/>schedule · steps · next_at")]
+
+    ROW --> TICK{"Runner, every 2s<br/>what is due?"}
+    TICK -- "more than an hour late" --> SKIP["Skipped, and the row says why<br/>yesterday's 8am at noon is worse<br/>than not done"]
+    TICK -- "due" --> SEQ
+
+    subgraph SEQ["The sequence, in order -- one turn, not several"]
+        direction LR
+        S1["Step 1"] --> S2["Step 2"] --> S3["Step 3"]
+    end
+
+    SEQ --> WHAT{"What kind of step?"}
+    WHAT -- "say something" --> OUT["Published to the outbox<br/>section 3 takes it from there"]
+    WHAT -- "run a tool" --> TOOL["One of the 52<br/>told what the sequence already ran"]
+
+    TOOL -- "stop" --> END
+    TOOL -- "failed" --> ON["The rest still runs<br/>one record per run"]
+    ON --> END
+    OUT --> END
+
+    END{"Does it repeat?"} -- "every 5m · at 08:00" --> AGAIN["next_at moved on,<br/>still active"]
+    END -- "once" --> DONE["done"]
+    AGAIN --> ROW
+```
+
+**Three ways to write when:** `every 5m`, `at 08:00`, `once
+2026-10-07 06:40`. No cron — these are meant to be dictated aloud.
+
+**Two things a step can do:** say something, or run one of the
+tools that already exist. The verbs were never missing; a rule just
+needed a way to point at one.
+
+**A sequence is one turn.** Each step is told which tools the ones
+before it ran, so `[list the task lists, add a task]` satisfies the
+read-before-write rule the tools enforce. Without that, more than
+one step would be decoration.
+
+**Linear, on purpose.** A step may stop the ones after it, and that
+is the whole of the conditional. No branching, no loops, no
+variables — Tasker and Home Assistant already exist for that.
+
+**A reminder is not a special thing here.** It is a job whose steps
+are *say the words* and *set the phone alarm*, which is what
+`reminder_set` already does inside one function.
+
+**Nothing runs on this yet.** New rules only. The watchers in
+section 3 move over one at a time, reminders last.
+
+---
+
+## 7. What is known to be missing
 
 Kept here so it is not rediscovered.
 
+- The job engine runs nothing real yet: the seven watchers are
+  still loops in Go, and moving them over is the work after a
+  client collects.
 - No client collects its announcements yet, so what situations
   publish is written down and never said. The next step, and the
   one that matters most.

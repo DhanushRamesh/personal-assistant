@@ -10422,6 +10422,99 @@ fresh announcement said, one the server was an hour late for
 expired with the reason kept.
 
 
+### A schedule and a sequence of tasks
+
+Owner, 6 October 2026: *"the producers are so rigid, these kind of
+rules must be configurable, because in future I'll be having a tool
+to set timer and perform a task, like workflow automation."* Then:
+*"I will give the AI when to do what, how frequently to do what, so
+a timer control I should be able to give, and the what might be an
+already available task function or hand it off to AI to do a custom
+task. The custom task will be just announce too, as it is also a
+task."* And: *"we don't need separate reminders, because it will
+also be a schedule timer with a task -- just to talk. To keep an
+alarm too will be a task, because not just a single task, a
+sequence of tasks can be done."*
+
+The thing being named is that **announcing was the shape of the
+system when it is one task among several.** Seven loops in Go, each
+watching one thing, each ending in the same place: say something.
+Adding an eighth meant writing an eighth loop, and every one of
+them was a schedule and a sequence with both written into a
+function instead of a row.
+
+The proof was already in the code. `reminder_set` does two things
+-- says the words and sets a phone alarm -- which is a two step
+sequence that only looks like one verb because somebody typed it
+that way. `internal/job` is that same shape, written down.
+
+**Three schedule forms and no more:** `every 5m`, `at 08:00`, `once
+2026-10-07 06:40`. A cron expression is unreadable to somebody
+dictating it aloud, and dictating it aloud is how these are meant
+to be made. Kept as written rather than parsed into columns,
+because it is read back to the person who said it and *every five
+minutes* is what they said.
+
+**Two kinds of task:** say something, and run one of the tools that
+already exist. The verbs were never missing -- there are fifty-two
+of them -- and a rule needs a way to point at one, not a new
+vocabulary of its own.
+
+**Linear, and that line is held.** No branching, no nesting, no
+else. A step may stop the ones after it, which covers *do this only
+if the battery is low* without the next question being loops and
+variables. Tasker exists and Home Assistant exists, and a third
+automation language in this house would be a mistake.
+
+#### A sequence is one turn, not several
+
+The first live probe failed, and failed usefully. A `[task_add]`
+step was refused: *task\_add was not called correctly ... this call
+never ran, so it says nothing about what exists.* That is the
+read-before-write rule working exactly as designed -- and a
+sequence built to be `[list, then add]` could never satisfy it,
+because each step was arriving as a turn that had read nothing.
+
+So `Doer.Do` takes `already []string`, the runner appends each
+tool it ran, and the sequence reaches the tools as what it is: one
+turn with several calls in it. Without this, sequences of more than
+one step are only decoration, which is the reason they exist.
+
+#### What it refuses to do
+
+**A run more than an hour late does not happen.** The same
+judgement the outbox makes, for the same reason: a server that was
+off over the moment comes back owing runs, and yesterday's eight
+o'clock done at noon is worse than not done at all. The row records
+that its moment passed.
+
+**A failed step does not swallow the ones after it.** A phone alarm
+that could not be set must not take the words with it, which is the
+rule the reminder and its alarm already follow. One run leaves one
+record however many of its steps failed.
+
+**A schedule that stops parsing ends the job.** It would otherwise
+be read and skipped every two seconds for ever.
+
+**`kind` is carried but never read by the engine.** So that
+somebody asking what reminders they have is not told they have
+fourteen jobs including a battery check. The listing reads it; the
+runner does not.
+
+#### Proved against the real thing
+
+A two step job `[task_lists, task_add]` due six seconds out: both
+steps `outcome=ok`, row `done`, no reason recorded. An announce job
+on `every 1m`: published to all three clients as pending, spoken,
+and rescheduled exactly sixty seconds on with the state left
+active.
+
+**Nothing is migrated onto this.** It runs new rules only. The
+producers move over one at a time afterwards and **reminders
+last**, because reminders are the feature most used and a new
+engine is wrong in small ways for a week.
+
+
 ## 12. Maintaining this file
 
 When the owner states a preference, makes a decision, or corrects something,
