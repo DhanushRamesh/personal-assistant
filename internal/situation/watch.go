@@ -82,9 +82,14 @@ func (w *Watcher) Look(ctx context.Context, userID string) (string, error) {
 		return "", nil
 	}
 
+	// Position readings included, where they used to be left out
+	// as noise. They are the only thing a phone reports when
+	// nobody is touching it, which makes them the heartbeat --
+	// without them a phone with the screen off looks the same as a
+	// phone that has stopped talking to this server entirely. The
+	// other checks filter by kind and never see them.
 	evs, err := w.Events.Recent(ctx, userID, event.Query{
 		Since: now.Add(-Behind),
-		Omit:  []string{event.Fixed, event.Stayed},
 	})
 	if err != nil {
 		return "", err

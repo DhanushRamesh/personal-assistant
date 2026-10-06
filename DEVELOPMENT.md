@@ -10144,6 +10144,61 @@ all intact. Every test alarm was deleted afterwards and the owner's
 own two were left alone.
 
 
+### A device that stops talking
+
+Events stopped reaching the server at 11:56 on 6 October 2026 and
+nobody noticed until the owner asked at three. A phone that reports
+every few minutes said nothing for three hours and the server had
+no opinion about it.
+
+**Worth saying because the failure is invisible from both ends.**
+The phone was fine and believed it was sending; the server was fine
+and had nothing to report on. Only the gap between them was wrong,
+and nothing was looking at the gap. `situation.Quiet` looks at it.
+
+**Measured on `ReceivedAt`, not `OccurredAt`.** This is the whole
+trick. A phone off the network spools what it sees and delivers the
+lot on reconnection, so by the time anybody reads the events they
+look perfectly continuous -- the three hours are only visible in
+when each one *arrived*.
+
+**Forty-five minutes**, from the data rather than a guess: across
+five days the gap between one report and the next is 2m11s at the
+median and 12m37s at the ninety-ninth percentile.
+
+**Position readings are now included in the window.** They used to
+be omitted as noise, and that number only holds with them counted.
+Without them the ninety-ninth percentile is **2h8m**, because a
+phone with the screen off and nobody calling genuinely says nothing
+for hours. Position is the one thing it never stops reporting, which
+makes it the heartbeat. Measuring on the filtered window would have
+produced a threshold of hours, or twenty-seven false alarms in five
+days at forty-five minutes. The other two checks filter by kind and
+never see a fix.
+
+Only devices with at least five reports in the window qualify.
+Something that reported once and stopped may have had one thing to
+say; only constant talkers have a silence that is evidence.
+
+### What the outage itself turned out to be
+
+Worth recording, because the first diagnosis was wrong. The spool
+shrank from 6.8 KB to 583 bytes and that was read as the flush
+discarding events it had failed to send. It was not. `Jarvis Flush`
+is correctly written: it *moves* the spool to `jarvis-sending.jsonl`,
+posts that, and deletes it only `If %http_response_code ~ 200`. The
+77 lines were sitting safely in the sending file the whole time.
+
+The actual cause was the office network. From the phone: the
+laptop's tailnet address and its LAN address both gave 100 per cent
+packet loss, while 1.1.1.1 answered in 80ms. `Zoho-Corp-TLS`
+isolates clients, and Tailscale could not get through either --
+`active; relay "blr" ... tx 12480 rx 0`, sending and receiving
+nothing.
+
+The lesson for next time: a file getting smaller is not evidence
+that anything was lost. Read the task before diagnosing it.
+
 ### The greeting goes back to a fixed sentence
 
 Owner, 6 October 2026: *"currently the greeting is fully dependent

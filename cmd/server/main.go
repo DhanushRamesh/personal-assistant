@@ -1499,6 +1499,11 @@ func watchingFor(
 			// A charger doing nothing, while the cable is still an
 			// arm's length away.
 			situation.NotCharging,
+			// A device that reports every few minutes and has
+			// stopped. Invisible from both ends: the phone
+			// believes it is sending and the server has nothing
+			// to report on.
+			situation.Quiet,
 		},
 		// Written down rather than said. What a situation adds up
 		// to is this watcher's business; whether it reaches
