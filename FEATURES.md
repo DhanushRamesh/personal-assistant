@@ -432,7 +432,8 @@ already showed, so the page did not change and now covers every
 rule rather than one watcher.
 
 The rest of section 3 is still loops in Go and moves over one at a
-time, reminders last.
+time, reminders last — except greeting and renaming, which are
+staying where they are.
 
 ---
 
@@ -446,9 +447,10 @@ Kept here so it is not rediscovered.
   having already said a thing, so each would repeat itself. The
   diary knows it has already given the one-hour warning for
   Thursday; a rule does not.
-- Greeting and renaming need different things again — presence
-  does not arrive as a reading, and a rule publishes by audience
-  rather than to one client.
+- **Greeting and renaming are not moving, by decision.** They stay
+  as they are. Neither is a standing rule, and neither would be
+  better as one — see DEVELOPMENT.md. Four producers are in scope,
+  not six.
 - No client collects its announcements yet, so what situations
   publish is written down and never said. The next step, and the
   one that matters most.

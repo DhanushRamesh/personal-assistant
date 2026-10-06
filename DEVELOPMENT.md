@@ -11234,6 +11234,48 @@ yesterday -- which is the whole of what the previous design could
 not do.
 
 
+### Two producers that are not moving
+
+Owner, 6 October 2026, told that six of the seven watchers remain
+and what each would need: *"rule out renaming, greeting."*
+
+So the engine's scope is four, not six. Written down because the
+absence of a thing leaves no trace in the code, and somebody
+reading the list of watchers in a year will otherwise work out
+for themselves that these two could be rules, and be right, and
+be wasting their time.
+
+**Renaming** is not a standing rule and would be worse as one. It
+happens inside a turn, when a conversation has enough in it to be
+named, and it goes to **the one client that caused it** -- which
+is the whole reason the audience table has an `Asked` row at all.
+Everything the engine publishes goes to an audience. Moving
+renaming would mean teaching rules to target a single client, for
+one producer that does not want anything else the engine offers:
+no schedule, no condition, no sequence, no sentence worked out
+from what was found.
+
+**Greeting** is closer to a rule and still not one. It fires when
+somebody walks in, and the engine has two triggers: a clock, and
+a reading arriving. Presence is neither -- it is *asked of* Home
+Assistant when wanted, and nothing lands at `/v1/events` when a
+person appears. Making it a rule means either presence starts
+reporting itself as an event, or the engine grows a third kind of
+trigger for one caller.
+
+The second of those is the tempting one and the reason to write
+this down. A third trigger is a day's work and would leave the
+engine with three ways to start a rule where two have been
+enough, for a producer that already works and that nobody has
+complained about.
+
+**What this leaves in scope:** situations, the diary and leave-by,
+all three blocked on the same missing thing -- a rule cannot
+remember what it already said -- and reminders, which needs the
+schedule grammar widened and an alarm step, and which moves last
+by an earlier decision.
+
+
 ## 12. Maintaining this file
 
 When the owner states a preference, makes a decision, or corrects something,
