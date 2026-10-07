@@ -64,6 +64,16 @@ type gathered struct {
 	// seen : Whether anything at all arrived, so an empty stream is
 	// told apart from a stream of empty text.
 	seen bool
+	// events : How many of them arrived.
+	events int
+	// finish : Why the model stopped, as the endpoint last said.
+	//
+	// Read only to explain a reply that came back with nothing in
+	// it. A stream can run for a minute, end tidily and carry no
+	// text at all, and without this there is nothing in the log
+	// that says whether the model was cut off, refused, or simply
+	// wrote nothing.
+	finish string
 }
 
 // readStream : Reads server-sent events until the stream ends, and
@@ -100,6 +110,7 @@ func readStream(body io.Reader, onText func(string)) (gathered, error) {
 			continue
 		}
 		out.seen = true
+		out.events++
 
 		if c.Data != nil {
 			out.usage = c.Data.Usage.Stats
@@ -110,6 +121,9 @@ func readStream(body io.Reader, onText func(string)) (gathered, error) {
 		}
 
 		for _, m := range c.Messages {
+			if m.FinishReason != "" {
+				out.finish = m.FinishReason
+			}
 			if text := contentText(m.Content); text != "" {
 				out.text.WriteString(text)
 				// Only while this round is still an answer. A model
@@ -180,7 +194,13 @@ func (p *Environment) fromStream(_ context.Context, body io.Reader, status int,
 		return reply{Text: text, ToolCalls: got.calls, Usage: got.usage}, status, nil
 	}
 	if text == "" {
-		return reply{}, status, fmt.Errorf("platformai: the reply was empty")
+		// What the stream did carry, because the failure is
+		// otherwise unexplainable: sixty seconds of events that
+		// add up to no answer look exactly like one second of
+		// them.
+		return reply{Usage: got.usage}, status, fmt.Errorf(
+			"platformai: the reply was empty (%d events, finished %q, %d words written)",
+			got.events, got.finish, got.usage.Output)
 	}
 	return reply{Text: text, Usage: got.usage}, status, nil
 }

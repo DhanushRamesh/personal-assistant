@@ -34,6 +34,7 @@ type row struct {
 	Body       string     `gorm:"column:body"`
 	Embedding  []byte     `gorm:"column:embedding"`
 	EmbedModel string     `gorm:"column:embed_model"`
+	Written    bool       `gorm:"column:written"`
 	CreatedAt  time.Time  `gorm:"column:created_at;autoCreateTime:false"`
 	UpdatedAt  time.Time  `gorm:"column:updated_at;autoUpdateTime:false"`
 	LastUsedAt *time.Time `gorm:"column:last_used_at"`
@@ -52,6 +53,7 @@ func (r *row) toMemory() memory.Memory {
 		Subject:    r.Subject,
 		Body:       r.Body,
 		EmbedModel: r.EmbedModel,
+		Written:    r.Written,
 		Embedding:  toVector(r.Embedding),
 		CreatedAt:  r.CreatedAt.UTC(),
 		UpdatedAt:  r.UpdatedAt.UTC(),
@@ -74,6 +76,7 @@ func toRow(m *memory.Memory) *row {
 		Body:       m.Body,
 		Embedding:  toBytes(m.Embedding),
 		EmbedModel: m.EmbedModel,
+		Written:    m.Written,
 		CreatedAt:  m.CreatedAt,
 		UpdatedAt:  m.UpdatedAt,
 		LastUsedAt: m.LastUsedAt,

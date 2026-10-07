@@ -20,7 +20,7 @@ func TestOnlyJudgementReasons(t *testing.T) {
 		purpose environment.Purpose
 		want    string
 	}{
-		{environment.PurposeProfile, "high"},
+		{environment.PurposeProfile, "low"},
 		// Not the greeting, though it wants it most: 29 to 46
 		// seconds against a five-second budget means a better
 		// greeting written every time and heard none of the time.
@@ -42,7 +42,7 @@ func TestItNeverReasonsLessThanAsked(t *testing.T) {
 	if got := thinking("high", environment.PurposeRemark); got != "high" {
 		t.Errorf("a global high was reduced to %q", got)
 	}
-	if got := thinking("low", environment.PurposeProfile); got != "high" {
+	if got := thinking("none", environment.PurposeProfile); got != "low" {
 		t.Errorf("a purpose asking for more got %q", got)
 	}
 	if got := thinking("medium", environment.PurposeChat); got != "medium" {

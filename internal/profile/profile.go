@@ -229,6 +229,13 @@ func (b *Builder) Build(ctx context.Context, userID string) error {
 // worth less than one where a third is a day old -- the parts are
 // about different things and age at different rates anyway.
 //
+// A part that fails and has nothing to keep is left out
+// altogether, for the same reason carried one step further. That
+// case is the first rebuild after a new section is added, and it
+// is the one that mattered: AN ORDINARY DAY had never once been
+// written, so every rebuild for a day and a half threw away the
+// two parts that had worked.
+//
 // Nothing is kept at all if no part is new. That is the honest
 // failure: a description rebuilt entirely from yesterday is
 // yesterday's, and writing it again would only move its date.
@@ -243,7 +250,15 @@ func (b *Builder) write(ctx context.Context, e Evidence, before map[Part]string)
 		case err != nil || body == "":
 			kept := before[part]
 			if kept == "" {
-				return "", fmt.Errorf("profile: asking for %q: %w", part, err)
+				// Nothing new and nothing old. The part is left
+				// out and the others are kept, which is the same
+				// trade as the line below taken one step further:
+				// a description missing a section is worth a
+				// great deal more than no description, and until
+				// today a part that had never once been written
+				// took the two that had down with it.
+				b.warn(ctx, "leaving out "+string(part)+", which has never been written", err)
+				continue
 			}
 			b.warn(ctx, "keeping what the last description said for "+string(part), err)
 			body = kept

@@ -744,8 +744,24 @@ func excerpt(raw []byte, most int) string {
 // Everything else is left alone. Answering "what is the time" with
 // reasoning first is seconds spent on a question that had one
 // answer, and the turn has thirty.
+//
+// # Why this is low
+//
+// Reasoning and the answer come out of one budget. The gateway
+// caps a reply at three thousand tokens and there is no field in
+// the request to raise it. Asked to reason over a week of talk
+// the model spent the whole three thousand thinking and wrote
+// nothing: finish_reason maxtokens, not one character of text.
+// Every rebuild from 6 October onwards failed that way, for
+// thirty-six hours, and the log said only that the reply was
+// empty.
+//
+// High and medium were measured and are the same failure -- 3000
+// of 3000 either way, which says the effort is not what decides
+// how long it thinks for; an open question and room to think is.
+// So the room is what is taken away.
 var Hard = map[environment.Purpose]string{
-	environment.PurposeProfile: "high",
+	environment.PurposeProfile: "low",
 }
 
 // thinking : How much reasoning this call may do.

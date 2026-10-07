@@ -12264,6 +12264,101 @@ thing at night and the first in the morning, hours apart.
 `quiet.go` already measures that silence for another purpose.
 
 
+### Three thousand tokens of thinking and not one word
+
+Owner, 7 October 2026, looking at the Personality panel: *"update
+the new profile here based on the logic."* It was showing a
+description written on 6 October at 15:11. Nothing had replaced
+it in a day and a half.
+
+The log said the same thing every hour:
+
+	profile: asking for "AN ORDINARY DAY":
+	I am having some difficulty reaching the server.
+
+Which was wrong in every particular. The server was reached.
+
+#### What the numbers ruled out first
+
+107 failed calls, 62 of them the profile, every one of them
+*"the reply was empty"* after between 52 and 76 seconds. Against
+that, the calls that worked:
+
+	38,426 tokens in   ->  2.59s
+	 6,040 bytes out   ->  3.26s
+
+So neither a long prompt nor a long answer explains a minute of
+nothing. Both of the obvious theories were wrong, and the split
+into three calls -- made the day before for exactly this failure
+-- had been written against the wrong cause.
+
+#### The log could not say why
+
+`finish_reason` was being parsed off the wire and dropped on the
+floor. One line of it, and:
+
+	the reply was empty (376 events, finished "maxtokens",
+	3000 words written)
+
+The gateway caps a reply at three thousand tokens. Reasoning
+comes out of that same three thousand. And one purpose, alone in
+the codebase, asks for the most expensive setting there is:
+
+	var Hard = map[environment.Purpose]string{
+		environment.PurposeProfile: "high",
+	}
+
+The model spent the entire budget thinking and emitted no text at
+all. That setting and that failure were added on the same day.
+
+**High and medium are the same failure.** 3000 of 3000 either
+way, measured. Which says the dial is not what decides how long
+it thinks for -- an open question and room to think is -- so the
+room is what was taken away. `low`.
+
+#### Two more things were hiding behind it
+
+**A part that had never been written took the others down.**
+`write` falls back to what a section said last time when its call
+fails, and returns an error when there is nothing to fall back
+on. `AN ORDINARY DAY` was new, so there never was. Two parts
+succeeded and were thrown away, every hour, for a day. A
+description missing a section is worth far more than none, which
+the function's own comment already argued one step short of.
+
+**`Written` was a field with no column.** A memory the server
+writes is allowed eight thousand characters and one a person
+asked to have kept is allowed four. Which of the two a memory is
+was decided by `Memory.Written`, and `memories` had no such
+column -- so everything read back out of the table came back as
+the person's. The longer limit applied on create and never on
+update.
+
+The standing description is created once and rewritten hourly. It
+got the long limit exactly once, reached 4,013 characters, and
+every rebuild since was refused for length. The comment on
+`MaxWritten` describes raising the ceiling for this one memory;
+the raise never reached the path that needed it. It also means
+**Save on the Personality panel could not have worked** -- 4,013
+is already past what a hand-edit is allowed.
+
+#### Afterwards
+
+6,609 characters, all three parts, and the hours from the day
+before are in it:
+
+	He is at home on 7 of 7 observed days, arriving usually
+	around 9pm and leaving usually around 10am.
+	He is at the office on 3 of 7 observed days, with no fixed
+	arrival or departure hour.
+
+#### Still wrong, not fixed here
+
+`Update` clears `embed_model` unconditionally, and the API marks
+a hand-edited description by writing `byHand` into it. So `Mine`
+on the read endpoint can never be true.
+
+
 ## 12. Maintaining this file
 
 When the owner states a preference, makes a decision, or corrects something,
