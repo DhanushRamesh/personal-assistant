@@ -13531,6 +13531,66 @@ call and read-before-write makes that the listing. An eval that
 is wrong in that direction is worse than none.
 
 
+### Two rules that use the profile for something
+
+From a list of twenty suggested elsewhere, ten of which were
+already running and five of which named tools that do not exist.
+These two were new and are the only ones that make the routine
+earn its keep.
+
+	still in when you would normally have gone
+	  every 15m, quiet for 2h after speaking
+	    look up  calendar_events (1 day)
+	    look up  event_recent (place.exited, 3)
+	    only if  usually.home.leaves older than 90m
+	    only if  hour < 18
+	    write    say only if they appear to still be in and
+	             something today would be missed by staying
+
+	low battery with something on
+	  every 10m, quiet for 3h after speaking
+	    look up  event_recent (battery.level, 3)
+	    look up  calendar_events (1 day)
+	    only if  battery.level < 25
+	    write    mention the battery only if something still to
+	             come today could be affected
+
+Both say nothing on an ordinary day, which is the point. A
+departure from a routine is not worth a sentence and a battery
+percentage is not worth a sentence; a departure with a
+consequence and a battery with somewhere to be are.
+
+#### The advice that was wrong for this server
+
+	every one that can speak should have: check presence is here
+
+It would make a rule silent and lost while he is out. The rule
+runs, publishes to the outbox, and the greeting says it when he
+is back -- which is what `keep` is for. Checking presence first
+means the sentence is never composed at all. It is a fix for a
+problem the outbox already solves, by throwing the message away.
+
+And `battery.full arrives` was suggested in place of
+`battery.level is 100`. Android fires battery.full once per
+charge cycle and only the level reaching 100 re-fires, which is
+recorded here from when that rule was built.
+
+#### Tried rather than waited for
+
+	still in ...  -> it would say nothing: the check hour < 18
+	                 did not pass
+	                 the diary is empty; place.exited today was
+	                 10:56 home, 13:47 office, 21:24 office
+
+	low battery -> it would say nothing: the check
+	               battery.level < 25 did not pass
+	               the battery is at 58
+
+Which also says the first rule would have been right earlier: he
+left at 10:56, near the ten the routine worked out, so there was
+nothing to say.
+
+
 ## 12. Maintaining this file
 
 When the owner states a preference, makes a decision, or corrects something,
