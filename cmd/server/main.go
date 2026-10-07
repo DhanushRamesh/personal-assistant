@@ -639,6 +639,7 @@ func run() error {
 		Doer: doing{
 			tools: tools, speaker: speaker, written: announcements,
 			to: publishing, events: deviceEvents, here: here,
+			usually:  ordinarily(&profile.Reader{Memories: remembering.Store}, logger.Logger),
 			answerer: answerer, cfg: cfg,
 			now: cfg.Assistant.Now, logger: logger.Logger,
 		},
@@ -1904,12 +1905,16 @@ func (a announcing) Publish(ctx context.Context, from, userID string,
 // before it is safe to add: a scheduled task with all fifty-two
 // could cancel reminders at three in the morning.
 type doing struct {
-	tools    *tool.Registry
-	speaker  announce.Announcer
-	written  *announcement.Writer
-	to       *outbox.Publisher
-	events   *eventmysql.Store
-	here     remind.Presence
+	tools   *tool.Registry
+	speaker announce.Announcer
+	written *announcement.Writer
+	to      *outbox.Publisher
+	events  *eventmysql.Store
+	here    remind.Presence
+	// usually : The shape of this person's ordinary day, from the
+	// standing description. Nil leaves a rule writing without it,
+	// which is how every rule wrote before this.
+	usually  func(ctx context.Context, userID string) string
 	answerer environment.Environment
 	cfg      config.Config
 	now      func() time.Time
@@ -2121,7 +2126,8 @@ func (d doing) write(ctx context.Context, run job.Turn, s job.Step) (job.Outcome
 	if bad != nil {
 		return job.Outcome{}, bad
 	}
-	answer, err := d.converse(ctx, run.UserID, writing(s.Ask, run.Already, run.Before), specs)
+	answer, err := d.converse(ctx, run.UserID,
+		writing(s.Ask, run.Already, run.Before, d.routine(ctx, run.UserID)), specs)
 	if err != nil {
 		return job.Outcome{}, err
 	}
@@ -2300,7 +2306,42 @@ func same(said, before string) bool {
 }
 
 // writing : What the model is asked, for a write step.
-func writing(ask string, already []job.Ran, before string) string {
+// ordinarily : Reads the shape of somebody's ordinary day out of
+// the standing description.
+//
+// One section of it, not the whole. The description's other two
+// parts are who is in their life and what they keep coming back
+// to, which is for answering them; this is the part that says
+// whether a thing happening now is worth interrupting them over.
+//
+// A failure is a line in the log and an empty string. A rule that
+// cannot read the description writes the sentence it would have
+// written before there was one.
+func ordinarily(known *profile.Reader, logger *slog.Logger) func(context.Context, string) string {
+	return func(ctx context.Context, userID string) string {
+		described, err := known.Profile(ctx, userID)
+		if err != nil {
+			if logger != nil {
+				logger.WarnContext(ctx, "writing without their ordinary day",
+					slog.Any("error", err))
+			}
+			return ""
+		}
+		return profile.Split(described)[profile.Day]
+	}
+}
+
+// routine : The shape of their ordinary day, or empty.
+//
+// A failure costs the sentence its context and not the sentence.
+func (d doing) routine(ctx context.Context, userID string) string {
+	if d.usually == nil {
+		return ""
+	}
+	return d.usually(ctx, userID)
+}
+
+func writing(ask string, already []job.Ran, before string, usually string) string {
 	found := make([]string, 0, len(already))
 	for _, r := range already {
 		if strings.TrimSpace(r.Got) == "" {
@@ -2333,8 +2374,29 @@ func writing(ask string, already []job.Ran, before string) string {
 		)
 	}
 
+	// What an ordinary day looks like for them, so that a rule can
+	// tell an unusual thing from a Tuesday. It is also what says
+	// when not to speak: three in the morning is a different hour
+	// to be told something at, and nothing else here knows that.
+	//
+	// Their day and not the whole description. The rest is who is
+	// in their life and what they talk about, which is for
+	// answering them rather than for deciding whether to.
+	var ordinary string
+	if strings.TrimSpace(usually) != "" {
+		ordinary = prompt.Block(
+			prompt.Text(
+				"This is what an ordinary day looks like for them, worked out from weeks of their own devices and their own words.",
+				"Use it to judge whether what you have is worth saying: the same thing is remarkable at one hour and unremarkable at another, and a departure from this is only worth mentioning if something follows from it.",
+				"It describes what usually happens and is not a rule they have agreed to. Never tell them what their routine is, never say they are late by it, and never treat a day that does not match it as a thing to be explained.",
+			),
+			strings.TrimSpace(usually),
+		)
+	}
+
 	return prompt.Block(
 		prompt.Text("You are writing one sentence to be said out loud, now.", ask),
+		ordinary,
 		// Nobody asked for this one, so nobody is listening when it
 		// starts. A reply is heard from its first word because
 		// somebody is waiting for it; an announcement arrives at
