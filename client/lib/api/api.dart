@@ -433,6 +433,13 @@ class AssistantApi {
     Reminder.fromJson,
   );
 
+  /// listRules : The standing rules, newest first.
+  ///
+  /// Read only. Rules are made and cancelled by asking, and a second
+  /// way to write them is a second place for the grammar to be checked.
+  Future<List<Rule>> listRules() async =>
+      parseList(await _send('GET', '/v1/rules'), 'rules', Rule.fromJson);
+
   /// snoozeReminder : Puts one off by the given number of minutes.
   ///
   /// A repeating one is not moved. The server makes a single one-off

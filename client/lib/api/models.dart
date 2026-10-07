@@ -927,6 +927,94 @@ class Snoozed {
   );
 }
 
+/// RuleStep : One thing a rule does.
+class RuleStep {
+  const RuleStep({required this.does, required this.says});
+
+  /// does : announce, tool, write, relay or check.
+  final String does;
+
+  /// says : What it does, in words, put together by the server so a new
+  /// kind of step does not need an edit here as well.
+  final String says;
+
+  factory RuleStep.fromJson(Map<String, dynamic> json) => RuleStep(
+    does: json['do'] as String? ?? '',
+    says: json['says'] as String? ?? '',
+  );
+}
+
+/// Rule : One standing rule, as the listing shows it.
+class Rule {
+  const Rule({
+    required this.id,
+    required this.name,
+    required this.kind,
+    required this.schedule,
+    required this.state,
+    this.waits = false,
+    this.steps = const [],
+    this.next,
+    this.last,
+    this.why = '',
+    this.said = '',
+  });
+
+  final String id;
+  final String name;
+
+  /// kind : rule or reminder, in the person's own words.
+  final String kind;
+
+  /// schedule : When it runs, as it was written: every 5m, at 08:00,
+  /// when battery.level < 20.
+  final String schedule;
+
+  /// state : active, done or cancelled.
+  final String state;
+
+  /// waits : Whether it waits for something to happen rather than for a
+  /// time. The two read alike in a list and behave nothing alike.
+  final bool waits;
+
+  final List<RuleStep> steps;
+
+  /// next : When it runs again. Null for one that waits, which has no
+  /// next time at all.
+  final DateTime? next;
+
+  /// last : When it last ran. Null for one that never has.
+  final DateTime? last;
+
+  /// why : What happened last run -- what went wrong, or which check
+  /// stopped it. Empty when it simply ran.
+  final String why;
+
+  /// said : The sentence it last said. What tells a rule that is running
+  /// and finding nothing from one that is not running.
+  final String said;
+
+  /// active : Whether it is still going to run.
+  bool get active => state == 'active';
+
+  factory Rule.fromJson(Map<String, dynamic> json) => Rule(
+    id: json['id'] as String? ?? '',
+    name: json['name'] as String? ?? '',
+    kind: json['kind'] as String? ?? 'rule',
+    schedule: json['schedule'] as String? ?? '',
+    state: json['state'] as String? ?? 'active',
+    waits: json['waits'] as bool? ?? false,
+    steps: ((json['steps'] as List<dynamic>?) ?? const [])
+        .whereType<Map<String, dynamic>>()
+        .map(RuleStep.fromJson)
+        .toList(),
+    next: DateTime.tryParse(json['next'] as String? ?? '')?.toLocal(),
+    last: DateTime.tryParse(json['last'] as String? ?? '')?.toLocal(),
+    why: json['why'] as String? ?? '',
+    said: json['said'] as String? ?? '',
+  );
+}
+
 /// Personality : What the assistant has noticed about the person.
 ///
 /// Written by a model from a week of what they said, and rewritten every

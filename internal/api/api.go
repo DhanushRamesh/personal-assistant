@@ -34,6 +34,7 @@ import (
 	"github.com/DhanushRamesh/personal-assistant/internal/api/presence"
 	profileapi "github.com/DhanushRamesh/personal-assistant/internal/api/profile"
 	remarksapi "github.com/DhanushRamesh/personal-assistant/internal/api/remarks"
+	rulesapi "github.com/DhanushRamesh/personal-assistant/internal/api/rules"
 	"github.com/DhanushRamesh/personal-assistant/internal/api/reminders"
 	speechapi "github.com/DhanushRamesh/personal-assistant/internal/api/speech"
 	toolsapi "github.com/DhanushRamesh/personal-assistant/internal/api/tools"
@@ -138,6 +139,8 @@ type Options struct {
 	// serves an empty list, which is what a server with nothing
 	// watching the room should show.
 	Remarks remarksapi.Store
+	// Rules : Where the standing rules are read from.
+	Rules rulesapi.Store
 
 	// Owed : What each client still owes somebody to say, which it
 	// collects for itself. Named apart from Announcements above:
@@ -226,6 +229,7 @@ type Server struct {
 	memories      *memories.Handler
 	tools         *toolsapi.Handler
 	remarks       *remarksapi.Handler
+	rules         *rulesapi.Handler
 	announcements *announcementsapi.Handler
 }
 
@@ -262,6 +266,7 @@ func New(opts Options) *Server {
 		memories:      memories.New(opts.Logger, opts.Memories),
 		tools:         toolsapi.New(opts.Logger, opts.Tools),
 		remarks:       remarksapi.New(opts.Logger, opts.Remarks),
+		rules:         rulesapi.New(opts.Logger, opts.Rules),
 		announcements: announcementsapi.New(opts.Logger, opts.Owed, nil),
 	}
 	s.routes()
@@ -317,6 +322,7 @@ func (s *Server) routes() {
 		s.memories.Mount(r)
 		s.tools.Mount(r)
 		s.remarks.Mount(r)
+		s.rules.Mount(r)
 		s.announcements.Mount(r)
 	})
 }

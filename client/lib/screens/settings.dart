@@ -13,6 +13,7 @@ enum SettingsModule {
   account('Account', Icons.person_outline),
   clients('Clients', Icons.devices_other_outlined),
   reminders('Reminders', Icons.alarm_outlined),
+  rules('Rules', Icons.rule_outlined),
   personality('Personality', Icons.psychology_outlined),
   knows('What it knows', Icons.travel_explore_outlined),
   server('Server', Icons.dns_outlined);
@@ -87,6 +88,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
   /// out of date.
   void _read(SettingsModule module) {
     if (module == SettingsModule.reminders) widget.state.loadReminders();
+    if (module == SettingsModule.rules) widget.state.loadRules();
     if (module == SettingsModule.personality) widget.state.loadPersonality();
     if (module == SettingsModule.clients) widget.state.loadClients();
   }
@@ -191,6 +193,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
                         SettingsModule.reminders => _RemindersModule(
                           state: state,
                         ),
+                        SettingsModule.rules => _RulesModule(state: state),
                         SettingsModule.personality => _PersonalityModule(
                           state: state,
                         ),
@@ -599,6 +602,158 @@ class _PersonalityModuleState extends State<_PersonalityModule> {
         ? 'Your words$when. The nightly rewrite will replace them.'
         : 'Written by the assistant$when.';
   }
+}
+
+/// _RulesModule : Everything standing that can speak on its own.
+///
+/// Owner, 7 October 2026: *"currently I'm having a hardcoded 25, 20,
+/// 15, 10, 5, 100 for battery, and like this I'll be adding many
+/// rules... before that I should be able to view the standing rules in
+/// UI."*
+///
+/// Read only. A rule is made by asking for one, and a second way to
+/// write them is a second place for the grammar to be checked.
+class _RulesModule extends StatelessWidget {
+  const _RulesModule({required this.state});
+
+  final AppState state;
+
+  @override
+  Widget build(BuildContext context) {
+    final held = state.rules;
+    return _Section(
+      title: 'Rules',
+      subtitle:
+          'Everything that can speak without being asked. A rule either '
+          'comes round on a clock or waits for something to happen, then '
+          'runs its steps in order; any step may stop the ones after it. '
+          'Ask to add or cancel one by voice.',
+      action: _SectionLink(label: 'Refresh', onTap: state.loadRules),
+      child: switch (held) {
+        null => Text(
+          'Reading them…',
+          style: context.text.caption.copyWith(
+            color: context.colors.textSecondary,
+          ),
+        ),
+        [] => Text(
+          'Nothing standing. Ask for something like "tell me when the '
+              'battery drops below twenty" and it appears here.',
+          style: context.text.caption.copyWith(
+            color: context.colors.textSecondary,
+          ),
+        ),
+        _ => Column(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [for (final r in held) _RuleTile(rule: r)],
+        ),
+      },
+    );
+  }
+}
+
+/// _RuleTile : One rule, its schedule, its steps and what it last did.
+///
+/// The last run is shown beside it and not behind a tap. The ordinary
+/// output of most of these is silence, and silence has two causes that
+/// look identical from outside: a rule that ran and found nothing, and
+/// a rule that is not running at all.
+class _RuleTile extends StatelessWidget {
+  const _RuleTile({required this.rule});
+
+  final Rule rule;
+
+  @override
+  Widget build(BuildContext context) {
+    final colors = context.colors;
+    final off = !rule.active;
+
+    return Padding(
+      padding: const EdgeInsets.only(top: AppSpacing.md),
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Icon(
+            off
+                ? Icons.close
+                : rule.waits
+                ? Icons.bolt_outlined
+                : Icons.schedule_outlined,
+            size: 15,
+            color: off ? colors.textMuted : colors.textSecondary,
+          ),
+          const SizedBox(width: AppSpacing.sm),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Row(
+                  children: [
+                    Flexible(
+                      child: Text(
+                        rule.name.isEmpty ? 'Unnamed' : rule.name,
+                        style: context.text.body.copyWith(
+                          color: off ? colors.textMuted : null,
+                        ),
+                      ),
+                    ),
+                    const SizedBox(width: AppSpacing.sm),
+                    Text(
+                      off ? rule.state : rule.schedule,
+                      style: context.text.caption.copyWith(
+                        color: colors.textMuted,
+                      ),
+                    ),
+                  ],
+                ),
+                for (final step in rule.steps)
+                  Padding(
+                    padding: const EdgeInsets.only(top: AppSpacing.xxs),
+                    child: Text(
+                      step.says.isEmpty
+                          ? step.does
+                          : '${step.does} — ${step.says}',
+                      style: context.text.caption.copyWith(
+                        color: colors.textSecondary,
+                      ),
+                    ),
+                  ),
+                if (_lastly(rule) case final line?) ...[
+                  const SizedBox(height: AppSpacing.xxs),
+                  Text(
+                    line,
+                    style: context.text.caption.copyWith(
+                      color: colors.textMuted,
+                    ),
+                  ),
+                ],
+              ],
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+/// _lastly : What happened the last time it ran, or null if it never has.
+String? _lastly(Rule rule) {
+  if (rule.last == null) return 'Has not run yet.';
+  final at = _clock(rule.last!);
+  if (rule.why.isNotEmpty) return 'Last ran $at — ${rule.why}.';
+  if (rule.said.isNotEmpty) return 'Last ran $at — said "${rule.said}"';
+  return 'Last ran $at.';
+}
+
+/// _clock : A time as it would be said, with the day when it is not today.
+String _clock(DateTime at) {
+  final now = DateTime.now();
+  final today =
+      at.year == now.year && at.month == now.month && at.day == now.day;
+  final hhmm =
+      '${at.hour.toString().padLeft(2, '0')}:'
+      '${at.minute.toString().padLeft(2, '0')}';
+  return today ? 'at $hhmm' : 'on ${at.day}/${at.month} at $hhmm';
 }
 
 class _RemindersModule extends StatelessWidget {

@@ -709,6 +709,7 @@ func run() error {
 		Cut:            cutOff,
 		DeviceEvents:   deviceEvents,
 		Remarks:        remarked,
+		Rules:          scheduled,
 		Owed:           owed,
 		Naming:         naming(cfg, logger.Logger),
 		Tools:          tools,

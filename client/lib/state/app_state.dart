@@ -139,6 +139,14 @@ class AppState extends ChangeNotifier {
   /// reminders : What is waiting to be said, soonest first.
   List<Reminder> get reminders => _reminders;
 
+  List<Rule>? _rules;
+
+  /// rules : The standing rules, newest first. Null before they have
+  /// been read, which is what tells an empty list from an unread one:
+  /// somebody with no rules and somebody whose rules have not loaded
+  /// should not see the same screen.
+  List<Rule>? get rules => _rules;
+
   Personas _personas = const Personas();
 
   /// personas : The manners the assistant can answer in, and the one it is
@@ -265,6 +273,7 @@ class AppState extends ChangeNotifier {
     _conversations = const [];
     _clients = const [];
     _reminders = const [];
+    _rules = null;
     _turns = const [];
     _conversationId = null;
     _error = null;
@@ -699,6 +708,22 @@ class AppState extends ChangeNotifier {
     _set(busy: true, error: null);
     try {
       _reminders = await api.listReminders(past: _showPast);
+    } on Object catch (e) {
+      _error = _explain(e);
+    }
+    _set(busy: false);
+  }
+
+  /// loadRules : Reads the standing rules, for the settings screen.
+  ///
+  /// Read every time the section is opened rather than once. A rule can
+  /// be made or cancelled by voice between two looks at this page, and a
+  /// list of what is running that is itself out of date is worse than no
+  /// list.
+  Future<void> loadRules() async {
+    _set(busy: true, error: null);
+    try {
+      _rules = await api.listRules();
     } on Object catch (e) {
       _error = _explain(e);
     }

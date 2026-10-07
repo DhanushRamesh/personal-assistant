@@ -12440,6 +12440,54 @@ And the fifteen second cut is unchanged, so an opening spends
 part of a budget that was already fixed.
 
 
+### Seeing the rules
+
+Owner, 7 October 2026: *"currently I'm having a hardcoded 25, 20,
+15, 10, 5, 100 for battery, and like this I'll be adding many
+rules. I can't be adding rules manually like this -- there should
+be a way for AI to understand how I did those and add these rules
+automatically. Before that I should be able to view the standing
+rules in UI."*
+
+The second sentence first, and he is right to put it there.
+Nothing should write rules on somebody's behalf while the only
+way to see the ones that exist is to ask aloud or read the table.
+
+`GET /v1/rules` and a page beside Reminders. Name, schedule, every
+step in order, and what happened last time it ran.
+
+**Read only.** Rules are made with `rule_add` and called off with
+`rule_cancel`, which check the grammar, the gate and that a tool a
+rule names exists and only reads. A second way in is a second
+place for all of that, and the first thing it would diverge on is
+the thing nobody tested.
+
+**The last run is on the face of it, not behind a tap.** The
+ordinary output of most of these is silence, and silence has two
+causes that look identical from outside: a rule that ran and found
+nothing, and a rule that is not running at all. `Last ran at 17:37
+-- coming_due found nothing` tells those apart at a glance.
+
+#### What it showed in its first minute
+
+	when to set off   every 5m0s
+	  tool -- leaving_due
+	  relay
+	  Last ran at 17:37 -- leaving_due: google: the connection
+	  has expired and must be granted again: The permission was
+	  withdrawn.
+
+The Google link is dead and has been failing every five minutes,
+and nothing had said so. It was in `jobs.why` the whole time, in a
+column nothing read.
+
+That is the argument for the page in one line, and it is also the
+argument for the thing it was asked for next: a rule that fails
+quietly is worse the more rules there are, and the answer to
+"write me more of these" has to include noticing when one stops
+working.
+
+
 ## 12. Maintaining this file
 
 When the owner states a preference, makes a decision, or corrects something,

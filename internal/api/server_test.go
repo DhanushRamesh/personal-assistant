@@ -77,6 +77,7 @@ func TestRouteTableIsComplete(t *testing.T) {
 		"GET /v1/memories":                      true,
 		"GET /v1/tools":                         true,
 		"GET /v1/profile":                       true,
+		"GET /v1/rules":                         true,
 		"PUT /v1/profile":                       true,
 		"GET /v1/vocabulary":                    true,
 		"GET /v1/google/account":                true,
