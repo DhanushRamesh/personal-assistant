@@ -12555,15 +12555,30 @@ What it leaves: anything whose moment is while he is at the
 laptop. The four percent overnight slide is the example -- he was
 home, awake, and nothing said so for four hours.
 
-#### The part that is not what it sounds like
+#### How it already waits, which was misread here first
 
-Presence is consulted only when a rule writes `check presence is
-here` for itself. Nothing else looks. So a rule firing while he
-is out does not stay quiet -- it announces to an empty room, and
-the sentence is recorded in `last_said`, which is what stops a
-rule repeating itself.
+Owner, correcting it: *"it is sent to the client, the client
+checks the presence and says the pending, and on greetings it
+will say the pending events."*
 
-The message is therefore not delayed. It is spent.
+Which is what is built. A rule publishes to the outbox as well as
+speaking, the endpoint hands each client the `away` of the kind
+rather than deciding for it, and `announcements.Mark` takes only
+said or dropped -- *"a voice client in an empty room says nothing
+and writes nothing, and the announcement is still waiting when
+the watch comes back into range."* The greeting then reads what
+is waiting and says it as part of hello, because a person would
+not say hello and then read out a list.
+
+So nothing is spent. The first reading of this -- that a rule
+firing while he was out burned its message -- came from reading
+the engine and the presence gate and not the outbox, and was
+wrong.
+
+The one thing that is true of it: the direct `Speak` beside the
+publish does talk to an empty room, which is speech nobody hears
+and no loss. That half goes when every client collects, which the
+step's own comment in main.go already says.
 
 
 ## 12. Maintaining this file
