@@ -12533,6 +12533,39 @@ pages, and a toggle on one quietly changing the other is the
 sort of thing nobody finds until it confuses them.
 
 
+### Rules speak in the room and nowhere else
+
+Owner, 7 October 2026, after being shown that no rule can reach
+him when he is out: *"currently let it talk only when in room."*
+
+So the reach-and-hold work is not done. A rule publishes as
+Immediate -- the room, dropped when nobody is there, worth saying
+for five minutes -- and that is the whole of it. Reminders remain
+the only thing that follows him out of the house, which is what
+they were always for.
+
+What this rules out, and it is worth being plain about it: a rule
+whose moment is the moment he leaves cannot work. Setting off
+with eighteen percent is the clearest case -- the trigger is the
+helmet connecting, which is him walking away from the only thing
+that can speak. That rule is not worth building until this
+decision changes.
+
+What it leaves: anything whose moment is while he is at the
+laptop. The four percent overnight slide is the example -- he was
+home, awake, and nothing said so for four hours.
+
+#### The part that is not what it sounds like
+
+Presence is consulted only when a rule writes `check presence is
+here` for itself. Nothing else looks. So a rule firing while he
+is out does not stay quiet -- it announces to an empty room, and
+the sentence is recorded in `last_said`, which is what stops a
+rule repeating itself.
+
+The message is therefore not delayed. It is spent.
+
+
 ## 12. Maintaining this file
 
 When the owner states a preference, makes a decision, or corrects something,
