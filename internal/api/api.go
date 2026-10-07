@@ -34,8 +34,8 @@ import (
 	"github.com/DhanushRamesh/personal-assistant/internal/api/presence"
 	profileapi "github.com/DhanushRamesh/personal-assistant/internal/api/profile"
 	remarksapi "github.com/DhanushRamesh/personal-assistant/internal/api/remarks"
-	rulesapi "github.com/DhanushRamesh/personal-assistant/internal/api/rules"
 	"github.com/DhanushRamesh/personal-assistant/internal/api/reminders"
+	rulesapi "github.com/DhanushRamesh/personal-assistant/internal/api/rules"
 	speechapi "github.com/DhanushRamesh/personal-assistant/internal/api/speech"
 	toolsapi "github.com/DhanushRamesh/personal-assistant/internal/api/tools"
 	vocabularyapi "github.com/DhanushRamesh/personal-assistant/internal/api/vocabulary"
@@ -48,6 +48,7 @@ import (
 	"github.com/DhanushRamesh/personal-assistant/internal/memory"
 	"github.com/DhanushRamesh/personal-assistant/internal/persona"
 	"github.com/DhanushRamesh/personal-assistant/internal/remind"
+	"github.com/DhanushRamesh/personal-assistant/internal/routine"
 	"github.com/DhanushRamesh/personal-assistant/internal/speech"
 	"github.com/DhanushRamesh/personal-assistant/internal/tool"
 	"github.com/DhanushRamesh/personal-assistant/internal/vocabulary"
@@ -141,6 +142,9 @@ type Options struct {
 	Remarks remarksapi.Store
 	// Rules : Where the standing rules are read from.
 	Rules rulesapi.Store
+	// Usually : What the person usually does, as conditions a rule
+	// may stand on.
+	Usually routine.Store
 
 	// Owed : What each client still owes somebody to say, which it
 	// collects for itself. Named apart from Announcements above:
@@ -266,7 +270,7 @@ func New(opts Options) *Server {
 		memories:      memories.New(opts.Logger, opts.Memories),
 		tools:         toolsapi.New(opts.Logger, opts.Tools),
 		remarks:       remarksapi.New(opts.Logger, opts.Remarks),
-		rules:         rulesapi.New(opts.Logger, opts.Rules),
+		rules:         rulesapi.New(opts.Logger, opts.Rules, opts.Usually),
 		announcements: announcementsapi.New(opts.Logger, opts.Owed, nil),
 	}
 	s.routes()

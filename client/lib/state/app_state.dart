@@ -139,13 +139,13 @@ class AppState extends ChangeNotifier {
   /// reminders : What is waiting to be said, soonest first.
   List<Reminder> get reminders => _reminders;
 
-  List<Rule>? _rules;
+  Rules? _rules;
 
   /// rules : The standing rules, newest first. Null before they have
   /// been read, which is what tells an empty list from an unread one:
   /// somebody with no rules and somebody whose rules have not loaded
   /// should not see the same screen.
-  List<Rule>? get rules => _rules;
+  Rules? get rules => _rules;
 
   Personas _personas = const Personas();
 

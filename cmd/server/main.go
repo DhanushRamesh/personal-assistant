@@ -62,6 +62,8 @@ import (
 	"github.com/DhanushRamesh/personal-assistant/internal/prompt"
 	"github.com/DhanushRamesh/personal-assistant/internal/remind"
 	remindmysql "github.com/DhanushRamesh/personal-assistant/internal/remind/mysql"
+	"github.com/DhanushRamesh/personal-assistant/internal/routine"
+	routinemysql "github.com/DhanushRamesh/personal-assistant/internal/routine/mysql"
 	"github.com/DhanushRamesh/personal-assistant/internal/runner"
 	"github.com/DhanushRamesh/personal-assistant/internal/search"
 	"github.com/DhanushRamesh/personal-assistant/internal/search/firecrawl"
@@ -504,6 +506,11 @@ func run() error {
 	// actually said. The memories are facts they gave once and none of
 	// them says what somebody is like to talk to; this is the attempt at
 	// the rest.
+	// What they usually do, for the conditions that read a routine
+	// rather than a device. Written by the same pass that rewrites
+	// the standing description, so the two cannot disagree.
+	usually := routinemysql.New(db.DB)
+
 	describing := &profile.Builder{
 		Said:     chats,
 		Did:      deviceEvents,
@@ -512,6 +519,7 @@ func run() error {
 		Replies:  chats,
 		Where:    cfg.Assistant.Location,
 		Memories: remembering.Store,
+		Usually:  usually,
 		Now:      cfg.Assistant.Now,
 		Logger:   logger.Logger,
 		// So the description says "their diary" rather than
@@ -643,11 +651,12 @@ func run() error {
 			answerer: answerer, cfg: cfg,
 			now: cfg.Assistant.Now, logger: logger.Logger,
 		},
-		Readings: readings{events: deviceEvents},
-		Journal:  keeping{notes: remarked},
-		Where:    cfg.Assistant.Location,
-		Now:      cfg.Assistant.Now,
-		Logger:   logger.Logger,
+		Readings: readings{events: deviceEvents, usually: usually,
+			where: cfg.Assistant.Location, now: cfg.Assistant.Now},
+		Journal: keeping{notes: remarked},
+		Where:   cfg.Assistant.Location,
+		Now:     cfg.Assistant.Now,
+		Logger:  logger.Logger,
 	}
 	// The one thing the separation must not lose. Nobody is told
 	// at the time that the phone refused, because nobody asked it
@@ -711,6 +720,7 @@ func run() error {
 		DeviceEvents:   deviceEvents,
 		Remarks:        remarked,
 		Rules:          scheduled,
+		Usually:        usually,
 		Owed:           owed,
 		Naming:         naming(cfg, logger.Logger),
 		Tools:          tools,
@@ -2038,10 +2048,25 @@ func came(r job.Record) notice.Outcome {
 // The one place a rule's view of a reading is built, used both by
 // a check step and by the runner deciding whether a watching rule
 // has just crossed its line.
-type readings struct{ events *eventmysql.Store }
+type readings struct {
+	events *eventmysql.Store
+	// usually : What the person usually does, for the conditions
+	// that read a routine rather than a device. Nil leaves those
+	// conditions unknown, which is how they fail: a rule standing
+	// on a routine nobody has worked out yet does not fire.
+	usually routine.Store
+	// where : Their zone, which is what an hour means.
+	where *time.Location
+	// now : The clock, so the hour a routine describes is placed on
+	// today.
+	now func() time.Time
+}
 
 // Latest : The most recent readings of a kind, newest first.
 func (r readings) Latest(ctx context.Context, userID, kind string, n int) ([]job.Reading, error) {
+	if routine.Mine(kind) {
+		return r.usual(ctx, userID, kind)
+	}
 	found, err := r.events.Recent(ctx, userID, event.Query{Kind: kind, Limit: n})
 	if err != nil {
 		return nil, err
@@ -2055,6 +2080,50 @@ func (r readings) Latest(ctx context.Context, userID, kind string, n int) ([]job
 		})
 	}
 	return out, nil
+}
+
+// usual : A routine as a reading, placed on today.
+//
+// One reading and never two. The crossing test asks for the
+// previous one to decide whether a thing has just become true, and
+// a routine never becomes true -- it is a time of day. Returning a
+// single reading is what makes [job.Watched] right to refuse these
+// as triggers: there is nothing here to cross.
+//
+// The value is the hour and the time is the hour, which is what
+// lets "older than 2h" and "within 30m" read as two hours past
+// when they normally go and the half hour after it, with no new
+// word in the grammar.
+func (r readings) usual(ctx context.Context, userID, kind string) ([]job.Reading, error) {
+	if r.usually == nil {
+		return nil, nil
+	}
+	held, err := r.usually.All(ctx, userID)
+	if err != nil {
+		return nil, err
+	}
+	for _, f := range held {
+		if !strings.EqualFold(f.Name(), kind) {
+			continue
+		}
+		return []job.Reading{{
+			Value: strconv.Itoa(f.Hour),
+			At:    f.Today(r.clock(), r.where),
+			Known: true,
+		}}, nil
+	}
+	// Nothing known. Not an error: a place they have only just
+	// started going to has no hour yet, and a condition on it
+	// should quietly not hold rather than stop the rule.
+	return nil, nil
+}
+
+// clock : Now.
+func (r readings) clock() time.Time {
+	if r.now == nil {
+		return time.Now()
+	}
+	return r.now()
 }
 
 // Rounds : How many times a write step may call tools before it

@@ -45,6 +45,7 @@ import (
 	"github.com/DhanushRamesh/personal-assistant/internal/event"
 	"github.com/DhanushRamesh/personal-assistant/internal/memory"
 	"github.com/DhanushRamesh/personal-assistant/internal/prompt"
+	"github.com/DhanushRamesh/personal-assistant/internal/routine"
 )
 
 // Subject : How the profile memory is recognised among the others.
@@ -155,6 +156,11 @@ type Builder struct {
 	// than "calendar_events". Nil leaves the tool's own name, which is
 	// what this did before there was anywhere to ask.
 	Domain func(tool string) string
+	// Usually : Where what they usually do is kept, as conditions a
+	// rule can stand on. Optional: without it the routine is only
+	// ever said in prose, which is how this worked before a rule
+	// could read one.
+	Usually routine.Store
 	// Logger : Where failures go. Nil is silent.
 	Logger *slog.Logger
 
@@ -177,6 +183,19 @@ func (b *Builder) Build(ctx context.Context, userID string) error {
 	if userID == "" {
 		return fmt.Errorf("profile: no person to describe")
 	}
+
+	// What their devices reported, and what that says they usually
+	// do. Before anything else and whatever else happens: the
+	// conditions are worked out from events, and every reason this
+	// function has for stopping early is about what was said.
+	//
+	// A quiet week is the case. Nobody has typed anything, so the
+	// description is left alone -- rightly, nothing new has been
+	// said about them -- and the routine would have gone on being
+	// whatever it was a fortnight ago, which is the one half of
+	// this that something acts on unattended.
+	did := b.did(ctx, userID)
+	b.remember(ctx, userID, did)
 
 	said, err := b.Said.SaidSince(ctx, userID, b.clock().Add(-Window), Most)
 	if err != nil {
@@ -202,7 +221,7 @@ func (b *Builder) Build(ctx context.Context, userID string) error {
 
 	evidence := Evidence{
 		Said:    Folded(said),
-		Rhythm:  b.rhythm(ctx, userID),
+		Rhythm:  b.rhythm(did),
 		Asking:  b.asking(ctx, userID),
 		Planned: b.planned(ctx, userID),
 		Replies: b.replies(ctx, userID),
@@ -390,9 +409,29 @@ func (b *Builder) planned(ctx context.Context, userID string) string {
 // not the description itself. What somebody says is the half that has
 // always been there, and losing a week of prose because a query failed
 // would be the wrong trade.
-func (b *Builder) rhythm(ctx context.Context, userID string) string {
-	if b.Did == nil {
+func (b *Builder) rhythm(did []event.Event) string {
+	if len(did) == 0 {
 		return ""
+	}
+	// And the same observations as conditions. Written here rather
+	// than worked out again elsewhere: a rule conditioned on when
+	// somebody leaves home and a description saying when they
+	// leave home read the same window through the same arithmetic,
+	// and two implementations would agree only until one was
+	// edited.
+	return prompt.Block(
+		Rhythm(did, b.Where),
+		Quiet(did, b.Where),
+		Changed(did, b.Where, b.clock()))
+}
+
+// did : What their devices reported over the four weeks.
+//
+// One read, used twice: the counted half of the description, and
+// the conditions a rule stands on.
+func (b *Builder) did(ctx context.Context, userID string) []event.Event {
+	if b.Did == nil {
+		return nil
 	}
 	did, err := b.Did.Recent(ctx, userID, event.Query{
 		Since: b.clock().Add(-Habits),
@@ -411,15 +450,31 @@ func (b *Builder) rhythm(ctx context.Context, userID string) string {
 			b.Logger.ErrorContext(ctx, "cannot read what their devices reported",
 				slog.String("user_id", userID), slog.Any("error", err))
 		}
-		return ""
+		return nil
 	}
-	// The counts, then what is different about them. Both from the
-	// same read: the change is a property of the four weeks, not a
-	// fifth thing to go and fetch.
-	return prompt.Block(
-		Rhythm(did, b.Where),
-		Quiet(did, b.Where),
-		Changed(did, b.Where, b.clock()))
+	return did
+}
+
+// remember : Keeps what they usually do, where a condition can
+// read it.
+//
+// A failure costs the conditions and not the description. The
+// prose half says the same thing and is what somebody reads; a
+// rule standing on an hour that could not be written simply does
+// not fire, which is the right way for this to fail.
+func (b *Builder) remember(ctx context.Context, userID string, did []event.Event) {
+	if b.Usually == nil {
+		return
+	}
+	facts := Usually(did, b.Where)
+	if err := b.Usually.Keep(ctx, userID, facts); err != nil {
+		b.warn(ctx, "cannot keep what they usually do", err)
+		return
+	}
+	if b.Logger != nil {
+		b.Logger.InfoContext(ctx, "worked out what they usually do",
+			slog.Int("facts", len(facts)))
+	}
 }
 
 // asking : What the assistant ran for them over the same four weeks.

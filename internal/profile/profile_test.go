@@ -8,10 +8,19 @@ import (
 	"time"
 
 	"github.com/DhanushRamesh/personal-assistant/internal/conversation"
+	"github.com/DhanushRamesh/personal-assistant/internal/event"
 	"github.com/DhanushRamesh/personal-assistant/internal/memory"
 	"github.com/DhanushRamesh/personal-assistant/internal/memory/inmemory"
 	"github.com/DhanushRamesh/personal-assistant/internal/profile"
+	"github.com/DhanushRamesh/personal-assistant/internal/routine"
 )
+
+// reported : A stand-in for the event store.
+type reported struct{ events []event.Event }
+
+func (r *reported) Recent(context.Context, string, event.Query) ([]event.Event, error) {
+	return r.events, nil
+}
 
 // at : A fixed week.
 func at() time.Time { return time.Date(2026, 9, 29, 12, 0, 0, 0, time.UTC) }
@@ -406,5 +415,68 @@ func TestUsingTheAssistantIsNotTheSubject(t *testing.T) {
 	p := profile.Prompt(profile.SoFar, profile.Evidence{Said: said(3)})
 	if !strings.Contains(p, "not their use of the assistant") {
 		t.Error("the prompt does not say to describe the person rather than the usage")
+	}
+}
+
+// usualStore : Somewhere for a test to catch what was worked out.
+type usualStore struct {
+	kept  []routine.Fact
+	times int
+}
+
+func (u *usualStore) Keep(_ context.Context, _ string, f []routine.Fact) error {
+	u.kept, u.times = f, u.times+1
+	return nil
+}
+func (u *usualStore) All(context.Context, string) ([]routine.Fact, error) {
+	return u.kept, nil
+}
+
+// TestTheRoutineIsWorkedOutOnAQuietWeek : The description rebuilds
+// only when somebody has said something, which is right -- events
+// arrive all day and no paragraph turns on one more. The routine is
+// the opposite: it is made of events, and something acts on it
+// unattended, so a week of silence must not leave it as it was a
+// fortnight ago.
+func TestTheRoutineIsWorkedOutOnAQuietWeek(t *testing.T) {
+	at := time.Date(2026, 10, 7, 9, 0, 0, 0, time.UTC)
+	usually := &usualStore{}
+
+	// Four mornings leaving home at ten, and not a word said.
+	var did []event.Event
+	for d := 0; d < 4; d++ {
+		when := at.AddDate(0, 0, -d-1)
+		did = append(did, event.Event{
+			Kind:       "place.exited",
+			Payload:    []byte(`{"value":"home"}`),
+			OccurredAt: time.Date(when.Year(), when.Month(), when.Day(), 10, 5, 0, 0, time.UTC),
+			ReceivedAt: at,
+		})
+	}
+
+	b := &profile.Builder{
+		Said:     &heard{},
+		Did:      &reported{events: did},
+		Memories: inmemory.New(),
+		Usually:  usually,
+		Where:    time.UTC,
+		Now:      func() time.Time { return at },
+		Ask: func(context.Context, string) (string, error) {
+			t.Error("a model was asked to describe somebody who said nothing")
+			return "", nil
+		},
+	}
+	if err := b.Build(context.Background(), "usr_1"); err != nil {
+		t.Fatal(err)
+	}
+
+	if usually.times != 1 {
+		t.Fatalf("the routine was worked out %d times, want once", usually.times)
+	}
+	if len(usually.kept) != 1 {
+		t.Fatalf("kept %d facts, want the one hour the evidence supports", len(usually.kept))
+	}
+	if got := usually.kept[0]; got.Name() != "usually.home.leaves" || got.Hour != 10 {
+		t.Errorf("worked out %q at %d, want usually.home.leaves at 10", got.Name(), got.Hour)
 	}
 }

@@ -944,6 +944,74 @@ class RuleStep {
   );
 }
 
+/// Usual : One thing the person usually does, as a condition a rule
+/// can stand on.
+class Usual {
+  const Usual({
+    required this.source,
+    required this.subject,
+    required this.what,
+    required this.hour,
+    required this.said,
+    this.days = 0,
+    this.over = 0,
+  });
+
+  /// source : What to write in a rule — usually.home.leaves.
+  final String source;
+
+  /// subject : The place, by the name they gave it themselves.
+  final String subject;
+
+  /// what : arrives or leaves.
+  final String what;
+
+  final int hour;
+
+  /// said : The hour as somebody would say it.
+  final String said;
+
+  /// days, over : How many days agreed, out of how many it was seen
+  /// at all. Both, because together they are what makes it arguable.
+  final int days;
+  final int over;
+
+  factory Usual.fromJson(Map<String, dynamic> json) => Usual(
+    source: json['source'] as String? ?? '',
+    subject: json['subject'] as String? ?? '',
+    what: json['what'] as String? ?? '',
+    hour: (json['hour'] as num?)?.toInt() ?? 0,
+    said: json['said'] as String? ?? '',
+    days: (json['days'] as num?)?.toInt() ?? 0,
+    over: (json['over'] as num?)?.toInt() ?? 0,
+  );
+}
+
+/// Rules : The standing rules, and what a rule may condition on
+/// besides a device reading.
+///
+/// One answer rather than two reads. The conditions are the
+/// vocabulary for the thing on the page, and a page that showed the
+/// rules before it knew what could be written would be a page that
+/// rearranged itself.
+class Rules {
+  const Rules({this.rules = const [], this.usually = const []});
+
+  final List<Rule> rules;
+  final List<Usual> usually;
+
+  factory Rules.fromJson(Map<String, dynamic> json) => Rules(
+    rules: ((json['rules'] as List<dynamic>?) ?? const [])
+        .whereType<Map<String, dynamic>>()
+        .map(Rule.fromJson)
+        .toList(),
+    usually: ((json['usually'] as List<dynamic>?) ?? const [])
+        .whereType<Map<String, dynamic>>()
+        .map(Usual.fromJson)
+        .toList(),
+  );
+}
+
 /// Rule : One standing rule, as the listing shows it.
 class Rule {
   const Rule({

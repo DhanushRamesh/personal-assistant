@@ -11,6 +11,7 @@ import (
 	"github.com/DhanushRamesh/personal-assistant/internal/conversation"
 	"github.com/DhanushRamesh/personal-assistant/internal/event"
 	"github.com/DhanushRamesh/personal-assistant/internal/prompt"
+	"github.com/DhanushRamesh/personal-assistant/internal/routine"
 	"github.com/DhanushRamesh/personal-assistant/internal/tool"
 )
 
@@ -256,6 +257,87 @@ func visits(moments []moment, where *time.Location) string {
 	)
 }
 
+// Usually : What they usually do, as facts a condition can read.
+//
+// The same arrivals and departures [visits] counts into a sentence,
+// given as numbers instead. One function over one set of
+// observations, so a rule conditioned on when somebody leaves home
+// and a description saying when they leave home cannot disagree --
+// which two separate implementations of the same arithmetic would,
+// the first time one of them was edited.
+//
+// Only the places whose hours actually agree. A place somebody
+// goes at no particular hour has no fact here rather than a fact
+// with a low number on it: a condition is a thing that fires, and
+// one standing on three observations scattered across a day would
+// fire at a time nobody keeps.
+func Usually(all []event.Event, where *time.Location) []routine.Fact {
+	if where == nil {
+		where = time.UTC
+	}
+	at := time.Time{}
+	for _, e := range all {
+		if e.ReceivedAt.After(at) {
+			at = e.ReceivedAt
+		}
+	}
+
+	type ends struct {
+		arrivals   []time.Time
+		departures []time.Time
+		days       map[string]bool
+	}
+	by := map[string]*ends{}
+	order := []string{}
+
+	// Collapsed, as the sentence does it: a phone that reports the
+	// same crossing three times in a minute reported one crossing.
+	for _, m := range collapsed(all, where) {
+		place := m.value
+		if place == "" {
+			continue
+		}
+		arriving := strings.HasSuffix(m.kind, Arrived)
+		leaving := strings.HasSuffix(m.kind, Left)
+		if !arriving && !leaving {
+			continue
+		}
+		e, seen := by[place]
+		if !seen {
+			e = &ends{days: map[string]bool{}}
+			by[place], order = e, append(order, place)
+		}
+		e.days[m.at.In(where).Format("2006-01-02")] = true
+		if arriving {
+			e.arrivals = append(e.arrivals, m.at)
+		} else {
+			e.departures = append(e.departures, m.at)
+		}
+	}
+
+	out := make([]routine.Fact, 0, len(order)*2)
+	for _, place := range order {
+		e := by[place]
+		for _, side := range []struct {
+			what routine.What
+			when []time.Time
+		}{
+			{routine.Arrives, e.arrivals},
+			{routine.Leaves, e.departures},
+		} {
+			hour, most, of, ok := usualHour(side.when, where)
+			if !ok {
+				continue
+			}
+			out = append(out, routine.Fact{
+				Subject: place, What: side.what,
+				Hour: hour, Days: most, Over: of, At: at,
+			})
+		}
+	}
+	return out
+}
+
 // moment : One thing happening, once.
 type moment struct {
 	kind  string
@@ -437,8 +519,38 @@ const Band = 3
 // Round, because the hours are. A band may run from eleven at night
 // to two in the morning, which is where a bedtime lives.
 func aroundWhen(when []time.Time, where *time.Location) string {
-	if len(when) < Fewest {
+	at, most, of, ok := usualHour(when, where)
+	if of == 0 {
 		return ""
+	}
+	if !ok {
+		return "at no particular hour"
+	}
+
+	// How much of it, in a word. Two thirds is a habit; half is a
+	// leaning, and saying "usually" of it would be the overstating
+	// this function exists to avoid.
+	how := "often around "
+	if most*3 >= of*2 {
+		how = "usually around "
+	}
+	return how + oclock(at)
+}
+
+// usualHour : The hour somebody does a thing, how many of the
+// observations agree on it, and how many there were.
+//
+// Split out of [aroundWhen] so the same answer can be stored as a
+// number and not only said in a sentence. A rule conditioned on
+// when somebody usually leaves cannot read "usually around 10am",
+// and two ways of working out the hour would agree until one of
+// them was edited.
+//
+// ok is false when the observations do not agree on an hour at
+// all; of is zero when there are too few to ask.
+func usualHour(when []time.Time, where *time.Location) (at, most, of int, ok bool) {
+	if len(when) < Fewest {
+		return 0, 0, 0, false
 	}
 	hours := make([]int, 0, len(when))
 	for _, t := range when {
@@ -458,7 +570,7 @@ func aroundWhen(when []time.Time, where *time.Location) string {
 	// witness, which is what [changed.Enough] says about the same
 	// question elsewhere.
 	if most < Agreeing || most*2 < len(hours) {
-		return "at no particular hour"
+		return 0, most, len(hours), false
 	}
 
 	within := make([]int, 0, most)
@@ -468,16 +580,7 @@ func aroundWhen(when []time.Time, where *time.Location) string {
 		}
 	}
 	sort.Ints(within)
-	at := (from + within[len(within)/2]) % 24
-
-	// How much of it, in a word. Two thirds is a habit; half is a
-	// leaning, and saying "usually" of it would be the overstating
-	// this function exists to avoid.
-	how := "often around "
-	if most*3 >= len(hours)*2 {
-		how = "usually around "
-	}
-	return how + oclock(at)
+	return (from + within[len(within)/2]) % 24, most, len(hours), true
 }
 
 // densest : The start of the fullest band of hours, and how many

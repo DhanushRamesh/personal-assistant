@@ -639,29 +639,103 @@ class _RulesModule extends StatelessWidget {
           _SectionLink(label: 'Refresh', onTap: state.loadRules),
         ],
       ),
-      child: switch (held) {
-        null => Text(
-          'Reading them…',
-          style: context.text.caption.copyWith(
-            color: context.colors.textSecondary,
+      child: held == null
+          ? Text(
+              'Reading them…',
+              style: context.text.caption.copyWith(
+                color: context.colors.textSecondary,
+              ),
+            )
+          : Column(
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: [
+                if (held.rules.isEmpty)
+                  Text(
+                    state.showPastRules
+                        ? 'Nothing at all, standing or otherwise. Ask for '
+                              'something like "tell me when the battery '
+                              'drops below twenty" and it appears here.'
+                        : 'Nothing standing. Ask for something like "tell '
+                              'me when the battery drops below twenty" and '
+                              'it appears here.',
+                    style: context.text.caption.copyWith(
+                      color: context.colors.textSecondary,
+                    ),
+                  ),
+                for (final r in held.rules) _RuleTile(rule: r),
+                if (held.usually.isNotEmpty) _Usually(usually: held.usually),
+              ],
+            ),
+    );
+  }
+}
+
+/// _Usually : What a rule can condition on besides a device reading.
+///
+/// Owner, 7 October 2026: *"I want the routine to be in a conditional
+/// way and able to visualise... I will use that to write the rules."*
+///
+/// So it is shown as the condition, not as a sentence. The whole
+/// point is that `usually.home.leaves` is a thing somebody can put in
+/// a rule, and a routine described in prose on another page is a
+/// routine nobody writes a rule against.
+///
+/// Beside the rules rather than on a page of its own, for the same
+/// reason: it is the vocabulary for the thing being read.
+class _Usually extends StatelessWidget {
+  const _Usually({required this.usually});
+
+  final List<Usual> usually;
+
+  @override
+  Widget build(BuildContext context) {
+    final colors = context.colors;
+    return Padding(
+      padding: const EdgeInsets.only(top: AppSpacing.lg),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          Text('What a rule can also ask about', style: context.text.label),
+          const SizedBox(height: AppSpacing.xxs),
+          Text(
+            'Worked out from weeks of your own devices, and kept as '
+            'conditions so a rule can stand on one. Use these the way a '
+            'rule uses a reading: "when to set off" could check '
+            'usually.home.leaves older than 90m.',
+            style: context.text.caption.copyWith(color: colors.textSecondary),
           ),
-        ),
-        [] => Text(
-          state.showPastRules
-              ? 'Nothing at all, standing or otherwise. Ask for something '
-                    'like "tell me when the battery drops below twenty" '
-                    'and it appears here.'
-              : 'Nothing standing. Ask for something like "tell me when '
-                    'the battery drops below twenty" and it appears here.',
-          style: context.text.caption.copyWith(
-            color: context.colors.textSecondary,
-          ),
-        ),
-        _ => Column(
-          crossAxisAlignment: CrossAxisAlignment.stretch,
-          children: [for (final r in held) _RuleTile(rule: r)],
-        ),
-      },
+          for (final u in usually)
+            Padding(
+              padding: const EdgeInsets.only(top: AppSpacing.sm),
+              child: Row(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Icon(
+                    Icons.repeat_outlined,
+                    size: 15,
+                    color: colors.textSecondary,
+                  ),
+                  const SizedBox(width: AppSpacing.sm),
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(u.source, style: context.text.body),
+                        Text(
+                          '${u.subject} ${u.what} around ${u.said} — '
+                          '${u.days} of ${u.over} days agreed',
+                          style: context.text.caption.copyWith(
+                            color: colors.textMuted,
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                ],
+              ),
+            ),
+        ],
+      ),
     );
   }
 }

@@ -441,10 +441,8 @@ class AssistantApi {
   ///
   /// Read only. Rules are made and cancelled by asking, and a second
   /// way to write them is a second place for the grammar to be checked.
-  Future<List<Rule>> listRules({bool past = false}) async => parseList(
+  Future<Rules> listRules({bool past = false}) async => Rules.fromJson(
     await _send('GET', '/v1/rules', query: {if (past) 'past': 'true'}),
-    'rules',
-    Rule.fromJson,
   );
 
   /// snoozeReminder : Puts one off by the given number of minutes.

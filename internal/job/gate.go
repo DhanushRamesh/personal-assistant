@@ -6,6 +6,8 @@ import (
 	"strconv"
 	"strings"
 	"time"
+
+	"github.com/DhanushRamesh/personal-assistant/internal/routine"
 )
 
 // Presence : The gate source that asks whether the person is in the
@@ -113,9 +115,9 @@ func (g Gate) sound() error {
 }
 
 // Needs : The event kind this gate reads, empty when it reads
-// presence instead.
+// presence instead, and empty for a routine: neither arrives.
 func (g Gate) Needs() string {
-	if g.Source == Presence {
+	if g.Source == Presence || routine.Mine(g.Source) {
 		return ""
 	}
 	return g.Source
@@ -159,10 +161,19 @@ func (g Gate) Passes(r Reading, away bool, now time.Time) bool {
 		if err != nil {
 			return false
 		}
-		if g.Op == Older {
-			return now.Sub(r.At) > d
+		since := now.Sub(r.At)
+		// A moment that has not come yet satisfies neither. Nothing
+		// is older than a thing that has not happened, and "within
+		// ten minutes" of it would otherwise be true from midnight
+		// onwards -- a reading is always in the past, but what
+		// somebody usually does at nine in the evening is not.
+		if since < 0 {
+			return false
 		}
-		return now.Sub(r.At) <= d
+		if g.Op == Older {
+			return since > d
+		}
+		return since <= d
 	case Is:
 		return strings.EqualFold(value, g.Value)
 	case IsNot:

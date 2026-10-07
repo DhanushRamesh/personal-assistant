@@ -32,6 +32,7 @@ import (
 	"github.com/DhanushRamesh/personal-assistant/internal/api/authn"
 	"github.com/DhanushRamesh/personal-assistant/internal/api/httpx"
 	"github.com/DhanushRamesh/personal-assistant/internal/job"
+	"github.com/DhanushRamesh/personal-assistant/internal/routine"
 )
 
 // DefaultLimit, MaxLimit : How many are returned.
@@ -52,12 +53,16 @@ type Store interface {
 // Handler : Serves them.
 type Handler struct {
 	httpx.Responder
-	store Store
+	store   Store
+	routine routine.Store
 }
 
 // New : Builds one.
-func New(logger *slog.Logger, store Store) *Handler {
-	return &Handler{Responder: httpx.Responder{Logger: logger}, store: store}
+func New(logger *slog.Logger, store Store, usually routine.Store) *Handler {
+	return &Handler{
+		Responder: httpx.Responder{Logger: logger},
+		store:     store, routine: usually,
+	}
 }
 
 // Mount : Registers the endpoint on r, which must already require
@@ -105,9 +110,38 @@ type Rule struct {
 	Said string `json:"said,omitempty"`
 }
 
+// Usual : One thing the person usually does, as a condition.
+//
+// Shown beside the rules and not on a page of its own, because what
+// it is for is writing one: these are the sources a rule may stand
+// on, and a condition nobody can see is a condition nobody writes.
+type Usual struct {
+	// Source : What to write in a rule -- usually.home.leaves.
+	Source string `json:"source"`
+	// Subject, What : The place, by their own name for it, and
+	// which end of a visit.
+	Subject string `json:"subject"`
+	What    string `json:"what"`
+	// Hour : The hour, 0 to 23, in their own zone.
+	Hour int `json:"hour"`
+	// Said : The hour as somebody would say it.
+	Said string `json:"said"`
+	// Days, Over : How many days agreed, out of how many it was
+	// seen at all. Both, because together they are what makes it
+	// arguable.
+	Days int `json:"days"`
+	Over int `json:"over"`
+	// At : When it was worked out.
+	At time.Time `json:"at"`
+}
+
 // ListResponse : The body of a listing.
 type ListResponse struct {
 	Rules []Rule `json:"rules"`
+	// Usually : What a rule may condition on besides a device
+	// reading. Sent with the rules rather than fetched separately:
+	// it is the vocabulary for the thing on the page.
+	Usually []Usual `json:"usually"`
 }
 
 // List : The person's rules, newest first.
@@ -153,7 +187,36 @@ func (h *Handler) List(w http.ResponseWriter, r *http.Request) {
 	for _, j := range held {
 		out = append(out, described(j))
 	}
-	httpx.WriteJSON(ctx, w, http.StatusOK, ListResponse{Rules: out})
+	httpx.WriteJSON(ctx, w, http.StatusOK, ListResponse{
+		Rules: out, Usually: h.usually(ctx, authn.Of(ctx).User.ID),
+	})
+}
+
+// usually : What they usually do, as conditions.
+//
+// A failure costs the vocabulary and not the listing. Somebody
+// looking at their rules should see them whether or not the
+// routine could be read.
+func (h *Handler) usually(ctx context.Context, userID string) []Usual {
+	if h.routine == nil {
+		return []Usual{}
+	}
+	held, err := h.routine.All(ctx, userID)
+	if err != nil {
+		if h.Logger != nil {
+			h.Logger.WarnContext(ctx, "cannot read what they usually do",
+				slog.Any("error", err))
+		}
+		return []Usual{}
+	}
+	out := make([]Usual, 0, len(held))
+	for _, f := range held {
+		out = append(out, Usual{
+			Source: f.Name(), Subject: f.Subject, What: string(f.What),
+			Hour: f.Hour, Said: f.Said(), Days: f.Days, Over: f.Over, At: f.At,
+		})
+	}
+	return out
 }
 
 // described : One job as the listing shows it.
