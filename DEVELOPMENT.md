@@ -12954,6 +12954,52 @@ battery an hour ago needs the hour either way.
 	battery.level >  2h ago   ->  the check did not pass
 
 
+### The two rules the day was for
+
+Twenty-four commits of engine and no new rules, so these are the
+proof it was worth it. Both were impossible in the morning.
+
+	plugged in and not charging
+	  when power.plugged is not nothing then 15m
+	    look up   event_recent (kind battery.level, limit 6)
+	    only if   battery.level <= 15m ago
+	    say       it is plugged in and has not risen
+
+	a call nobody returned
+	  when call.missed is not unknown then 30m, kept 6h
+	    look up   event_recent (kind call.missed, limit 5)
+	    look up   event_recent (kind call.made, limit 10)
+	    say       only if one has had no call since
+
+The first needed the wait -- whether a phone on charge is
+charging is unknowable as it is plugged in -- and the comparison
+with its own past. The second needed the wait and needed keeping
+for the afternoon, because he is out when the call comes and the
+answer is as true at nine as it was at two.
+
+Added through `rule_add` itself rather than written into the
+table, so they were validated and assembled exactly as a dictated
+rule is.
+
+#### Two things found by writing them
+
+**`power.plugged` carries `value: "unknown"`.** The charger type
+is not resolvable on the phone, so `power.plugged is true` would
+never have matched anything. What is wanted is *any* reading of
+that kind, and the idiom for it in this grammar is `is not`
+against a value that cannot occur. It works and it reads badly,
+and the honest fix is a gate that says a reading arrived at all
+rather than comparing its value -- not today.
+
+**`rule_add` can only make one check.** The engine ands across
+steps, and `assemble` takes a single `when`, so a dictated rule
+gets one condition with `or`s inside it and no second check. The
+and is reachable only by writing the steps directly. That ruled
+out the polling form of the charging rule, which wanted three
+conditions, and pushed it onto the trigger -- which is better
+anyway, firing once a plug-in instead of six times an hour.
+
+
 ## 12. Maintaining this file
 
 When the owner states a preference, makes a decision, or corrects something,
