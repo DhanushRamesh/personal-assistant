@@ -235,6 +235,11 @@ func run() error {
 	// Assistant is configured, which is not a fault: it is how the server
 	// behaved before it could speak first.
 	speaker := announcer(cfg, logger.Logger)
+	// What the person is called, for the word said in front of an
+	// announcement that arrives out of nowhere. One configured
+	// persona for the server, so it is set here rather than carried
+	// down to every caller.
+	announcement.Addressing(persona.AddressFor(cfg.Assistant.Persona))
 
 	// What the assistant has been asked to remember. Without an embedding
 	// server it still works, matching words rather than meaning, which is
@@ -2329,6 +2334,18 @@ func writing(ask string, already []job.Ran, before string) string {
 
 	return prompt.Block(
 		prompt.Text("You are writing one sentence to be said out loud, now.", ask),
+		// Nobody asked for this one, so nobody is listening when it
+		// starts. A reply is heard from its first word because
+		// somebody is waiting for it; an announcement arrives at
+		// somebody in the middle of something else, and the first
+		// few words are spent getting their attention rather than
+		// carrying anything.
+		prompt.Text(
+			"This will be said to somebody who is not listening yet, and is not expecting it.",
+			"So the thing that matters must not be the first thing in the sentence: whatever a person misses while they look up should be words they can afford to miss.",
+			"Lead with what is happening in general, then the particular. Not \"twenty-four percent, sir\" but \"your battery is getting low, sir -- twenty-four percent\".",
+			"A word is already being said in front of this to get their attention, so do not open with one of your own and do not address them at the start. Address them once, later in the sentence, if your manner calls for it at all.",
+		),
 		what,
 		again,
 		// A rule asking for the battery every minute was handed a

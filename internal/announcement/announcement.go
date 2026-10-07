@@ -26,6 +26,57 @@ import (
 	"github.com/DhanushRamesh/personal-assistant/internal/conversation"
 )
 
+// address : What the assistant calls the person, for the word said
+// in front of a cold announcement.
+//
+// Set once at startup rather than passed down. The persona is one
+// configured value for the whole server, and the five places that
+// call Speak -- a reminder falling due, a device reporting
+// something, a rule, a greeting, the renaming -- have no other
+// reason to know a persona exists. Empty until set, which means no
+// opening, which is what an unconfigured server did before this.
+var address string
+
+// Addressing : Sets what the person is called.
+func Addressing(a string) { address = strings.TrimSpace(a) }
+
+// Opening : The word said before an announcement, or empty.
+//
+// Owner, 7 October 2026: *"I'll be doing something and suddenly
+// Jarvis is saying the important stuff fast before I even start to
+// listen."*
+//
+// A reply is heard because they asked and are waiting for it. An
+// announcement arrives at somebody mid-sentence in another
+// conversation, and the first second of it is spent getting their
+// attention rather than carrying anything. So the first second is
+// given something it does not matter if they miss.
+//
+// Their own form of address and nothing invented: it is the one
+// word the assistant already says to them, it carries no
+// information, and a persona that calls them nothing gets no
+// opening rather than a line of English it would never say.
+//
+// The greeting has had this since it was written -- "Good evening,
+// sir." in front of whatever the model wrote -- and it is the
+// reason a greeting is easy to follow and an announcement is not.
+func Opening(kind conversation.Kind) string {
+	if !kind.Cold() || address == "" {
+		return ""
+	}
+	return strings.ToUpper(address[:1]) + address[1:] + "."
+}
+
+// opened : The announcement with its opening in front of it.
+func opened(kind conversation.Kind, text string) string {
+	lead := Opening(kind)
+	text = strings.TrimSpace(text)
+	if lead == "" || text == "" {
+		return text
+	}
+	return lead + " " + text
+}
+
 // Speak : Says an announcement to the audience its kind is for.
 //
 // The one place that turns the rule into a call. Say reaches the room;
@@ -49,10 +100,15 @@ func Speak(ctx context.Context, to announce.Announcer, kind conversation.Kind, t
 	if to == nil || !to.Available() {
 		return ErrNowhereToSay
 	}
+	// Spoken with its opening; written down without one. What goes
+	// into the conversation is read rather than heard, and a word
+	// whose whole purpose is to be talked over has no business
+	// being in the transcript.
+	said := opened(kind, text)
 	if audience == conversation.Everywhere {
-		return to.Reach(ctx, text)
+		return to.Reach(ctx, said)
 	}
-	return to.Say(ctx, text)
+	return to.Say(ctx, said)
 }
 
 // ErrNotAnnouncement, ErrNowhereToSay : Why nothing was said.

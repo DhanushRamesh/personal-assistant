@@ -12359,6 +12359,87 @@ a hand-edited description by writing `byHand` into it. So `Mine`
 on the read endpoint can never be true.
 
 
+### The first second of an announcement
+
+Owner, 7 October 2026: *"I'll be doing something and suddenly
+Jarvis is saying the important stuffs fast before I even start to
+listen. Is there anything like rules already defined so that I
+will be able to understand whatever Jarvis says as an
+announcement?"*
+
+There was not, and the one rule that existed pushed the other
+way. `aloud`, which every reply is shaped by:
+
+	Be brief and direct: say the answer first, then only the
+	detail that matters.
+
+Correct for a reply. Somebody asked, and is waiting. It is
+exactly backwards for an announcement, which arrives at somebody
+in the middle of something else.
+
+The last ten announcements, with the subject and the number
+inside the first six words every time:
+
+	Your phone battery has dropped to twenty-four percent, sir,
+	and now would be the time to find a charger.
+
+Miss the opening and what is left is "percent, sir, and now
+would be the time to find a charger": a number that has already
+gone past.
+
+#### The greeting already solved this
+
+`greet.Opening` puts "Good evening, sir." in front of whatever
+the model wrote. That salutation carries nothing, and carrying
+nothing is its job -- it is the second somebody spends turning
+their head. It is why a greeting is easy to follow and an
+announcement is not, and nothing had taken the lesson across.
+
+#### Their own word, and no other
+
+The opening is the persona's form of address and nothing
+invented: `persona.Address`, which is "sir" or "boss" or empty.
+It is the one word the assistant already says to them, it
+carries no information, and a persona that calls them nothing
+gets no opening rather than a line of English it would never
+say.
+
+Said, not written. The spoken copy gets the opening; what goes
+into the conversation does not. A word whose whole purpose is to
+be talked over has no business in the transcript.
+
+**Not every kind.** A greeting opens with its own salutation and
+the renaming follows an answer somebody was already listening
+to; both would be opened twice. So which kinds arrive cold is a
+column in the policy table beside the audience, because adding a
+kind should be one edit.
+
+#### And the model stops leading with the fact
+
+The lead-in buys about a second. The sentence after it still has
+to survive being half-heard, so the write step is told:
+
+	This will be said to somebody who is not listening yet.
+	Lead with what is happening in general, then the
+	particular. Not "twenty-four percent, sir" but "your
+	battery is getting low, sir -- twenty-four percent".
+
+And told that a word is already being said in front of it, so it
+does not write an opening of its own -- the same thing the
+greeting prompt has always said.
+
+#### What is not done
+
+The chime. `assist_satellite.announce` takes a `preannounce`
+flag and it is hardcoded false, with a reason that is true of
+the aside it was written for and false of everything that
+arrives out of nowhere. Left until somebody has heard whether it
+is pleasant or irritating at eleven at night.
+
+And the fifteen second cut is unchanged, so an opening spends
+part of a budget that was already fixed.
+
+
 ## 12. Maintaining this file
 
 When the owner states a preference, makes a decision, or corrects something,

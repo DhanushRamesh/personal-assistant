@@ -206,6 +206,20 @@ type Policy struct {
 	Worth time.Duration
 	// Tries : How many attempts at saying it before giving up.
 	Tries int
+	// Cold : Whether it arrives with nothing in front of it.
+	//
+	// What it decides is whether a word is said before the words
+	// that matter. Somebody who was not listening loses the start
+	// of a sentence, and in an announcement the start is the whole
+	// of it: miss the first clause of "your battery has dropped to
+	// twenty-four percent" and what is left is a number that has
+	// gone past.
+	//
+	// False where something has just been said. A greeting opens
+	// with a salutation of its own, and the housekeeping that
+	// follows an answer is heard by somebody already listening --
+	// both would only be opened twice.
+	Cold bool
 }
 
 // announcements : Every kind the assistant says unasked, and who it is for.
@@ -217,8 +231,8 @@ type Policy struct {
 // meant reading both to find out what it should do. This is the same
 // lesson as known() below -- adding a kind should be one edit.
 var announcements = map[Kind]Policy{
-	ReminderAnnouncement: {Everywhere, Hold, time.Hour, 5},
-	PresenceAnnouncement: {Asked, Drop, 20 * time.Second, 1},
+	ReminderAnnouncement: {Everywhere, Hold, time.Hour, 5, true},
+	PresenceAnnouncement: {Asked, Drop, 20 * time.Second, 1, false},
 	// The room, and only the room. A remark is the assistant being
 	// company, which is a thing that belongs where the person is
 	// standing; followed onto a phone in a meeting it is an
@@ -228,12 +242,16 @@ var announcements = map[Kind]Policy{
 	// The room, like a remark. It is said at once rather than said
 	// anywhere: it is only made when somebody is there to hear it,
 	// and a phone reports its own battery without help.
-	Immediate: {Asked, Drop, 5 * time.Minute, 3},
-	Renaming:  {Asked, Drop, time.Hour, 1},
+	Immediate: {Asked, Drop, 5 * time.Minute, 3, true},
+	Renaming:  {Asked, Drop, time.Hour, 1, false},
 	// Nothing asked for it and it is about something hours or days
 	// away, so where they happen to be standing decides nothing.
-	Coming: {Everywhere, Hold, 6 * time.Hour, 5},
+	Coming: {Everywhere, Hold, 6 * time.Hour, 5, true},
 }
+
+// Cold : Whether this kind arrives with nothing in front of it, and
+// so needs a word said before the words that matter.
+func (k Kind) Cold() bool { return announcements[k].Cold }
 
 // Announcement : Whether this is the assistant having spoken unprompted.
 func (k Kind) Announcement() bool {

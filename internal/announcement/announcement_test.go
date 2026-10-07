@@ -200,3 +200,61 @@ func TestSpeakWithNowhereToSay(t *testing.T) {
 		t.Fatal("expected an error with no announcer at all")
 	}
 }
+
+// TestSomethingDisposableIsSaidFirst : Owner, 7 October 2026 -- "I'll
+// be doing something and suddenly Jarvis is saying the important
+// stuff fast before I even start to listen."
+//
+// A reply is heard from its first word because somebody asked for it.
+// An announcement arrives at somebody mid-sentence in another
+// conversation, and whatever is in the first second is lost. So the
+// first second is given a word it does not matter to lose.
+func TestSomethingDisposableIsSaidFirst(t *testing.T) {
+	announcement.Addressing("sir")
+	t.Cleanup(func() { announcement.Addressing("") })
+
+	to := &spoke{}
+	if err := announcement.Speak(context.Background(), to,
+		conversation.Immediate, "your battery is low."); err != nil {
+		t.Fatal(err)
+	}
+	if len(to.said) != 1 || to.said[0] != "Sir. your battery is low." {
+		t.Errorf("nothing was said in front of it: %v", to.said)
+	}
+}
+
+// TestNothingIsSaidInFrontOfAGreeting : It opens with a salutation of
+// its own, and the housekeeping that follows an answer is heard by
+// somebody already listening. Both would be opened twice.
+func TestNothingIsSaidInFrontOfAGreeting(t *testing.T) {
+	announcement.Addressing("sir")
+	t.Cleanup(func() { announcement.Addressing("") })
+
+	for _, k := range []conversation.Kind{
+		conversation.PresenceAnnouncement, conversation.Renaming,
+	} {
+		to := &spoke{}
+		if err := announcement.Speak(context.Background(), to, k, "hello."); err != nil {
+			t.Fatal(err)
+		}
+		if len(to.said) != 1 || to.said[0] != "hello." {
+			t.Errorf("%s was opened as well: %v", k, to.said)
+		}
+	}
+}
+
+// TestAPersonaThatCallsThemNothingOpensWithNothing : The opening is
+// the one word the assistant already says to them. Without one there
+// is nothing to say that it would not be inventing.
+func TestAPersonaThatCallsThemNothingOpensWithNothing(t *testing.T) {
+	announcement.Addressing("")
+
+	to := &spoke{}
+	if err := announcement.Speak(context.Background(), to,
+		conversation.Immediate, "your battery is low."); err != nil {
+		t.Fatal(err)
+	}
+	if len(to.said) != 1 || to.said[0] != "your battery is low." {
+		t.Errorf("something was invented to say first: %v", to.said)
+	}
+}
