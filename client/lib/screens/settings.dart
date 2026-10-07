@@ -624,10 +624,9 @@ class _RulesModule extends StatelessWidget {
     return _Section(
       title: 'Rules',
       subtitle:
-          'Everything that can speak without being asked. A rule either '
-          'comes round on a clock or waits for something to happen, then '
-          'runs its steps in order; any step may stop the ones after it. '
-          'Ask to add or cancel one by voice.',
+          'Everything that can speak without being asked, and what each '
+          'one did last time. Tap a rule to see its steps. Ask to add or '
+          'cancel one by voice.',
       action: _SectionLink(label: 'Refresh', onTap: state.loadRules),
       child: switch (held) {
         null => Text(
@@ -652,97 +651,163 @@ class _RulesModule extends StatelessWidget {
   }
 }
 
-/// _RuleTile : One rule, its schedule, its steps and what it last did.
+/// _RuleTile : One rule. Two lines, and its steps behind a tap.
 ///
-/// The last run is shown beside it and not behind a tap. The ordinary
-/// output of most of these is silence, and silence has two causes that
-/// look identical from outside: a rule that ran and found nothing, and
-/// a rule that is not running at all.
-class _RuleTile extends StatelessWidget {
+/// Owner, 7 October 2026, looking at the first version: *"too much
+/// cognitive load."* It showed every step of every rule at once, and
+/// seven of the twelve were battery thresholds whose steps differ by
+/// one number in a paragraph repeated verbatim.
+///
+/// So the two things somebody opens this page for are the two things
+/// on it: what the rule is and when it fires, and whether it is
+/// working. The steps are what you look at once, when you want to
+/// know how one was built.
+///
+/// The last run stays visible rather than collapsing with the steps.
+/// Hiding it would hide the only sign that a rule has stopped
+/// working, which is the thing worth noticing and the thing nobody
+/// goes looking for.
+class _RuleTile extends StatefulWidget {
   const _RuleTile({required this.rule});
 
   final Rule rule;
 
   @override
+  State<_RuleTile> createState() => _RuleTileState();
+}
+
+class _RuleTileState extends State<_RuleTile> {
+  bool _open = false;
+
+  @override
   Widget build(BuildContext context) {
     final colors = context.colors;
+    final rule = widget.rule;
     final off = !rule.active;
+    final steps = rule.steps.length;
 
     return Padding(
       padding: const EdgeInsets.only(top: AppSpacing.md),
-      child: Row(
-        crossAxisAlignment: CrossAxisAlignment.start,
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
-          Icon(
-            off
-                ? Icons.close
-                : rule.waits
-                ? Icons.bolt_outlined
-                : Icons.schedule_outlined,
-            size: 15,
-            color: off ? colors.textMuted : colors.textSecondary,
-          ),
-          const SizedBox(width: AppSpacing.sm),
-          Expanded(
-            child: Column(
+          InkWell(
+            onTap: steps == 0 ? null : () => setState(() => _open = !_open),
+            child: Row(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                Row(
-                  children: [
-                    Flexible(
-                      child: Text(
-                        rule.name.isEmpty ? 'Unnamed' : rule.name,
-                        style: context.text.body.copyWith(
-                          color: off ? colors.textMuted : null,
+                Icon(
+                  off
+                      ? Icons.close
+                      : rule.waits
+                      ? Icons.bolt_outlined
+                      : Icons.schedule_outlined,
+                  size: 15,
+                  color: off ? colors.textMuted : colors.textSecondary,
+                ),
+                const SizedBox(width: AppSpacing.sm),
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Row(
+                        children: [
+                          Flexible(
+                            child: Text(
+                              rule.name.isEmpty ? 'Unnamed' : rule.name,
+                              style: context.text.body.copyWith(
+                                color: off ? colors.textMuted : null,
+                              ),
+                            ),
+                          ),
+                          const SizedBox(width: AppSpacing.sm),
+                          Flexible(
+                            child: Text(
+                              off ? rule.state : rule.schedule,
+                              maxLines: 1,
+                              overflow: TextOverflow.ellipsis,
+                              style: context.text.caption.copyWith(
+                                color: colors.textMuted,
+                              ),
+                            ),
+                          ),
+                        ],
+                      ),
+                      Text(
+                        _lastly(rule),
+                        // One line, always. The whole of a failure is
+                        // three sentences of somebody else's error and
+                        // would be most of the page.
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                        style: context.text.caption.copyWith(
+                          color: colors.textMuted,
                         ),
                       ),
-                    ),
-                    const SizedBox(width: AppSpacing.sm),
-                    Text(
-                      off ? rule.state : rule.schedule,
-                      style: context.text.caption.copyWith(
-                        color: colors.textMuted,
-                      ),
-                    ),
-                  ],
-                ),
-                for (final step in rule.steps)
-                  Padding(
-                    padding: const EdgeInsets.only(top: AppSpacing.xxs),
-                    child: Text(
-                      step.says.isEmpty
-                          ? step.does
-                          : '${step.does} — ${step.says}',
-                      style: context.text.caption.copyWith(
-                        color: colors.textSecondary,
-                      ),
-                    ),
+                    ],
                   ),
-                if (_lastly(rule) case final line?) ...[
-                  const SizedBox(height: AppSpacing.xxs),
-                  Text(
-                    line,
-                    style: context.text.caption.copyWith(
-                      color: colors.textMuted,
-                    ),
+                ),
+                if (steps > 0) ...[
+                  const SizedBox(width: AppSpacing.sm),
+                  Icon(
+                    _open ? Icons.expand_less : Icons.expand_more,
+                    size: 15,
+                    color: colors.textMuted,
                   ),
                 ],
               ],
             ),
           ),
+          if (_open)
+            Padding(
+              padding: const EdgeInsets.only(
+                left: 23,
+                top: AppSpacing.xxs,
+                bottom: AppSpacing.xxs,
+              ),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  for (final step in rule.steps)
+                    Padding(
+                      padding: const EdgeInsets.only(top: AppSpacing.xxs),
+                      child: Text(
+                        step.says.isEmpty
+                            ? step.does
+                            : '${step.does} — ${step.says}',
+                        style: context.text.caption.copyWith(
+                          color: colors.textSecondary,
+                        ),
+                      ),
+                    ),
+                  // The whole of what happened last time, which the
+                  // line above had to cut.
+                  if (rule.why.isNotEmpty)
+                    Padding(
+                      padding: const EdgeInsets.only(top: AppSpacing.xs),
+                      child: Text(
+                        rule.why,
+                        style: context.text.caption.copyWith(
+                          color: colors.textMuted,
+                        ),
+                      ),
+                    ),
+                ],
+              ),
+            ),
         ],
       ),
     );
   }
 }
 
-/// _lastly : What happened the last time it ran, or null if it never has.
-String? _lastly(Rule rule) {
-  if (rule.last == null) return 'Has not run yet.';
+/// _lastly : What came of the last run, in as few words as it takes.
+String _lastly(Rule rule) {
+  if (rule.last == null) return 'Not run yet';
   final at = _clock(rule.last!);
-  if (rule.why.isNotEmpty) return 'Last ran $at — ${rule.why}.';
-  if (rule.said.isNotEmpty) return 'Last ran $at — said "${rule.said}"';
-  return 'Last ran $at.';
+  if (rule.why.isNotEmpty) return '$at · ${rule.why}';
+  if (rule.said.isNotEmpty) return '$at · said "${rule.said}"';
+  return '$at · ran';
 }
 
 /// _clock : A time as it would be said, with the day when it is not today.
@@ -753,7 +818,7 @@ String _clock(DateTime at) {
   final hhmm =
       '${at.hour.toString().padLeft(2, '0')}:'
       '${at.minute.toString().padLeft(2, '0')}';
-  return today ? 'at $hhmm' : 'on ${at.day}/${at.month} at $hhmm';
+  return today ? hhmm : '${at.day}/${at.month} $hhmm';
 }
 
 class _RemindersModule extends StatelessWidget {

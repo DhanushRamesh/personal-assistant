@@ -18,8 +18,11 @@ package rules
 
 import (
 	"context"
+	"encoding/json"
+	"fmt"
 	"log/slog"
 	"net/http"
+	"sort"
 	"strconv"
 	"strings"
 	"time"
@@ -175,10 +178,48 @@ func says(s job.Step) string {
 	case strings.TrimSpace(s.Ask) != "":
 		return s.Ask
 	case strings.TrimSpace(s.Tool) != "":
-		if args := strings.TrimSpace(string(s.Args)); args != "" && args != "{}" {
-			return s.Tool + " " + args
+		if with := arguments(s.Args); with != "" {
+			return s.Tool + " (" + with + ")"
 		}
 		return s.Tool
 	}
 	return ""
+}
+
+// arguments : What a tool step passes, as words rather than as JSON.
+//
+// A page of rules is read to find out what they do, and
+// {"kind": "battery.level", "limit": 6} is punctuation around two
+// facts. Sorted, because a map has no order and a listing that
+// shuffled itself between refreshes would be unreadable.
+//
+// Anything that cannot be read back as an object is passed through
+// whole: a tool is free to take something other than an object, and
+// showing it raw is better than showing nothing.
+func arguments(raw []byte) string {
+	text := strings.TrimSpace(string(raw))
+	if text == "" || text == "{}" || text == "null" {
+		return ""
+	}
+	var held map[string]any
+	if err := json.Unmarshal(raw, &held); err != nil {
+		return text
+	}
+
+	keys := make([]string, 0, len(held))
+	for k := range held {
+		// What the assistant says while the tool runs, which is
+		// about the moment and not about the rule.
+		if k == "saying" {
+			continue
+		}
+		keys = append(keys, k)
+	}
+	sort.Strings(keys)
+
+	out := make([]string, 0, len(keys))
+	for _, k := range keys {
+		out = append(out, fmt.Sprintf("%s %v", k, held[k]))
+	}
+	return strings.Join(out, ", ")
 }

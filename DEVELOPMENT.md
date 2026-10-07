@@ -12487,6 +12487,33 @@ quietly is worse the more rules there are, and the answer to
 "write me more of these" has to include noticing when one stops
 working.
 
+#### And the first version was unreadable
+
+Owner, immediately: *"too much cognitive load."* Fair. Every step
+of every rule was on the page at once, seven of the twelve were
+battery thresholds, and their steps differ by one number inside a
+paragraph of instruction repeated verbatim. Twelve rules filled
+more than a screen.
+
+Two lines each now. What it is and when it fires; what came of
+the last run. The steps are behind a tap, because they are what
+somebody looks at once, to see how a rule was built, and never
+again.
+
+**The last run did not collapse with them.** Hiding it would hide
+the only sign that a rule has stopped working -- which is the
+thing worth noticing and the thing nobody goes looking for.
+Shortened to one line and cut with an ellipsis; the whole of it
+is in the expansion, where a three-sentence error from somebody
+else's service can be read without being most of the page.
+
+And the arguments are words now. `event_recent (kind
+battery.level, limit 6)` rather than the JSON, sorted because a
+map has no order and a listing that shuffled between refreshes
+would be worse than the JSON. `saying` is dropped: it is what the
+assistant says while the tool runs, which is about the moment and
+not about the rule.
+
 
 ## 12. Maintaining this file
 
