@@ -877,10 +877,22 @@ class _RuleTileState extends State<_RuleTile> {
   /// is about this one rule and this one look at it.
   Tried? _tried;
 
+  /// _trying : Whether a trial is running. A rule with a model in it
+  /// takes seconds, and without this the button looks dead -- which
+  /// is exactly how it was reported: "on pressing try nothing
+  /// happens".
+  bool _trying = false;
+
   /// _try : Runs it now and shows what it did.
   Future<void> _try() async {
+    if (_trying) return;
+    setState(() => _trying = true);
     final out = await widget.state.tryRule(widget.rule.id);
-    if (mounted) setState(() => _tried = out);
+    if (!mounted) return;
+    setState(() {
+      _trying = false;
+      _tried = out;
+    });
   }
 
   @override
@@ -952,7 +964,7 @@ class _RuleTileState extends State<_RuleTile> {
                   ),
                 ),
                 const SizedBox(width: AppSpacing.sm),
-                _SectionLink(label: 'Try', onTap: _try),
+                _SectionLink(label: _trying ? 'Trying…' : 'Try', onTap: _try),
                 if (steps > 0) ...[
                   const SizedBox(width: AppSpacing.sm),
                   Icon(
@@ -1021,35 +1033,67 @@ class _Tried extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final colors = context.colors;
+    final spoke = tried.said.isNotEmpty;
+
     return Padding(
       padding: const EdgeInsets.only(left: 23, top: AppSpacing.xs),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Text(
-            tried.said.isNotEmpty
-                ? 'Tried: it would say "${tried.said}"'
-                : 'Tried: it would say nothing'
-                      '${tried.why.isEmpty ? '' : ' — ${tried.why}'}',
-            style: context.text.caption.copyWith(
-              color: tried.said.isNotEmpty ? colors.textSecondary : colors.textMuted,
-            ),
-          ),
-          for (final step in tried.steps)
-            Padding(
-              padding: const EdgeInsets.only(top: AppSpacing.xxs),
-              child: Text(
-                step.did.isEmpty
-                    ? '· ${step.does}'
-                    : '· ${step.does} — ${step.did}',
-                style: context.text.caption.copyWith(color: colors.textMuted),
+      child: Container(
+        padding: const EdgeInsets.all(AppSpacing.sm),
+        decoration: BoxDecoration(
+          color: colors.surface,
+          border: Border.all(color: colors.border),
+          borderRadius: BorderRadius.circular(AppRadius.xs),
+        ),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            // Said in full and never cut. What a rule would say is
+            // the whole question, and most of the time the answer is
+            // that it would say nothing -- which has to read as an
+            // answer rather than as the button having failed.
+            Text(
+              spoke
+                  ? 'It would say: "${tried.said}"'
+                  : 'It would say nothing.',
+              style: context.text.body.copyWith(
+                color: spoke ? colors.textPrimary : colors.textSecondary,
               ),
             ),
-        ],
+            if (!spoke && tried.why.isNotEmpty) ...[
+              const SizedBox(height: AppSpacing.xxs),
+              Text(
+                tried.why,
+                style: context.text.caption.copyWith(color: colors.textMuted),
+              ),
+            ],
+            const SizedBox(height: AppSpacing.xs),
+            for (final step in tried.steps)
+              Padding(
+                padding: const EdgeInsets.only(top: AppSpacing.xxs),
+                child: Text(
+                  step.did.isEmpty
+                      ? step.does
+                      : '${step.does} — ${_short(step.did)}',
+                  // A tool hands back everything it found, which for
+                  // a week of events is most of a screen. The trial
+                  // is read to see whether the rule works, not to
+                  // read the evidence again.
+                  maxLines: 2,
+                  overflow: TextOverflow.ellipsis,
+                  style: context.text.caption.copyWith(
+                    color: colors.textMuted,
+                  ),
+                ),
+              ),
+          ],
+        ),
       ),
     );
   }
 }
+
+/// _short : What a step found, on one line.
+String _short(String did) => did.replaceAll(RegExp(r'\s+'), ' ').trim();
 
 /// _lastly : What came of the last run, in as few words as it takes.
 ///

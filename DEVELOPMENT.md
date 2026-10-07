@@ -13238,6 +13238,28 @@ a number -- and tried again:
 Which is correct: all three of today's missed calls are from
 strangers.
 
+#### "On pressing try nothing happens"
+
+Reported the moment it was shipped, and true in effect while the
+button worked perfectly. Two things were wrong and neither was
+the button.
+
+**Most rules would say nothing**, and "it would say nothing"
+rendered as one muted grey line among other muted grey lines --
+indistinguishable from the button having done nothing at all. It
+is a panel now, bordered, with the verdict in full-weight text.
+The commonest answer has to read as an answer.
+
+**And nothing showed while it ran.** A rule with a model in it
+takes seconds, during which the page sat still. The link says
+"Trying…" and refuses a second press.
+
+**What a tool found is cut to two lines.** A trial of the missed
+call rule printed a week of events twice over and filled a
+screen. The trial is read to see whether the rule works, not to
+read the evidence again -- the same lesson as the first version
+of this page, relearned one screen further on.
+
 
 ## 12. Maintaining this file
 
