@@ -12806,6 +12806,56 @@ written before there were any, and a paragraph explaining the
 absence is worse than silence.
 
 
+### A rule says how long it matters
+
+Owner, 7 October 2026, shown that the voice client had said none
+of the announcements it was ever offered: *"fix the five
+minutes."*
+
+	home assistant   expired 18   said 0
+	tasker           expired 15   said 0
+	chrome-dhanush   expired  1   said 14
+
+Everything a rule says is published as Immediate, which is worth
+saying for five minutes. He is out for hours. The copy was swept
+long before he walked back in, which makes the earlier correction
+in this file -- that the outbox holds it and the greeting says it
+-- true of the design and false eighteen times out of eighteen.
+
+#### One number was the wrong fix, and the eighteen say so
+
+	3  the assistant naming a conversation
+	6  battery warnings -- 24%, 19%, 14%, 9%, 4%, below 50
+	5  probes from an afternoon of testing
+	2  missed calls from somebody the phone could not name
+
+Nine of them are worthless hours later. A warning that the
+battery was at four percent, read out at the door that evening,
+is worse than silence. Two were worth keeping.
+
+Nothing about the kind tells those apart. They are all Immediate.
+What knows is whoever wrote the rule, so that is who is asked,
+and empty still means the kind decides as it always did.
+
+	when call.missed is not unknown then 30m, kept 6h
+
+#### Where it is kept, and why there
+
+As written, like the schedule beside it, because it is read back
+to whoever said it and "6h" is what they said. On the job and not
+on the step: a rule's announcements are all the same thing
+arriving at the same moment, and a sequence that kept one of them
+for the afternoon and binned the next would be two rules.
+
+Carried on the [job.Turn], because the step that publishes never
+sees the rule.
+
+`outbox.New` is unchanged and still means the kind's own answer.
+`Keeping` is the one that asks, which leaves every caller that
+has no opinion -- reminders, the renaming, the greeting -- saying
+exactly what it said before.
+
+
 ## 12. Maintaining this file
 
 When the owner states a preference, makes a decision, or corrects something,

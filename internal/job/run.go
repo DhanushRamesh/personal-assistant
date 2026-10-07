@@ -101,6 +101,15 @@ type Turn struct {
 	// written sentence is held to it: words fixed when the rule
 	// was made are meant to repeat.
 	Before string
+	// Worth : How long what this rule says stays worth saying, or
+	// zero to leave it to the kind of announcement it is.
+	//
+	// Carried on the turn because the step that publishes does not
+	// see the rule, and because the rule is the only thing that
+	// knows: every announcement a rule makes is the same kind, and
+	// a battery warning is worth five minutes while a missed call
+	// nobody returned is worth the afternoon.
+	Worth time.Duration
 }
 
 // Outcome : What carrying out one step came to.
@@ -435,7 +444,8 @@ func (r *Runner) one(ctx context.Context, j Job, now time.Time, pass *Pass) {
 	var already []Ran
 	for _, step := range j.Steps {
 		done, err := r.Doer.Do(ctx,
-			Turn{UserID: j.UserID, Already: already, Before: j.Said}, step)
+			Turn{UserID: j.UserID, Already: already, Before: j.Said,
+				Worth: j.Worth()}, step)
 		if step.Do == Call && step.Tool != "" {
 			already = append(already, Ran{Tool: step.Tool, Got: done.Got})
 		}

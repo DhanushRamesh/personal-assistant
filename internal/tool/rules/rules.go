@@ -116,6 +116,15 @@ var howToArgue = prompt.Text(
 	"rather than what that thing says now, and the rule will answer from the wrong row.",
 )
 
+// howLongToKeep : How long what a rule says is worth saying,
+// written for the model.
+var howLongToKeep = prompt.Lines(
+	"How long what this rule says is still worth hearing if they are not in the room when it runs. Leave it out for most rules.",
+	`  "6h" -- keep it, and say it when they are next about`,
+	"Only for something as true an hour later as it was at the time: a call nobody returned, something still waiting to be done.",
+	"Leave it out for anything about this moment. A warning that the battery was at four percent, read out at the door that evening, is worse than saying nothing.",
+)
+
 // howToTools : When to let it decide for itself, written for the
 // model.
 var howToTools = prompt.Text(
@@ -226,6 +235,7 @@ func add(store Store, clock Clock, id func() string, look Lookup) tool.Tool {
 						"and may answer that there is nothing worth saying. Give this or say, never both.",
 				},
 				"when": {Type: "string", Description: howToCondition},
+				"keep": {Type: "string", Description: howLongToKeep},
 				"tools": {
 					Type:        "array",
 					Description: howToTools,
@@ -277,6 +287,7 @@ func add(store Store, clock Clock, id func() string, look Lookup) tool.Tool {
 				Say      string   `json:"say"`
 				Ask      string   `json:"ask"`
 				When     string   `json:"when"`
+				Keep     string   `json:"keep"`
 				LookUp   []lookUp `json:"look_up"`
 				Tools    []string `json:"tools"`
 			}
@@ -299,11 +310,15 @@ func add(store Store, clock Clock, id func() string, look Lookup) tool.Tool {
 			if name == "" {
 				return tool.Failed("A rule needs a name, so they can ask for it later.")
 			}
+			if err := job.Kept(args.Keep); err != nil {
+				return tool.Failed(readable(err))
+			}
 			made, err := job.New(id(), in.Caller.UserID, name, Kind,
 				strings.TrimSpace(args.Schedule), steps, clock.now().In(clock.where()))
 			if err != nil {
 				return tool.Failed(readable(err))
 			}
+			made.Keep = strings.TrimSpace(args.Keep)
 			if err := store.Keep(ctx, made); err != nil {
 				return tool.Failed(err.Error())
 			}
@@ -558,6 +573,9 @@ func conditions(ctx context.Context, usually routine.Store, userID string) strin
 // one : A single rule on one line.
 func one(j job.Job, clock Clock) string {
 	parts := []string{fmt.Sprintf("%q (%s)", j.Name, j.ID), j.Schedule}
+	if j.Keep != "" {
+		parts = append(parts, "kept "+j.Keep)
+	}
 	if j.State != job.Active {
 		parts = append(parts, string(j.State))
 	}

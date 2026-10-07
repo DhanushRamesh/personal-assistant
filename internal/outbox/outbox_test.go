@@ -290,3 +290,43 @@ func TestNobodyThereHasOnlyTwoAnswers(t *testing.T) {
 		}
 	}
 }
+
+// TestARuleSaysHowLongItMatters : Owner, 7 October 2026, shown that
+// eighteen announcements in a row had expired before he was ever in
+// the room to hear them: "fix the five minutes."
+//
+// One number was the wrong fix and the eighteen say so. Six were
+// battery warnings and three were the assistant naming a
+// conversation -- a warning that the battery was at four percent,
+// read out at the door that evening, is worse than silence. Two
+// were missed calls nobody had returned, and those were worth
+// keeping.
+//
+// Nothing about the kind tells them apart. They are all Immediate.
+func TestARuleSaysHowLongItMatters(t *testing.T) {
+	at := time.Date(2026, 10, 7, 9, 0, 0, 0, time.UTC)
+
+	// What every rule meant before today, and still means.
+	now, err := outbox.New("owd_1", "usr_1", conversation.Immediate, "the battery is low", at)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got := now.Expires.Sub(at); got != 5*time.Minute {
+		t.Errorf("a rule that said nothing keeps for %s, want the kind's own five minutes", got)
+	}
+
+	kept, err := outbox.Keeping("owd_2", "usr_1", conversation.Immediate,
+		"somebody rang and nobody rang back", at, 6*time.Hour)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got := kept.Expires.Sub(at); got != 6*time.Hour {
+		t.Errorf("a rule that asked for six hours keeps for %s", got)
+	}
+	if kept.Stale(at.Add(5 * time.Hour)) {
+		t.Error("it went stale inside the time it asked for")
+	}
+	if !kept.Stale(at.Add(7 * time.Hour)) {
+		t.Error("it outlasted the time it asked for")
+	}
+}

@@ -1953,8 +1953,8 @@ func (d doing) Do(ctx context.Context, run job.Turn, s job.Step) (job.Outcome, e
 		// Published, which is where announcements go now, and
 		// spoken, which is the only way one is currently heard.
 		// The second half goes when a client collects.
-		o, err := outbox.New(outboxmysql.ID(), run.UserID,
-			conversation.Immediate, s.Say, d.now())
+		o, err := outbox.Keeping(outboxmysql.ID(), run.UserID,
+			conversation.Immediate, s.Say, d.now(), run.Worth)
 		if err != nil {
 			return job.Outcome{}, err
 		}
@@ -2163,7 +2163,7 @@ func (d doing) relay(ctx context.Context, run job.Turn) (job.Outcome, error) {
 		d.logger.InfoContext(ctx, "a job had nothing new to pass on")
 		return job.Outcome{Stop: true, Why: "it had already said that", Said: said}, nil
 	}
-	if err := d.publish(ctx, run.UserID, said); err != nil {
+	if err := d.publish(ctx, run.UserID, said, run.Worth); err != nil {
 		return job.Outcome{}, err
 	}
 	d.logger.InfoContext(ctx, "a job passed on what it found")
@@ -2173,8 +2173,9 @@ func (d doing) relay(ctx context.Context, run job.Turn) (job.Outcome, error) {
 // publish : Writes an announcement down, says it, and records it.
 //
 // The speaking is the half that goes when every client collects.
-func (d doing) publish(ctx context.Context, userID, said string) error {
-	o, err := outbox.New(outboxmysql.ID(), userID, conversation.Immediate, said, d.now())
+func (d doing) publish(ctx context.Context, userID, said string, worth time.Duration) error {
+	o, err := outbox.Keeping(outboxmysql.ID(), userID,
+		conversation.Immediate, said, d.now(), worth)
 	if err != nil {
 		return err
 	}
@@ -2252,7 +2253,8 @@ func (d doing) write(ctx context.Context, run job.Turn, s job.Step) (job.Outcome
 		return job.Outcome{Stop: true, Why: "it had already said that", Said: said}, nil
 	}
 
-	o, err := outbox.New(outboxmysql.ID(), run.UserID, conversation.Immediate, said, d.now())
+	o, err := outbox.Keeping(outboxmysql.ID(), run.UserID,
+		conversation.Immediate, said, d.now(), run.Worth)
 	if err != nil {
 		return job.Outcome{}, err
 	}

@@ -162,6 +162,14 @@ type Job struct {
 	// Why : What happened last run -- what went wrong, or which
 	// check stopped it. Empty when it simply ran.
 	Why string
+	// Keep : How long what this rule says stays worth saying, as it
+	// was written. Empty leaves it to the kind.
+	//
+	// A rule knows something the kind cannot. Every announcement a
+	// rule makes is the same kind, and a battery warning is worth
+	// five minutes while a missed call nobody returned is worth the
+	// afternoon.
+	Keep string
 	// Said : The sentence this rule last said, so it does not say
 	// it again.
 	//
@@ -200,6 +208,34 @@ const (
 // it. The same judgement the outbox makes about announcements, for
 // the same reason.
 const Stale = time.Hour
+
+// Worth : How long this rule's announcements stay worth saying, or
+// zero to leave it to the kind.
+func (j Job) Worth() time.Duration {
+	if strings.TrimSpace(j.Keep) == "" {
+		return 0
+	}
+	keep, err := time.ParseDuration(strings.TrimSpace(j.Keep))
+	if err != nil || keep <= 0 {
+		return 0
+	}
+	return keep
+}
+
+// Kept : Whether a written length of time can be read, for
+// refusing one that cannot in front of whoever wrote it.
+func Kept(keep string) error {
+	keep = strings.TrimSpace(keep)
+	if keep == "" {
+		return nil
+	}
+	held, err := time.ParseDuration(keep)
+	if err != nil || held <= 0 {
+		return fmt.Errorf("%w: %q is not a length of time to keep it for",
+			ErrUnreadable, keep)
+	}
+	return nil
+}
 
 // New : A job, with its first run worked out.
 func New(id, userID, name, kind, schedule string, steps []Step, from time.Time) (Job, error) {

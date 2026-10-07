@@ -174,6 +174,29 @@ const Limit = 50
 // be measured from whenever the server happened to come back, which
 // is the one case this is for.
 func New(id, userID string, kind conversation.Kind, text string, at time.Time) (Owing, error) {
+	return Keeping(id, userID, kind, text, at, 0)
+}
+
+// Keeping : The same, with how long this one is worth saying.
+//
+// Owner, 7 October 2026, shown that eighteen announcements in a row
+// had expired before he was ever in the room to hear them: *"fix
+// the five minutes."*
+//
+// One number was the wrong fix, and the eighteen say so. Six were
+// battery warnings and three were the assistant naming a
+// conversation, none of which is worth hearing hours later -- a
+// warning that the battery was at four percent, read out at the
+// door that evening, is worse than silence. Two were missed calls
+// from somebody the phone could not name, and those were worth
+// keeping.
+//
+// Nothing about the kind can tell those apart. They are all the
+// same kind. What knows is whoever wrote the rule, so that is who
+// is asked, and zero means the kind decides as it always did.
+func Keeping(id, userID string, kind conversation.Kind, text string,
+	at time.Time, worth time.Duration,
+) (Owing, error) {
 	rule, ok := kind.Rule()
 	if !ok {
 		return Owing{}, ErrNotAnnouncement
@@ -181,13 +204,16 @@ func New(id, userID string, kind conversation.Kind, text string, at time.Time) (
 	if text == "" {
 		return Owing{}, ErrNoText
 	}
+	if worth <= 0 {
+		worth = rule.Worth
+	}
 	return Owing{
 		ID:      id,
 		UserID:  userID,
 		Kind:    kind,
 		Text:    text,
 		Due:     at,
-		Expires: at.Add(rule.Worth),
+		Expires: at.Add(worth),
 		At:      at,
 	}, nil
 }

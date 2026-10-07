@@ -29,6 +29,7 @@ type row struct {
 	LastAt    *time.Time `gorm:"column:last_at"`
 	Why       string     `gorm:"column:why"`
 	LastSaid  string     `gorm:"column:last_said"`
+	Keep      string     `gorm:"column:keep"`
 	CreatedAt time.Time  `gorm:"column:created_at"`
 	UpdatedAt time.Time  `gorm:"column:updated_at"`
 }
@@ -61,7 +62,7 @@ func (s *Store) Keep(ctx context.Context, j job.Job) error {
 	r := row{
 		ID: j.ID, UserID: j.UserID, Name: j.Name, Kind: j.Kind,
 		Schedule: j.Schedule, Steps: string(steps), State: string(j.State),
-		Why: j.Why, CreatedAt: now, UpdatedAt: now,
+		Why: j.Why, Keep: j.Keep, CreatedAt: now, UpdatedAt: now,
 	}
 	if !j.Next.IsZero() {
 		at := j.Next.UTC()
@@ -243,7 +244,7 @@ func assemble(r row) (job.Job, error) {
 	j := job.Job{
 		ID: r.ID, UserID: r.UserID, Name: r.Name, Kind: r.Kind,
 		Schedule: r.Schedule, Steps: steps, State: job.State(r.State),
-		Why: r.Why, Said: r.LastSaid,
+		Why: r.Why, Said: r.LastSaid, Keep: r.Keep,
 	}
 	if r.NextAt != nil {
 		j.Next = r.NextAt.UTC()
