@@ -646,6 +646,9 @@ func run() error {
 	// triggers it waits for. Two would be two answers to the same
 	// question.
 	look := readings{events: deviceEvents, usually: usually,
+		linked: map[string]func(context.Context, string) (string, time.Time, error){
+			"link.google": googleHealth(googleLink),
+		},
 		where: cfg.Assistant.Location, now: cfg.Assistant.Now}
 
 	running := &job.Runner{
@@ -1111,6 +1114,34 @@ func diaryOf(link *google.Link, cfg config.Config) calendartool.Diary {
 // Nil rather than an error: a server with no Google client is a working
 // server that cannot reach Google, exactly as it was before any of this
 // existed.
+//
+// googleHealth : Whether the Google permission still works, and
+// since when.
+//
+// Broken is what the account itself records rather than anything
+// worked out here: a refresh token dies for reasons nobody on
+// this side can see, and the one thing that finds out is the call
+// that failed.
+//
+// No connection configured reads as working, not broken. Nothing
+// is wrong with a permission nobody asked for, and a rule warning
+// about one would be wrong on every server that has none.
+func googleHealth(link *google.Link) func(context.Context, string) (string, time.Time, error) {
+	return func(ctx context.Context, userID string) (string, time.Time, error) {
+		if link == nil {
+			return job.Working, time.Time{}, nil
+		}
+		account, err := link.Account(ctx, userID)
+		if err != nil || account == nil {
+			return job.Working, time.Time{}, nil
+		}
+		if account.BrokenAt != nil {
+			return job.Broken, *account.BrokenAt, nil
+		}
+		return job.Working, time.Time{}, nil
+	}
+}
+
 func linkToGoogle(cfg config.Config, logger *slog.Logger, db *storage.DB) *google.Link {
 	link, err := google.New(google.Config{
 		ClientID:     cfg.Google.ClientID,
@@ -2065,6 +2096,10 @@ type readings struct {
 	// conditions unknown, which is how they fail: a rule standing
 	// on a routine nobody has worked out yet does not fire.
 	usually routine.Store
+	// linked : How a connection to somewhere else is doing, by the
+	// name a gate calls it. Nil leaves those conditions unknown,
+	// and an unknown reading never passes.
+	linked map[string]func(ctx context.Context, userID string) (string, time.Time, error)
 	// where : Their zone, which is what an hour means.
 	where *time.Location
 	// now : The clock, so the hour a routine describes is placed on
@@ -2076,6 +2111,9 @@ type readings struct {
 func (r readings) Latest(ctx context.Context, userID, kind string, n int) ([]job.Reading, error) {
 	if routine.Mine(kind) {
 		return r.usual(ctx, userID, kind)
+	}
+	if job.Linked(kind) {
+		return r.connection(ctx, userID, kind)
 	}
 	found, err := r.events.Recent(ctx, userID, event.Query{Kind: kind, Limit: n})
 	if err != nil {
@@ -2126,6 +2164,33 @@ func (r readings) usual(ctx context.Context, userID, kind string) ([]job.Reading
 	// started going to has no hour yet, and a condition on it
 	// should quietly not hold rather than stop the rule.
 	return nil, nil
+}
+
+// connection : How a link to somewhere else is doing, as a
+// reading.
+//
+// One reading, like a routine: a connection does not arrive and
+// there is nothing to cross. Its time is when it broke, so a rule
+// can ask how long it has been down with the operators that are
+// already there.
+//
+// A name nothing answers to is unknown rather than an error. A
+// rule asking about a connection this server was never configured
+// for should quietly not hold, the same as one asking about a
+// kind no device reports.
+func (r readings) connection(ctx context.Context, userID, kind string) ([]job.Reading, error) {
+	ask, ok := r.linked[strings.ToLower(strings.TrimSpace(kind))]
+	if !ok || ask == nil {
+		return nil, nil
+	}
+	state, since, err := ask(ctx, userID)
+	if err != nil {
+		return nil, err
+	}
+	if since.IsZero() {
+		since = r.clock()
+	}
+	return []job.Reading{{Value: state, At: since, Known: true}}, nil
 }
 
 // clock : Now.

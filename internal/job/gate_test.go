@@ -468,3 +468,73 @@ func TestWhatDoesNotArrive(t *testing.T) {
 		}
 	}
 }
+
+// TestAConnectionThatHasStoppedWorking : A permission can die with
+// nobody doing anything -- Google expires a refresh token after seven
+// days while an app is in testing -- and the server finds out only
+// when the next call fails. That is not a rule finding nothing. It is
+// a capability gone, and every rule standing on it quietly does
+// nothing until somebody looks.
+//
+// The one that prompted this had been dead nine hours, had said so in
+// the log a hundred and nine times, and nothing had said it aloud.
+func TestAConnectionThatHasStoppedWorking(t *testing.T) {
+	now := time.Date(2026, 10, 7, 20, 0, 0, 0, time.UTC)
+	broke := now.Add(-9 * time.Hour)
+
+	gate, err := job.ParseGate("link.google is broken")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if gate.Needs() != "link.google" {
+		t.Errorf("it reads %q", gate.Needs())
+	}
+	// Read when somebody asks, so it can never set a rule off.
+	if gate.Arrives() {
+		t.Error("a rule would be allowed to wait for it, and wait for ever")
+	}
+	if _, err := job.Watched("when link.google is broken"); err == nil {
+		t.Error("it was accepted as a trigger")
+	}
+
+	down := job.Reading{Value: job.Broken, At: broke, Known: true}
+	if !gate.Passes(down, false, now) {
+		t.Error("a broken connection did not read as broken")
+	}
+	up := job.Reading{Value: job.Working, At: now, Known: true}
+	if gate.Passes(up, false, now) {
+		t.Error("a working connection read as broken")
+	}
+
+	// Its time is when it broke, so how long it has been down is
+	// asked with the operators already there.
+	since, err := job.ParseConditions("link.google older than 1h")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !since.Passes(map[string][]job.Reading{"link.google": {down}}, false, now) {
+		t.Error("nine hours down did not read as older than an hour")
+	}
+}
+
+// TestWhatAConnectionCanBe : Working or broken and nothing else. Why
+// it broke is the connection's own business and is recorded beside
+// it; a rule asking about the wording would break when the wording
+// changed.
+func TestWhatAConnectionCanBe(t *testing.T) {
+	for _, written := range []string{
+		"link.google is down", "link.google < 20", "link.google older than 1h ago",
+		"link.google arrives", "link.google older than soon", "link.google older than soon",
+	} {
+		if _, err := job.ParseGate(written); err == nil {
+			t.Errorf("%q was accepted", written)
+		}
+	}
+	for _, written := range []string{
+		"link.google is broken", "link.google is not working", "link.anything is broken",
+	} {
+		if _, err := job.ParseGate(written); err != nil {
+			t.Errorf("%q was refused: %v", written, err)
+		}
+	}
+}

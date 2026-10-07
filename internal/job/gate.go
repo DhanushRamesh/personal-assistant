@@ -14,6 +14,38 @@ import (
 // room, rather than reading an event.
 const Presence = "presence"
 
+// Links : What every gate source about a connection to somewhere
+// else is called.
+//
+//	check link.google is broken
+//
+// A permission can die without anybody doing anything: Google
+// expires a refresh token after seven days while an app is in
+// testing, and the server finds out only when the next call
+// fails. That is not a rule finding nothing -- it is a capability
+// gone, and every rule standing on it will quietly do nothing
+// until somebody notices.
+//
+// A namespace rather than one source per service, so the next
+// connection needs a resolver and not a word in the grammar. The
+// value is working or broken, which is all a rule can usefully
+// ask: why it broke is the connection's own business and is
+// already recorded beside it.
+//
+// Its time is when it broke, and a working one is always nought
+// seconds old. So "link.google older than 1h" asks whether it has
+// been down for more than an hour, in one condition -- which is
+// the question worth asking, since a permission that fails once
+// and recovers is not worth a sentence.
+const Links = "link."
+
+// Working, Broken : What a connection gate may be compared
+// against.
+const (
+	Working = "working"
+	Broken  = "broken"
+)
+
 // Hour, Day : The gate sources that ask what time it is, rather
 // than reading anything.
 //
@@ -318,6 +350,24 @@ func (g Gate) sound() error {
 			return fmt.Errorf("%w: %q is not a number", ErrUnreadableGate, g.Value)
 		}
 	}
+	if Linked(g.Source) {
+		switch g.Op {
+		case Older, Within:
+			if _, err := time.ParseDuration(g.Value); err != nil {
+				return fmt.Errorf("%w: %q is not a length of time", ErrUnreadableGate, g.Value)
+			}
+			return nil
+		case Is, IsNot:
+			if v := strings.ToLower(g.Value); v != Working && v != Broken {
+				return fmt.Errorf("%w: a connection is %q or %q, not %q",
+					ErrUnreadableGate, Working, Broken, g.Value)
+			}
+			return nil
+		}
+		return fmt.Errorf("%w: a connection is %q or %q something, or older than a length of time",
+			ErrUnreadableGate, Is, IsNot)
+	}
+
 	if g.Op == Any {
 		switch g.Source {
 		case Presence, Hour, Day:
@@ -482,10 +532,18 @@ func (g Gate) Measures() bool {
 // could set a rule off.
 //
 // Everything a device reports does. The clock does not, presence
-// does not, and a routine does not -- a time of day is worked out
-// and kept, and nothing about it ever arrives to be noticed.
+// does not, a routine does not -- a time of day is worked out and
+// kept -- and neither does a connection, which is read when
+// somebody asks and reports how it was the last time it was
+// used.
 func (g Gate) Arrives() bool {
-	return g.Needs() != "" && !routine.Mine(g.Source)
+	return g.Needs() != "" && !routine.Mine(g.Source) && !Linked(g.Source)
+}
+
+// Linked : Whether a gate source asks about a connection to
+// somewhere else rather than about the person.
+func Linked(source string) bool {
+	return strings.HasPrefix(strings.ToLower(strings.TrimSpace(source)), Links)
 }
 
 // Reading : The latest the server has of one event kind.

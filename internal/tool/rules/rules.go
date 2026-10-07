@@ -150,6 +150,7 @@ var howToCondition = prompt.Lines(
 	`  "hour >= 10", "hour < 18" -- the hour of the day where they are, 0 to 23`,
 	`  "day is weekday", "day is weekend", "day is saturday"`,
 	`  "usually.home.leaves older than 90m" -- past the time they usually go`,
+	`  "link.google is broken" -- a permission that has stopped working, so everything standing on it quietly does nothing`,
 	`  "battery.level <= 15m ago" -- no higher than it was then, so it is not rising`,
 	`  "battery.level > 1h ago" -- higher than it was an hour back`,
 	`The value "15m ago" compares a reading with its own earlier self, which is the only way to know whether something is moving.`,

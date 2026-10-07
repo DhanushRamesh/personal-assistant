@@ -13076,6 +13076,64 @@ They are a record of what happened, and what happened is that
 the server wrote them.
 
 
+### When a connection dies, say so
+
+The Google permission expired at 11:41. `broken_at` was set, the
+account row recorded exactly what Google said, and the server
+wrote *"must be granted again"* into the log **109 times**. The
+owner found out nine hours later because somebody happened to
+look at a page.
+
+A rule finding nothing is the system working. A permission dying
+is a capability gone, and every rule standing on it quietly does
+nothing until somebody notices.
+
+	check link.google older than 20m
+
+#### A gate source, not another loop
+
+Everything else that watches has been moved onto the engine this
+week, so this went the same way rather than becoming the eighth
+Go loop. It is a source a condition can read, like presence and
+like a routine: read when somebody asks, never arriving, so it
+can never be what a rule waits for.
+
+**A namespace and not one source per service.** `link.` so the
+next connection needs a resolver in one map and not a word in the
+grammar.
+
+**Working or broken, and nothing else.** Why it broke is the
+connection's own business and is recorded beside it; a rule
+matching on the wording would break when the wording changed.
+
+**And its time is when it broke.** A working connection is always
+nought seconds old, so `older than 20m` asks whether it has been
+down for twenty minutes -- in a single condition, which matters
+because a rule written by voice gets one check. A permission that
+fails once and recovers is not worth a sentence.
+
+**No connection configured reads as working.** Nothing is wrong
+with a permission nobody asked for, and a rule warning about one
+would be wrong on every server that has none.
+
+#### What it said
+
+	Sir, the connection to Google has expired and needs granting
+	again. Until it is, nothing can read your diary.
+
+Kept twelve hours, because it is as true in the morning as it was
+at ten at night -- which is the first real use of a rule choosing
+its own worth.
+
+#### Found while writing it
+
+The comment claimed a rule could ask how long a connection had
+been down, and the validation allowed only `is` and `is not`. The
+test written from the comment caught it. The comment was right
+and the code was narrower, which is the better way round for that
+to happen.
+
+
 ## 12. Maintaining this file
 
 When the owner states a preference, makes a decision, or corrects something,
