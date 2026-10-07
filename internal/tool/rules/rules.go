@@ -38,7 +38,7 @@ const Kind = "rule"
 
 // Store : Where rules are kept.
 type Store interface {
-	Mine(ctx context.Context, userID, kind string, limit int) ([]job.Job, error)
+	Mine(ctx context.Context, userID, kind string, limit int, states ...job.State) ([]job.Job, error)
 	Keep(ctx context.Context, j job.Job) error
 	Stop(ctx context.Context, userID, id string) (bool, error)
 }

@@ -32,13 +32,24 @@ func (s *Store) Keep(_ context.Context, j job.Job) error {
 	return nil
 }
 
-// Mine : This person's rules of a kind, newest first.
-func (s *Store) Mine(_ context.Context, userID, kind string, limit int) ([]job.Job, error) {
+// Mine : This person's rules of a kind, newest first. No states is
+// every state, as it is in the real one.
+func (s *Store) Mine(_ context.Context, userID, kind string, limit int,
+	states ...job.State,
+) ([]job.Job, error) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 
+	want := map[job.State]bool{}
+	for _, st := range states {
+		want[st] = true
+	}
+
 	var out []job.Job
 	for _, j := range s.jobs {
+		if len(want) > 0 && !want[j.State] {
+			continue
+		}
 		if j.UserID == userID && (kind == "" || j.Kind == kind) {
 			out = append(out, j)
 		}

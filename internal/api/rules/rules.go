@@ -45,7 +45,8 @@ type Store interface {
 	// Mine : This person's, newest first. An empty kind is all of
 	// them, which is what this wants: a listing that hid the
 	// reminders would be a listing that disagreed with the engine.
-	Mine(ctx context.Context, userID, kind string, limit int) ([]job.Job, error)
+	// No states is every state.
+	Mine(ctx context.Context, userID, kind string, limit int, states ...job.State) ([]job.Job, error)
 }
 
 // Handler : Serves them.
@@ -128,7 +129,21 @@ func (h *Handler) List(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	held, err := h.store.Mine(ctx, authn.Of(ctx).User.ID, r.URL.Query().Get("kind"), limit)
+	// What is standing, unless the whole record is asked for. A rule
+	// that was called off is not a rule somebody has; listed beside
+	// the ones that are, it is a thing to read past every time, and
+	// there is no limit on how many of them accumulate.
+	//
+	// Asked for rather than shown, as the reminders are, and for the
+	// same reason: a screen that opens on a log buries the handful
+	// of things actually running.
+	var states []job.State
+	if r.URL.Query().Get("past") != "true" {
+		states = []job.State{job.Active}
+	}
+
+	held, err := h.store.Mine(ctx, authn.Of(ctx).User.ID,
+		r.URL.Query().Get("kind"), limit, states...)
 	if err != nil {
 		h.Fail(ctx, w, "reading the rules", err)
 		return

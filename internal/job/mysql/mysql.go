@@ -182,13 +182,26 @@ func (s *Store) Ran(ctx context.Context, id string, next time.Time,
 }
 
 // Mine : One person's jobs, newest first. Kind filters when given.
-func (s *Store) Mine(ctx context.Context, userID, kind string, limit int) ([]job.Job, error) {
+func (s *Store) Mine(ctx context.Context, userID, kind string, limit int,
+	states ...job.State,
+) ([]job.Job, error) {
 	if s == nil || s.db == nil {
 		return nil, fmt.Errorf("job: there is nowhere to read jobs")
 	}
 	q := s.db.WithContext(ctx).Where("user_id = ?", userID)
 	if kind != "" {
 		q = q.Where("kind = ?", kind)
+	}
+	// Narrowed in the query rather than afterwards. Filtering what
+	// came back would let a pile of cancelled rules fill the limit
+	// and hide the active ones underneath, which is the one listing
+	// nobody could do without.
+	if len(states) > 0 {
+		want := make([]string, 0, len(states))
+		for _, st := range states {
+			want = append(want, string(st))
+		}
+		q = q.Where("state IN ?", want)
 	}
 	var rows []row
 	if err := q.Order("created_at DESC").Limit(limit).Find(&rows).Error; err != nil {

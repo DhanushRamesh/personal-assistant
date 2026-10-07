@@ -714,6 +714,24 @@ class AppState extends ChangeNotifier {
     _set(busy: false);
   }
 
+  /// _showPastRules : Whether the rules list includes the ones that
+  /// have been called off or have finished.
+  ///
+  /// Its own flag and not the reminders' one. They are two lists on
+  /// two pages, and a toggle on one quietly changing the other is the
+  /// sort of thing nobody finds until it confuses them.
+  bool _showPastRules = false;
+
+  /// showPastRules : Whether rules that are no longer standing show.
+  bool get showPastRules => _showPastRules;
+
+  /// togglePastRules : Shows or hides them, and reads the list again,
+  /// since the server decides what the list holds.
+  Future<void> togglePastRules() async {
+    _showPastRules = !_showPastRules;
+    await loadRules();
+  }
+
   /// loadRules : Reads the standing rules, for the settings screen.
   ///
   /// Read every time the section is opened rather than once. A rule can
@@ -723,7 +741,7 @@ class AppState extends ChangeNotifier {
   Future<void> loadRules() async {
     _set(busy: true, error: null);
     try {
-      _rules = await api.listRules();
+      _rules = await api.listRules(past: _showPastRules);
     } on Object catch (e) {
       _error = _explain(e);
     }

@@ -624,10 +624,21 @@ class _RulesModule extends StatelessWidget {
     return _Section(
       title: 'Rules',
       subtitle:
-          'Everything that can speak without being asked, and what each '
-          'one did last time. Tap a rule to see its steps. Ask to add or '
-          'cancel one by voice.',
-      action: _SectionLink(label: 'Refresh', onTap: state.loadRules),
+          'Everything standing that can speak without being asked, and '
+          'what each one did last time. Tap a rule to see its steps. '
+          'Show past adds the ones called off and the ones that have '
+          'finished. Ask to add or cancel one by voice.',
+      action: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          _SectionLink(
+            label: state.showPastRules ? 'Hide past' : 'Show past',
+            onTap: state.togglePastRules,
+          ),
+          const SizedBox(width: AppSpacing.md),
+          _SectionLink(label: 'Refresh', onTap: state.loadRules),
+        ],
+      ),
       child: switch (held) {
         null => Text(
           'Reading them…',
@@ -636,8 +647,12 @@ class _RulesModule extends StatelessWidget {
           ),
         ),
         [] => Text(
-          'Nothing standing. Ask for something like "tell me when the '
-              'battery drops below twenty" and it appears here.',
+          state.showPastRules
+              ? 'Nothing at all, standing or otherwise. Ask for something '
+                    'like "tell me when the battery drops below twenty" '
+                    'and it appears here.'
+              : 'Nothing standing. Ask for something like "tell me when '
+                    'the battery drops below twenty" and it appears here.',
           style: context.text.caption.copyWith(
             color: context.colors.textSecondary,
           ),

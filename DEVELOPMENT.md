@@ -12514,6 +12514,24 @@ would be worse than the JSON. `saying` is dropped: it is what the
 assistant says while the tool runs, which is about the moment and
 not about the rule.
 
+#### Show past
+
+A rule that was called off is not a rule somebody has, and
+nothing ever removes one: `battery percentage report` and
+`engine status` were two lines to read past on every visit, and
+there is no limit on how many accumulate. Standing only, with
+the rest behind the same words the reminders use.
+
+**Narrowed in the query, not afterwards.** Filtering what came
+back would let a pile of cancelled rules fill the limit and hide
+the active ones underneath -- which is the one listing nobody
+could do without. So `Mine` takes the states, variadically, so
+that `rule_list` asking for all of them did not have to change.
+
+**Its own flag, not the reminders\' one.** Two lists on two
+pages, and a toggle on one quietly changing the other is the
+sort of thing nobody finds until it confuses them.
+
 
 ## 12. Maintaining this file
 

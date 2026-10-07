@@ -435,10 +435,17 @@ class AssistantApi {
 
   /// listRules : The standing rules, newest first.
   ///
+  /// What is standing, unless past is asked for: a rule that was
+  /// called off is not a rule somebody has, and there is no limit on
+  /// how many of them pile up.
+  ///
   /// Read only. Rules are made and cancelled by asking, and a second
   /// way to write them is a second place for the grammar to be checked.
-  Future<List<Rule>> listRules() async =>
-      parseList(await _send('GET', '/v1/rules'), 'rules', Rule.fromJson);
+  Future<List<Rule>> listRules({bool past = false}) async => parseList(
+    await _send('GET', '/v1/rules', query: {if (past) 'past': 'true'}),
+    'rules',
+    Rule.fromJson,
+  );
 
   /// snoozeReminder : Puts one off by the given number of minutes.
   ///
