@@ -391,6 +391,13 @@ func whatFollows(moments []moment, where *time.Location) string {
 	return prompt.Lines(append([]string{"Things that happen together, in the order they happened:"}, lines...)...)
 }
 
+// Agreeing : The fewest observations in a band that can be a time
+// of day.
+//
+// Two of anything is a coincidence. It is the number the same
+// judgement uses when deciding whether something has changed.
+const Agreeing = 3
+
 // Band : How many hours wide a time of day may be and still be one
 // time of day.
 //
@@ -432,7 +439,16 @@ func aroundWhen(when []time.Time, where *time.Location) string {
 	from, most := densest(hours)
 	// Fewer than half of them is not a time of day, it is some of
 	// them happening to agree.
-	if most*2 < len(hours) {
+	//
+	// And a half of something tiny is not a time of day either.
+	// Office arrivals were 19, 11 and 13: two of the three fall in
+	// one band, which passes the half, and the band's middle is
+	// one in the afternoon -- a confident hour out of two
+	// observations two and a quarter hours apart. Three is the
+	// fewest that can be a habit rather than a coincidence with a
+	// witness, which is what [changed.Enough] says about the same
+	// question elsewhere.
+	if most < Agreeing || most*2 < len(hours) {
 		return "at no particular hour"
 	}
 

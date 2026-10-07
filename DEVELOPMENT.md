@@ -12236,6 +12236,21 @@ it of anything that passed at all.
 Which is the first half of what was asked for, and it was there
 all along.
 
+#### And three, not two
+
+Checked against what `visits` actually reads -- the phone's
+geofence crossings, not the server's stays -- the first version
+overstated. Office arrivals were 19, 11 and 13. Two of the three
+fall in one band, which is half of them and passed, and the
+middle of that band is one in the afternoon. A confident hour
+read off two observations two and a quarter hours apart.
+
+So a band must hold at least three. Two of anything is a
+coincidence however large a share of a small number it is, which
+is what `changed.Enough` says about the same question elsewhere.
+Home keeps its hours -- three of four at nine, four of six near
+ten -- and the office honestly has none yet.
+
 #### What is still not there
 
 The chain. This says when he reaches home and when he leaves it,

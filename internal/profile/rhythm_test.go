@@ -405,11 +405,16 @@ func TestAnHourMayStraddleMidnight(t *testing.T) {
 // are not said in the same word. "Usually" of a coin toss is the
 // overstating this is meant to avoid.
 func TestHowSureItIsShowsInTheWord(t *testing.T) {
+	// Three agreeing out of six: half, which is a leaning. Fewer
+	// than three agreeing is no hour at all, whatever the half
+	// says -- see TestTwoAgreeingIsNotAnHour.
 	leaning := []event.Event{
 		happened("door.shut", "", day(1, 9, 0)),
 		happened("door.shut", "", day(2, 9, 0)),
-		happened("door.shut", "", day(3, 15, 0)),
-		happened("door.shut", "", day(4, 20, 0)),
+		happened("door.shut", "", day(3, 9, 0)),
+		happened("door.shut", "", day(4, 15, 0)),
+		happened("door.shut", "", day(5, 20, 0)),
+		happened("door.shut", "", day(6, 22, 0)),
 	}
 	if got := profile.Rhythm(leaning, india()); !strings.Contains(got, "often around") {
 		t.Errorf("half agreeing was not reported as a leaning:\n%s", got)
@@ -423,5 +428,25 @@ func TestHowSureItIsShowsInTheWord(t *testing.T) {
 	}
 	if got := profile.Rhythm(habit, india()); !strings.Contains(got, "usually around") {
 		t.Errorf("three of four agreeing was not reported as a habit:\n%s", got)
+	}
+}
+
+// Office arrivals were 19, 11 and 13. Two of the three fall in
+// one band, which is half of them, and the middle of that band
+// is one in the afternoon -- a confident hour read off two
+// observations two and a quarter hours apart.
+//
+// Two of anything is a coincidence, however large a share of a
+// small number it is.
+func TestTwoAgreeingIsNotAnHour(t *testing.T) {
+	events := []event.Event{
+		happened("door.shut", "", day(1, 19, 0)),
+		happened("door.shut", "", day(2, 11, 23)),
+		happened("door.shut", "", day(3, 13, 37)),
+	}
+
+	got := profile.Rhythm(events, india())
+	if !strings.Contains(got, "at no particular hour") {
+		t.Errorf("an hour was read off two observations:\n%s", got)
 	}
 }
