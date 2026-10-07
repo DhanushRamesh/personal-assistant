@@ -419,8 +419,45 @@ func TestAFullNameIsStillExact(t *testing.T) {
 	if !strings.Contains(got.Content, "Amma") {
 		t.Errorf("the exact kind was not found:\n%s", got.Content)
 	}
-	if strings.Contains(got.Content, "call.made") {
+	// The reading stays exact: the sibling's own event is not in
+	// it. That it is named afterwards is a different thing, and
+	// the test below is about that.
+	if strings.Contains(got.Content, "Kliffy") {
 		t.Errorf("an exact kind matched its sibling:\n%s", got.Content)
+	}
+}
+
+// Asked "who called me recently", the model read call.received,
+// found yesterday's, and said "you received no calls today,
+// sir". There had been a missed call that morning. The
+// description already warned against narrowing a family from the
+// words of a question and the warning did not hold, so the
+// reading now says what else of the family is there.
+func TestTheRestOfTheFamilyIsNamed(t *testing.T) {
+	s := store(t,
+		at(t, 9, 28, "call.received", "Alekhya"),
+		at(t, 9, 49, "call.missed", "unknown"),
+	)
+
+	got := ask(t, s, `{"kind":"call.received"}`)
+	if !strings.Contains(got.Content, "call.missed 1") {
+		t.Errorf("the missed call is not mentioned at all:\n%s", got.Content)
+	}
+	if !strings.Contains(got.Content, "did not ask for it") {
+		t.Errorf("it is not said to be outside what was asked:\n%s", got.Content)
+	}
+}
+
+// A kind with no family has nothing to add, and a prefix has
+// already read the whole of it.
+func TestNothingIsAddedWhereThereIsNoFamilyToAdd(t *testing.T) {
+	s := store(t,
+		at(t, 9, 28, "call.received", "Alekhya"),
+		at(t, 9, 49, "call.missed", "unknown"),
+	)
+
+	if got := ask(t, s, `{"kind":"call."}`); strings.Contains(got.Content, "did not ask for it") {
+		t.Errorf("a family read whole was told about itself:\n%s", got.Content)
 	}
 }
 

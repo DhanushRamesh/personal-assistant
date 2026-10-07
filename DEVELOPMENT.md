@@ -12111,6 +12111,72 @@ Saying it twice is worse than either, and it is the one of the
 three that sounds broken.
 
 
+### A family answered from one of its kinds
+
+Owner, 7 October 2026, with the exchange:
+
+	Who called me recently?
+	You received no calls today, sir. Your most recent received
+	call was yesterday -- Alekhya at 9:28 am on Tuesday the 6th.
+
+	I got a call at 09:49AM. Right?
+	Yes, sir. You missed a call at 9:49 am this morning from an
+	unknown number.
+
+It knew. The stored calls say what it did:
+
+	event_recent {"kind": "call.received", "limit": 10}
+	event_recent {"kind": "call.missed",   "limit": 5}
+
+The first question was answered from `call.received` alone. The
+second named the thing and it found it at once.
+
+#### The warning was already there
+
+From the `kind` description, written before any of this:
+
+> *Never guess one from the words of the question. A family holds
+> the same thing happening several ways and the question names
+> only one of them: asked when somebody called, the answer may be
+> that they were called instead, and a kind taken from the
+> phrasing turns a thing plainly there into nothing at all.*
+
+Nearly this example, in nearly these words, and it did not hold.
+Which is the rule about where to put things: **enforce in the
+server first; prompt wording is the last resort.** The wording
+was already the last resort and had been spent.
+
+#### So the reading says what it left out
+
+A reading of a single kind now comes back with what else of its
+family is in the same window, counted:
+
+	The same family also reported this today, and you did not
+	ask for it: call.missed 1.
+
+The answer cannot be "no calls today" while that is sitting
+underneath it. Nothing is widened and nothing is refused -- the
+reading is still exactly the kind that was asked for, and the
+listing is unchanged. What is added is the one fact that makes
+the omission visible.
+
+Only for a single kind with a family: a prefix has already read
+the whole of it, and a kind with no dot has no siblings.
+
+`Nothing` already did a version of this, and only when a
+`contains` was given as well and the kind found nothing at all.
+Here the kind found something -- yesterday's call -- so it never
+looked. Finding something is exactly when this matters, because
+that is when an answer sounds complete.
+
+#### The same question afterwards
+
+	Today you missed one call at 9:49 am from an unknown number.
+	Yesterday, Alekhya called you at 9:28 am, and you also missed
+	two calls -- one unknown and one from Megatron. You called
+	Amma twice, once last night and once just after midnight, sir.
+
+
 ## 12. Maintaining this file
 
 When the owner states a preference, makes a decision, or corrects something,

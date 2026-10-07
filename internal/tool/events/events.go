@@ -380,9 +380,11 @@ func recent(reader Reader, clock Clock) tool.Tool {
 			}
 
 			if len(found) == 0 {
-				return tool.OK(Nothing(ctx, reader, in.Caller.UserID, q, over))
+				return tool.OK(Nothing(ctx, reader, in.Caller.UserID, q, over) +
+					Besides(ctx, reader, in.Caller.UserID, q, over))
 			}
-			return tool.OK(describe(found, q, over, where))
+			return tool.OK(describe(found, q, over, where) +
+				Besides(ctx, reader, in.Caller.UserID, q, over))
 		},
 	}
 }
@@ -394,6 +396,63 @@ func recent(reader Reader, clock Clock) tool.Tool {
 //
 // Which kinds do exist, when the question found nothing, because the
 // likeliest reason is a kind that was guessed at rather than a quiet day.
+// Besides : The rest of a family, when only one of it was asked for.
+//
+// Asked *"who called me recently"*, the model called this with
+// kind call.received, read yesterday's, and answered "you
+// received no calls today, sir". There had been a missed call at
+// 9:49 that morning. Told about it directly it found it at once,
+// with kind call.missed.
+//
+// The description already warns against this in nearly those
+// words -- *a family holds the same thing happening several ways
+// and the question names only one of them* -- and the warning did
+// not hold. So the server says it instead of asking: a reading of
+// one kind comes back with what else of its family is in the same
+// window, and the answer cannot be "no calls" while "call.missed
+// 1" is sitting under it.
+//
+// Only for a single kind with a family. A prefix already read the
+// whole of it, and a kind with no dot has no siblings.
+func Besides(ctx context.Context, reader Reader, userID string, q event.Query, over string) string {
+	stem, _, found := strings.Cut(q.Kind, ".")
+	if !found || stem == "" {
+		return ""
+	}
+
+	wider := q
+	wider.Kind, wider.Prefix, wider.Limit = "", stem+".", MaxLimit
+	also, err := reader.Recent(ctx, userID, wider)
+	if err != nil || len(also) == 0 {
+		return ""
+	}
+
+	seen := map[string]int{}
+	order := make([]string, 0, 4)
+	for _, e := range also {
+		if e.Kind == q.Kind {
+			continue
+		}
+		if _, had := seen[e.Kind]; !had {
+			order = append(order, e.Kind)
+		}
+		seen[e.Kind]++
+	}
+	if len(order) == 0 {
+		return ""
+	}
+	sort.Strings(order)
+
+	counted := make([]string, 0, len(order))
+	for _, kind := range order {
+		counted = append(counted, fmt.Sprintf("%s %d", kind, seen[kind]))
+	}
+	return fmt.Sprintf("\n\nThe same family also reported this %s, and you did not ask for it: %s. "+
+		"They are the same thing happening other ways, so answer about the family rather than "+
+		"the one kind you chose, and read them by name before saying any of it did not happen.",
+		over, strings.Join(counted, ", "))
+}
+
 func Nothing(ctx context.Context, reader Reader, userID string, q event.Query, over string) string {
 	asked := q.Kind + q.Prefix
 	if asked == "" && q.Contains == "" {
