@@ -34,6 +34,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"strconv"
 	"strings"
 	"time"
 )
@@ -162,6 +163,23 @@ type Job struct {
 	// Why : What happened last run -- what went wrong, or which
 	// check stopped it. Empty when it simply ran.
 	Why string
+	// Quiet : When this rule may speak again, or the zero time when
+	// it may speak now.
+	//
+	// Set by somebody putting it aside for a week, and by the rule
+	// itself after it has spoken when it has a [Job.Cool]. One
+	// field because they are the same thing: a rule that is not to
+	// run until a moment.
+	Quiet time.Time
+	// Cool : How long to stay quiet after speaking, as it was
+	// written. Empty is a rule that may speak as often as it has
+	// something to say.
+	//
+	// Blunt where [Job.Said] is sharp. The sentence comparison
+	// catches the same news in the same words and lets the same
+	// news in different words through; this catches everything and
+	// knows nothing. They work together.
+	Cool string
 	// Keep : How long what this rule says stays worth saying, as it
 	// was written. Empty leaves it to the kind.
 	//
@@ -209,14 +227,31 @@ const (
 // the same reason.
 const Stale = time.Hour
 
+// Resting : Whether this rule is to stay quiet for now.
+func (j Job) Resting(now time.Time) bool {
+	return !j.Quiet.IsZero() && now.Before(j.Quiet)
+}
+
+// Cooling : How long this rule stays quiet after speaking, or zero.
+func (j Job) Cooling() time.Duration {
+	if strings.TrimSpace(j.Cool) == "" {
+		return 0
+	}
+	cool, err := Span(j.Cool)
+	if err != nil {
+		return 0
+	}
+	return cool
+}
+
 // Worth : How long this rule's announcements stay worth saying, or
 // zero to leave it to the kind.
 func (j Job) Worth() time.Duration {
 	if strings.TrimSpace(j.Keep) == "" {
 		return 0
 	}
-	keep, err := time.ParseDuration(strings.TrimSpace(j.Keep))
-	if err != nil || keep <= 0 {
+	keep, err := Span(j.Keep)
+	if err != nil {
 		return 0
 	}
 	return keep
@@ -229,10 +264,8 @@ func Kept(keep string) error {
 	if keep == "" {
 		return nil
 	}
-	held, err := time.ParseDuration(keep)
-	if err != nil || held <= 0 {
-		return fmt.Errorf("%w: %q is not a length of time to keep it for",
-			ErrUnreadable, keep)
+	if _, err := Span(keep); err != nil {
+		return fmt.Errorf("%w: %q is not a length of time", ErrUnreadable, keep)
 	}
 	return nil
 }
@@ -253,6 +286,13 @@ func New(id, userID, name, kind, schedule string, steps []Step, from time.Time) 
 	// A watching rule has no first run to work out. Its next_at
 	// stays null, which is what keeps the clock from ever picking
 	// it up.
+	if err := joined(schedule); err != nil {
+		return Job{}, err
+	}
+
+	// Both halves are read, and both must be readable. A rule with
+	// a clock and a trigger is two things that set it off, not a
+	// choice between them.
 	var next time.Time
 	if Watches(schedule) {
 		if _, err := Watched(schedule); err != nil {
@@ -261,12 +301,16 @@ func New(id, userID, name, kind, schedule string, steps []Step, from time.Time) 
 		if _, err := Waits(schedule); err != nil {
 			return Job{}, err
 		}
-	} else {
+	}
+	if Ticks(schedule) {
 		following, err := Following(schedule, from, from.Location())
 		if err != nil {
 			return Job{}, err
 		}
 		next = following
+	}
+	if !Watches(schedule) && !Ticks(schedule) {
+		return Job{}, fmt.Errorf("%w: %q", ErrUnreadable, schedule)
 	}
 	return Job{
 		ID: id, UserID: userID, Name: name, Kind: kind,
@@ -288,12 +332,86 @@ func (j Job) Speaks() bool {
 	return false
 }
 
-// Watches : Whether this schedule waits for something to happen
-// rather than for a time.
-func Watches(schedule string) bool {
-	fields := strings.Fields(strings.ToLower(strings.TrimSpace(schedule)))
-	return len(fields) > 0 && fields[0] == When
+// Also : What joins a clock to a trigger, for a rule that wants
+// both.
+//
+//	every 30m also when battery.level < 20
+//
+// A rule had one mouth: it came round on a clock or it waited for
+// something, never both. Which is right for almost everything and
+// wrong for the one shape that keeps coming up -- tell me when
+// this happens, and look anyway now and then in case the moment
+// was missed while nothing was running.
+//
+// A plain word rather than "or", because they are not
+// alternatives: both are live, and either sets the rule off.
+const Also = " also "
+
+// joined : Whether a schedule naming both halves names two of
+// them.
+//
+// [Also] is spaced on both sides, so a schedule ending in the word
+// does not split and the word is read as part of the clock:
+// "every 30m also" parsed as a perfectly good half-hour. Caught
+// here rather than left to mean something nobody wrote.
+func joined(schedule string) error {
+	word := strings.TrimSpace(Also)
+	for _, field := range strings.Fields(strings.ToLower(strings.TrimSpace(schedule))) {
+		if field != word {
+			continue
+		}
+		before, after, ok := strings.Cut(strings.TrimSpace(schedule), Also)
+		if !ok || strings.TrimSpace(before) == "" || strings.TrimSpace(after) == "" {
+			return fmt.Errorf("%w: %q has a %q with nothing on one side of it",
+				ErrUnreadable, schedule, word)
+		}
+	}
+	return nil
 }
+
+// Clock : The part of a schedule that is a time, or empty.
+//
+// Everything before "also" when there is one, which is where a
+// clock goes: the trigger is what reads strangely in the middle
+// of a sentence, so it goes last.
+func Clock(schedule string) string {
+	before, _, found := strings.Cut(strings.TrimSpace(schedule), Also)
+	if !found {
+		if Watches(schedule) {
+			return ""
+		}
+		return strings.TrimSpace(schedule)
+	}
+	return strings.TrimSpace(before)
+}
+
+// Trigger : The part of a schedule that waits for something, or
+// empty.
+func Trigger(schedule string) string {
+	_, after, found := strings.Cut(strings.TrimSpace(schedule), Also)
+	if !found {
+		if Watches(schedule) {
+			return strings.TrimSpace(schedule)
+		}
+		return ""
+	}
+	return strings.TrimSpace(after)
+}
+
+// Watches : Whether this schedule waits for something to happen as
+// well as, or instead of, coming round on a clock.
+func Watches(schedule string) bool {
+	for _, part := range strings.Split(strings.TrimSpace(schedule), Also) {
+		fields := strings.Fields(strings.ToLower(strings.TrimSpace(part)))
+		if len(fields) > 0 && fields[0] == When {
+			return true
+		}
+	}
+	return false
+}
+
+// Ticks : Whether this schedule also comes round on a clock.
+func Ticks(schedule string) bool { return Clock(schedule) != "" }
 
 // Then : What separates a trigger from how long to wait after it.
 //
@@ -302,6 +420,47 @@ func Watches(schedule string) bool {
 // Spaced on both sides so it cannot be mistaken for part of a
 // value, and a plain word because these are dictated aloud.
 const Then = " then "
+
+// Day, Week : Lengths of time Go does not parse.
+//
+// time.ParseDuration stops at hours, because beyond that a day is
+// not always twenty-four of them. Here it is: these are rules, and
+// "quiet for a week" is the thing somebody actually says. A week
+// of clock time is near enough, and the alternative is asking them
+// for 168h.
+const (
+	oneDay  = 24 * time.Hour
+	oneWeek = 7 * oneDay
+)
+
+// Span : A length of time as somebody would write it.
+//
+// Everything Go reads, plus days and weeks: "30m", "2h", "7d",
+// "1w". One function so that every length on a rule -- how long to
+// wait, how long to keep what it says, how long to stay quiet --
+// is written the same way.
+func Span(s string) (time.Duration, error) {
+	s = strings.TrimSpace(strings.ToLower(s))
+	if s == "" {
+		return 0, fmt.Errorf("%w: no length of time", ErrUnreadable)
+	}
+	for suffix, unit := range map[string]time.Duration{"d": oneDay, "w": oneWeek} {
+		number, found := strings.CutSuffix(s, suffix)
+		if !found {
+			continue
+		}
+		many, err := strconv.ParseFloat(number, 64)
+		if err != nil || many <= 0 {
+			return 0, fmt.Errorf("%w: %q is not a length of time", ErrUnreadable, s)
+		}
+		return time.Duration(many * float64(unit)), nil
+	}
+	long, err := time.ParseDuration(s)
+	if err != nil || long <= 0 {
+		return 0, fmt.Errorf("%w: %q is not a length of time", ErrUnreadable, s)
+	}
+	return long, nil
+}
 
 // Waits : How long a trigger waits before running, or zero.
 //
@@ -327,8 +486,8 @@ func Waits(schedule string) (time.Duration, error) {
 	if !found {
 		return 0, nil
 	}
-	wait, err := time.ParseDuration(strings.TrimSpace(after))
-	if err != nil || wait <= 0 {
+	wait, err := Span(after)
+	if err != nil {
 		return 0, fmt.Errorf("%w: %q is not a length of time to wait",
 			ErrUnreadable, strings.TrimSpace(after))
 	}
@@ -342,6 +501,9 @@ func Waits(schedule string) (time.Duration, error) {
 // arrival here, and a rule about how old a reading is could never
 // fire on one landing, since landing is what makes it new.
 func Watched(schedule string) (Gate, error) {
+	// The trigger half, where a rule has a clock as well.
+	schedule = Trigger(schedule)
+
 	// Whatever follows "then" is how long to wait, not part of the
 	// condition. Taken off before the fields are counted so that a
 	// trigger reads the same with a wait on it and without.
@@ -376,6 +538,8 @@ func Following(schedule string, after time.Time, where *time.Location) (time.Tim
 	if where == nil {
 		where = time.UTC
 	}
+	// The clock half, where a rule has a trigger as well.
+	schedule = Clock(schedule)
 	fields := strings.Fields(strings.ToLower(strings.TrimSpace(schedule)))
 	if len(fields) < 2 {
 		return time.Time{}, ErrUnreadable
@@ -416,7 +580,7 @@ func Following(schedule string, after time.Time, where *time.Location) (time.Tim
 
 // Repeats : Whether this schedule comes round again.
 func Repeats(schedule string) bool {
-	fields := strings.Fields(strings.ToLower(strings.TrimSpace(schedule)))
+	fields := strings.Fields(strings.ToLower(strings.TrimSpace(Clock(schedule))))
 	return len(fields) > 0 && (fields[0] == Every || fields[0] == At)
 }
 

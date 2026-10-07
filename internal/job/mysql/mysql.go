@@ -30,6 +30,8 @@ type row struct {
 	Why       string     `gorm:"column:why"`
 	LastSaid  string     `gorm:"column:last_said"`
 	Keep      string     `gorm:"column:keep"`
+	Cool      string     `gorm:"column:cool"`
+	QuietAt   *time.Time `gorm:"column:quiet_until"`
 	CreatedAt time.Time  `gorm:"column:created_at"`
 	UpdatedAt time.Time  `gorm:"column:updated_at"`
 }
@@ -62,7 +64,7 @@ func (s *Store) Keep(ctx context.Context, j job.Job) error {
 	r := row{
 		ID: j.ID, UserID: j.UserID, Name: j.Name, Kind: j.Kind,
 		Schedule: j.Schedule, Steps: string(steps), State: string(j.State),
-		Why: j.Why, Keep: j.Keep, CreatedAt: now, UpdatedAt: now,
+		Why: j.Why, Keep: j.Keep, Cool: j.Cool, CreatedAt: now, UpdatedAt: now,
 	}
 	if !j.Next.IsZero() {
 		at := j.Next.UTC()
@@ -94,6 +96,7 @@ func (s *Store) Change(ctx context.Context, j job.Job) error {
 		"schedule":   j.Schedule,
 		"steps":      string(steps),
 		"keep":       j.Keep,
+		"cool":       j.Cool,
 		"state":      string(j.State),
 		"last_said":  "",
 		"why":        "",
@@ -117,6 +120,32 @@ func (s *Store) Change(ctx context.Context, j job.Job) error {
 	return nil
 }
 
+// Quiet : Puts a rule aside until a moment, or lets it run again.
+//
+// The zero time clears it. Nothing else about the rule is touched:
+// being quiet is not being cancelled, and it has to come back as
+// it was.
+func (s *Store) Quiet(ctx context.Context, userID, id string, until time.Time) error {
+	if s == nil || s.db == nil {
+		return fmt.Errorf("job: there is nowhere to read jobs")
+	}
+	var when *time.Time
+	if !until.IsZero() {
+		at := until.UTC()
+		when = &at
+	}
+	out := s.db.WithContext(ctx).Model(&row{}).
+		Where("id = ? AND user_id = ?", id, userID).
+		Updates(map[string]any{"quiet_until": when, "updated_at": time.Now().UTC()})
+	if out.Error != nil {
+		return fmt.Errorf("job: quieting %s: %w", id, out.Error)
+	}
+	if out.RowsAffected == 0 {
+		return fmt.Errorf("job: there is no rule %s", id)
+	}
+	return nil
+}
+
 // Due : Jobs whose time has come, soonest first.
 func (s *Store) Due(ctx context.Context, at time.Time, limit int) ([]job.Job, error) {
 	if s == nil || s.db == nil {
@@ -128,6 +157,10 @@ func (s *Store) Due(ctx context.Context, at time.Time, limit int) ([]job.Job, er
 	var rows []row
 	err := s.db.WithContext(ctx).
 		Where("state = ? AND next_at IS NOT NULL AND next_at <= ?", string(job.Active), at.UTC()).
+		// A rule being quiet is not read at all, rather than read
+		// and then refused: the clock asks this question every two
+		// seconds and the ones put aside should cost it nothing.
+		Where("quiet_until IS NULL OR quiet_until <= ?", at.UTC()).
 		Order("next_at ASC").Limit(limit).Find(&rows).Error
 	if err != nil {
 		return nil, fmt.Errorf("job: %w", err)
@@ -185,8 +218,15 @@ func (s *Store) Watching(ctx context.Context, userID string, limit int) ([]job.J
 	}
 	var rows []row
 	err := s.db.WithContext(ctx).
-		Where("user_id = ? AND state = ? AND schedule LIKE ?",
-			userID, string(job.Active), job.When+" %").
+		// Either shape: a rule that only watches, and one that
+		// watches as well as coming round on a clock. The second
+		// does not begin with the word, so matching only the start
+		// would leave it never woken by anything arriving.
+		Where("user_id = ? AND state = ? AND (schedule LIKE ? OR schedule LIKE ?)",
+			userID, string(job.Active), job.When+" %", "%"+job.Also+job.When+" %").
+		// Nor off a reading landing. A rule put aside for a week
+		// is put aside from everything, not only from the clock.
+		Where("quiet_until IS NULL OR quiet_until <= ?", time.Now().UTC()).
 		Order("created_at ASC").Limit(limit).Find(&rows).Error
 	if err != nil {
 		return nil, fmt.Errorf("job: %w", err)
@@ -287,7 +327,10 @@ func assemble(r row) (job.Job, error) {
 	j := job.Job{
 		ID: r.ID, UserID: r.UserID, Name: r.Name, Kind: r.Kind,
 		Schedule: r.Schedule, Steps: steps, State: job.State(r.State),
-		Why: r.Why, Said: r.LastSaid, Keep: r.Keep,
+		Why: r.Why, Said: r.LastSaid, Keep: r.Keep, Cool: r.Cool,
+	}
+	if r.QuietAt != nil {
+		j.Quiet = r.QuietAt.UTC()
 	}
 	if r.NextAt != nil {
 		j.Next = r.NextAt.UTC()

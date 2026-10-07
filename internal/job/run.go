@@ -44,6 +44,9 @@ type Store interface {
 	// Ran : Records that a job ran, when it next runs, what went
 	// wrong if anything, and what it said.
 	Ran(ctx context.Context, id string, next time.Time, state State, why, said string, at time.Time) error
+	// Quiet : Puts a rule aside until a moment, or lets it run
+	// again. The zero time clears it.
+	Quiet(ctx context.Context, userID, id string, until time.Time) error
 	// Arm : Sets when a waiting rule should run, without
 	// recording a run.
 	//
@@ -626,6 +629,21 @@ func (r *Runner) one(ctx context.Context, j Job, now time.Time, pass *Pass) {
 			Said: spoke, Why: why, Stopped: stopped, Failed: failed,
 		})
 	}
+	// Quiet for a while, where the rule asked for it and there was
+	// something to be quiet about. Blunt where the sentence
+	// comparison is sharp: that catches the same news in the same
+	// words and lets a rewording through, and this catches
+	// everything for an hour and knows nothing about any of it.
+	//
+	// Only after speaking. A rule that found nothing has nothing
+	// to hold off from, and resting it then would turn every quiet
+	// minute into a quieter one.
+	if cool := j.Cooling(); cool > 0 && spoke != "" {
+		if err := r.Store.Quiet(ctx, j.UserID, j.ID, now.Add(cool)); err != nil {
+			r.log("cannot quieten a rule after it spoke", err)
+		}
+	}
+
 	r.settle(ctx, j, now, why, remember)
 }
 
@@ -642,8 +660,10 @@ func (r *Runner) wrote(ctx context.Context, rec Record) {
 // settle : Works out when the job runs next and records it.
 func (r *Runner) settle(ctx context.Context, j Job, now time.Time, why, said string) {
 	// A watching rule has no next time and does not end. It waits
-	// for the next reading that crosses its line.
-	if Watches(j.Schedule) {
+	// for the next reading that crosses its line -- unless it has
+	// a clock as well, in which case the clock decides when it
+	// next comes round and the trigger goes on watching between.
+	if Watches(j.Schedule) && !Ticks(j.Schedule) {
 		if err := r.Store.Ran(ctx, j.ID, time.Time{}, Active, why, said, now); err != nil {
 			r.log("cannot record that a job ran", err)
 		}

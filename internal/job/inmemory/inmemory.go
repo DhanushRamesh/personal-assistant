@@ -73,6 +73,19 @@ func (s *Store) Change(_ context.Context, j job.Job) error {
 	return nil
 }
 
+// Quiet : Puts a rule aside until a moment, or lets it run again.
+func (s *Store) Quiet(_ context.Context, _, id string, until time.Time) error {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	j, ok := s.jobs[id]
+	if !ok {
+		return nil
+	}
+	j.Quiet = until
+	s.jobs[id] = j
+	return nil
+}
+
 // Arm : Sets when a waiting rule runs, without recording a run.
 func (s *Store) Arm(_ context.Context, id string, at time.Time) error {
 	s.mu.Lock()
@@ -104,6 +117,9 @@ func (s *Store) Due(_ context.Context, at time.Time, limit int) ([]job.Job, erro
 		// A job with no next time is not due and never will be:
 		// it waits on a reading, not on the clock. The same
 		// "next_at IS NOT NULL" the real store asks for.
+		if j.Resting(at) {
+			continue
+		}
 		if j.State == job.Active && !j.Next.IsZero() && !j.Next.After(at) {
 			out = append(out, j)
 		}
@@ -123,6 +139,9 @@ func (s *Store) Watching(_ context.Context, userID string, limit int) ([]job.Job
 
 	var out []job.Job
 	for _, j := range s.jobs {
+		if j.Resting(time.Now()) {
+			continue
+		}
 		if j.State == job.Active && j.UserID == userID && job.Watches(j.Schedule) {
 			out = append(out, j)
 		}

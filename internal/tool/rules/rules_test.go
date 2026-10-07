@@ -209,8 +209,8 @@ func TestWritingRulesInsistsOnReadingThemFirst(t *testing.T) {
 	if lists != 1 {
 		t.Errorf("%d tools list rules, want exactly one for a write to read first", lists)
 	}
-	if writes != 3 {
-		t.Errorf("%d tools write rules, want add, update and cancel", writes)
+	if writes != 4 {
+		t.Errorf("%d tools write rules, want add, update, quiet and cancel", writes)
 	}
 }
 
@@ -528,5 +528,66 @@ func TestChangingARuleKeepsEveryCondition(t *testing.T) {
 	}
 	if len(checks) != 2 {
 		t.Fatalf("changing the words left %d checks, want both: %v", len(checks), checks)
+	}
+}
+
+// TestARuleCanBePutAsideAndComeBack : Cancelling was the only way to
+// stop a rule and it loses the rule: a week's peace meant remembering
+// how it was written in order to have it again.
+func TestARuleCanBePutAsideAndComeBack(t *testing.T) {
+	store, by := made()
+	call(t, by["rule_add"], `{"name":"n","schedule":"every 10m","say":"hello"}`)
+	held, _ := store.Mine(context.Background(), "usr_1", "rule", 10)
+	id := held[0].ID
+
+	got := call(t, by["rule_quiet"], `{"id":"`+id+`","how_long":"7d"}`)
+	if got.Outcome == conversation.OutcomeFailed {
+		t.Fatalf("could not quieten it: %s", got.Content)
+	}
+	held, _ = store.Mine(context.Background(), "usr_1", "rule", 10)
+	if !held[0].Resting(noon) {
+		t.Error("it is not resting")
+	}
+	if !held[0].Resting(noon.AddDate(0, 0, 6)) {
+		t.Error("it woke up inside the week")
+	}
+	if held[0].Resting(noon.AddDate(0, 0, 8)) {
+		t.Error("it is still resting after the week")
+	}
+	// And the rule itself is untouched: being quiet is not being
+	// cancelled.
+	if held[0].State != job.Active || len(held[0].Steps) != 1 {
+		t.Errorf("quieting it changed the rule: %+v", held[0])
+	}
+
+	if got := call(t, by["rule_quiet"], `{"id":"`+id+`"}`); got.Outcome == conversation.OutcomeFailed {
+		t.Fatalf("could not start it again: %s", got.Content)
+	}
+	held, _ = store.Mine(context.Background(), "usr_1", "rule", 10)
+	if held[0].Resting(noon) {
+		t.Error("it is still resting after being started again")
+	}
+}
+
+// TestARuleThatHoldsOffAfterSpeaking : The only thing stopping a rule
+// repeating itself was the exact sentence it said last time, so the
+// same news in different words went through.
+func TestARuleThatHoldsOffAfterSpeaking(t *testing.T) {
+	store, by := made()
+	got := call(t, by["rule_add"],
+		`{"name":"n","schedule":"every 10m","say":"hello","cool":"1h"}`)
+	if got.Outcome == conversation.OutcomeFailed {
+		t.Fatalf("a cooling rule was refused: %s", got.Content)
+	}
+	held, _ := store.Mine(context.Background(), "usr_1", "rule", 10)
+	if held[0].Cooling() != time.Hour {
+		t.Errorf("it cools for %s, want an hour", held[0].Cooling())
+	}
+
+	// And a length of time that is not one is caught when it is
+	// written, in front of whoever wrote it.
+	if got := call(t, by["rule_add"],
+		`{"name":"m","schedule":"every 10m","say":"hello","cool":"a while"}`); got.Outcome != conversation.OutcomeFailed {
+		t.Error("a cool of \"a while\" was accepted")
 	}
 }

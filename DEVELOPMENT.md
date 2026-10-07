@@ -13379,6 +13379,85 @@ probe badly, which is the second time today that a deliberate
 mistake in a test has turned up a real one.
 
 
+### A clock and a trigger, a rest, and holding off
+
+The last three limitations with nothing behind them but the
+asking.
+
+#### Both mouths
+
+	every 30m also when battery.level < 20
+
+A rule came round on a clock or waited for something, never both.
+Right for almost everything and wrong for the one shape that
+keeps coming up: *tell me when this happens, and look anyway now
+and then in case the moment passed while nothing was running.*
+
+"also" and not "or", because they are not alternatives: both are
+live and either sets it off. The clock goes first because a
+trigger reads strangely in the middle of a sentence.
+
+Two things had to give. `settle` cleared a watching rule's next
+time, which is what keeps the clock off it -- now only where it
+has no clock of its own. And `Watching` matched schedules
+beginning with the word, so a rule beginning "every" would never
+have been woken by anything arriving.
+
+**A dangling "also" is refused.** The word is spaced on both
+sides so "every 30m also" does not split, and it parsed as a
+perfectly good half-hour with a stray word in it. Caught rather
+than left to mean something nobody wrote.
+
+#### A rest
+
+	rule_quiet, an identifier, and how long
+
+Cancelling was the only way to stop a rule and it loses the rule:
+a week's peace meant remembering how it was written in order to
+have it back. Being quiet is not being cancelled -- it returns by
+itself and nothing is rewritten.
+
+Read out of the query rather than filtered afterwards, in both
+paths: the clock asks every two seconds and a rule put aside
+should cost it nothing, and a rule put aside is put aside from
+readings arriving as well.
+
+#### Holding off
+
+	cool: "1h"
+
+The only thing stopping a rule repeating itself was the exact
+sentence it said last time, so the same news in different words
+went through. This catches everything for an hour and knows
+nothing about any of it -- blunt where the sentence comparison is
+sharp, and they work together.
+
+Only after speaking. A rule that found nothing has nothing to
+hold off from.
+
+One column for both, because they are the same thing: a rule that
+is not to run until a moment. Somebody sets it, or the rule sets
+it on itself.
+
+#### Days, because a week is what people say
+
+`time.ParseDuration` stops at hours, so "7d" was refused and
+*quiet for a week* -- the thing that prompted the feature -- could
+only be asked for as "168h". `job.Span` reads days and weeks and
+hands everything else to Go, and every written length on a rule
+goes through it.
+
+#### Proved on the running server
+
+	schedule     every 2m also when battery.level < 100
+	next_at      17:44:24   the clock advanced, though it watches too
+	said         "the both-mouths probe spoke"
+	quiet_until  18:42:24   an hour, set by the rule on itself
+
+	at 17:46, two clock ticks later: last_at still 17:42, one
+	announcement in all.
+
+
 ## 12. Maintaining this file
 
 When the owner states a preference, makes a decision, or corrects something,

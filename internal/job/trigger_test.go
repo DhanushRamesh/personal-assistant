@@ -372,3 +372,77 @@ func TestAWaitThatIsNotALengthOfTime(t *testing.T) {
 		}
 	}
 }
+
+// TestARuleWithAClockAndATrigger : A rule had one mouth -- it came
+// round on a clock or it waited for something, never both. Which is
+// right for almost everything and wrong for the shape that keeps
+// coming up: tell me when this happens, and look anyway now and then
+// in case the moment passed while nothing was running.
+func TestARuleWithAClockAndATrigger(t *testing.T) {
+	const both = "every 30m also when battery.level < 20"
+
+	if !job.Watches(both) {
+		t.Error("it does not watch")
+	}
+	if !job.Ticks(both) {
+		t.Error("it does not come round on a clock")
+	}
+	if got := job.Clock(both); got != "every 30m" {
+		t.Errorf("its clock reads %q", got)
+	}
+	if got := job.Trigger(both); got != "when battery.level < 20" {
+		t.Errorf("its trigger reads %q", got)
+	}
+
+	// Made with a next time, which a rule that only watches has not.
+	s, h := inmemory.New(), &hands{}
+	j, err := job.New("job_1", "usr_1", "a rule", "rule", both,
+		[]job.Step{{Do: job.Announce, Say: "low"}}, noon)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if j.Next.IsZero() {
+		t.Fatal("a rule with a clock was given no next time")
+	}
+	j.Next = noon
+	s.Add(j)
+
+	// The clock sets it off.
+	if got := runner(s, h, noon).Once(context.Background()); got.Ran != 1 {
+		t.Fatalf("the clock gave %+v, want Ran 1", got)
+	}
+	// And it still has a next time afterwards, rather than being
+	// left waiting for ever.
+	after, _ := s.Get("job_1")
+	if after.Next.IsZero() {
+		t.Error("it was left with no next time, so the clock would never pick it up again")
+	}
+
+	// And so does a reading crossing its line.
+	s2, h2 := inmemory.New(), &hands{}
+	j2, _ := job.New("job_2", "usr_1", "a rule", "rule", both,
+		[]job.Step{{Do: job.Announce, Say: "low"}}, noon)
+	s2.Add(j2)
+	got := watcher(s2, h2, seen{"battery.level": {at("18", 0), at("22", time.Minute)}}).
+		Landed(context.Background(), "usr_1", []string{"battery.level"})
+	if got.Ran != 1 {
+		t.Fatalf("the trigger gave %+v, want Ran 1", got)
+	}
+}
+
+// TestASchedulePartlyUnreadable : Both halves are read, and both must
+// be readable. A rule half of which cannot be understood is a rule
+// that would half work, at three in the morning.
+func TestASchedulePartlyUnreadable(t *testing.T) {
+	for _, schedule := range []string{
+		"every 30m also when nonsense",
+		"whenever also when battery.level < 20",
+		"also when battery.level < 20",
+		"every 30m also",
+	} {
+		if _, err := job.New("job_1", "usr_1", "x", "rule", schedule,
+			[]job.Step{{Do: job.Announce, Say: "hello"}}, noon); err == nil {
+			t.Errorf("%q was accepted", schedule)
+		}
+	}
+}

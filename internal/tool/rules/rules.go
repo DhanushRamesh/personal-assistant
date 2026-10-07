@@ -41,6 +41,9 @@ const Kind = "rule"
 type Store interface {
 	Mine(ctx context.Context, userID, kind string, limit int, states ...job.State) ([]job.Job, error)
 	Keep(ctx context.Context, j job.Job) error
+	// Quiet : Puts one aside until a moment, or lets it run again
+	// with the zero time.
+	Quiet(ctx context.Context, userID, id string, until time.Time) error
 	// Change : Replaces one that exists, and forgets what it last
 	// said.
 	Change(ctx context.Context, j job.Job) error
@@ -89,6 +92,7 @@ var howToSchedule = prompt.Lines(
 	`  "at 08:00" -- that hour, every day, in their own zone`,
 	`  "once 2026-10-07 06:40" -- one time, then finished`,
 	`  "when battery.level < 20" -- no clock at all; it runs the moment a reading from their device crosses that line`,
+	`  "every 30m also when battery.level < 20" -- both at once: the clock brings it round and a crossing sets it off, and either will do`,
 	`  "when power.plugged arrives" -- any reading of that kind at all, whatever it says`,
 	"Use arrives for a thing that happens rather than a level that moves. A phone cannot always say what it was plugged into, and what matters is that it was.",
 	`A trigger may wait before it runs: "when power.plugged is true then 15m".`,
@@ -130,6 +134,15 @@ var howLongToKeep = prompt.Lines(
 	"Leave it out for anything about this moment. A warning that the battery was at four percent, read out at the door that evening, is worse than saying nothing.",
 )
 
+// howLongToCool : How long a rule holds off after speaking,
+// written for the model.
+var howLongToCool = prompt.Lines(
+	"How long to say nothing after it has spoken. Leave it out for most rules.",
+	`  "1h" -- having said something, stay quiet for an hour however often it runs`,
+	"A rule already refuses to say the same sentence twice. This is for the one that would say the same news in different words, which that cannot catch.",
+	"Only use it where being told twice is worse than being told late.",
+)
+
 // howToTools : When to let it decide for itself, written for the
 // model.
 var howToTools = prompt.Text(
@@ -169,6 +182,7 @@ func All(store Store, clock Clock, id func() string, look Lookup, usually routin
 		list(store, clock, usually),
 		add(store, clock, id, look),
 		update(store, clock, look),
+		quieten(store, clock),
 		cancel(store),
 	}
 }
@@ -250,6 +264,7 @@ func add(store Store, clock Clock, id func() string, look Lookup) tool.Tool {
 				},
 				"when": {Type: "string", Description: howToCondition},
 				"keep": {Type: "string", Description: howLongToKeep},
+				"cool": {Type: "string", Description: howLongToCool},
 				"tools": {
 					Type:        "array",
 					Description: howToTools,
@@ -289,6 +304,7 @@ func add(store Store, clock Clock, id func() string, look Lookup) tool.Tool {
 				Ask      string   `json:"ask"`
 				When     string   `json:"when"`
 				Keep     string   `json:"keep"`
+				Cool     string   `json:"cool"`
 				LookUp   []lookUp `json:"look_up"`
 				Tools    []string `json:"tools"`
 			}
@@ -320,6 +336,10 @@ func add(store Store, clock Clock, id func() string, look Lookup) tool.Tool {
 				return tool.Failed(readable(err))
 			}
 			made.Keep = strings.TrimSpace(args.Keep)
+			if err := job.Kept(args.Cool); err != nil {
+				return tool.Failed(readable(err))
+			}
+			made.Cool = strings.TrimSpace(args.Cool)
 			if err := store.Keep(ctx, made); err != nil {
 				return tool.Failed(err.Error())
 			}
@@ -406,6 +426,7 @@ func update(store Store, clock Clock, look Lookup) tool.Tool {
 				"ask":      {Type: "string", Description: "A new thing for it to work out and say."},
 				"when":     {Type: "string", Description: howToCondition},
 				"keep":     {Type: "string", Description: howLongToKeep},
+				"cool":     {Type: "string", Description: howLongToCool},
 				"tools": {
 					Type:        "array",
 					Description: howToTools,
@@ -434,6 +455,7 @@ func update(store Store, clock Clock, look Lookup) tool.Tool {
 				Ask      *string  `json:"ask"`
 				When     *string  `json:"when"`
 				Keep     *string  `json:"keep"`
+				Cool     *string  `json:"cool"`
 				LookUp   []lookUp `json:"look_up"`
 				Tools    []string `json:"tools"`
 			}
@@ -500,6 +522,10 @@ func update(store Store, clock Clock, look Lookup) tool.Tool {
 				return tool.Failed(readable(err))
 			}
 			made.Keep = given(args.Keep, was.Keep)
+			if err := job.Kept(given(args.Cool, was.Cool)); err != nil {
+				return tool.Failed(readable(err))
+			}
+			made.Cool = given(args.Cool, was.Cool)
 			// What it last said is dropped on purpose. The rule is
 			// not the rule it was, so the sentence it is holding
 			// back is no longer a repeat of anything -- and
@@ -509,6 +535,88 @@ func update(store Store, clock Clock, look Lookup) tool.Tool {
 				return tool.Failed(err.Error())
 			}
 			return tool.OK(prompt.Text("Changed:", one(made, clock)))
+		},
+	}
+}
+
+// quieten : Puts one aside for a while, or brings it back.
+//
+// Cancelling was the only way to stop a rule, and it loses the
+// rule: somebody who wanted a week's peace had to remember how it
+// was written in order to have it again. Being quiet is not being
+// cancelled -- it comes back by itself, and nothing has to be
+// rewritten.
+func quieten(store Store, clock Clock) tool.Tool {
+	return tool.Tool{
+		Name:    "rule_quiet",
+		Domain:  Kind,
+		Writes:  true,
+		Purpose: "Stop a standing rule for a while, or start it again.",
+		UseWhen: "They want one to stop for now rather than for good: not this week, give it a rest, " +
+			"stop telling me that until Monday. And the other way: start that one again, " +
+			"you can tell me about that now.",
+		Avoid: "Not for a rule they are finished with -- that is rule_cancel, and this one comes " +
+			"back on its own. The identifier must come from a listing in this turn.",
+		Channels: []chat.Channel{chat.ChannelVoice, chat.ChannelDirect},
+		Params: tool.Schema{
+			Required: []string{"id"},
+			Properties: map[string]tool.Property{
+				"id": {
+					Type:        "string",
+					Description: "The rule's identifier, exactly as the listing gave it.",
+					Pattern:     idPattern,
+				},
+				"how_long": {
+					Type: "string",
+					Description: "How long to stay quiet, as a length of time: \"7d\", \"2h\", " +
+						"\"30m\". Leave it out to start the rule again now.",
+				},
+			},
+		},
+		Examples: []tool.Example{
+			{
+				Ask:  "give the battery one a rest for a week",
+				Args: `{"saying":"quieting that","id":"job_01M48E09RJW0G247RBST6712D3","how_long":"7d"}`,
+			},
+			{
+				Ask:  "you can tell me about the battery again",
+				Args: `{"saying":"starting that again","id":"job_01M48E09RJW0G247RBST6712D3"}`,
+			},
+		},
+		Run: func(ctx context.Context, in tool.Invocation) tool.Result {
+			var args struct {
+				ID      string `json:"id"`
+				HowLong string `json:"how_long"`
+			}
+			if err := json.Unmarshal(in.Args, &args); err != nil {
+				return tool.Failed("Those arguments could not be read.")
+			}
+			if store == nil {
+				return tool.Failed("There is nowhere to keep rules on this server.")
+			}
+			if in.Caller.UserID == "" {
+				return tool.Failed("This request did not come from a known person.")
+			}
+
+			var until time.Time
+			if how := strings.TrimSpace(args.HowLong); how != "" {
+				if err := job.Kept(how); err != nil {
+					return tool.Failed(readable(err))
+				}
+				long, err := job.Span(how)
+				if err != nil {
+					return tool.Failed(readable(err))
+				}
+				until = clock.now().Add(long)
+			}
+			if err := store.Quiet(ctx, in.Caller.UserID, args.ID, until); err != nil {
+				return tool.Failed(err.Error())
+			}
+			if until.IsZero() {
+				return tool.OK("That rule is running again.")
+			}
+			return tool.OK(prompt.Text("Quiet until",
+				until.In(clock.where()).Format("Monday 2 January, 3:04 pm")+"."))
 		},
 	}
 }
@@ -785,6 +893,12 @@ func one(j job.Job, clock Clock) string {
 	parts := []string{fmt.Sprintf("%q (%s)", j.Name, j.ID), j.Schedule}
 	if j.Keep != "" {
 		parts = append(parts, "kept "+j.Keep)
+	}
+	if j.Cool != "" {
+		parts = append(parts, "quiet for "+j.Cool+" after speaking")
+	}
+	if !j.Quiet.IsZero() && j.Quiet.After(clock.now()) {
+		parts = append(parts, "quiet until "+j.Quiet.In(clock.where()).Format("Mon 2 Jan 3:04 pm"))
 	}
 	if j.State != job.Active {
 		parts = append(parts, string(j.State))
