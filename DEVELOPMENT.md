@@ -12177,6 +12177,78 @@ that is when an answer sounds complete.
 	Amma twice, once last night and once just after midnight, sir.
 
 
+### One late night was hiding every hour
+
+Owner, 7 October 2026, asking whether profiling could be an
+algorithm rather than a model, and describing what he wanted from
+it: *"location: home exit 10am and reaching office 10:20am,
+leaving office 7:30pm, badminton 8pm ... that is a pattern found
+across days. Screen lock at 1-2am and unlock at 9am can denote my
+sleeping time."*
+
+Half of that was already implemented and returning nothing:
+
+	- home:   there on 7 days, arriving at no particular hour,
+	          leaving at no particular hour
+	- office: there on 3 days, arriving at no particular hour
+
+#### Why it never found one
+
+`aroundWhen` sorted the hours and gave up if the first and last
+were more than four apart. A range, over every observation, with
+no middle.
+
+The hours somebody actually came home that week:
+
+	2, 10, 11, 21, 21, 21, 21
+
+Four of the seven at nine in the evening. The furthest two are
+nineteen hours apart, so the answer was "at no particular hour".
+One late night hid four ordinary ones. The office read 11, 11,
+11, 17, 18 and went the same way.
+
+The file already knew better. `middle`, thirty lines further
+down, takes the median of a set of gaps *"which a single long gap
+cannot drag about"*. The same thought had not been applied to the
+hours.
+
+#### The densest band, not the range
+
+Every hour is tried as the start of a four hour band and the
+fullest one wins. Fewer than half the observations inside it is
+not a time of day, it is some of them happening to agree.
+
+**Round, because hours are.** A band may run from eleven at night
+to two in the morning, which is exactly where a bedtime lives and
+where a range test reads two habits twenty two hours apart.
+
+**Two words, not one.** Two thirds agreeing is "usually around";
+half is "often around". Saying "usually" of a coin toss is the
+overstating the function exists to prevent, and the old code said
+it of anything that passed at all.
+
+#### The same week afterwards
+
+	- home:   there on 7 days, arriving usually around 9pm,
+	          leaving usually around 10am, usually staying 12 hours
+	- office: there on 3 days, arriving usually around 1pm
+
+Which is the first half of what was asked for, and it was there
+all along.
+
+#### What is still not there
+
+The chain. This says when he reaches home and when he leaves it,
+each on its own; it does not say that leaving home is followed by
+reaching the office twenty minutes later, day after day. Pairing
+exists but only inside `Soon`, a few minutes wide, so it finds a
+screen unlocked and locked again and never a commute.
+
+And the sleep example needs the opposite of `Soon`: the last
+thing at night and the first in the morning, hours apart.
+`quiet.go` already measures that silence for another purpose.
+
+
 ## 12. Maintaining this file
 
 When the owner states a preference, makes a decision, or corrects something,

@@ -358,3 +358,70 @@ func withPayload(kind, payload string, at time.Time) event.Event {
 }
 
 func itoa(n int) string { return strconv.Itoa(n) }
+
+// The hours somebody actually came home over a week: 2, 10, 11,
+// 21, 21, 21, 21. Four of the seven at nine in the evening, which
+// is a plain daily habit.
+//
+// It was invisible until 7 October 2026. The test asked whether
+// the furthest two hours were within four hours of each other;
+// these are nineteen apart, so the answer was "at no particular
+// hour" and one late night had hidden four ordinary ones.
+func TestOneLateNightDoesNotHideAnHour(t *testing.T) {
+	events := []event.Event{
+		happened("door.shut", "", day(1, 2, 0)),
+		happened("door.shut", "", day(2, 10, 0)),
+		happened("door.shut", "", day(3, 11, 0)),
+		happened("door.shut", "", day(4, 21, 0)),
+		happened("door.shut", "", day(5, 21, 0)),
+		happened("door.shut", "", day(6, 21, 0)),
+		happened("door.shut", "", day(7, 21, 0)),
+	}
+
+	got := profile.Rhythm(events, india())
+	if !strings.Contains(got, "9pm") {
+		t.Errorf("the hour four of seven days agree on was not found:\n%s", got)
+	}
+}
+
+// Hours are round, so a band may run from before midnight to
+// after it. A bedtime lives exactly there and would otherwise
+// read as two habits twenty two hours apart.
+func TestAnHourMayStraddleMidnight(t *testing.T) {
+	events := []event.Event{
+		happened("screen.locked", "", day(1, 23, 30)),
+		happened("screen.locked", "", day(2, 0, 20)),
+		happened("screen.locked", "", day(3, 1, 10)),
+		happened("screen.locked", "", day(4, 0, 40)),
+	}
+
+	got := profile.Rhythm(events, india())
+	if strings.Contains(got, "at no particular hour") {
+		t.Errorf("a bedtime across midnight was not seen as one hour:\n%s", got)
+	}
+}
+
+// Half agreeing is a leaning and two thirds is a habit, and they
+// are not said in the same word. "Usually" of a coin toss is the
+// overstating this is meant to avoid.
+func TestHowSureItIsShowsInTheWord(t *testing.T) {
+	leaning := []event.Event{
+		happened("door.shut", "", day(1, 9, 0)),
+		happened("door.shut", "", day(2, 9, 0)),
+		happened("door.shut", "", day(3, 15, 0)),
+		happened("door.shut", "", day(4, 20, 0)),
+	}
+	if got := profile.Rhythm(leaning, india()); !strings.Contains(got, "often around") {
+		t.Errorf("half agreeing was not reported as a leaning:\n%s", got)
+	}
+
+	habit := []event.Event{
+		happened("door.shut", "", day(1, 9, 0)),
+		happened("door.shut", "", day(2, 9, 0)),
+		happened("door.shut", "", day(3, 10, 0)),
+		happened("door.shut", "", day(4, 20, 0)),
+	}
+	if got := profile.Rhythm(habit, india()); !strings.Contains(got, "usually around") {
+		t.Errorf("three of four agreeing was not reported as a habit:\n%s", got)
+	}
+}

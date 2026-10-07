@@ -391,11 +391,35 @@ func whatFollows(moments []moment, where *time.Location) string {
 	return prompt.Lines(append([]string{"Things that happen together, in the order they happened:"}, lines...)...)
 }
 
+// Band : How many hours wide a time of day may be and still be one
+// time of day.
+//
+// Four, counted inclusively: something at nine and something at
+// noon are the same part of the morning, and something at nine and
+// something at two is not.
+const Band = 3
+
 // aroundWhen : Roughly what time of day, when there is one.
 //
 // Nothing at all when the hours are spread: "usually around 2pm" for
 // something that happens at any hour is the kind of detail that gets
 // written into a description and then believed.
+//
+// The densest band rather than the whole range, which is what this
+// tested until 7 October 2026 and why it almost never found an
+// hour. Coming home was 2, 10, 11, 21, 21, 21, 21 -- four of the
+// seven at nine in the evening, and the test asked whether the
+// furthest two were within four hours of each other. They were
+// nineteen apart, so the answer was "at no particular hour" and a
+// plain daily habit was invisible. Reaching the office was 11, 11,
+// 11, 17, 18 and went the same way.
+//
+// [middle] in this file already says the principle, about gaps: the
+// median is what a single long one cannot drag about. One late
+// night should not be able to say somebody has no bedtime.
+//
+// Round, because the hours are. A band may run from eleven at night
+// to two in the morning, which is where a bedtime lives.
 func aroundWhen(when []time.Time, where *time.Location) string {
 	if len(when) < Fewest {
 		return ""
@@ -404,11 +428,51 @@ func aroundWhen(when []time.Time, where *time.Location) string {
 	for _, t := range when {
 		hours = append(hours, t.In(where).Hour())
 	}
-	sort.Ints(hours)
-	if hours[len(hours)-1]-hours[0] > 3 {
+
+	from, most := densest(hours)
+	// Fewer than half of them is not a time of day, it is some of
+	// them happening to agree.
+	if most*2 < len(hours) {
 		return "at no particular hour"
 	}
-	return "usually around " + oclock(hours[len(hours)/2])
+
+	within := make([]int, 0, most)
+	for _, h := range hours {
+		if (h-from+24)%24 <= Band {
+			within = append(within, (h-from+24)%24)
+		}
+	}
+	sort.Ints(within)
+	at := (from + within[len(within)/2]) % 24
+
+	// How much of it, in a word. Two thirds is a habit; half is a
+	// leaning, and saying "usually" of it would be the overstating
+	// this function exists to avoid.
+	how := "often around "
+	if most*3 >= len(hours)*2 {
+		how = "usually around "
+	}
+	return how + oclock(at)
+}
+
+// densest : The start of the fullest band of hours, and how many
+// are in it.
+//
+// Every hour is tried as a start, which is twenty four passes over
+// a handful of numbers and not worth being cleverer about.
+func densest(hours []int) (from, most int) {
+	for start := 0; start < 24; start++ {
+		n := 0
+		for _, h := range hours {
+			if (h-start+24)%24 <= Band {
+				n++
+			}
+		}
+		if n > most {
+			from, most = start, n
+		}
+	}
+	return from, most
 }
 
 // oclock : An hour as somebody would say it.
