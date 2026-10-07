@@ -79,7 +79,8 @@ func Prompt(part Part, e Evidence) string {
 		prompt.Text(
 			"Your job is to work out what is true of this person and keeps being true.",
 			"Not a summary. Miss nothing that recurs, however ordinary it looks.",
-			"The assistant reads this before it answers them, so a thing you leave out is a thing it will not know.",
+			"The assistant reads this before it answers them, so a thing that keeps being true and is left out is a thing it will not know.",
+			"That is the only reason anything is here. Something it can go and look up when the moment comes is not a thing it will not know, and does not earn its place by being interesting.",
 		),
 		prompt.Text(
 			"Write one part of it and only that part:", string(part)+".",
@@ -212,6 +213,7 @@ func section(part Part) string {
 			"One line per thing, as many lines as the evidence supports.",
 			"Every line carries how many times and over what stretch of days, because that is what makes it arguable.",
 			"A line you cannot put a count on does not belong in this part.",
+			"Which rules out the one-off that is yet to happen. It has a count of one, it will be read when its day comes, and written here it is still being read long after it is over or called off.",
 			"Count what was recorded and say that is what you are counting. Recorded on four of seven days is what you have; at the office on four of seven days is a claim that the other three were days he did not go, and nothing in front of you says that -- a reading that was never taken looks exactly like a thing that never happened.",
 			"Order them by how well established they are, not by how interesting.",
 		)
