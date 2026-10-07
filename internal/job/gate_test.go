@@ -263,9 +263,9 @@ func TestAlternativesReadEveryKindTheyNeed(t *testing.T) {
 	}
 
 	now := time.Date(2026, 10, 7, 14, 0, 0, 0, time.UTC)
-	at := map[string]job.Reading{
-		"battery.level": {Value: "64", At: now, Known: true},
-		"place.entered": {Value: "office", At: now, Known: true},
+	at := map[string][]job.Reading{
+		"battery.level": {{Value: "64", At: now, Known: true}},
+		"place.entered": {{Value: "office", At: now, Known: true}},
 	}
 	if !got.Passes(at, false, now) {
 		t.Error("at the office with a full battery satisfied nothing")
@@ -296,6 +296,114 @@ func TestTheHourAndTheDayAreNotTriggers(t *testing.T) {
 func TestAnHourThatIsNotAnHour(t *testing.T) {
 	for _, written := range []string{
 		"hour >= 24", "hour is noon", "hour older than 2h", "day is somedayday",
+	} {
+		if _, err := job.ParseConditions(written); err == nil {
+			t.Errorf("%q was accepted", written)
+		}
+	}
+}
+
+// TestAReadingAgainstItsOwnPast : Owner, 7 October 2026, on the
+// engine's limitations -- "it can't compare two things." It could
+// only compare a reading with a number somebody wrote down, so
+// "lower than it was an hour ago" had nowhere to go. That is the
+// whole of knowing whether a phone on charge is actually charging.
+func TestAReadingAgainstItsOwnPast(t *testing.T) {
+	now := time.Date(2026, 10, 7, 20, 0, 0, 0, time.UTC)
+
+	// Plugged in a quarter of an hour ago and nothing has moved.
+	stuck := map[string][]job.Reading{"battery.level": {
+		{Value: "18", At: now, Known: true},
+		{Value: "18", At: now.Add(-5 * time.Minute), Known: true},
+		{Value: "18", At: now.Add(-16 * time.Minute), Known: true},
+	}}
+	// And the same quarter of an hour spent charging.
+	rising := map[string][]job.Reading{"battery.level": {
+		{Value: "31", At: now, Known: true},
+		{Value: "24", At: now.Add(-5 * time.Minute), Known: true},
+		{Value: "18", At: now.Add(-16 * time.Minute), Known: true},
+	}}
+
+	not, err := job.ParseConditions("battery.level <= 15m ago")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !not.Passes(stuck, false, now) {
+		t.Error("a level that has not moved in a quarter of an hour read as rising")
+	}
+	if not.Passes(rising, false, now) {
+		t.Error("eighteen to thirty-one read as not rising")
+	}
+
+	up, err := job.ParseConditions("battery.level > 15m ago")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !up.Passes(rising, false, now) {
+		t.Error("a level that climbed thirteen points did not read as higher")
+	}
+	if up.Passes(stuck, false, now) {
+		t.Error("a level that did not move read as higher")
+	}
+}
+
+// TestNothingGoesBackThatFar : The comparison cannot be made, so it
+// does not hold -- the same answer a gate gives about a kind nobody
+// has reported. A rule that fired because the past was unknown would
+// fire hardest on the day a device started reporting.
+func TestNothingGoesBackThatFar(t *testing.T) {
+	now := time.Date(2026, 10, 7, 20, 0, 0, 0, time.UTC)
+	young := map[string][]job.Reading{"battery.level": {
+		{Value: "18", At: now, Known: true},
+		{Value: "18", At: now.Add(-2 * time.Minute), Known: true},
+	}}
+
+	for _, written := range []string{
+		"battery.level <= 15m ago", "battery.level > 15m ago",
+	} {
+		got, err := job.ParseConditions(written)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if got.Passes(young, false, now) {
+			t.Errorf("%q held on two minutes of history", written)
+		}
+	}
+}
+
+// TestHowDeepAConditionHasToRead : Asked of the conditions and not
+// of each gate, because the check fetches once per kind.
+func TestHowDeepAConditionHasToRead(t *testing.T) {
+	for _, c := range []struct {
+		written string
+		deep    time.Duration
+	}{
+		{"battery.level < 20", 0},
+		{"battery.level <= 15m ago", 15 * time.Minute},
+		{"battery.level < 20 or battery.level <= 2h ago", 2 * time.Hour},
+		{"hour >= 10 or day is weekend", 0},
+	} {
+		got, err := job.ParseConditions(c.written)
+		if err != nil {
+			t.Fatalf("%q: %v", c.written, err)
+		}
+		if deep := got.Deep(); deep != c.deep {
+			t.Errorf("%q reads back %s, want %s", c.written, deep, c.deep)
+		}
+	}
+}
+
+// TestWhatHasNoPast : The clock, presence and a routine are answered
+// from the moment or from a number somebody worked out, and none of
+// them has readings to look back through.
+func TestWhatHasNoPast(t *testing.T) {
+	for _, written := range []string{
+		"hour >= 2h ago",
+		"day is 1h ago",
+		"presence is 5m ago",
+		"usually.home.leaves <= 1h ago",
+		"battery.level older than 5m ago",
+		"battery.level < soon ago",
 	} {
 		if _, err := job.ParseConditions(written); err == nil {
 			t.Errorf("%q was accepted", written)

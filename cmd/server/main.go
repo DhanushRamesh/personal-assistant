@@ -2527,15 +2527,22 @@ func (d doing) check(ctx context.Context, userID string, s job.Step) (job.Outcom
 		return job.Outcome{}, err
 	}
 
-	got := map[string]job.Reading{}
+	// One reading each, unless something is being compared with its
+	// own past -- then enough of them to reach back that far. A
+	// phone reports its level every few minutes, so a quarter of an
+	// hour is a handful and a day would still be inside the cap.
+	deep := 1
+	if back := conditions.Deep(); back > 0 {
+		deep = job.Over
+	}
+
+	got := map[string][]job.Reading{}
 	for _, kind := range conditions.Needs() {
-		latest, err := d.look.Latest(ctx, userID, kind, 1)
+		latest, err := d.look.Latest(ctx, userID, kind, deep)
 		if err != nil {
 			return job.Outcome{}, err
 		}
-		if len(latest) > 0 {
-			got[kind] = latest[0]
-		}
+		got[kind] = latest
 	}
 
 	// Nil presence is the convention the reminder loop already

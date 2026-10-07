@@ -12899,6 +12899,61 @@ hear whether it works, not silence from a comparison with the old
 one.
 
 
+### A reading against its own past
+
+Owner, 7 October 2026, on the engine's limitations: *"it can't
+compare two things."* It could only compare a reading with a
+number somebody had written down, so *lower than it was an hour
+ago* had nowhere to go -- and that is the whole of knowing
+whether a phone on charge is actually charging.
+
+	check battery.level <= 15m ago
+
+#### A value, not an operator
+
+Which is the decision worth recording. Three new operators --
+rising, falling, steady -- would have given less and needed rules
+of their own. As a value, every comparison already there works on
+it unchanged:
+
+	<= 15m ago   has not risen in a quarter of an hour
+	>  1h ago    higher than it was
+	is 10m ago   has not moved at all
+	is not 1h ago  has moved, either way
+
+#### Which reading from back then
+
+The newest one at least that old. Not the oldest held, and
+nothing interpolated: what the value actually was then, as near
+as anything was reported.
+
+**Nothing that far back means the condition does not hold.** An
+unknown reading never passes, which is the answer a gate already
+gives about a kind nobody has reported -- and the alternative is
+a rule that fires hardest on the day a device starts reporting,
+when its past is emptiest.
+
+**Only where there is a past.** The clock, presence and a routine
+are answered from the moment or from a number already worked out,
+and `older than` asks how old a reading is, which is not a thing
+to compare with the past. All refused when the rule is written.
+
+#### Reading deeper, only when asked
+
+The check fetches one reading per kind, and as many as [job.Over]
+when any of its conditions compares against the past. Asked of
+the conditions rather than of each gate, because the fetch is
+once per kind: a condition satisfied by the battery now or by the
+battery an hour ago needs the hour either way.
+
+#### Proved on the running server
+
+	readings   15:17 91%   14:53 92%   14:41 93%   14:19 95%
+
+	battery.level <= 2h ago   ->  said it
+	battery.level >  2h ago   ->  the check did not pass
+
+
 ## 12. Maintaining this file
 
 When the owner states a preference, makes a decision, or corrects something,

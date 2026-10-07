@@ -76,6 +76,24 @@ const (
 // ErrUnreadableGate : The condition is not one of the forms.
 var ErrUnreadableGate = errors.New("job: that condition could not be read")
 
+// Ago : What marks a value as a moment in the past rather than a
+// number.
+//
+//	battery.level <= 15m ago
+//
+// Owner, 7 October 2026, on the engine's limitations: *"it can't
+// compare two things."* It could only ever compare a reading with
+// a number somebody wrote down, so *lower than it was an hour ago*
+// had nowhere to go -- and that is the whole of knowing whether a
+// phone on charge is actually charging.
+//
+// A value and not an operator, deliberately. Every comparison
+// already there works on it unchanged: "<= 15m ago" is has not
+// risen in a quarter of an hour, "> 1h ago" is higher than it was,
+// "is 10m ago" is has not moved at all. Three new operators would
+// have given less and needed rules of their own.
+const Ago = " ago"
+
 // Gate : A condition checked before the rest of a sequence runs.
 type Gate struct {
 	// Source : The event kind to read, or [Presence].
@@ -168,13 +186,29 @@ func (c Conditions) Needs() []string {
 // the kind each gate asks for; one that was never fetched is
 // unknown, and an unknown reading never passes, which is the same
 // answer a single gate gives.
-func (c Conditions) Passes(got map[string]Reading, away bool, now time.Time) bool {
+func (c Conditions) Passes(got map[string][]Reading, away bool, now time.Time) bool {
 	for _, g := range c {
-		if g.Passes(got[g.Needs()], away, now) {
+		if g.Holds(got[g.Needs()], away, now) {
 			return true
 		}
 	}
 	return false
+}
+
+// Deep : How far back the readings have to go for these to be
+// judged, or zero when the latest of each will do.
+//
+// Asked of the conditions and not of each gate, because the check
+// fetches once per kind: a condition satisfied by the battery now
+// or by the battery an hour ago needs the hour either way.
+func (c Conditions) Deep() time.Duration {
+	var most time.Duration
+	for _, g := range c {
+		if back, against := g.Against(); against && back > most {
+			most = back
+		}
+	}
+	return most
 }
 
 // ParseGate : Reads a condition as it is written on a step.
@@ -218,6 +252,30 @@ func ParseGate(s string) (Gate, error) {
 // Checked when the gate is written rather than when it runs, so a
 // rule that cannot work fails in front of whoever wrote it.
 func (g Gate) sound() error {
+	// A comparison against the past, which every operator takes and
+	// none of the sources answered from the moment can.
+	if strings.HasSuffix(strings.ToLower(strings.TrimSpace(g.Value)), Ago) {
+		if _, against := g.Against(); !against {
+			return fmt.Errorf("%w: %q is not a length of time to look back",
+				ErrUnreadableGate, g.Value)
+		}
+		switch g.Op {
+		case Older, Within:
+			return fmt.Errorf("%w: %q asks how old a reading is, which is not a thing to compare with the past",
+				ErrUnreadableGate, g.Op)
+		}
+		switch g.Source {
+		case Presence, Hour, Day:
+			return fmt.Errorf("%w: %q has no past to compare with",
+				ErrUnreadableGate, g.Source)
+		}
+		if routine.Mine(g.Source) {
+			return fmt.Errorf("%w: %q is already a time of day",
+				ErrUnreadableGate, g.Source)
+		}
+		return nil
+	}
+
 	switch g.Op {
 	case Older, Within:
 		if _, err := time.ParseDuration(g.Value); err != nil {
@@ -269,6 +327,77 @@ func (g Gate) Needs() string {
 		return ""
 	}
 	return g.Source
+}
+
+// Against : How far back the value asks us to look, and whether it
+// asks at all.
+func (g Gate) Against() (time.Duration, bool) {
+	value := strings.TrimSpace(g.Value)
+	if !strings.HasSuffix(strings.ToLower(value), Ago) {
+		return 0, false
+	}
+	back, err := time.ParseDuration(strings.TrimSpace(value[:len(value)-len(Ago)]))
+	if err != nil || back <= 0 {
+		return 0, false
+	}
+	return back, true
+}
+
+// Past : Whether this gate compares a reading with its own earlier
+// self, and so needs more than the latest one.
+func (g Gate) Past() bool {
+	_, yes := g.Against()
+	return yes
+}
+
+// Holds : Whether the condition holds, given what is known of the
+// kind it reads.
+//
+// Newest first, as the store gives them. A gate comparing against
+// a number wants only the first; one comparing against the past
+// wants the reading from back then as well, which is why this
+// takes what [Gate.Passes] could not.
+func (g Gate) Holds(got []Reading, away bool, now time.Time) bool {
+	back, against := g.Against()
+	if !against {
+		var latest Reading
+		if len(got) > 0 {
+			latest = got[0]
+		}
+		return g.Passes(latest, away, now)
+	}
+	if len(got) == 0 || !got[0].Known {
+		return false
+	}
+
+	// The newest reading at least that old. Not the oldest held,
+	// and nothing interpolated: what the value actually was then,
+	// as near as anything was reported.
+	want := now.Add(-back)
+	var before Reading
+	for _, r := range got {
+		if r.Known && !r.At.After(want) {
+			before = r
+			break
+		}
+	}
+	if !before.Known {
+		// Nothing goes back that far, so the comparison cannot be
+		// made. An unknown reading never passes, which is the same
+		// answer a gate gives about a kind nobody has reported.
+		return false
+	}
+
+	then, err := strconv.ParseFloat(strings.TrimSpace(before.Value), 64)
+	if err != nil {
+		return false
+	}
+	// Against the value it had then, written as the number an
+	// ordinary comparison expects, so one piece of arithmetic
+	// serves both.
+	return Gate{Source: g.Source, Op: g.Op,
+		Value: strconv.FormatFloat(then, 'f', -1, 64)}.
+		Passes(got[0], away, now)
 }
 
 // Measures : Whether this gate compares a measurement rather than

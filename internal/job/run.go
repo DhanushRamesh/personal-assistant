@@ -17,6 +17,15 @@ const Tick = 2 * time.Second
 // Limit : How many jobs are taken in one look.
 const Limit = 50
 
+// Over : The most readings fetched when a condition compares
+// something with its own past.
+//
+// A cap rather than a window. A phone reports its battery every
+// few minutes, so this reaches back hours; something reporting
+// every second would not reach back far, and the comparison
+// honestly says it cannot be made rather than pretending.
+const Over = 240
+
 // Backlog : How many arrivals wait to be looked at.
 //
 // Small, because the readings behind them keep coming. A runner
