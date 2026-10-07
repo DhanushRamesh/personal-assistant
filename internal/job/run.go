@@ -35,6 +35,15 @@ type Store interface {
 	// Ran : Records that a job ran, when it next runs, what went
 	// wrong if anything, and what it said.
 	Ran(ctx context.Context, id string, next time.Time, state State, why, said string, at time.Time) error
+	// Arm : Sets when a waiting rule should run, without
+	// recording a run.
+	//
+	// Its own call rather than [Ran] with a time on it, because
+	// nothing has happened yet: a rule that has been set off and
+	// is waiting has not run, said anything, or failed, and
+	// writing it down as a run would put a line in the record for
+	// something nobody did.
+	Arm(ctx context.Context, id string, at time.Time) error
 }
 
 // Ran : What a step earlier in the same sequence did.
@@ -235,6 +244,10 @@ type Pass struct {
 	Stopped int
 	Failed  int
 	Skipped int
+	// Armed : Triggers that fired and are now waiting out their
+	// delay rather than running. Counted apart from Ran, because a
+	// rule that has been set off and has not run yet is neither.
+	Armed int
 }
 
 // Run : Runs jobs until the context ends.
@@ -313,6 +326,23 @@ func (r *Runner) Landed(ctx context.Context, userID string, kinds []string) Pass
 		if !crossed {
 			continue
 		}
+
+		// A trigger that waits does not run when it fires. It sets
+		// its own next time and the clock takes it from there,
+		// which is how nothing has to sleep.
+		//
+		// Re-armed if it fires again while waiting, which is the
+		// right way round: plugged in, pulled out, plugged in
+		// again is a fresh fifteen minutes and not the tail of the
+		// old one.
+		if wait, err := Waits(j.Schedule); err == nil && wait > 0 {
+			if err := r.Store.Arm(ctx, j.ID, now.Add(wait)); err != nil {
+				r.log("cannot set when a waiting rule runs", err)
+				continue
+			}
+			pass.Armed++
+			continue
+		}
 		r.one(ctx, j, now, &pass)
 	}
 	return pass
@@ -384,10 +414,11 @@ func (r *Runner) one(ctx context.Context, j Job, now time.Time, pass *Pass) {
 	// moment, and yesterday's eight o'clock done at noon is worse
 	// than not done at all.
 	//
-	// Only ever asked of a rule that had a time. A watching rule
-	// has none, and the reading that set it off arrived a moment
-	// ago by definition.
-	if !Watches(j.Schedule) && now.Sub(j.Next) > Stale {
+	// Asked of anything with a time, which a watching rule now has
+	// when it is waiting out a delay. One that is not waiting has
+	// no time at all, and the reading that set it off arrived a
+	// moment ago by definition.
+	if !j.Next.IsZero() && now.Sub(j.Next) > Stale {
 		pass.Skipped++
 		r.note("a job's moment passed while nothing was running", j, "")
 		// The memory is left alone: nothing was said, and nothing

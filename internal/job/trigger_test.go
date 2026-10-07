@@ -298,3 +298,77 @@ func TestAFullBatteryIsAMeasurement(t *testing.T) {
 		}
 	}
 }
+
+// TestATriggerThatWaitsArmsTheClock : Owner, 7 October 2026, on
+// what the engine could not do: *"it can't wait."*
+//
+// Whether a phone is actually charging cannot be known when it is
+// plugged in, only later, by whether the level moved. So a trigger
+// may carry how long to wait: it does not run when it fires, it
+// sets its own next time and the clock takes it from there.
+func TestATriggerThatWaitsArmsTheClock(t *testing.T) {
+	s, h := inmemory.New(), &hands{}
+	j, err := job.New("job_1", "usr_1", "really charging", "rule",
+		"when power.plugged is true then 15m",
+		[]job.Step{{Do: job.Announce, Say: "it is not charging"}}, noon)
+	if err != nil {
+		t.Fatal(err)
+	}
+	s.Add(j)
+	if !j.Next.IsZero() {
+		t.Errorf("a waiting rule was given a next time up front: %s", j.Next)
+	}
+
+	got := watcher(s, h, seen{"power.plugged": {at("true", 0), at("false", time.Hour)}}).
+		Landed(context.Background(), "usr_1", []string{"power.plugged"})
+
+	if got.Armed != 1 || got.Ran != 0 {
+		t.Fatalf("pass = %+v, want it armed and not run", got)
+	}
+	if len(h.did) != 0 {
+		t.Errorf("it ran the sequence straight away: %v", h.did)
+	}
+
+	armed, _ := s.Get("job_1")
+	if want := noon.Add(15 * time.Minute); !armed.Next.Equal(want) {
+		t.Errorf("it runs at %s, want %s", armed.Next, want)
+	}
+	if armed.Last.IsZero() == false {
+		t.Error("waiting was written down as a run")
+	}
+
+	// And then the clock, which was always there, picks it up.
+	later := runner(s, h, noon.Add(16*time.Minute))
+	later.Readings = seen{"power.plugged": {at("true", 16 * time.Minute)}}
+	if ran := later.Once(context.Background()); ran.Ran != 1 {
+		t.Fatalf("pass = %+v, want the clock to run it", ran)
+	}
+}
+
+// TestATriggerWithNoWaitStillRunsAtOnce : The whole point of the
+// others, and the thing a delay must not quietly change.
+func TestATriggerWithNoWaitStillRunsAtOnce(t *testing.T) {
+	s, h := inmemory.New(), &hands{}
+	waiting(t, s, "when battery.level < 20")
+
+	got := watcher(s, h, seen{"battery.level": {at("18", 0), at("22", time.Minute)}}).
+		Landed(context.Background(), "usr_1", []string{"battery.level"})
+	if got.Ran != 1 || got.Armed != 0 {
+		t.Fatalf("pass = %+v, want it run and not armed", got)
+	}
+}
+
+// TestAWaitThatIsNotALengthOfTime : Caught when the rule is written,
+// in front of whoever wrote it.
+func TestAWaitThatIsNotALengthOfTime(t *testing.T) {
+	for _, schedule := range []string{
+		"when power.plugged is true then soon",
+		"when power.plugged is true then -5m",
+		"when power.plugged is true then 0s",
+	} {
+		if _, err := job.New("job_1", "usr_1", "x", "rule", schedule,
+			[]job.Step{{Do: job.Announce, Say: "hello"}}, noon); err == nil {
+			t.Errorf("%q was accepted", schedule)
+		}
+	}
+}

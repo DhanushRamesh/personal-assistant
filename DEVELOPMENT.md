@@ -12714,6 +12714,61 @@ rule remembers its last sentence -- so the cost is work rather
 than noise.
 
 
+### A trigger that waits
+
+Owner, 7 October 2026, on the engine's limitations: *"we need to
+fix all, do the wait one."*
+
+Some questions cannot be answered at the moment they are asked.
+Whether a phone is actually charging is unknowable when it is
+plugged in -- only fifteen minutes later, by whether the level
+moved. Whether a missed call mattered is unknowable as it comes
+in, only once nobody has rung back.
+
+Both were possible before only by asking every few minutes for
+ever: a loop running seven hundred times a day to catch the two
+occasions it is about.
+
+	when power.plugged is true then 15m
+
+#### Nothing sleeps
+
+A trigger with a wait does not run when it fires. It sets its own
+next time, and the clock that was always there picks it up. So a
+rule waiting a fortnight costs exactly what a rule waiting a
+minute costs, which is a row.
+
+That also means the delay is kept nowhere new. A watching rule's
+`next_at` was always null -- that is what kept the clock from
+touching it -- so the one spare field was already there, and
+having a time in it now means *set off, and waiting*.
+
+**`Arm` and not `Ran`.** Its own call on the store, because
+nothing has happened: a rule that was set off and is waiting has
+not run, said anything or failed, and writing it down as a run
+would put a line in the record for something nobody did. The
+page reads the same field and says "set off -- runs at 20:22",
+which is a state it could not otherwise show at all.
+
+**Re-armed if it fires again while waiting.** Plugged in, pulled
+out, plugged in again is a fresh fifteen minutes and not the tail
+of the old one.
+
+**And the staleness test now reaches it.** `one` skipped that
+check for a watching rule, on the grounds that a watching rule
+has no time and the reading that set it off arrived a moment ago.
+Both halves stop being true the moment one can wait, so the test
+is on having a time rather than on being a watching rule.
+
+#### Proved on the running server
+
+	14:50:01  a reading arrives  -> armed for 14:52:01, last_at null
+	14:52:02  the clock runs it  -> the check stopped it, as written
+	          next_at null again -> waiting for the next trigger
+
+One second late, nothing slept, and it disarmed itself.
+
+
 ## 12. Maintaining this file
 
 When the owner states a preference, makes a decision, or corrects something,

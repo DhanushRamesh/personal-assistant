@@ -222,6 +222,9 @@ func New(id, userID, name, kind, schedule string, steps []Step, from time.Time) 
 		if _, err := Watched(schedule); err != nil {
 			return Job{}, err
 		}
+		if _, err := Waits(schedule); err != nil {
+			return Job{}, err
+		}
 	} else {
 		following, err := Following(schedule, from, from.Location())
 		if err != nil {
@@ -256,6 +259,46 @@ func Watches(schedule string) bool {
 	return len(fields) > 0 && fields[0] == When
 }
 
+// Then : What separates a trigger from how long to wait after it.
+//
+//	when power.plugged is true then 15m
+//
+// Spaced on both sides so it cannot be mistaken for part of a
+// value, and a plain word because these are dictated aloud.
+const Then = " then "
+
+// Waits : How long a trigger waits before running, or zero.
+//
+// Owner, 7 October 2026, on what the engine could not do: *"it
+// can't wait."*
+//
+// Some questions cannot be answered at the moment they are asked.
+// Whether a phone is actually charging cannot be known when it is
+// plugged in -- only fifteen minutes later, by whether the level
+// moved. Whether a missed call mattered cannot be known as it
+// comes in, only once nobody has rung back.
+//
+// Both were possible before only by asking every few minutes for
+// ever, which is a loop that runs seven hundred times a day to
+// catch the two occasions it is about.
+//
+// Nothing sleeps. A trigger with a wait on it does not run when it
+// fires: it sets its own next time, and the clock that was always
+// there picks it up. So a rule waiting a fortnight costs exactly
+// what a rule waiting a minute costs, which is a row.
+func Waits(schedule string) (time.Duration, error) {
+	_, after, found := strings.Cut(strings.TrimSpace(schedule), Then)
+	if !found {
+		return 0, nil
+	}
+	wait, err := time.ParseDuration(strings.TrimSpace(after))
+	if err != nil || wait <= 0 {
+		return 0, fmt.Errorf("%w: %q is not a length of time to wait",
+			ErrUnreadable, strings.TrimSpace(after))
+	}
+	return wait, nil
+}
+
 // Watched : The condition a watching rule waits for.
 //
 // Narrower than a check can be. A trigger must name an event kind,
@@ -263,6 +306,11 @@ func Watches(schedule string) bool {
 // arrival here, and a rule about how old a reading is could never
 // fire on one landing, since landing is what makes it new.
 func Watched(schedule string) (Gate, error) {
+	// Whatever follows "then" is how long to wait, not part of the
+	// condition. Taken off before the fields are counted so that a
+	// trigger reads the same with a wait on it and without.
+	schedule, _, _ = strings.Cut(strings.TrimSpace(schedule), Then)
+
 	fields := strings.Fields(strings.TrimSpace(schedule))
 	if len(fields) < 2 || !strings.EqualFold(fields[0], When) {
 		return Gate{}, fmt.Errorf("%w: %q", ErrUnreadableGate, schedule)

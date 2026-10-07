@@ -891,7 +891,15 @@ class _RuleTileState extends State<_RuleTile> {
 }
 
 /// _lastly : What came of the last run, in as few words as it takes.
+///
+/// A waiting rule with a time is one that has been set off and is
+/// waiting out its delay. That is the one state the page cannot show
+/// any other way: nothing has run, so the last run says nothing
+/// about it, and without this it reads as a rule sitting idle.
 String _lastly(Rule rule) {
+  if (rule.waits && rule.next != null) {
+    return 'Set off — runs at ${_clock(rule.next!)}';
+  }
   if (rule.last == null) return 'Not run yet';
   final at = _clock(rule.last!);
   if (rule.why.isNotEmpty) return '$at · ${rule.why}';

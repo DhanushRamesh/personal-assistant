@@ -85,6 +85,8 @@ var howToSchedule = prompt.Lines(
 	`  "at 08:00" -- that hour, every day, in their own zone`,
 	`  "once 2026-10-07 06:40" -- one time, then finished`,
 	`  "when battery.level < 20" -- no clock at all; it runs the moment a reading from their device crosses that line`,
+	`A trigger may wait before it runs: "when power.plugged is true then 15m".`,
+	"For a question that cannot be answered at the moment it is asked -- whether the phone is really charging is only known later, by whether the level moved.",
 )
 
 // most : [Most], addressable, for a schema bound.

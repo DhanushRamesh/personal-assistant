@@ -181,6 +181,24 @@ func (s *Store) Ran(ctx context.Context, id string, next time.Time,
 	return nil
 }
 
+// Arm : Sets when a waiting rule runs, without recording a run.
+//
+// Only next_at. Nothing has happened: the rule was set off and is
+// waiting, which is not a run, not a failure and not something
+// said.
+func (s *Store) Arm(ctx context.Context, id string, at time.Time) error {
+	if s == nil || s.db == nil {
+		return fmt.Errorf("job: there is nowhere to read jobs")
+	}
+	out := s.db.WithContext(ctx).Model(&row{}).
+		Where("id = ?", id).
+		Updates(map[string]any{"next_at": at.UTC(), "updated_at": time.Now().UTC()})
+	if out.Error != nil {
+		return fmt.Errorf("job: arming %s: %w", id, out.Error)
+	}
+	return nil
+}
+
 // Mine : One person's jobs, newest first. Kind filters when given.
 func (s *Store) Mine(ctx context.Context, userID, kind string, limit int,
 	states ...job.State,

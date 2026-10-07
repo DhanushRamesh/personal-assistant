@@ -98,7 +98,9 @@ type Rule struct {
 	State string `json:"state"`
 	// Steps : What it does, in order.
 	Steps []Step `json:"steps"`
-	// Next : When it next runs. Absent for one that waits.
+	// Next : When it next runs. Absent for a waiting rule, unless
+	// it has been set off and is waiting out a delay, which is the
+	// one time a waiting rule has a time at all.
 	Next *time.Time `json:"next,omitempty"`
 	// Last : When it last ran. Absent for one that never has.
 	Last *time.Time `json:"last,omitempty"`
