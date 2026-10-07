@@ -19,6 +19,7 @@ import (
 	"github.com/DhanushRamesh/personal-assistant/internal/chat"
 	"github.com/DhanushRamesh/personal-assistant/internal/job"
 	"github.com/DhanushRamesh/personal-assistant/internal/prompt"
+	"github.com/DhanushRamesh/personal-assistant/internal/routine"
 	"github.com/DhanushRamesh/personal-assistant/internal/tool"
 )
 
@@ -141,16 +142,16 @@ var howToCondition = prompt.Lines(
 )
 
 // All : Every rule tool, in the order they are offered.
-func All(store Store, clock Clock, id func() string, look Lookup) []tool.Tool {
+func All(store Store, clock Clock, id func() string, look Lookup, usually routine.Store) []tool.Tool {
 	return []tool.Tool{
-		list(store, clock),
+		list(store, clock, usually),
 		add(store, clock, id, look),
 		cancel(store),
 	}
 }
 
 // list : What standing rules exist.
-func list(store Store, clock Clock) tool.Tool {
+func list(store Store, clock Clock, usually routine.Store) tool.Tool {
 	return tool.Tool{
 		Name:        "rule_list",
 		Domain:      Kind,
@@ -179,7 +180,10 @@ func list(store Store, clock Clock) tool.Tool {
 			if err != nil {
 				return tool.Failed(err.Error())
 			}
-			return tool.OK(describe(found, clock))
+			return tool.OK(prompt.Block(
+				describe(found, clock),
+				conditions(ctx, usually, in.Caller.UserID),
+			))
 		},
 	}
 }
@@ -499,6 +503,56 @@ func describe(found []job.Job, clock Clock) string {
 		lines = append(lines, "- "+one(j, clock))
 	}
 	return prompt.Lines(lines...)
+}
+
+// conditions : What this person's routine offers a rule to stand
+// on, or nothing.
+//
+// Owner, 7 October 2026: *"I will use that to write the rules, and
+// further I'll ask the AI to write the rules by itself with
+// examples of the existing rules, and it should use the routine
+// too."*
+//
+// Which is why it is here rather than in a tool of its own.
+// rule_add writes, and a writing tool refuses to run until the
+// domain has been listed in the same turn -- so anything written
+// into this listing is in front of whoever is about to write a
+// rule, every time, without their having to know to ask.
+//
+// The rules above are the examples and these are the vocabulary.
+// Together they are the whole of what somebody needs to write a
+// new one, which was the point.
+//
+// Counted, because a condition standing on four days out of six is
+// a different proposition from one standing on twenty, and the
+// model deciding whether to use it should be able to see which.
+func conditions(ctx context.Context, usually routine.Store, userID string) string {
+	if usually == nil {
+		return ""
+	}
+	held, err := usually.All(ctx, userID)
+	if err != nil || len(held) == 0 {
+		// Nothing known yet, which is the first weeks and is not
+		// worth a sentence. A rule written without these is the
+		// rule anybody would have written before there were any.
+		return ""
+	}
+
+	lines := make([]string, 0, len(held))
+	for _, f := range held {
+		lines = append(lines, fmt.Sprintf("- %s -- %s %s around %s, on %d of %d days",
+			f.Name(), f.Subject, f.What, f.Said(), f.Days, f.Over))
+	}
+	return prompt.Block(
+		prompt.Text(
+			"Besides what their devices report, a rule may be conditioned on what they usually do.",
+			"These are worked out from weeks of their own readings and are used like any other condition:",
+			`"usually.home.leaves older than 90m" is an hour and a half past the time they normally go,`,
+			`and "usually.home.arrives within 30m" is the half hour after they normally get back.`,
+			"They are conditions only. Nothing about them arrives, so none of them can be what a rule waits for.",
+		),
+		prompt.Lines(lines...),
+	)
 }
 
 // one : A single rule on one line.

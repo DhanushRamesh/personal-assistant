@@ -321,7 +321,7 @@ func run() error {
 		}, cfg.Assistant.Now),
 		rules.All(jobmysql.New(db.DB), rules.Clock{
 			Now: cfg.Assistant.Now, Location: cfg.Assistant.Location,
-		}, jobmysql.ID, known),
+		}, jobmysql.ID, known, routinemysql.New(db.DB)),
 		memories.All(remembering),
 		reminders.All(reminderStore, clock, alarms),
 		taskstool.All(listsOf(googleLink), taskstool.Clock{

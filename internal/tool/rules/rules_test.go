@@ -11,6 +11,7 @@ import (
 	"github.com/DhanushRamesh/personal-assistant/internal/conversation"
 	"github.com/DhanushRamesh/personal-assistant/internal/job"
 	"github.com/DhanushRamesh/personal-assistant/internal/job/inmemory"
+	"github.com/DhanushRamesh/personal-assistant/internal/routine"
 	"github.com/DhanushRamesh/personal-assistant/internal/tool"
 	"github.com/DhanushRamesh/personal-assistant/internal/tool/rules"
 )
@@ -41,7 +42,7 @@ func made() (*inmemory.Store, map[string]tool.Tool) {
 	by := map[string]tool.Tool{}
 	for _, t := range rules.All(store, rules.Clock{
 		Now: func() time.Time { return noon }, Location: india,
-	}, id, look) {
+	}, id, look, nil) {
 		by[t.Name] = t
 	}
 	return store, by
@@ -191,7 +192,7 @@ func TestWritingRulesInsistsOnReadingThemFirst(t *testing.T) {
 	store, _ := made()
 	n := 0
 	id := func() string { n++; return "job_01M48E09RJW0G247RBST6712D1" }
-	all := rules.All(store, rules.Clock{Now: func() time.Time { return noon }, Location: india}, id, look)
+	all := rules.All(store, rules.Clock{Now: func() time.Time { return noon }, Location: india}, id, look, nil)
 
 	var writes, lists int
 	for _, which := range all {
@@ -285,5 +286,66 @@ func TestAToolAWriteMayCallMustOnlyRead(t *testing.T) {
 	}
 	if !strings.Contains(out.Content, "calendar_cancel") {
 		t.Errorf("it did not say which tool: %s", out.Content)
+	}
+}
+
+// stored : A routine a listing can read.
+type stored []routine.Fact
+
+func (s stored) All(context.Context, string) ([]routine.Fact, error) { return s, nil }
+func (s stored) Keep(context.Context, string, []routine.Fact) error  { return nil }
+
+// TestListingARuleShowsWhatElseOneCanAskAbout : Owner, 7 October
+// 2026 -- "I'll ask the AI to write the rules by itself with
+// examples of the existing rules, and it should use the routine
+// too."
+//
+// Which is why the routine is in this listing and not in a tool of
+// its own. rule_add writes, and a writing tool refuses to run until
+// the domain has been listed in the same turn, so whatever is here
+// is in front of whoever is about to write a rule -- every time,
+// without their having to know to ask. The rules are the examples
+// and these are the vocabulary.
+func TestListingARuleShowsWhatElseOneCanAskAbout(t *testing.T) {
+	store := inmemory.New()
+	id := func() string { return "job_01M48E09RJW0G247RBST6712D1" }
+	by := map[string]tool.Tool{}
+	for _, one := range rules.All(store, rules.Clock{
+		Now: func() time.Time { return noon }, Location: india,
+	}, id, look, stored{
+		{Subject: "home", What: routine.Leaves, Hour: 10, Days: 4, Over: 6},
+	}) {
+		by[one.Name] = one
+	}
+
+	got := call(t, by["rule_list"], `{}`)
+	for _, want := range []string{
+		"usually.home.leaves",
+		"home leaves around 10am",
+		"4 of 6 days",
+		"none of them can be what a rule waits for",
+	} {
+		if !strings.Contains(got.Content, want) {
+			t.Errorf("the listing does not offer %q:\n%s", want, got.Content)
+		}
+	}
+}
+
+// TestListingSaysNothingAboutARoutineNobodyHasYet : The first weeks.
+// A rule written without these is the rule anybody would have
+// written before there were any, and a paragraph explaining that
+// there is nothing is worse than silence.
+func TestListingSaysNothingAboutARoutineNobodyHasYet(t *testing.T) {
+	store := inmemory.New()
+	id := func() string { return "job_01M48E09RJW0G247RBST6712D1" }
+	by := map[string]tool.Tool{}
+	for _, one := range rules.All(store, rules.Clock{
+		Now: func() time.Time { return noon }, Location: india,
+	}, id, look, stored{}) {
+		by[one.Name] = one
+	}
+
+	if got := call(t, by["rule_list"], `{}`); strings.Contains(got.Content, "usually") {
+		t.Errorf("it spoke about a routine nobody has:\n%s", got.Content)
 	}
 }

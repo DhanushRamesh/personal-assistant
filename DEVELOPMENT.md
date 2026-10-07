@@ -12769,6 +12769,43 @@ is on having a time rather than on being a watching rule.
 One second late, nothing slept, and it disarmed itself.
 
 
+### The rules are the examples and the routine is the vocabulary
+
+Owner, 7 October 2026, from the start of all of this: *"I will use
+that to write the rules, and further I'll ask the AI to write the
+rules by itself with examples of the existing rules, and it should
+use the routine too."*
+
+Which needed no new tool, because the thing it needed was already
+enforced. `rule_add` writes, and a writing tool refuses to run
+until its domain has been listed in the same turn. So anything
+put into `rule_list` is in front of whoever is about to write a
+rule, every time, without their having to know to ask.
+
+The listing already gave every rule with its exact schedule and
+what its steps come to -- ten worked examples in the person's own
+house, which is better than any example that could be written
+into a description. What it did not give was what else a
+condition may read. Now it does:
+
+	- usually.home.leaves -- home leaves around 10am, on 4 of 6 days
+	- usually.home.arrives -- home arrives around 9pm, on 3 of 4 days
+
+**Counted, deliberately.** A condition standing on four days out
+of six is a different proposition from one standing on twenty,
+and whoever is deciding whether to use it should see which.
+
+**And told what they are not.** Nothing about a routine arrives,
+so none of them can be what a rule waits for -- said in the
+listing because that is where it will be read, rather than left
+to be discovered by writing a rule that waits for ever.
+
+**Nothing at all when there is no routine yet.** The first weeks.
+A rule written without these is the rule anybody would have
+written before there were any, and a paragraph explaining the
+absence is worse than silence.
+
+
 ## 12. Maintaining this file
 
 When the owner states a preference, makes a decision, or corrects something,
