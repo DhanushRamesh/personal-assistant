@@ -318,7 +318,25 @@ func (r *Runner) Landed(ctx context.Context, userID string, kinds []string) Pass
 	return pass
 }
 
-// crossed : Whether the condition has just become true.
+// crossed : Whether what just arrived should set the rule off.
+//
+// Two questions, depending on what the gate compares.
+//
+// A measurement is a line to cross. The battery falls 12, 11, 10,
+// 9 and the rule speaks once, at 9, because before that it was
+// not under ten; at 8 it already was. Without this a phone
+// discharging would say something every reading until it died.
+//
+// A thing that happened is not a line and has no before. Leaving
+// home is leaving home whether or not the last place left was
+// also home, and asking whether it "changed" threw the second one
+// away: there are two consecutive place.exited "home" in this
+// person's own week, and the second was silent. So any arrival
+// that satisfies the gate sets it off.
+//
+// The same sentence is still only said once, whichever this is --
+// a rule remembers what it last said -- so the cost of a thing
+// that reports the same word over and over is work and not noise.
 func (r *Runner) crossed(ctx context.Context, userID string, g Gate, now time.Time) (bool, error) {
 	got, err := r.Readings.Latest(ctx, userID, g.Needs(), 2)
 	if err != nil {
@@ -331,6 +349,9 @@ func (r *Runner) crossed(ctx context.Context, userID string, g Gate, now time.Ti
 	// presence, because presence does not arrive.
 	if !g.Passes(got[0], false, now) {
 		return false, nil
+	}
+	if !g.Measures() {
+		return true, nil
 	}
 	if len(got) < 2 {
 		return false, nil

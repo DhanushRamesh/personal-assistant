@@ -12659,6 +12659,61 @@ one that should not, and reading `why` afterwards. Neither was
 reachable from a unit test, because both were in the wiring.
 
 
+### Leaving twice is leaving twice
+
+A trigger fired when its condition had *changed* since the
+reading before. Right, and the reason it exists: a battery
+falling 12, 11, 10, 9 speaks once, at nine, because before that
+it was not under ten. Without it a discharging phone says
+something every reading until it dies.
+
+Wrong for everything that is not a measurement. This person's own
+week:
+
+	Sun 04  place.exited "home"
+	Sun 04  place.exited "home"
+
+Out, back, out again. The second was silent, because the last
+departure had also been from home and nothing had "changed".
+Two named missed calls in a row would have gone the same way.
+
+#### Two sorts of reading, and no list of them
+
+A measurement has a value at every moment. A battery is always at
+some percent, so two readings the same really do mean nothing
+happened.
+
+A thing that happened has no value in between. There is no state
+of "having left"; there are departures, and two of them is two.
+
+The engine had no way to tell them apart, and a list of which
+event kinds are which is exactly the thing this codebase refuses
+to keep: it is wrong the moment a new device starts reporting.
+
+#### Decided by the value, not the operator
+
+	a number   ->  a line to cross, speak when it is crossed
+	a word     ->  a thing that happened, speak each time
+
+Which needs nothing from whoever writes the rule and no knowledge
+of any device. Checked against every rule that exists: the six
+battery thresholds, `place.exited is home`, `call.missed is not
+unknown`, `bluetooth.connected is bike helmet` -- all correct.
+
+**By the value and not the operator, and that is the whole
+subtlety.** `battery.level is 100` is written like naming a
+thing and is a measurement. Sorted by the operator it would be an
+event, and the rule would speak every time the phone reported a
+full battery while it sat on the charger.
+
+#### What it costs
+
+A kind that reports the same word over and over would set its
+rule off each time. It would still only ever *say* it once -- a
+rule remembers its last sentence -- so the cost is work rather
+than noise.
+
+
 ## 12. Maintaining this file
 
 When the owner states a preference, makes a decision, or corrects something,

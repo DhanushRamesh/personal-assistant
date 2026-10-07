@@ -226,3 +226,75 @@ func (w *written) Wrote(_ context.Context, r job.Record) error {
 	w.records = append(w.records, r)
 	return nil
 }
+
+// TestLeavingTwiceIsLeavingTwice : A trigger asked whether the
+// condition had changed since the reading before, which is right for
+// a measurement and wrong for a thing that happened.
+//
+// This person's own week has two consecutive place.exited "home" --
+// out in the morning, back, out again -- and the second was silent,
+// because the last departure had also been from home.
+func TestLeavingTwiceIsLeavingTwice(t *testing.T) {
+	s, h := inmemory.New(), &hands{}
+	j, err := job.New("job_1", "usr_1", "going out", "rule",
+		"when place.exited is home",
+		[]job.Step{{Do: job.Announce, Say: "you are heading out"}}, noon)
+	if err != nil {
+		t.Fatal(err)
+	}
+	s.Add(j)
+
+	got := watcher(s, h, seen{"place.exited": {
+		at("home", 0), at("home", 3*time.Hour),
+	}}).Landed(context.Background(), "usr_1", []string{"place.exited"})
+
+	if got.Ran != 1 {
+		t.Fatalf("leaving home a second time gave %+v, want Ran 1", got)
+	}
+}
+
+// TestADischargingPhoneStillSpeaksOnce : The other half, and the
+// reason the change test existed. A battery sliding past the line
+// must not say something on every reading all the way down.
+func TestADischargingPhoneStillSpeaksOnce(t *testing.T) {
+	s, h := inmemory.New(), &hands{}
+	waiting(t, s, "when battery.level < 20")
+
+	// Already under the line on the reading before.
+	got := watcher(s, h, seen{"battery.level": {
+		at("8", 0), at("9", time.Minute),
+	}}).Landed(context.Background(), "usr_1", []string{"battery.level"})
+
+	if got.Ran != 0 {
+		t.Fatalf("a battery already under the line gave %+v, want Ran 0", got)
+	}
+	if len(h.did) != 0 {
+		t.Errorf("it did %v", h.did)
+	}
+}
+
+// TestAFullBatteryIsAMeasurement : "battery.level is 100" names a
+// number and reads like naming a thing. Sorted as a thing that
+// happened it would speak every time the phone reported a full
+// battery while it sat on the charger -- which is why this is
+// decided by the value and not by the operator.
+func TestAFullBatteryIsAMeasurement(t *testing.T) {
+	for _, c := range []struct {
+		written  string
+		measures bool
+	}{
+		{"battery.level is 100", true},
+		{"battery.level < 10", true},
+		{"place.exited is home", false},
+		{"call.missed is not unknown", false},
+		{"bluetooth.connected is bike helmet", false},
+	} {
+		gate, err := job.ParseGate(c.written)
+		if err != nil {
+			t.Fatalf("%q: %v", c.written, err)
+		}
+		if got := gate.Measures(); got != c.measures {
+			t.Errorf("%q measures = %v, want %v", c.written, got, c.measures)
+		}
+	}
+}

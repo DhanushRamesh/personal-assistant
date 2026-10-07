@@ -271,6 +271,34 @@ func (g Gate) Needs() string {
 	return g.Source
 }
 
+// Measures : Whether this gate compares a measurement rather than
+// naming a thing that happened.
+//
+// What tells the two sorts of reading apart, which a trigger has
+// to do and had been getting wrong.
+//
+// A measurement has a value at every moment -- a battery is always
+// at some percent -- so two readings the same mean nothing
+// happened, and a rule should speak when it crosses a line and not
+// again while it stays over it. A thing that happened has no value
+// in between: leaving home twice in a row is leaving twice, and
+// the second one was being thrown away for looking like the first.
+//
+// Decided by the value rather than the operator, which is the
+// distinction that matters and the one that is easy to get wrong.
+// "battery.level is 100" reads like naming a thing and is a
+// measurement; treated as an event it would speak every time the
+// phone reported a full battery while it sat on the charger.
+//
+// No list of event kinds anywhere in it, which is the point: a
+// device that starts reporting something nobody has seen is
+// sorted by how its rule is written, and nothing here needs
+// editing.
+func (g Gate) Measures() bool {
+	_, err := strconv.ParseFloat(strings.TrimSpace(g.Value), 64)
+	return err == nil
+}
+
 // Arrives : Whether this gate reads something that lands, and so
 // could set a rule off.
 //
