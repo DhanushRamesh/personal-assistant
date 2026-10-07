@@ -84,6 +84,10 @@ func Quiet(events []event.Event, where *time.Location) string {
 			"Look at what hour they begin, how long they run, whether they fall on the same days of the week, and whether they have been moving.",
 			"A stretch that keeps falling at the same hour is the largest thing they do that day, and nothing will ever report it directly.",
 			"What it is depends on the hour and the length, and that is yours to work out: the same shape at night and in the afternoon are not the same thing, and somebody who works nights would be described wrongly by anything that assumed.",
+			"Whatever you work out, name it for what was recorded and not for what you take it to be.",
+			"Nothing reported between one and nine is the observation, and it stays the observation however obvious its explanation looks.",
+			"Naming one of these after the activity you believe it is turns a conclusion into a heading, and nobody reading it a month later can tell that it ever was one.",
+			"So write the stretch first and your reading of it after, marked as yours -- which would fit, which may be -- and leave them in that order.",
 		),
 		prompt.Lines(lines...),
 	)

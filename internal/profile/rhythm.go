@@ -232,7 +232,8 @@ func visits(moments []moment, where *time.Location) string {
 			break
 		}
 		s := by[place]
-		line := fmt.Sprintf("- %s: there on %d %s", place, len(s.days), plural("day", len(s.days)))
+		line := fmt.Sprintf("- %s: arriving or leaving recorded on %d %s",
+			place, len(s.days), plural("day", len(s.days)))
 		if at := aroundWhen(s.arrivals, where); at != "" && len(s.arrivals) >= Fewest {
 			line += ", arriving " + at
 		}
@@ -244,7 +245,15 @@ func visits(moments []moment, where *time.Location) string {
 		}
 		lines = append(lines, line)
 	}
-	return prompt.Lines(append([]string{"Where they went:"}, lines...)...)
+	return prompt.Block(
+		prompt.Lines(append([]string{"Where they went:"}, lines...)...),
+		prompt.Text(
+			"These count days a crossing was recorded, which is not the same as days they were there.",
+			"A boundary is only noticed when the phone notices it, and one that goes unreported leaves no trace at all: a stay can have an arrival and no departure, a departure and no arrival, or neither.",
+			"So a day missing from a count is a day nothing was recorded and never a day they did not go, and the number is a floor rather than a frequency.",
+			"Say it as what was seen -- recorded on four days -- and not as how often they do it.",
+		),
+	)
 }
 
 // moment : One thing happening, once.

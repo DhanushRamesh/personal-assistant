@@ -181,3 +181,85 @@ func TestOnlyTheLastPartIsToldWhatTheFirstFound(t *testing.T) {
 		}
 	}
 }
+
+// TestEachPartIsGivenOnlyItsOwnEvidence : Three calls handed the same
+// week of talk and the same month of counts wrote the same findings
+// three times over, each in its own register. The commute appeared as
+// a count, then as an hour of the day, then as a remark about his
+// weeks.
+//
+// So the day is hours and places and is given no conversation, and the
+// prose is words and is given no raw counts -- it reaches them through
+// what the counted part made of them, which it is handed separately.
+func TestEachPartIsGivenOnlyItsOwnEvidence(t *testing.T) {
+	at := time.Date(2026, 10, 1, 9, 0, 0, 0, time.UTC)
+	e := profile.Evidence{
+		Said:    []conversation.Message{{Content: "remind me about the barber", At: at}},
+		Rhythm:  "- office: arriving or leaving recorded on 4 days",
+		Planned: "Thu 1 Oct 9:00 am: barber",
+		Asking:  "their diary, most of all",
+	}
+
+	for _, c := range []struct {
+		part  profile.Part
+		wants []string
+		not   []string
+	}{
+		{profile.SoFar,
+			[]string{"barber", "recorded on 4 days", "most of all"},
+			nil},
+		{profile.Day,
+			[]string{"recorded on 4 days", "9:00 am"},
+			[]string{"remind me about the barber", "most of all"}},
+		{profile.Like,
+			[]string{"remind me about the barber"},
+			[]string{"recorded on 4 days", "most of all"}},
+	} {
+		asked := profile.Prompt(c.part, e)
+		for _, want := range c.wants {
+			if !strings.Contains(asked, want) {
+				t.Errorf("%q was not given %q", c.part, want)
+			}
+		}
+		for _, avoid := range c.not {
+			if strings.Contains(asked, avoid) {
+				t.Errorf("%q was given %q, which is another part's evidence", c.part, avoid)
+			}
+		}
+	}
+}
+
+// TestAPartIsCorrectingOnlyItsOwnSection : A call is asked to correct
+// what it wrote last time. The other two sections are the other two
+// calls' business, and handing all three to each of them is how one
+// part comes to rewrite another's.
+func TestAPartIsCorrectingOnlyItsOwnSection(t *testing.T) {
+	// As write assembles it: the heading, then the body.
+	was := strings.Join([]string{
+		string(profile.SoFar) + "\n- plays badminton, 4 times over 7 days",
+		string(profile.Day) + "\nLeaves around ten.",
+		string(profile.Like) + "\nHe keeps a close eye on birthdays.",
+	}, "\n\n")
+
+	for _, c := range []struct {
+		part profile.Part
+		mine string
+	}{
+		{profile.SoFar, "plays badminton"},
+		{profile.Day, "Leaves around ten"},
+		{profile.Like, "close eye on birthdays"},
+	} {
+		asked := profile.Prompt(c.part, profile.Evidence{Was: was})
+		if !strings.Contains(asked, c.mine) {
+			t.Errorf("%q was not given its own section back", c.part)
+		}
+		for _, other := range []string{"plays badminton", "Leaves around ten", "close eye on birthdays"} {
+			if other == c.mine {
+				continue
+			}
+			if strings.Contains(asked, other) {
+				t.Errorf("%q was given another part's section: %q", c.part, other)
+			}
+		}
+	}
+}

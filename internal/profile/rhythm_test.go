@@ -171,7 +171,7 @@ func TestWhereTheyGoSaysWhenAndForHowLong(t *testing.T) {
 	got := profile.Rhythm(events, india())
 
 	for _, want := range []string{
-		"Where they went:", "office", "there on 4 days",
+		"Where they went:", "office", "arriving or leaving recorded on 4 days",
 		"arriving usually around 9am", "leaving usually around 6pm", "usually staying 8 hours",
 	} {
 		if !strings.Contains(got, want) {

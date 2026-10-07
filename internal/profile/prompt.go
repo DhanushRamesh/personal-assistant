@@ -68,6 +68,7 @@ type Evidence struct {
 // separate copy once elsewhere in this codebase, and the eval went on
 // passing against wording the server had stopped using.
 func Prompt(part Part, e Evidence) string {
+	e = only(part, e)
 	return prompt.Block(
 		prompt.Text(
 			"Below is one person talking to their assistant over the past week, in the order they said it,",
@@ -122,13 +123,13 @@ func Prompt(part Part, e Evidence) string {
 			"Their health: leave out symptoms, conditions and medicines entirely unless they asked for something to be remembered, which is a different thing from having mentioned it in passing.",
 			"This is about being wrong, not about being discreet. Both were written confidently from evidence that did not support them, and a wrong line here is read before every answer and acted on.",
 		),
-		prompt.Text(
+		about(e.Rhythm,
 			"The places below are different, and may be used.",
 			"They are named by the person themselves, on their own devices, and a place they called home or the office is something they have told you rather than something you worked out.",
 			"Write about where they go, how often and at what hour, by the names they gave those places.",
 			"That is not the same as saying where they live: a name they gave a place is not an address, a city or a country, and none of those follow from it.",
 		),
-		prompt.Text(
+		about(e.Planned,
 			"Their diary is below as well, and it is a different kind of thing from the rest.",
 			"An entry says they meant to be somewhere. It is not evidence they were, and it never becomes one however ordinary it looks.",
 			"What says whether they went is the readings, if anything does.",
@@ -152,6 +153,49 @@ func Prompt(part Part, e Evidence) string {
 	)
 }
 
+// only : The evidence one part is written from.
+//
+// All three were given everything, and splitting the writing into
+// three calls then tripled the reading without making any one call
+// smaller. It also had each part write the same findings again in
+// its own register -- the commute appeared three times, counted,
+// then as an hour of the day, then as a remark about his weeks --
+// which is the repetition that is hardest to read and the easiest
+// way for a description to end up contradicting itself.
+//
+// The parts are about different things, so they are not given the
+// same things. An ordinary day is hours and places: a week of
+// conversation cannot say what time somebody got up. What they are
+// like is the opposite, written from their words, and the event
+// counts reach it through what the first part made of them, which
+// it is handed.
+func only(part Part, e Evidence) Evidence {
+	// Its own section of the description from last time, and not
+	// the whole of it. A part is being asked to correct what it
+	// wrote, and the other two sections are the other two calls'
+	// business.
+	was := Split(e.Was)[part]
+	switch part {
+	case Day:
+		return Evidence{Rhythm: e.Rhythm, Planned: e.Planned, Was: was}
+	case Like:
+		return Evidence{Said: e.Said, Replies: e.Replies, SoFar: e.SoFar, Was: was}
+	}
+	e.Was = was
+	return e
+}
+
+// about : Instructions for evidence, left out when there is none.
+//
+// A paragraph explaining how to read a diary, in front of a part
+// that was given no diary, is an instruction to go and find one.
+func about(evidence string, lines ...string) string {
+	if strings.TrimSpace(evidence) == "" {
+		return ""
+	}
+	return prompt.Text(lines...)
+}
+
 // section : What this part is, and how it is written.
 func section(part Part) string {
 	switch part {
@@ -161,6 +205,7 @@ func section(part Part) string {
 			"One line per thing, as many lines as the evidence supports.",
 			"Every line carries how many times and over what stretch of days, because that is what makes it arguable.",
 			"A line you cannot put a count on does not belong in this part.",
+			"Count what was recorded and say that is what you are counting. Recorded on four of seven days is what you have; at the office on four of seven days is a claim that the other three were days he did not go, and nothing in front of you says that -- a reading that was never taken looks exactly like a thing that never happened.",
 			"Order them by how well established they are, not by how interesting.",
 		)
 	case Day:
@@ -171,6 +216,7 @@ func section(part Part) string {
 			"Hours as they would be said, and a range where it is a range: around nine, between seven and ten, not 09:00.",
 			"Say which days it is true of. If weekdays and the weekend are different days, say so and give whichever you have the evidence for; if you cannot tell them apart, say that instead of averaging them into a day nobody has.",
 			"Mark every line with how sure it is -- most days, usually, sometimes, once or twice -- and leave out anything you would have to invent to fill the gap. An hour nothing is known about is said to be unknown, which is worth more than a guess at it.",
+			"How sure is not how many were recorded. Four days out of seven with a reading is not most days unless you know the other three had none to take, so where the count is of things recorded, say what was recorded and leave the frequency alone.",
 			"The point of this part is to be the thing an unusual day is measured against, so a line that is nearly always true is worth more than an interesting one.",
 		)
 	case Like:
