@@ -13,6 +13,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"sort"
+	"strconv"
 	"strings"
 	"time"
 
@@ -48,6 +49,50 @@ type Store interface {
 	// said.
 	Change(ctx context.Context, j job.Job) error
 	Stop(ctx context.Context, userID, id string) (bool, error)
+}
+
+// Trier : Runs a rule now and says what it would have said,
+// without saying it.
+//
+// Optional. Nil leaves a rule made and unproven, which is how
+// every rule was made before this.
+type Trier func(ctx context.Context, j job.Job) job.Trial
+
+// proving : What a rule did when it was tried the moment it was
+// written.
+//
+// Owner, 7 October 2026: *"this is an important rule, the AI must
+// know how to use it well without making mistakes. Is there any
+// way to check if the AI created or updated a rule properly?"*
+//
+// The tools already refuse a rule that cannot be read -- an
+// unreadable schedule, an hour of ninety-nine, a tool that
+// writes. What nothing caught was a rule that reads perfectly and
+// is wrong: a condition that can never hold, a trigger on the
+// wrong thing, a lookup handing over the very evidence the
+// trigger was meant to exclude. Two of those were written in one
+// evening and both were found by running them afterwards.
+//
+// So a rule is run the moment it is made, and what it did comes
+// back with it. The model sees in the same turn that its rule
+// would say nothing, or would say the wrong thing, and can say so
+// or mend it -- which is the cheapest moment there will ever be.
+//
+// It says nothing aloud and writes nothing down, so a rule made
+// and immediately tried is in exactly the state it would have
+// been in unmade.
+func proving(ctx context.Context, try Trier, j job.Job) string {
+	if try == nil {
+		return ""
+	}
+	tried := try(ctx, j)
+	if tried.Said != "" {
+		return prompt.Text("Run just now, it would say:", strconv.Quote(tried.Said))
+	}
+	if tried.Why != "" {
+		return prompt.Text("Run just now, it would say nothing:", tried.Why+".")
+	}
+	return "Run just now, it would say nothing."
 }
 
 // Lookup : Finds a tool by name, for checking what a rule may run.
@@ -177,11 +222,13 @@ var howToCondition = prompt.Lines(
 )
 
 // All : Every rule tool, in the order they are offered.
-func All(store Store, clock Clock, id func() string, look Lookup, usually routine.Store) []tool.Tool {
+func All(store Store, clock Clock, id func() string, look Lookup,
+	usually routine.Store, try Trier,
+) []tool.Tool {
 	return []tool.Tool{
 		list(store, clock, usually),
-		add(store, clock, id, look),
-		update(store, clock, look),
+		add(store, clock, id, look, try),
+		update(store, clock, look, try),
 		quieten(store, clock),
 		cancel(store),
 	}
@@ -226,7 +273,7 @@ func list(store Store, clock Clock, usually routine.Store) tool.Tool {
 }
 
 // add : Sets one up.
-func add(store Store, clock Clock, id func() string, look Lookup) tool.Tool {
+func add(store Store, clock Clock, id func() string, look Lookup, try Trier) tool.Tool {
 	return tool.Tool{
 		Name:    "rule_add",
 		Domain:  Kind,
@@ -343,7 +390,10 @@ func add(store Store, clock Clock, id func() string, look Lookup) tool.Tool {
 			if err := store.Keep(ctx, made); err != nil {
 				return tool.Failed(err.Error())
 			}
-			return tool.OK(prompt.Text("Created:", one(made, clock)))
+			return tool.OK(prompt.Block(
+				prompt.Text("Created:", one(made, clock)),
+				proving(ctx, try, made),
+			))
 		},
 	}
 }
@@ -400,7 +450,7 @@ func given(now *string, before string) string {
 //
 // Everything a rule is made of can be read back off its steps, so
 // a change can name one thing and leave the rest alone.
-func update(store Store, clock Clock, look Lookup) tool.Tool {
+func update(store Store, clock Clock, look Lookup, try Trier) tool.Tool {
 	return tool.Tool{
 		Name:    "rule_update",
 		Domain:  Kind,
@@ -534,7 +584,10 @@ func update(store Store, clock Clock, look Lookup) tool.Tool {
 			if err := store.Change(ctx, made); err != nil {
 				return tool.Failed(err.Error())
 			}
-			return tool.OK(prompt.Text("Changed:", one(made, clock)))
+			return tool.OK(prompt.Block(
+				prompt.Text("Changed:", one(made, clock)),
+				proving(ctx, try, made),
+			))
 		},
 	}
 }

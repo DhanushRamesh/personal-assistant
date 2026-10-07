@@ -308,6 +308,15 @@ func run() error {
 		return registry.Get(name)
 	}
 
+	// The engine, named before it exists.
+	//
+	// A rule is tried the moment it is written, which needs the
+	// runner -- and the runner needs the registry, which needs the
+	// rule tools. The cycle is real and the only thing in it that
+	// can wait is this: a rule cannot be written before the server
+	// is listening, by which time the runner is long built.
+	var running *job.Runner
+
 	tools, err := tool.NewRegistry(slices.Concat(
 		conversations.All(chats),
 		situationstool.Tools(deviceEvents, []situation.Check{
@@ -321,7 +330,13 @@ func run() error {
 		}, cfg.Assistant.Now),
 		rules.All(jobmysql.New(db.DB), rules.Clock{
 			Now: cfg.Assistant.Now, Location: cfg.Assistant.Location,
-		}, jobmysql.ID, known, routinemysql.New(db.DB)),
+		}, jobmysql.ID, known, routinemysql.New(db.DB),
+			func(ctx context.Context, j job.Job) job.Trial {
+				if running == nil {
+					return job.Trial{}
+				}
+				return running.Try(ctx, j)
+			}),
 		memories.All(remembering),
 		reminders.All(reminderStore, clock, alarms),
 		taskstool.All(listsOf(googleLink), taskstool.Clock{
@@ -651,7 +666,7 @@ func run() error {
 		},
 		where: cfg.Assistant.Location, now: cfg.Assistant.Now}
 
-	running := &job.Runner{
+	running = &job.Runner{
 		Store: scheduled,
 		Doer: doing{
 			tools: tools, speaker: speaker, written: announcements,

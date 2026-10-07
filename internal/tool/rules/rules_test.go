@@ -42,7 +42,7 @@ func made() (*inmemory.Store, map[string]tool.Tool) {
 	by := map[string]tool.Tool{}
 	for _, t := range rules.All(store, rules.Clock{
 		Now: func() time.Time { return noon }, Location: india,
-	}, id, look, nil) {
+	}, id, look, nil, nil) {
 		by[t.Name] = t
 	}
 	return store, by
@@ -192,7 +192,7 @@ func TestWritingRulesInsistsOnReadingThemFirst(t *testing.T) {
 	store, _ := made()
 	n := 0
 	id := func() string { n++; return "job_01M48E09RJW0G247RBST6712D1" }
-	all := rules.All(store, rules.Clock{Now: func() time.Time { return noon }, Location: india}, id, look, nil)
+	all := rules.All(store, rules.Clock{Now: func() time.Time { return noon }, Location: india}, id, look, nil, nil)
 
 	var writes, lists int
 	for _, which := range all {
@@ -314,7 +314,7 @@ func TestListingARuleShowsWhatElseOneCanAskAbout(t *testing.T) {
 		Now: func() time.Time { return noon }, Location: india,
 	}, id, look, stored{
 		{Subject: "home", What: routine.Leaves, Hour: 10, Days: 4, Over: 6},
-	}) {
+	}, nil) {
 		by[one.Name] = one
 	}
 
@@ -341,7 +341,7 @@ func TestListingSaysNothingAboutARoutineNobodyHasYet(t *testing.T) {
 	by := map[string]tool.Tool{}
 	for _, one := range rules.All(store, rules.Clock{
 		Now: func() time.Time { return noon }, Location: india,
-	}, id, look, stored{}) {
+	}, id, look, stored{}, nil) {
 		by[one.Name] = one
 	}
 
@@ -589,5 +589,71 @@ func TestARuleThatHoldsOffAfterSpeaking(t *testing.T) {
 	if got := call(t, by["rule_add"],
 		`{"name":"m","schedule":"every 10m","say":"hello","cool":"a while"}`); got.Outcome != conversation.OutcomeFailed {
 		t.Error("a cool of \"a while\" was accepted")
+	}
+}
+
+// tried : A trier that reports whatever it is told to.
+type tried struct{ out job.Trial }
+
+func (t tried) try(context.Context, job.Job) job.Trial { return t.out }
+
+// TestARuleIsTriedTheMomentItIsMade : The tools refuse a rule that
+// cannot be read. What nothing caught was a rule that reads
+// perfectly and is wrong -- a condition that can never hold, a
+// trigger on the wrong thing. Two of those were written in one
+// evening and both were found by running them afterwards.
+//
+// So the answer comes back with the rule, and the model sees in the
+// same turn that its rule would say nothing.
+func TestARuleIsTriedTheMomentItIsMade(t *testing.T) {
+	store := inmemory.New()
+	id := func() string { return "job_01M48E09RJW0G247RBST6712D1" }
+	silent := tried{job.Trial{Stopped: true, Why: "the check hour >= 22 did not pass"}}
+
+	by := map[string]tool.Tool{}
+	for _, one := range rules.All(store, rules.Clock{
+		Now: func() time.Time { return noon }, Location: india,
+	}, id, look, nil, silent.try) {
+		by[one.Name] = one
+	}
+
+	got := call(t, by["rule_add"],
+		`{"name":"late","schedule":"every 20m","when":"hour >= 22","say":"it is late"}`)
+	if got.Outcome == conversation.OutcomeFailed {
+		t.Fatalf("could not make one: %s", got.Content)
+	}
+	for _, want := range []string{"Created:", "it would say nothing", "hour >= 22 did not pass"} {
+		if !strings.Contains(got.Content, want) {
+			t.Errorf("the answer does not carry %q:\n%s", want, got.Content)
+		}
+	}
+
+	// And the same on a change, which is where a rule is most
+	// likely to be quietly broken.
+	spoke := tried{job.Trial{Said: "it is late, sir"}}
+	by2 := map[string]tool.Tool{}
+	for _, one := range rules.All(store, rules.Clock{
+		Now: func() time.Time { return noon }, Location: india,
+	}, id, look, nil, spoke.try) {
+		by2[one.Name] = one
+	}
+	held, _ := store.Mine(context.Background(), "usr_1", "rule", 10)
+	changed := call(t, by2["rule_update"],
+		`{"id":"`+held[0].ID+`","say":"it is late, sir"}`)
+	if !strings.Contains(changed.Content, `it would say: "it is late, sir"`) {
+		t.Errorf("a change was not tried:\n%s", changed.Content)
+	}
+}
+
+// TestARuleIsStillMadeWithNothingToTryItWith : Nil leaves a rule
+// made and unproven, which is how every rule was made before this.
+func TestARuleIsStillMadeWithNothingToTryItWith(t *testing.T) {
+	_, by := made()
+	got := call(t, by["rule_add"], `{"name":"n","schedule":"every 10m","say":"hello"}`)
+	if got.Outcome == conversation.OutcomeFailed {
+		t.Fatalf("a rule was refused for want of a trier: %s", got.Content)
+	}
+	if strings.Contains(got.Content, "Run just now") {
+		t.Errorf("it claimed to have tried one with nothing to try it with:\n%s", got.Content)
 	}
 }

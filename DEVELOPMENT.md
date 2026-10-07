@@ -13458,6 +13458,79 @@ goes through it.
 	announcement in all.
 
 
+### Checking that a rule was written properly
+
+Owner, 7 October 2026: *"this is an important rule, the AI must
+know how to use it well without making mistakes. Is there any way
+to check if the AI created or updated a rule properly?"*
+
+Three layers, and the top one did not exist.
+
+**Form** was already checked: an unreadable schedule, an hour of
+ninety-nine, a keep of "a while", a tool that writes -- all
+refused in front of whoever wrote it, and a change goes through
+`job.New` so a rule cannot be edited into a state it could not
+have been made in.
+
+**Behaviour** was checkable with Try, but only by going and
+pressing it.
+
+**Meaning** was not checked at all.
+
+#### A rule is tried the moment it is written
+
+	Created: "a rule that can never fire"; every 20m; only if
+	hour >= 23, then only if hour < 1, then says "..."
+
+	Run just now, it would say nothing: the check hour < 1 did
+	not pass.
+
+Both halves come back together, so the model sees in the same
+turn that its rule is dead and can say so or mend it. It says
+nothing aloud and writes nothing down, so a rule made and
+immediately tried is in exactly the state it would have been in
+unmade.
+
+The cycle is real -- the rule tools need the runner, the runner
+needs the registry, the registry needs the rule tools -- and the
+only thing in it that can wait is the runner, because no rule can
+be written before the server is listening. So it is named early
+and assigned late.
+
+#### And measured
+
+`TestTheModelWritesARuleProperly`, eighteen cases over the rule
+tools and the two they are most likely to be confused with.
+
+	17 right, 1 wrong
+
+The one: *"stop telling me about that until Monday"* went to
+`reminder_list`. With no prior turn "that" could be a reminder,
+and rule_quiet is hours old where reminders are not. A fair
+failure, and now a recorded boundary rather than a guess.
+
+#### What the eval does not measure, and why
+
+The first move only. A write refuses to run until its domain has
+been listed, so reaching for `rule_list` is as right as reaching
+for `rule_add`, and both are accepted: what is measured is
+whether the model goes to the rules at all rather than to the
+events or the reminders, which is where every failure went.
+
+The rule that comes out is not measured. That needs the round
+after the listing, and the gateway refuses one unless it is
+handed back the identifier it gave the first call -- which `ask`
+throws away. Two evenings of five hundreds came from guessing at
+that shape; the fix is to thread the identifier through, and it
+is the next thing here.
+
+The first run of this suite is also worth recording for what it
+got wrong: four cases failed and two of the four were the test
+rather than the model, because the harness measured the first
+call and read-before-write makes that the listing. An eval that
+is wrong in that direction is worse than none.
+
+
 ## 12. Maintaining this file
 
 When the owner states a preference, makes a decision, or corrects something,
