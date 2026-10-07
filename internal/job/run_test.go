@@ -318,3 +318,70 @@ func TestASkippedRunForgetsNothing(t *testing.T) {
 		t.Errorf("a skipped run forgot %q", after.Said)
 	}
 }
+
+// TestASilentRunIsNotRecordedAsHavingSpoken : The record of what the
+// assistant considered saying logged "said" thirty times an hour for
+// a rule that had been silent all afternoon, quoting a sentence from
+// hours earlier.
+//
+// A step that stops the sequence hands back what this rule said last
+// time, so the memory that stops it repeating itself survives a run
+// that found nothing. That is a thing to carry and never a thing
+// that was spoken, and one variable was doing both.
+func TestASilentRunIsNotRecordedAsHavingSpoken(t *testing.T) {
+	s := inmemory.New()
+	j, err := job.New("job_1", "usr_1", "anything amiss", "rule", "every 2m",
+		[]job.Step{
+			{Do: job.Call, Tool: "situation_find"},
+			{Do: job.Write, Ask: "say what was found"},
+		}, noon)
+	if err != nil {
+		t.Fatal(err)
+	}
+	// It spoke an hour ago, and is still holding that sentence.
+	j.Said = "Someone the phone could not name has tried to reach you."
+	j.Next = noon
+	s.Add(j)
+
+	kept := &journal{}
+	running := &job.Runner{
+		Store: s, Doer: stops{}, Where: india, Journal: kept,
+		Now: func() time.Time { return noon },
+	}
+	running.Once(context.Background())
+
+	if len(kept.runs) != 1 {
+		t.Fatalf("recorded %d runs, want one", len(kept.runs))
+	}
+	got := kept.runs[0]
+	if got.Said != "" {
+		t.Errorf("a silent run was written down as having said %q", got.Said)
+	}
+	if !got.Stopped {
+		t.Error("the run was not recorded as having stopped")
+	}
+
+	// And the memory still survives, which is what the carrying is
+	// for: the rule must not say that sentence again when the thing
+	// comes back.
+	after, _ := s.Get("job_1")
+	if after.Said != j.Said {
+		t.Errorf("it forgot what it had said: %q", after.Said)
+	}
+}
+
+// stops : A doer whose first step finds nothing and carries the
+// memory forward, as the real tool and write steps do.
+type stops struct{}
+
+func (stops) Do(_ context.Context, run job.Turn, _ job.Step) (job.Outcome, error) {
+	return job.Outcome{Stop: true, Why: "situation_find found nothing", Said: run.Before}, nil
+}
+
+// journal : Keeps what was written down.
+type journal struct{ runs []job.Record }
+
+func (j *journal) Wrote(_ context.Context, r job.Record) error {
+	j.runs = append(j.runs, r)
+	return nil
+}

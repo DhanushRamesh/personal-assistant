@@ -13035,6 +13035,47 @@ tool has been used for and the reason it exists: the rule was
 tuned rather than rewritten beside its predecessor.
 
 
+### A silent rule that logged itself as having spoken
+
+Found while being asked what was still missing, which is the way
+these are usually found.
+
+	outcome: said
+	said:    "Someone the phone could not name has tried..."
+	because: situation_find found nothing
+
+`anything amiss` runs every two minutes, finds nothing, and had
+written itself down as having spoken three hundred and five
+times -- quoting a sentence from hours earlier. The one page
+built to answer *"I should see in UI when it triggered, why it
+didn't speak, if spoken what it spoke"* was answering the third
+part with a lie.
+
+#### One variable doing two jobs
+
+A step that stops the sequence hands back the sentence this rule
+said last time, so the memory that stops it repeating itself
+survives a run that found nothing. `settle` needs that. The
+record of what was spoken needs the opposite -- nothing -- and
+both read the same local.
+
+	spoke      what a step said in this run
+	remember   what to keep, which may be from before
+
+A stopping step's sentence becomes the memory and never the
+speech. A step that does not stop and hands back a sentence has
+just said it, and is both.
+
+**And only where nothing has been said yet in the run.** A
+sequence that spoke and was then stopped has to remember what it
+just said, not what it said before -- which is the one ordering
+that makes this subtle rather than obvious.
+
+Three hundred rows of the old answer are left where they are.
+They are a record of what happened, and what happened is that
+the server wrote them.
+
+
 ## 12. Maintaining this file
 
 When the owner states a preference, makes a decision, or corrects something,

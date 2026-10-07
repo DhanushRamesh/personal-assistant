@@ -448,7 +448,18 @@ func (r *Runner) one(ctx context.Context, j Job, now time.Time, pass *Pass) {
 	// What went wrong, if anything did. Collected rather than
 	// recorded as it happens, so that one run leaves one record
 	// however many of its steps failed.
-	var why, said string
+	//
+	// spoke and remember are two different things and were one
+	// variable, which is how the record of what the assistant
+	// considered saying came to log "said" thirty times an hour
+	// for a rule that had been silent all afternoon.
+	//
+	// A step that stops the sequence hands back the sentence this
+	// rule said last time, so the memory that stops it repeating
+	// itself survives a run that found nothing. That is a thing to
+	// carry, never a thing that was spoken. A step that does not
+	// stop and hands back a sentence has just said it.
+	var why, spoke, remember string
 	var stopped, failed bool
 	var already []Ran
 	for _, step := range j.Steps {
@@ -470,7 +481,17 @@ func (r *Runner) one(ctx context.Context, j Job, now time.Time, pass *Pass) {
 			continue
 		}
 		if done.Said != "" {
-			said = done.Said
+			if done.Stop {
+				// Only where nothing has been said in this run.
+				// A sequence that spoke and was then stopped must
+				// remember what it just said, not what it said
+				// before.
+				if spoke == "" {
+					remember = done.Said
+				}
+			} else {
+				spoke, remember = done.Said, done.Said
+			}
 		}
 		if done.Stop {
 			pass.Stopped++
@@ -491,10 +512,10 @@ func (r *Runner) one(ctx context.Context, j Job, now time.Time, pass *Pass) {
 		// tool considered nothing.
 		r.wrote(ctx, Record{
 			UserID: j.UserID, Name: j.Name, At: now,
-			Said: said, Why: why, Stopped: stopped, Failed: failed,
+			Said: spoke, Why: why, Stopped: stopped, Failed: failed,
 		})
 	}
-	r.settle(ctx, j, now, why, said)
+	r.settle(ctx, j, now, why, remember)
 }
 
 // wrote : Writes down one run, if anybody is keeping the record.
