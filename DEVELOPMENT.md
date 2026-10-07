@@ -12581,6 +12581,84 @@ and no loss. That half goes when every client collects, which the
 step's own comment in main.go already says.
 
 
+### And, or, and what time it is
+
+Owner, 7 October 2026: *"time is a trigger, event is a trigger. I
+should be able to add like and and or operator -- like if time is
+10am and battery is less 25 or location is office."*
+
+Half of that already worked and the half that did not was not
+the half it looked like.
+
+**And was always there.** Two check steps in a row are two things
+that must both hold, because a step may stop the ones after it.
+`battery at 10` has been doing it since it was written.
+
+**Or had nowhere to go.** `ParseGate` reads exactly one source,
+one operator, one value.
+
+**And the clock could start a rule but never qualify one.** `at
+10:00` is a schedule; there was no way to say *when the battery
+drops, but only after ten*. That asymmetry is also why reminders
+cannot move onto the engine: no weekdays, no weekly.
+
+#### Where the or goes
+
+Inside one check, never between steps. Steps are the and, a step
+is the or, and anything of the shape *this and that and (either
+of these)* can be written. No nesting, no parentheses, no
+expression language -- the line the engine holds is unmoved, and
+it has to be: Tasker exists, Home Assistant exists, and a third
+automation language in this house would be a mistake.
+
+	check  hour >= 22 or day is weekend
+	check  battery.level < 25
+
+The split happens on the word before anything else is read, so
+each part is parsed by the same function one alone would be. It
+costs one thing: a value containing "or" cannot be written. No
+source or operator contains it, and the values that might are
+compared with `is`, where the place can be named differently.
+
+#### The hour, and the day
+
+	hour >= 10      hour < 18
+	day is weekday  day is weekend  day is saturday
+
+In the person's own zone, because an hour means nothing anywhere
+else. Neither can be a trigger: a time of day does not arrive, so
+there is nothing to cross.
+
+The day names are the ones Go prints, which are English. That is
+the same bargain cron makes and it does not break the rule about
+hardcoded English, which is about matching what somebody said
+into a microphone; this is a condition somebody writes down.
+`weekday` and `weekend` are there because they are what anybody
+actually wants of a clock, and spelling them as five names is
+five chances to leave one out.
+
+#### Two bugs the live probe found and the tests did not
+
+**An edit that never landed.** The script rewriting `check` also
+touched a struct field, that assertion failed, and the whole
+script wrote nothing -- atomically. It still compiled, `make
+check` still passed, and `check` was still calling `ParseGate` on
+a string with an `or` in it. A rule inserted into the database
+and watched is what showed it.
+
+**Two questions that had become one.** `Needs()` returned empty
+for anything that could not be a trigger, and the check used it
+to decide what to look up. A routine is both: it cannot set a
+rule off, and it does have to be fetched. So every condition on
+what somebody usually does compared an hour it had never read.
+Split into `Needs` -- what to look up -- and `Arrives` -- what
+could set a rule off.
+
+Both were found by inserting two rules, one that should pass and
+one that should not, and reading `why` afterwards. Neither was
+reachable from a unit test, because both were in the wiring.
+
+
 ## 12. Maintaining this file
 
 When the owner states a preference, makes a decision, or corrects something,

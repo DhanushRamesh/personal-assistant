@@ -126,6 +126,10 @@ type Step struct {
 	// Kept as written rather than parsed into fields, for the same
 	// reason as [Job.Schedule]: it is read back to the person who
 	// said it.
+	//
+	// May hold alternatives joined by "or", any one of which
+	// satisfies it. Two check steps in a row are the and; this is
+	// the or, and there is no third thing.
 	When string `json:"when,omitempty"`
 }
 
@@ -267,7 +271,7 @@ func Watched(schedule string) (Gate, error) {
 	if err != nil {
 		return Gate{}, err
 	}
-	if gate.Needs() == "" {
+	if !gate.Arrives() {
 		return Gate{}, fmt.Errorf(
 			"%w: a rule can only wait for an event, and %q is not one",
 			ErrUnreadableGate, gate.Source)
@@ -359,7 +363,7 @@ func (s Step) Valid() error {
 		if strings.TrimSpace(s.When) == "" {
 			return errors.New("job: a check with no condition")
 		}
-		if _, err := ParseGate(s.When); err != nil {
+		if _, err := ParseConditions(s.When); err != nil {
 			return err
 		}
 	default:

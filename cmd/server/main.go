@@ -642,21 +642,26 @@ func run() error {
 	// reminders move last because they are the feature most used
 	// and a new engine is wrong in small ways for a week.
 	scheduled := jobmysql.New(db.DB)
+	// One reader, used by the conditions a rule checks and by the
+	// triggers it waits for. Two would be two answers to the same
+	// question.
+	look := readings{events: deviceEvents, usually: usually,
+		where: cfg.Assistant.Location, now: cfg.Assistant.Now}
+
 	running := &job.Runner{
 		Store: scheduled,
 		Doer: doing{
 			tools: tools, speaker: speaker, written: announcements,
-			to: publishing, events: deviceEvents, here: here,
+			to: publishing, events: deviceEvents, here: here, look: look,
 			usually:  ordinarily(&profile.Reader{Memories: remembering.Store}, logger.Logger),
 			answerer: answerer, cfg: cfg,
 			now: cfg.Assistant.Now, logger: logger.Logger,
 		},
-		Readings: readings{events: deviceEvents, usually: usually,
-			where: cfg.Assistant.Location, now: cfg.Assistant.Now},
-		Journal: keeping{notes: remarked},
-		Where:   cfg.Assistant.Location,
-		Now:     cfg.Assistant.Now,
-		Logger:  logger.Logger,
+		Readings: look,
+		Journal:  keeping{notes: remarked},
+		Where:    cfg.Assistant.Location,
+		Now:      cfg.Assistant.Now,
+		Logger:   logger.Logger,
 	}
 	// The one thing the separation must not lose. Nobody is told
 	// at the time that the phone refused, because nobody asked it
@@ -1921,6 +1926,11 @@ type doing struct {
 	to      *outbox.Publisher
 	events  *eventmysql.Store
 	here    remind.Presence
+	// look : Where a condition's readings come from. The runner's
+	// own, so that a check and a trigger read the same sources --
+	// including the routine, which a reader built here would not
+	// have.
+	look job.Readings
 	// usually : The shape of this person's ordinary day, from the
 	// standing description. Nil leaves a rule writing without it,
 	// which is how every rule wrote before this.
@@ -2495,23 +2505,34 @@ func writing(ask string, already []job.Ran, before string, usually string) strin
 
 // check : Reads a condition and stops the sequence unless it holds.
 //
-// The reading is the latest event of that kind, timed by when this
+// A reading is the latest event of that kind, timed by when this
 // server was told rather than by the device's own clock, so that
-// "older than" means what it says when a phone has stopped talking.
+// "older than" means what it says when a phone has stopped
+// talking.
+//
+// One reading per kind the condition names, which is more than one
+// when it has alternatives: a check satisfied by the battery or by
+// where somebody is has to read both before it knows. The sources
+// that read nothing at all -- presence, the hour, the day, a
+// routine -- ask for no kind and are answered from the moment.
+//
+// Through the runner's own reader rather than a fresh one. Built
+// here it is a reader with no routine store, and every condition
+// on what somebody usually does would quietly never hold.
 func (d doing) check(ctx context.Context, userID string, s job.Step) (job.Outcome, error) {
-	gate, err := job.ParseGate(s.When)
+	conditions, err := job.ParseConditions(s.When)
 	if err != nil {
 		return job.Outcome{}, err
 	}
 
-	var reading job.Reading
-	if kind := gate.Needs(); kind != "" {
-		latest, err := readings{events: d.events}.Latest(ctx, userID, kind, 1)
+	got := map[string]job.Reading{}
+	for _, kind := range conditions.Needs() {
+		latest, err := d.look.Latest(ctx, userID, kind, 1)
 		if err != nil {
 			return job.Outcome{}, err
 		}
 		if len(latest) > 0 {
-			reading = latest[0]
+			got[kind] = latest[0]
 		}
 	}
 
@@ -2519,11 +2540,22 @@ func (d doing) check(ctx context.Context, userID string, s job.Step) (job.Outcom
 	// uses: nothing can tell, so nobody is held to be away.
 	away := d.here != nil && d.here.Away(ctx, userID)
 
-	passed := gate.Passes(reading, away, d.now())
+	// In their own zone, because an hour means nothing anywhere
+	// else: ten o'clock is ten where they are standing. Lengths of
+	// time are unaffected, being lengths rather than moments.
+	passed := conditions.Passes(got, away, d.now().In(d.where()))
 	d.logger.InfoContext(ctx, "a job checked a condition",
 		slog.String("when", s.When), slog.Bool("passed", passed))
 	if passed {
 		return job.Outcome{}, nil
 	}
 	return job.Outcome{Stop: true, Why: "the check " + s.When + " did not pass"}, nil
+}
+
+// where : The person's zone, or UTC.
+func (d doing) where() *time.Location {
+	if d.cfg.Assistant.Location == nil {
+		return time.UTC
+	}
+	return d.cfg.Assistant.Location
 }

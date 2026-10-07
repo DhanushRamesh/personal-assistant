@@ -129,7 +129,12 @@ var howToCondition = prompt.Lines(
 	`  "battery.level < 20", "battery.level is not 100"`,
 	`  "battery.level older than 2h" -- nothing has been reported for that long`,
 	`  "presence is here", "presence is away"`,
-	"The name on the left is an event kind their devices report.",
+	`  "hour >= 10", "hour < 18" -- the hour of the day where they are, 0 to 23`,
+	`  "day is weekday", "day is weekend", "day is saturday"`,
+	`  "usually.home.leaves older than 90m" -- past the time they usually go`,
+	"The name on the left is an event kind their devices report, or one of the above.",
+	"Several alternatives may be joined with \"or\", and any one of them satisfies it: \"hour >= 22 or day is weekend\".",
+	"For something that must hold as well, give another condition rather than joining it: each one stops the rule on its own, which is the and.",
 	"If nothing is known about it, the condition does not hold and the rule stays quiet.",
 )
 
@@ -409,7 +414,7 @@ func assemble(when string, reads []lookUp, mayCall []string, say, ask string, lo
 	}
 
 	if w := strings.TrimSpace(when); w != "" {
-		if _, err := job.ParseGate(w); err != nil {
+		if _, err := job.ParseConditions(w); err != nil {
 			return nil, readable(err)
 		}
 		steps = append(steps, job.Step{Do: job.Check, When: w})

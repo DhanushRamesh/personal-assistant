@@ -213,3 +213,92 @@ func TestAWriteNeedsSomethingToWriteAbout(t *testing.T) {
 		t.Error("a job carrying an empty write was accepted")
 	}
 }
+
+// TestAConditionMayHaveAlternatives : Owner, 7 October 2026 -- "I
+// should be able to add like and and or operator." And was already
+// the sequence: two checks in a row are two things that must both
+// hold. This is the or, and it lives inside one check.
+func TestAConditionMayHaveAlternatives(t *testing.T) {
+	where := time.FixedZone("IST", 19800)
+	saturday := time.Date(2026, 10, 10, 14, 0, 0, 0, where)
+
+	got, err := job.ParseConditions("hour >= 22 or day is weekend")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(got) != 2 {
+		t.Fatalf("read %d alternatives, want two", len(got))
+	}
+	// Neither reads anything a device reported, so neither asks for
+	// a kind and the check needs no lookup at all.
+	if kinds := got.Needs(); len(kinds) != 0 {
+		t.Errorf("asked for readings it cannot use: %v", kinds)
+	}
+	// Two in the afternoon fails the first and the second carries it.
+	if !got.Passes(nil, false, saturday) {
+		t.Error("a Saturday afternoon satisfied neither alternative")
+	}
+
+	wednesday := time.Date(2026, 10, 7, 14, 0, 0, 0, where)
+	if got.Passes(nil, false, wednesday) {
+		t.Error("a Wednesday afternoon satisfied one of them")
+	}
+	if !got.Passes(nil, false, wednesday.Add(9*time.Hour)) {
+		t.Error("eleven at night did not satisfy the hour")
+	}
+}
+
+// TestAlternativesReadEveryKindTheyNeed : A single gate reads at most
+// one kind. A condition satisfied by the battery or by where somebody
+// is has to read both before it knows which.
+func TestAlternativesReadEveryKindTheyNeed(t *testing.T) {
+	got, err := job.ParseConditions(
+		"battery.level < 20 or place.entered is office or battery.level is 100")
+	if err != nil {
+		t.Fatal(err)
+	}
+	kinds := got.Needs()
+	if len(kinds) != 2 {
+		t.Fatalf("asks for %v, want the two distinct kinds", kinds)
+	}
+
+	now := time.Date(2026, 10, 7, 14, 0, 0, 0, time.UTC)
+	at := map[string]job.Reading{
+		"battery.level": {Value: "64", At: now, Known: true},
+		"place.entered": {Value: "office", At: now, Known: true},
+	}
+	if !got.Passes(at, false, now) {
+		t.Error("at the office with a full battery satisfied nothing")
+	}
+	delete(at, "place.entered")
+	if got.Passes(at, false, now) {
+		t.Error("a kind that was never read was treated as holding")
+	}
+}
+
+// TestTheHourAndTheDayAreNotTriggers : A trigger fires when a reading
+// lands. The clock does not land, and a rule waiting for ten in the
+// morning would wait for ever.
+func TestTheHourAndTheDayAreNotTriggers(t *testing.T) {
+	for _, written := range []string{"when hour >= 10", "when day is saturday"} {
+		if _, err := job.Watched(written); err == nil {
+			t.Errorf("%q was allowed as a trigger", written)
+		}
+	}
+	// A schedule is how a clock starts a rule, and that already works.
+	if _, err := job.ParseConditions("hour >= 10"); err != nil {
+		t.Errorf("the hour could not be used as a condition: %v", err)
+	}
+}
+
+// TestAnHourThatIsNotAnHour : Caught when the rule is written rather
+// than at three in the morning.
+func TestAnHourThatIsNotAnHour(t *testing.T) {
+	for _, written := range []string{
+		"hour >= 24", "hour is noon", "hour older than 2h", "day is somedayday",
+	} {
+		if _, err := job.ParseConditions(written); err == nil {
+			t.Errorf("%q was accepted", written)
+		}
+	}
+}

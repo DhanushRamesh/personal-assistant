@@ -55,3 +55,34 @@ func TestARuleCannotWaitForARoutine(t *testing.T) {
 		t.Errorf("a routine could not be used as a condition: %v", err)
 	}
 }
+
+// TestARoutineIsFetchedEvenThoughItIsNoTrigger : Two different
+// questions that were briefly one. "Nothing to look up" is true of
+// the clock and of presence, which are answered from the moment;
+// "cannot set a rule off" is true of those and of a routine as well.
+//
+// Conflating them made every condition on a routine silently fail:
+// the check asked which kinds to read, was told none, and compared
+// an hour it had never fetched.
+func TestARoutineIsFetchedEvenThoughItIsNoTrigger(t *testing.T) {
+	got, err := job.ParseConditions("usually.home.leaves older than 1h")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if kinds := got.Needs(); len(kinds) != 1 || kinds[0] != "usually.home.leaves" {
+		t.Errorf("the check would read %v, so it compares an hour it never fetched", kinds)
+	}
+	if _, err := job.Watched("when usually.home.leaves is 10"); err == nil {
+		t.Error("a rule was allowed to wait for a routine")
+	}
+
+	for _, written := range []string{"hour >= 10", "day is saturday", "presence is here"} {
+		one, err := job.ParseConditions(written)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if kinds := one.Needs(); len(kinds) != 0 {
+			t.Errorf("%q asked to read %v, and is answered from the moment", written, kinds)
+		}
+	}
+}
