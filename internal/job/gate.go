@@ -67,6 +67,29 @@ const (
 	More    = ">"
 	AtMost  = "<="
 	AtLeast = ">="
+	// Any : Nothing about the value at all -- a reading of this
+	// kind arrived.
+	//
+	//	when power.plugged arrives
+	//
+	// Every other gate asks about a value, and for a measurement
+	// that is the whole question: what matters about a battery is
+	// what it says. For a thing that happened the value is often
+	// beside the point and sometimes absent -- a phone cannot
+	// always tell what it has been plugged into, and reports
+	// "unknown" -- so a rule that wanted every plug-in had to say
+	// `is not` against a string that could never occur. It worked
+	// and it read like a trick.
+	//
+	// Said rather than left out. "when nonsense" would be a rule
+	// that never fired and never said why, which is the failure
+	// this codebase has least patience with; "when nonsense
+	// arrives" is at least somebody meaning it.
+	//
+	// Meaningful as a trigger above all. As a condition it asks
+	// whether the kind has ever been reported, which is nearly
+	// always true; how recently is what [Within] is for.
+	Any = "arrives"
 	// Older, Within : How long ago the reading arrived, against a
 	// duration such as "2h".
 	Older  = "older than"
@@ -222,6 +245,15 @@ func (c Conditions) Deep() time.Duration {
 // comparison, and the rest is the value, which may contain spaces.
 func ParseGate(s string) (Gate, error) {
 	fields := strings.Fields(strings.TrimSpace(s))
+	// The kind and nothing else to compare: a reading of it
+	// arrived, whatever it said.
+	if len(fields) == 2 && strings.EqualFold(fields[1], Any) {
+		gate := Gate{Source: strings.ToLower(fields[0]), Op: Any}
+		if err := gate.sound(); err != nil {
+			return Gate{}, err
+		}
+		return gate, nil
+	}
 	if len(fields) < 3 {
 		return Gate{}, fmt.Errorf("%w: %q", ErrUnreadableGate, s)
 	}
@@ -286,6 +318,19 @@ func (g Gate) sound() error {
 			return fmt.Errorf("%w: %q is not a number", ErrUnreadableGate, g.Value)
 		}
 	}
+	if g.Op == Any {
+		switch g.Source {
+		case Presence, Hour, Day:
+			return fmt.Errorf("%w: %q is not something that arrives",
+				ErrUnreadableGate, g.Source)
+		}
+		if routine.Mine(g.Source) {
+			return fmt.Errorf("%w: %q is worked out rather than reported, so nothing of it arrives",
+				ErrUnreadableGate, g.Source)
+		}
+		return nil
+	}
+
 	switch g.Source {
 	case Hour:
 		if g.Op == Older || g.Op == Within {
@@ -424,6 +469,11 @@ func (g Gate) Holds(got []Reading, away bool, now time.Time) bool {
 // sorted by how its rule is written, and nothing here needs
 // editing.
 func (g Gate) Measures() bool {
+	if g.Op == Any {
+		// It asks nothing about the value, so there is no line to
+		// cross and every arrival is its own occasion.
+		return false
+	}
 	_, err := strconv.ParseFloat(strings.TrimSpace(g.Value), 64)
 	return err == nil
 }
@@ -477,6 +527,11 @@ func (g Gate) Passes(r Reading, away bool, now time.Time) bool {
 	}
 	if !r.Known {
 		return false
+	}
+	// Nothing about the value. A reading arrived, which is the
+	// whole of the question.
+	if g.Op == Any {
+		return true
 	}
 
 	value := strings.TrimSpace(r.Value)

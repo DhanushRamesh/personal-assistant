@@ -13000,6 +13000,41 @@ conditions, and pushed it onto the trigger -- which is better
 anyway, firing once a plug-in instead of six times an hour.
 
 
+### Whether a thing happened, rather than what it said
+
+	when power.plugged arrives then 15m
+
+Every gate asked about a value. For a measurement that is the
+whole question -- what matters about a battery is what it says.
+For a thing that happened the value is often beside the point and
+sometimes absent: a phone cannot always tell what it has been
+plugged into and reports "unknown", so the rule written an hour
+earlier had to say `is not nothing` -- a comparison against a
+string that could never occur. It worked and it read like a
+trick, and every occurrence-shaped kind would have needed the
+same trick: a screen unlocked, a call made, a network joined.
+
+#### The word is required
+
+The first version took the kind alone -- `when power.plugged` --
+and two existing tests refused it, rightly. `when nonsense` would
+then parse, and become a rule that never fired and never said
+why. The engine keeps no list of event kinds on purpose, so it
+cannot tell a real one from a typo; what it can do is insist that
+somebody meant it.
+
+#### And it is never a measurement
+
+It asks nothing about the value, so there is no line to cross and
+every arrival is its own occasion. Without that, a second plug-in
+would have been silent for the same reason leaving home twice
+was.
+
+Mended the rule with `rule_update`, which is the first thing that
+tool has been used for and the reason it exists: the rule was
+tuned rather than rewritten beside its predecessor.
+
+
 ## 12. Maintaining this file
 
 When the owner states a preference, makes a decision, or corrects something,

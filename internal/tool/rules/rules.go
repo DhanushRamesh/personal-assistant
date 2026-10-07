@@ -89,6 +89,8 @@ var howToSchedule = prompt.Lines(
 	`  "at 08:00" -- that hour, every day, in their own zone`,
 	`  "once 2026-10-07 06:40" -- one time, then finished`,
 	`  "when battery.level < 20" -- no clock at all; it runs the moment a reading from their device crosses that line`,
+	`  "when power.plugged arrives" -- any reading of that kind at all, whatever it says`,
+	"Use arrives for a thing that happens rather than a level that moves. A phone cannot always say what it was plugged into, and what matters is that it was.",
 	`A trigger may wait before it runs: "when power.plugged is true then 15m".`,
 	"For a question that cannot be answered at the moment it is asked -- whether the phone is really charging is only known later, by whether the level moved.",
 )
@@ -142,6 +144,7 @@ var howToTools = prompt.Text(
 var howToCondition = prompt.Lines(
 	"A condition checked each time it runs, which stops it when it does not hold. Leave it out unless they said one.",
 	`  "battery.level < 20", "battery.level is not 100"`,
+	`  "power.plugged arrives" -- any reading of that kind, whatever it says`,
 	`  "battery.level older than 2h" -- nothing has been reported for that long`,
 	`  "presence is here", "presence is away"`,
 	`  "hour >= 10", "hour < 18" -- the hour of the day where they are, 0 to 23`,

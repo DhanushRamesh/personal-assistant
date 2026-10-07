@@ -410,3 +410,61 @@ func TestWhatHasNoPast(t *testing.T) {
 		}
 	}
 }
+
+// TestAGateThatAsksOnlyWhetherSomethingArrived : Every other gate
+// asks about a value, and for a measurement that is the whole
+// question. For a thing that happened the value is often beside the
+// point and sometimes absent: a phone cannot always tell what it has
+// been plugged into and reports "unknown", so a rule wanting every
+// plug-in had to say `is not` against a string that could never
+// occur. It worked and read like a trick.
+func TestAGateThatAsksOnlyWhetherSomethingArrived(t *testing.T) {
+	now := time.Date(2026, 10, 7, 20, 0, 0, 0, time.UTC)
+
+	gate, err := job.ParseGate("power.plugged arrives")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if gate.Needs() != "power.plugged" {
+		t.Errorf("it reads %q", gate.Needs())
+	}
+	// Whatever the value, including the one the phone actually sends.
+	for _, value := range []string{"unknown", "ac", "", "anything"} {
+		if !gate.Passes(job.Reading{Value: value, At: now, Known: true}, false, now) {
+			t.Errorf("a reading saying %q did not count as having arrived", value)
+		}
+	}
+	// And nothing at all is still nothing.
+	if gate.Passes(job.Reading{}, false, now) {
+		t.Error("a kind nobody has reported counted as having arrived")
+	}
+	// It asks nothing about the value, so there is no line to cross
+	// and every arrival is its own occasion.
+	if gate.Measures() {
+		t.Error("it was taken for a measurement, so a second plug-in would be silent")
+	}
+}
+
+// TestATypoIsStillRefused : The word is required rather than taking
+// the kind alone, because "when nonsense" would be a rule that never
+// fired and never said why.
+func TestATypoIsStillRefused(t *testing.T) {
+	for _, written := range []string{"battery.level", "nonsense", "power.plugged arrived"} {
+		if _, err := job.ParseGate(written); err == nil {
+			t.Errorf("%q was accepted", written)
+		}
+	}
+}
+
+// TestWhatDoesNotArrive : The clock and presence are answered from
+// the moment, and a routine is worked out and kept. Nothing of any
+// of them ever lands.
+func TestWhatDoesNotArrive(t *testing.T) {
+	for _, written := range []string{
+		"hour arrives", "day arrives", "presence arrives", "usually.home.leaves arrives",
+	} {
+		if _, err := job.ParseGate(written); err == nil {
+			t.Errorf("%q was accepted", written)
+		}
+	}
+}
