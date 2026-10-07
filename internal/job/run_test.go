@@ -478,3 +478,38 @@ func (r *remembers) Do(_ context.Context, run job.Turn, _ job.Step) (job.Outcome
 	r.before, r.trying = run.Before, run.Trying
 	return job.Outcome{}, nil
 }
+
+// TestACheckThatCannotBeReadStopsTheRule : A step that fails does not
+// stop the sequence, deliberately -- a phone alarm that could not be
+// set must not swallow the words that go with it.
+//
+// A check is the opposite. Its whole purpose is to withhold, so a
+// broken one must withhold. It did not: a probe with three
+// conditions, the third unreadable, said its words aloud in the room.
+// The step meant to stop it failed, and failing was taken for
+// permission.
+func TestACheckThatCannotBeReadStopsTheRule(t *testing.T) {
+	s := inmemory.New()
+	j := job.Job{
+		ID: "job_1", UserID: "usr_1", Name: "a rule", Kind: "rule",
+		Schedule: "every 10m", State: job.Active, Next: noon,
+		Steps: []job.Step{
+			{Do: job.Check, When: "hour >= 99"},
+			{Do: job.Announce, Say: "it should never say this"},
+		},
+	}
+	s.Add(j)
+
+	h := &hands{}
+	runner(s, h, noon).Once(context.Background())
+
+	for _, did := range h.did {
+		if did == string(job.Announce) {
+			t.Fatal("the rule spoke although its condition could not be read")
+		}
+	}
+	after, _ := s.Get("job_1")
+	if after.Said != "" {
+		t.Errorf("it remembered saying %q", after.Said)
+	}
+}

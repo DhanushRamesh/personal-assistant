@@ -560,13 +560,34 @@ func (r *Runner) one(ctx context.Context, j Job, now time.Time, pass *Pass) {
 			already = append(already, Ran{Tool: step.Tool, Got: done.Got})
 		}
 		if err != nil {
-			// The rest still runs. A phone alarm that could not be
-			// set must not swallow the words that go with it,
-			// which is the rule the reminder and its alarm already
-			// follow.
 			pass.Failed++
 			failed = true
 			why = err.Error()
+
+			// A check that could not be read stops the sequence.
+			// Everything else carries on: a phone alarm that could
+			// not be set must not swallow the words that go with
+			// it, which is the rule the reminder and its alarm
+			// already follow.
+			//
+			// A check is the opposite of that. Its whole purpose is
+			// to withhold, so a broken one must withhold -- and it
+			// did not. A probe written this evening had three
+			// conditions, the third unreadable, and the rule said
+			// its words aloud in the room: the step that was meant
+			// to stop it failed, and failing was taken for
+			// permission.
+			//
+			// Nothing else in the sequence can be wrong in this
+			// direction. A lookup that fails leaves the steps after
+			// it less to go on; a check that fails leaves them
+			// unguarded.
+			if step.Do == Check {
+				pass.Stopped++
+				stopped = true
+				r.note("a rule's condition could not be read, so it said nothing", j, why)
+				break
+			}
 			r.note("a step failed and the sequence went on", j, why)
 			continue
 		}

@@ -151,13 +151,15 @@ var howToCondition = prompt.Lines(
 	`  "day is weekday", "day is weekend", "day is saturday"`,
 	`  "usually.home.leaves older than 90m" -- past the time they usually go`,
 	`  "link.google is broken" -- a permission that has stopped working, so everything standing on it quietly does nothing`,
+	`Several conditions may be joined with "and", and every one of them must hold: "hour >= 22 and battery.level < 20".`,
+	`Alternatives within one are joined with "or", and any of them will do: "hour >= 22 or day is weekend".`,
+	`"and" is the looser of the two, so "a and b or c" is a, and either b or c.`,
 	`  "battery.level <= 15m ago" -- no higher than it was then, so it is not rising`,
 	`  "battery.level > 1h ago" -- higher than it was an hour back`,
 	`The value "15m ago" compares a reading with its own earlier self, which is the only way to know whether something is moving.`,
 	"It needs readings going back that far, and says the condition does not hold when there are none rather than guessing.",
 	"The name on the left is an event kind their devices report, or one of the above.",
-	"Several alternatives may be joined with \"or\", and any one of them satisfies it: \"hour >= 22 or day is weekend\".",
-	"For something that must hold as well, give another condition rather than joining it: each one stops the rule on its own, which is the and.",
+
 	"If nothing is known about it, the condition does not hold and the rule stays quiet.",
 )
 
@@ -334,19 +336,23 @@ func add(store Store, clock Clock, id func() string, look Lookup) tool.Tool {
 // thing and nothing else goes in, which is what makes reading it
 // back a matter of looking rather than of guessing.
 func parts(j job.Job) (when, say, ask string, reads []lookUp, mayCall []string) {
+	// Every check, rejoined. A rule may have several and they are
+	// the and: reading only the last back would quietly drop the
+	// others the first time anybody changed the words.
+	var checks []string
 	for _, step := range j.Steps {
 		switch step.Do {
 		case job.Call:
 			reads = append(reads, lookUp{Tool: step.Tool, Args: string(step.Args)})
 		case job.Check:
-			when = step.When
+			checks = append(checks, strings.TrimSpace(step.When))
 		case job.Announce:
 			say = step.Say
 		case job.Write:
 			ask, mayCall = step.Ask, step.Tools
 		}
 	}
-	return when, say, ask, reads, mayCall
+	return strings.Join(checks, job.And), say, ask, reads, mayCall
 }
 
 // given : The new value where one was given, and the old where
@@ -632,11 +638,17 @@ func assemble(when string, reads []lookUp, mayCall []string, say, ask string, lo
 		steps = append(steps, job.Step{Do: job.Call, Tool: name, Args: args})
 	}
 
+	// One check per condition, which is how the engine ands them: a
+	// step may stop the ones after it, so two in a row are two
+	// things that must both hold.
 	if w := strings.TrimSpace(when); w != "" {
-		if _, err := job.ParseConditions(w); err != nil {
+		all, err := job.ParseAll(w)
+		if err != nil {
 			return nil, readable(err)
 		}
-		steps = append(steps, job.Step{Do: job.Check, When: w})
+		for _, one := range all {
+			steps = append(steps, job.Step{Do: job.Check, When: one.Written()})
+		}
 	}
 
 	if ask != "" {

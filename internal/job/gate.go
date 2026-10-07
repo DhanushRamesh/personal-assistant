@@ -166,6 +166,51 @@ type Gate struct {
 // whoever dictated it and "or" is the word they said.
 const Or = " or "
 
+// And : What separates one condition from the next.
+//
+// Owner, 7 October 2026, on the last gap with a cost behind it:
+// the engine ands across steps -- two checks in a row are two
+// things that must both hold -- and a rule asked for aloud could
+// only ever have one check. So what the engine could do and what
+// could be asked for had come apart, which is the worst kind of
+// gap: it changed the shape of a rule written this evening.
+//
+//	hour >= 22 and battery.level < 20
+//
+// Looser than [Or], which is the one thing here that has to be
+// learned rather than guessed: "a and b or c" is a, and either b
+// or c. It falls out of the shape -- steps are the and, a step is
+// the or -- rather than from the usual precedence, and it is said
+// plainly where a rule is written.
+//
+// It costs what Or costs: a value containing the word cannot be
+// written. No source or operator does, and the values that might
+// -- a place called "Bar and Grill" -- are compared with is,
+// where somebody can name it differently.
+const And = " and "
+
+// ParseAll : Every condition written on one step, in order.
+//
+// Each may have alternatives of its own. All of them must hold and
+// any of each will do, which is every shape of "this and that and
+// either of these" and no more: no nesting, no parentheses, no
+// expression language.
+func ParseAll(s string) ([]Conditions, error) {
+	parts := strings.Split(strings.TrimSpace(s), And)
+	out := make([]Conditions, 0, len(parts))
+	for _, part := range parts {
+		one, err := ParseConditions(part)
+		if err != nil {
+			return nil, err
+		}
+		out = append(out, one)
+	}
+	if len(out) == 0 {
+		return nil, fmt.Errorf("%w: %q", ErrUnreadableGate, s)
+	}
+	return out, nil
+}
+
 // Conditions : One condition, which may be satisfied by any of
 // several things.
 //
@@ -213,6 +258,22 @@ func ParseConditions(s string) (Conditions, error) {
 		return nil, fmt.Errorf("%w: %q", ErrUnreadableGate, s)
 	}
 	return out, nil
+}
+
+// Written : These conditions as somebody would write them, which
+// is how they are stored and read back.
+//
+// Rebuilt from the gates rather than kept as the text they came
+// from, so what is on the step is what the engine will act on: a
+// condition that reads differently from the one being checked is
+// the beginning of an argument nobody can settle.
+func (c Conditions) Written() string {
+	out := make([]string, 0, len(c))
+	for _, g := range c {
+		out = append(out, strings.TrimSpace(
+			strings.Join([]string{g.Source, g.Op, g.Value}, " ")))
+	}
+	return strings.Join(out, Or)
 }
 
 // Needs : Every event kind these conditions read, without

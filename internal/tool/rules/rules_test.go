@@ -464,3 +464,69 @@ func TestARuleCannotBeEditedIntoSomethingItCouldNotHaveBeen(t *testing.T) {
 		t.Errorf("a refused change still landed: %q", held[0].Schedule)
 	}
 }
+
+// TestARuleDictatedWithTwoConditions : The gap this closes. The
+// engine ands across steps and assemble made exactly one check, so a
+// rule asked for aloud could have one condition with alternatives
+// inside it and no second. That changed the shape of a real rule.
+func TestARuleDictatedWithTwoConditions(t *testing.T) {
+	store, by := made()
+
+	got := call(t, by["rule_add"], `{
+		"name": "late and low",
+		"schedule": "every 20m",
+		"when": "hour >= 22 and battery.level < 20",
+		"say": "it is late and the battery is low"
+	}`)
+	if got.Outcome == conversation.OutcomeFailed {
+		t.Fatalf("two conditions were refused: %s", got.Content)
+	}
+
+	held, _ := store.Mine(context.Background(), "usr_1", "rule", 10)
+	if len(held) != 1 {
+		t.Fatalf("made %d rules", len(held))
+	}
+	var checks []string
+	for _, step := range held[0].Steps {
+		if step.Do == job.Check {
+			checks = append(checks, step.When)
+		}
+	}
+	if len(checks) != 2 {
+		t.Fatalf("it has %d checks, want one per condition: %v", len(checks), checks)
+	}
+	if checks[0] != "hour >= 22" || checks[1] != "battery.level < 20" {
+		t.Errorf("the checks read %v", checks)
+	}
+}
+
+// TestChangingARuleKeepsEveryCondition : parts reads the arguments
+// back off the steps, and reading only the last check would quietly
+// drop the others the first time anybody changed the words.
+func TestChangingARuleKeepsEveryCondition(t *testing.T) {
+	store, by := made()
+	call(t, by["rule_add"], `{
+		"name": "late and low",
+		"schedule": "every 20m",
+		"when": "hour >= 22 and battery.level < 20",
+		"say": "the old words"
+	}`)
+	held, _ := store.Mine(context.Background(), "usr_1", "rule", 10)
+	id := held[0].ID
+
+	got := call(t, by["rule_update"], `{"id":"`+id+`","say":"the new words"}`)
+	if got.Outcome == conversation.OutcomeFailed {
+		t.Fatalf("could not change it: %s", got.Content)
+	}
+
+	held, _ = store.Mine(context.Background(), "usr_1", "rule", 10)
+	var checks []string
+	for _, step := range held[0].Steps {
+		if step.Do == job.Check {
+			checks = append(checks, step.When)
+		}
+	}
+	if len(checks) != 2 {
+		t.Fatalf("changing the words left %d checks, want both: %v", len(checks), checks)
+	}
+}

@@ -538,3 +538,76 @@ func TestWhatAConnectionCanBe(t *testing.T) {
 		}
 	}
 }
+
+// TestConditionsJoinedWithAnd : The engine ands across steps -- two
+// checks in a row are two things that must both hold -- and a rule
+// asked for aloud could only ever have one check. What the engine
+// could do and what could be asked for had come apart.
+func TestConditionsJoinedWithAnd(t *testing.T) {
+	all, err := job.ParseAll("hour >= 22 and battery.level < 20")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(all) != 2 {
+		t.Fatalf("read %d conditions, want two", len(all))
+	}
+	if got := all[0].Written(); got != "hour >= 22" {
+		t.Errorf("the first reads %q", got)
+	}
+	if got := all[1].Written(); got != "battery.level < 20" {
+		t.Errorf("the second reads %q", got)
+	}
+}
+
+// TestAndIsLooserThanOr : The one thing here that has to be learned
+// rather than guessed. It falls out of the shape -- steps are the
+// and, a step is the or -- rather than from the usual precedence.
+func TestAndIsLooserThanOr(t *testing.T) {
+	all, err := job.ParseAll("hour >= 22 and battery.level < 20 or presence is away")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(all) != 2 {
+		t.Fatalf("read %d conditions, want two: the hour, then either of the other two", len(all))
+	}
+	if len(all[1]) != 2 {
+		t.Errorf("the second condition holds %d alternatives, want two", len(all[1]))
+	}
+
+	where := time.FixedZone("IST", 19800)
+	late := time.Date(2026, 10, 7, 23, 0, 0, 0, where)
+	early := time.Date(2026, 10, 7, 14, 0, 0, 0, where)
+	full := map[string][]job.Reading{
+		"battery.level": {{Value: "80", At: late, Known: true}},
+	}
+
+	// Late, battery full, and away: the hour holds and the second
+	// condition is carried by presence.
+	if !all[0].Passes(full, true, late) || !all[1].Passes(full, true, late) {
+		t.Error("late and away did not satisfy both conditions")
+	}
+	// Early is early however the rest of it stands.
+	if all[0].Passes(full, true, early) {
+		t.Error("two in the afternoon passed an hour of ten at night")
+	}
+	// Late and here with a full battery satisfies neither
+	// alternative of the second.
+	if all[1].Passes(full, false, late) {
+		t.Error("a full battery with somebody in the room satisfied the second condition")
+	}
+}
+
+// TestOneBadConditionRefusesTheWhole : Caught in front of whoever
+// wrote it, rather than a rule that half works at three in the
+// morning.
+func TestOneBadConditionRefusesTheWhole(t *testing.T) {
+	for _, written := range []string{
+		"hour >= 22 and nonsense",
+		"hour >= 99 and battery.level < 20",
+		"battery.level < 20 and hour is noon",
+	} {
+		if _, err := job.ParseAll(written); err == nil {
+			t.Errorf("%q was accepted", written)
+		}
+	}
+}

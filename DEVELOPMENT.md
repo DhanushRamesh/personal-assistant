@@ -13319,6 +13319,66 @@ measure that both ways rather than reason about it -- a wider
 description buys over-reach. `make evals` has not been run on it.
 
 
+### Two conditions, said aloud
+
+The engine ands across steps -- a step may stop the ones after
+it, so two checks in a row are two things that must both hold --
+and `assemble` made exactly one check. So a rule asked for aloud
+could have one condition with alternatives inside it and no
+second, and what the engine could do had come apart from what
+could be asked for.
+
+That is the worst kind of gap, because it changes the work
+quietly: the charging rule written this evening wanted three
+conditions and became a trigger instead, and the shape was
+decided by what could be dictated rather than by what was right.
+
+	when: "hour >= 22 and battery.level < 20"
+	  ->  only if hour >= 22, then only if battery.level < 20
+
+#### "and" is the looser of the two
+
+	a and b or c   is   a, and either b or c
+
+Which has to be learned rather than guessed, and is said where a
+rule is written. It falls out of the shape -- steps are the and, a
+step is the or -- rather than from the usual precedence, and it
+buys every form of *this and that and either of these* with no
+nesting, no parentheses and no expression language.
+
+It costs what `or` costs: a value containing the word cannot be
+written. Nothing in a source or an operator does, and the values
+that might are compared with `is`, where the place can be named
+differently.
+
+**And `rule_update` reads every check back.** The arguments are
+rebuilt from the steps, so reading only the last one would have
+dropped the others the first time anybody changed the words.
+There is a test for exactly that.
+
+#### What the probe found, by speaking in the room
+
+A probe with three conditions, the third deliberately unreadable:
+
+	why:  that condition could not be read: "99" is not an hour
+	said: all three held
+
+**The check failed and the announcement ran anyway.** A step that
+errors does not stop the sequence, deliberately -- *a phone alarm
+that could not be set must not swallow the words that go with
+it*. That is right for an alarm and exactly backwards for a
+check, whose whole purpose is to withhold.
+
+So failing was taken for permission. Nothing else in a sequence
+can be wrong in this direction: a lookup that fails leaves the
+steps after it less to go on, and a check that fails leaves them
+unguarded.
+
+A failed check now stops the rule. Found by writing a throwaway
+probe badly, which is the second time today that a deliberate
+mistake in a test has turned up a real one.
+
+
 ## 12. Maintaining this file
 
 When the owner states a preference, makes a decision, or corrects something,
