@@ -113,6 +113,13 @@ func Prompt(part Part, e Evidence) string {
 			"Those are facts about a tool being used and they are not facts about a person.",
 		),
 		prompt.Text(
+			"Leave out anything that is looked up at the moment it matters.",
+			"Anything dated that has not happened yet, and anything still outstanding, is read when it is needed and is right then.",
+			"Written here it is a snapshot instead, and this is read before every answer -- so one that has since been called off is believed in place of going and looking.",
+			"What belongs here is what is true of them over weeks, not what is on this Thursday.",
+			"That somebody's birthday falls in March is a standing fact and stays. That they have something booked on the thirtieth is not, however firmly it is written down somewhere.",
+		),
+		prompt.Text(
 			"Only what is in front of you.",
 			"Where you are guessing, say so in the sentence -- 'seems to', 'appears to' -- and where there is not enough to tell, leave it out entirely rather than filling the gap.",
 			"Do not flatter them, and do not write anything you would not be able to point at a line of evidence for.",
@@ -229,6 +236,9 @@ func section(part Part) string {
 			"How they behave: how they ask for things, what they want more of and less of, what they lose patience with.",
 			"Their weeks rather than their days -- which days differ from the others and how -- since the day itself is the part above.",
 			"This part may say things the counts only imply, and it is the only part that may.",
+			"What it may not do is sum somebody up. Write what they do; do not write what kind of person that makes them.",
+			"Spelling a name out letter by letter is worth having. Being organised is a verdict passed on somebody from a handful of things they did, and this is read before every answer as though it were a fact about them.",
+			"A disposition drawn from two occasions is the easiest thing here to get wrong and the hardest to notice afterwards, because nothing in a later week will contradict it -- it will simply go on being read as true of them.",
 		)
 	}
 	return ""
