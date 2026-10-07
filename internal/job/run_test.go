@@ -385,3 +385,96 @@ func (j *journal) Wrote(_ context.Context, r job.Record) error {
 	j.runs = append(j.runs, r)
 	return nil
 }
+
+// TestATrialSaysWhatItWouldSayAndSaysNothing : A rule could be made
+// and then nothing done but wait for the world to set it off. That is
+// how a rule that was wrong stayed wrong for a day, and why a rule
+// written in the evening could not be shown to work at all.
+//
+// The same steps through the same code against the same readings,
+// because a trial down a different path would be testing the path.
+// Only the announcing is held back.
+func TestATrialSaysWhatItWouldSayAndSaysNothing(t *testing.T) {
+	s := inmemory.New()
+	j, err := job.New("job_1", "usr_1", "a rule", "rule", "every 10m",
+		[]job.Step{
+			{Do: job.Call, Tool: "event_recent"},
+			{Do: job.Announce, Say: "the battery is low"},
+		}, noon)
+	if err != nil {
+		t.Fatal(err)
+	}
+	j.Next = noon
+	s.Add(j)
+
+	kept := &journal{}
+	running := &job.Runner{
+		Store: s, Doer: &hands{}, Where: india, Journal: kept,
+		Now: func() time.Time { return noon },
+	}
+	tried := running.Try(context.Background(), j)
+
+	if len(tried.Steps) != 2 {
+		t.Fatalf("it ran %d steps, want both", len(tried.Steps))
+	}
+	if tried.Stopped {
+		t.Error("it stopped, and nothing in it stops")
+	}
+
+	// Nothing written down: not the run, not what it said, not when
+	// it next runs. A trial that moved the rule on would be a trial
+	// that changed the thing being tried.
+	if len(kept.runs) != 0 {
+		t.Errorf("a trial was written into the record: %+v", kept.runs)
+	}
+	after, _ := s.Get("job_1")
+	if after.Said != "" {
+		t.Errorf("a trial was remembered as something said: %q", after.Said)
+	}
+	if !after.Last.IsZero() {
+		t.Error("a trial was recorded as a run")
+	}
+	if !after.Next.Equal(noon) {
+		t.Errorf("a trial moved its next run to %s", after.Next)
+	}
+}
+
+// TestATrialIsToldWhatTheRuleLastSaid : So it answers the question
+// actually being asked -- would this speak, now, as things stand. A
+// rule holding a sentence it has already said will say so, which is
+// the truth and is worth seeing.
+func TestATrialIsToldWhatTheRuleLastSaid(t *testing.T) {
+	s := inmemory.New()
+	j, err := job.New("job_1", "usr_1", "a rule", "rule", "every 10m",
+		[]job.Step{{Do: job.Write, Ask: "say what is amiss"}}, noon)
+	if err != nil {
+		t.Fatal(err)
+	}
+	j.Said = "it was already said"
+	s.Add(j)
+
+	seen := &remembers{}
+	running := &job.Runner{
+		Store: s, Doer: seen, Where: india,
+		Now: func() time.Time { return noon },
+	}
+	running.Try(context.Background(), j)
+
+	if seen.before != "it was already said" {
+		t.Errorf("the trial was told %q was said last time", seen.before)
+	}
+	if !seen.trying {
+		t.Error("the step was not told this was a trial, so it would have spoken")
+	}
+}
+
+// remembers : A doer that keeps what it was told about the turn.
+type remembers struct {
+	before string
+	trying bool
+}
+
+func (r *remembers) Do(_ context.Context, run job.Turn, _ job.Step) (job.Outcome, error) {
+	r.before, r.trying = run.Before, run.Trying
+	return job.Outcome{}, nil
+}

@@ -765,7 +765,7 @@ class _RulesModule extends StatelessWidget {
                       color: context.colors.textSecondary,
                     ),
                   ),
-                for (final r in held.rules) _RuleTile(rule: r),
+                for (final r in held.rules) _RuleTile(rule: r, state: state),
                 if (held.usually.isNotEmpty) _Usually(usually: held.usually),
               ],
             ),
@@ -860,9 +860,10 @@ class _Usually extends StatelessWidget {
 /// working, which is the thing worth noticing and the thing nobody
 /// goes looking for.
 class _RuleTile extends StatefulWidget {
-  const _RuleTile({required this.rule});
+  const _RuleTile({required this.rule, required this.state});
 
   final Rule rule;
+  final AppState state;
 
   @override
   State<_RuleTile> createState() => _RuleTileState();
@@ -870,6 +871,17 @@ class _RuleTile extends StatefulWidget {
 
 class _RuleTileState extends State<_RuleTile> {
   bool _open = false;
+
+  /// _tried : What it did when it was last tried here, if it has
+  /// been. Kept on the tile rather than in the app state, because it
+  /// is about this one rule and this one look at it.
+  Tried? _tried;
+
+  /// _try : Runs it now and shows what it did.
+  Future<void> _try() async {
+    final out = await widget.state.tryRule(widget.rule.id);
+    if (mounted) setState(() => _tried = out);
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -939,6 +951,8 @@ class _RuleTileState extends State<_RuleTile> {
                     ],
                   ),
                 ),
+                const SizedBox(width: AppSpacing.sm),
+                _SectionLink(label: 'Try', onTap: _try),
                 if (steps > 0) ...[
                   const SizedBox(width: AppSpacing.sm),
                   Icon(
@@ -950,6 +964,7 @@ class _RuleTileState extends State<_RuleTile> {
               ],
             ),
           ),
+          if (_tried case final t?) _Tried(tried: t),
           if (_open)
             Padding(
               padding: const EdgeInsets.only(
@@ -985,6 +1000,49 @@ class _RuleTileState extends State<_RuleTile> {
                       ),
                     ),
                 ],
+              ),
+            ),
+        ],
+      ),
+    );
+  }
+}
+
+/// _Tried : What a rule did when it was tried, said nothing aloud.
+///
+/// Beneath the rule rather than in a dialog, because the thing it
+/// answers -- would this speak, now, as things stand -- is read
+/// against the rule itself and often more than once.
+class _Tried extends StatelessWidget {
+  const _Tried({required this.tried});
+
+  final Tried tried;
+
+  @override
+  Widget build(BuildContext context) {
+    final colors = context.colors;
+    return Padding(
+      padding: const EdgeInsets.only(left: 23, top: AppSpacing.xs),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text(
+            tried.said.isNotEmpty
+                ? 'Tried: it would say "${tried.said}"'
+                : 'Tried: it would say nothing'
+                      '${tried.why.isEmpty ? '' : ' — ${tried.why}'}',
+            style: context.text.caption.copyWith(
+              color: tried.said.isNotEmpty ? colors.textSecondary : colors.textMuted,
+            ),
+          ),
+          for (final step in tried.steps)
+            Padding(
+              padding: const EdgeInsets.only(top: AppSpacing.xxs),
+              child: Text(
+                step.did.isEmpty
+                    ? '· ${step.does}'
+                    : '· ${step.does} — ${step.did}',
+                style: context.text.caption.copyWith(color: colors.textMuted),
               ),
             ),
         ],

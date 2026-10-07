@@ -41,6 +41,75 @@ const (
 	MaxLimit     = 500
 )
 
+// Trier : Something that can run a rule without saying anything.
+type Trier interface {
+	Try(ctx context.Context, j job.Job) job.Trial
+}
+
+// TriedResponse : What a rule did when it was tried.
+type TriedResponse struct {
+	// Said : What it would have said, empty when it would have
+	// said nothing.
+	Said string `json:"said,omitempty"`
+	// Stopped : Whether a step ended the sequence early.
+	Stopped bool `json:"stopped"`
+	// Why : Which step stopped it, or what went wrong.
+	Why string `json:"why,omitempty"`
+	// Steps : What each step did, as far as it got.
+	Steps []Step `json:"steps"`
+}
+
+// Try : Runs a rule now and says what it did, saying nothing aloud.
+//
+// A rule could be made and then nothing done but wait for the
+// world to set it off. That is how a rule that was wrong stayed
+// wrong for a day, and why a rule written tonight could not be
+// shown to work at all.
+//
+// Nothing is written down and nothing is said. The same steps run
+// through the same code against the same readings, because a
+// trial down a different path would be testing the path.
+func (h *Handler) Try(w http.ResponseWriter, r *http.Request) {
+	ctx := r.Context()
+	if h.store == nil || h.trier == nil {
+		httpx.WriteError(ctx, w, http.StatusNotImplemented,
+			"This server cannot try rules.")
+		return
+	}
+
+	id := chi.URLParam(r, "id")
+	held, err := h.store.Mine(ctx, authn.Of(ctx).User.ID, "", MaxLimit)
+	if err != nil {
+		h.Fail(ctx, w, "reading the rules", err)
+		return
+	}
+	var want job.Job
+	for _, j := range held {
+		if j.ID == id {
+			want = j
+			break
+		}
+	}
+	if want.ID == "" {
+		httpx.WriteError(ctx, w, http.StatusNotFound, "There is no rule with that identifier.")
+		return
+	}
+
+	tried := h.trier.Try(ctx, want)
+	out := TriedResponse{Said: tried.Said, Stopped: tried.Stopped, Why: tried.Why}
+	out.Steps = make([]Step, 0, len(tried.Steps))
+	for i, step := range tried.Steps {
+		did := ""
+		if i < len(tried.Did) {
+			did = tried.Did[i]
+		}
+		out.Steps = append(out.Steps, Step{
+			Do: string(step.Do), Says: says(step), Did: did,
+		})
+	}
+	httpx.WriteJSON(ctx, w, http.StatusOK, out)
+}
+
 // Store : Where the rules are kept.
 type Store interface {
 	// Mine : This person's, newest first. An empty kind is all of
@@ -55,13 +124,14 @@ type Handler struct {
 	httpx.Responder
 	store   Store
 	routine routine.Store
+	trier   Trier
 }
 
 // New : Builds one.
-func New(logger *slog.Logger, store Store, usually routine.Store) *Handler {
+func New(logger *slog.Logger, store Store, usually routine.Store, trier Trier) *Handler {
 	return &Handler{
 		Responder: httpx.Responder{Logger: logger},
-		store:     store, routine: usually,
+		store:     store, routine: usually, trier: trier,
 	}
 }
 
@@ -69,6 +139,7 @@ func New(logger *slog.Logger, store Store, usually routine.Store) *Handler {
 // authentication.
 func (h *Handler) Mount(r chi.Router) {
 	r.Get("/v1/rules", h.List)
+	r.Post("/v1/rules/{id}/try", h.Try)
 }
 
 // Step : One thing a rule does, as a line to read.
@@ -79,6 +150,10 @@ type Step struct {
 	// together here rather than in the client, so that a new kind
 	// of step does not need two edits to be readable.
 	Says string `json:"says"`
+	// Did : What came of it when the rule was tried -- what a tool
+	// found, what a check decided, what would have been said.
+	// Empty in a listing, which is a rule at rest.
+	Did string `json:"did,omitempty"`
 }
 
 // Rule : One standing rule.

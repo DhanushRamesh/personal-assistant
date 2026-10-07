@@ -461,6 +461,11 @@ class AssistantApi {
     await _send('GET', '/v1/rules', query: {if (past) 'past': 'true'}),
   );
 
+  /// tryRule : Runs one now and says what it did, saying nothing
+  /// aloud and writing nothing down.
+  Future<Tried> tryRule(String id) async =>
+      Tried.fromJson(await _send('POST', '/v1/rules/$id/try'));
+
   /// snoozeReminder : Puts one off by the given number of minutes.
   ///
   /// A repeating one is not moved. The server makes a single one-off

@@ -110,6 +110,21 @@ type Turn struct {
 	// written sentence is held to it: words fixed when the rule
 	// was made are meant to repeat.
 	Before string
+	// Trying : Whether this is a trial rather than the rule
+	// running.
+	//
+	// Everything happens except the saying. A rule is written and
+	// then nothing can be done but wait for the world to set it
+	// off, which is how a rule that was wrong stayed wrong for a
+	// day and how two rules written tonight cannot be shown to
+	// work at all.
+	//
+	// The same steps, through the same code, reading the same
+	// readings -- a trial that took a different path would be
+	// testing the path rather than the rule. Only the announcing
+	// is held back, because a trial that spoke in the room is a
+	// side effect nobody asked for.
+	Trying bool
 	// Worth : How long what this rule says stays worth saying, or
 	// zero to leave it to the kind of announcement it is.
 	//
@@ -405,6 +420,81 @@ func (r *Runner) crossed(ctx context.Context, userID string, g Gate, now time.Ti
 		return false, nil
 	}
 	return !g.Passes(got[1], false, now), nil
+}
+
+// Trial : What a rule did when it was tried.
+type Trial struct {
+	// Said : What it would have said, empty when it would have
+	// said nothing.
+	Said string
+	// Stopped : Whether a step ended the sequence early.
+	Stopped bool
+	// Why : Which step stopped it, or what went wrong.
+	Why string
+	// Steps : What each step did, in order, as far as it got.
+	Steps []Step
+	// Did : What came of each step, beside it.
+	Did []string
+}
+
+// Try : Runs a rule now and says what it did, without saying
+// anything aloud.
+//
+// Nothing is written down: not the run, not what it said, not
+// when it next runs. A trial that moved the rule on would be a
+// trial that changed the thing being tried, and one that
+// remembered its sentence would silence the real run that
+// followed it.
+//
+// What it does carry is what the rule last said, so a trial
+// answers the question actually being asked -- would this speak,
+// now, as things stand. A rule holding a sentence it has already
+// said will say so, which is the truth and is worth seeing.
+func (r *Runner) Try(ctx context.Context, j Job) Trial {
+	var out Trial
+	if r == nil || r.Doer == nil {
+		return out
+	}
+
+	var already []Ran
+	for _, step := range j.Steps {
+		done, err := r.Doer.Do(ctx,
+			Turn{UserID: j.UserID, Already: already, Before: j.Said,
+				Worth: j.Worth(), Trying: true}, step)
+		out.Steps = append(out.Steps, step)
+
+		switch {
+		case err != nil:
+			out.Did = append(out.Did, err.Error())
+			out.Why = err.Error()
+		case done.Stop:
+			out.Did = append(out.Did, done.Why)
+		case done.Said != "":
+			out.Did = append(out.Did, done.Said)
+		case done.Got != "":
+			out.Did = append(out.Did, done.Got)
+		default:
+			out.Did = append(out.Did, "")
+		}
+
+		if step.Do == Call && step.Tool != "" {
+			already = append(already, Ran{Tool: step.Tool, Got: done.Got})
+		}
+		if err != nil {
+			continue
+		}
+		if done.Said != "" && !done.Stop {
+			out.Said = done.Said
+		}
+		if done.Stop {
+			out.Stopped = true
+			if out.Why == "" {
+				out.Why = done.Why
+			}
+			break
+		}
+	}
+	return out
 }
 
 // Once : One look for work.

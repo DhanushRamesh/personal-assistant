@@ -929,7 +929,7 @@ class Snoozed {
 
 /// RuleStep : One thing a rule does.
 class RuleStep {
-  const RuleStep({required this.does, required this.says});
+  const RuleStep({required this.does, required this.says, this.did = ''});
 
   /// does : announce, tool, write, relay or check.
   final String does;
@@ -938,9 +938,46 @@ class RuleStep {
   /// kind of step does not need an edit here as well.
   final String says;
 
+  /// did : What came of it when the rule was tried. Empty in a
+  /// listing, which is a rule at rest.
+  final String did;
+
   factory RuleStep.fromJson(Map<String, dynamic> json) => RuleStep(
     does: json['do'] as String? ?? '',
     says: json['says'] as String? ?? '',
+    did: json['did'] as String? ?? '',
+  );
+}
+
+/// Tried : What a rule did when it was tried, having said nothing.
+class Tried {
+  const Tried({
+    this.said = '',
+    this.stopped = false,
+    this.why = '',
+    this.steps = const [],
+  });
+
+  /// said : What it would have said, empty when it would have said
+  /// nothing — which is what most rules do most of the time.
+  final String said;
+
+  /// stopped : Whether a step ended the sequence early.
+  final bool stopped;
+
+  /// why : Which step stopped it, or what went wrong.
+  final String why;
+
+  final List<RuleStep> steps;
+
+  factory Tried.fromJson(Map<String, dynamic> json) => Tried(
+    said: json['said'] as String? ?? '',
+    stopped: json['stopped'] as bool? ?? false,
+    why: json['why'] as String? ?? '',
+    steps: ((json['steps'] as List<dynamic>?) ?? const [])
+        .whereType<Map<String, dynamic>>()
+        .map(RuleStep.fromJson)
+        .toList(),
   );
 }
 

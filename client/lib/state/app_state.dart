@@ -785,6 +785,24 @@ class AppState extends ChangeNotifier {
     _set(busy: false);
   }
 
+  /// tryRule : Runs one now and returns what it did, or null when it
+  /// could not be tried.
+  ///
+  /// Nothing about the rule changes, so nothing is read again
+  /// afterwards: a trial that moved the rule on would be a trial that
+  /// changed the thing being tried.
+  Future<Tried?> tryRule(String id) async {
+    _set(busy: true, error: null);
+    Tried? out;
+    try {
+      out = await api.tryRule(id);
+    } on Object catch (e) {
+      _error = _explain(e);
+    }
+    _set(busy: false);
+    return out;
+  }
+
   /// snoozeReminder : Puts one off, then reads the list again.
   ///
   /// Read again rather than patched in place: putting off a repeating one

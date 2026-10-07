@@ -13185,6 +13185,60 @@ healthy answer.
 will say so within half an hour.
 
 
+### Trying a rule
+
+A rule could be made and then nothing done but wait for the world
+to set it off. That is how a rule logging itself wrongly stayed
+wrong for a day, and why two rules written this evening could not
+be shown to work at all.
+
+**Try**, beside each rule on the page. It runs now and says what
+it would have said, having said nothing.
+
+#### The same path, with one half held back
+
+The same steps, through the same code, against the same readings.
+A trial down a different path would be testing the path rather
+than the rule, so `Turn` carries a flag and the three places that
+publish check it. Everything up to the sentence happens; only the
+saying of it does not.
+
+**Nothing is written down.** Not the run, not what it said, not
+when it next runs. A trial that moved the rule on would be a
+trial that changed the thing being tried, and one that remembered
+its sentence would silence the real run that followed it.
+
+**But it is told what the rule last said.** So it answers the
+question actually being asked -- would this speak, now, as things
+stand. A rule holding a sentence it has already said answers
+"nothing new to say", which is the truth and is worth seeing.
+
+#### It found a bug in its first use
+
+Trying `a call nobody returned`, written two hours earlier:
+
+	it would say "There are two missed calls that have not been
+	followed up, sir -- one from an unsaved number ending 0867,
+	and one from a number ending 8376."
+
+Both were strangers. The trigger `call.missed is not unknown`
+filters when the rule *fires*; the lookup beside it then hands
+the model every missed call including the ones the trigger was
+meant to keep out. And it read out telephone digits, which the
+rule about a caller with no name exists to prevent.
+
+The gate filters the occasion. It does not filter the evidence,
+and nothing had made that distinction visible before.
+
+Mended with `rule_update` -- ignore the unknown ones, never read
+a number -- and tried again:
+
+	it would say nothing -- there was nothing new to say
+
+Which is correct: all three of today's missed calls are from
+strangers.
+
+
 ## 12. Maintaining this file
 
 When the owner states a preference, makes a decision, or corrects something,

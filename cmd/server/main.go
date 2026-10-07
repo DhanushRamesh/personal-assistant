@@ -729,6 +729,7 @@ func run() error {
 		Remarks:        remarked,
 		Rules:          scheduled,
 		Usually:        usually,
+		Trying:         running,
 		Owed:           owed,
 		Naming:         naming(cfg, logger.Logger),
 		Tools:          tools,
@@ -1981,6 +1982,12 @@ func (d doing) Do(ctx context.Context, run job.Turn, s job.Step) (job.Outcome, e
 
 	switch s.Do {
 	case job.Announce:
+		// A trial says what it would say and says nothing. The
+		// sentence is fixed, so there is nothing to work out and
+		// nothing to hold back but the announcing itself.
+		if run.Trying {
+			return job.Outcome{Said: s.Say}, nil
+		}
 		// Published, which is where announcements go now, and
 		// spoken, which is the only way one is currently heard.
 		// The second half goes when a client collects.
@@ -2228,7 +2235,7 @@ func (d doing) relay(ctx context.Context, run job.Turn) (job.Outcome, error) {
 		d.logger.InfoContext(ctx, "a job had nothing new to pass on")
 		return job.Outcome{Stop: true, Why: "it had already said that", Said: said}, nil
 	}
-	if err := d.publish(ctx, run.UserID, said, run.Worth); err != nil {
+	if err := d.publish(ctx, run, said); err != nil {
 		return job.Outcome{}, err
 	}
 	d.logger.InfoContext(ctx, "a job passed on what it found")
@@ -2238,7 +2245,14 @@ func (d doing) relay(ctx context.Context, run job.Turn) (job.Outcome, error) {
 // publish : Writes an announcement down, says it, and records it.
 //
 // The speaking is the half that goes when every client collects.
-func (d doing) publish(ctx context.Context, userID, said string, worth time.Duration) error {
+func (d doing) publish(ctx context.Context, run job.Turn, said string) error {
+	// A trial has already worked the sentence out, which is the
+	// expensive and interesting half. Publishing it is the half
+	// that would reach somebody, and is the only half held back.
+	if run.Trying {
+		return nil
+	}
+	userID, worth := run.UserID, run.Worth
 	o, err := outbox.Keeping(outboxmysql.ID(), userID,
 		conversation.Immediate, said, d.now(), worth)
 	if err != nil {
@@ -2318,18 +2332,15 @@ func (d doing) write(ctx context.Context, run job.Turn, s job.Step) (job.Outcome
 		return job.Outcome{Stop: true, Why: "it had already said that", Said: said}, nil
 	}
 
-	o, err := outbox.Keeping(outboxmysql.ID(), run.UserID,
-		conversation.Immediate, said, d.now(), run.Worth)
-	if err != nil {
+	// The sentence is worked out either way, which is the half
+	// worth seeing. Only the saying of it is held back.
+	if run.Trying {
+		return job.Outcome{Said: said}, nil
+	}
+
+	if err := d.publish(ctx, run, said); err != nil {
 		return job.Outcome{}, err
 	}
-	if err := d.to.Publish(ctx, o); err != nil {
-		return job.Outcome{}, err
-	}
-	if err := announcement.Speak(ctx, d.speaker, conversation.Immediate, said); err != nil {
-		return job.Outcome{}, err
-	}
-	d.written.Announced(ctx, run.UserID, said)
 	d.logger.InfoContext(ctx, "a job wrote what to say", slog.String("ask", s.Ask))
 	return job.Outcome{Said: said}, nil
 }

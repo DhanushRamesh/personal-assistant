@@ -145,6 +145,8 @@ type Options struct {
 	// Usually : What the person usually does, as conditions a rule
 	// may stand on.
 	Usually routine.Store
+	// Trying : Runs a rule on demand without it saying anything.
+	Trying rulesapi.Trier
 
 	// Owed : What each client still owes somebody to say, which it
 	// collects for itself. Named apart from Announcements above:
@@ -270,7 +272,7 @@ func New(opts Options) *Server {
 		memories:      memories.New(opts.Logger, opts.Memories),
 		tools:         toolsapi.New(opts.Logger, opts.Tools),
 		remarks:       remarksapi.New(opts.Logger, opts.Remarks),
-		rules:         rulesapi.New(opts.Logger, opts.Rules, opts.Usually),
+		rules:         rulesapi.New(opts.Logger, opts.Rules, opts.Usually, opts.Trying),
 		announcements: announcementsapi.New(opts.Logger, opts.Owed, nil),
 	}
 	s.routes()
