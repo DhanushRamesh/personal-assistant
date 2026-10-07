@@ -944,6 +944,57 @@ class RuleStep {
   );
 }
 
+/// GoogleAccount : What permission the assistant has to reach Google.
+class GoogleAccount {
+  const GoogleAccount({
+    this.connected = false,
+    this.configurable = false,
+    this.email = '',
+    this.scopes = const [],
+    this.connectedAt,
+    this.refreshedAt,
+    this.broken = '',
+  });
+
+  /// connected : Whether there is a usable permission.
+  final bool connected;
+
+  /// configurable : Whether this server has client credentials at all.
+  /// False means there is nothing to connect and the screen should say
+  /// so rather than offer a button that cannot work.
+  final bool configurable;
+
+  final String email;
+
+  /// scopes : What Google actually granted, which is not always what
+  /// was asked for.
+  final List<String> scopes;
+
+  /// connectedAt, refreshedAt : When permission was given, and when it
+  /// was last known to work.
+  final DateTime? connectedAt;
+  final DateTime? refreshedAt;
+
+  /// broken : Why it stopped working, when it has. Empty while it works.
+  final String broken;
+
+  factory GoogleAccount.fromJson(Map<String, dynamic> json) => GoogleAccount(
+    connected: json['connected'] as bool? ?? false,
+    configurable: json['configurable'] as bool? ?? false,
+    email: json['email'] as String? ?? '',
+    scopes: ((json['scopes'] as List<dynamic>?) ?? const [])
+        .whereType<String>()
+        .toList(),
+    connectedAt: DateTime.tryParse(
+      json['connected_at'] as String? ?? '',
+    )?.toLocal(),
+    refreshedAt: DateTime.tryParse(
+      json['refreshed_at'] as String? ?? '',
+    )?.toLocal(),
+    broken: json['broken'] as String? ?? '',
+  );
+}
+
 /// Usual : One thing the person usually does, as a condition a rule
 /// can stand on.
 class Usual {

@@ -13134,6 +13134,57 @@ and the code was narrower, which is the better way round for that
 to happen.
 
 
+### The button that was configured and never built
+
+`settings_url = http://localhost:8000/settings/google` has been in
+the config since September. The server has had `/v1/google/account`,
+`/authorize` and `/callback` since then, and the callback has always
+redirected to that page. Nothing was ever built to land on.
+
+So the only way to grant the permission was by hand -- which
+matters more than it sounds, because the client is in Testing on
+purpose and Google expires a refresh token after seven days while
+it is. This is a weekly errand, and it had no button.
+
+Settings → Google now shows which account, when it last worked,
+what Google said when it broke, and **Grant again**.
+
+#### Why the address cannot come from anywhere else
+
+`Begin` keeps the state in the running process's memory. So the
+consent URL has to be issued by the same server that will handle
+the callback, which rules out a subcommand, a script, or anything
+holding the person's token on their behalf. A page talking to its
+own server is the only shape that works, and it was the shape
+already designed for.
+
+**Same tab, not a new one.** Google sends the browser back to this
+screen when it is done; a new tab would leave the answer in one
+window and the person looking at another.
+
+**Off the web it offers the address instead.** There is nowhere to
+send a browser on Android, so `openUrl` returns false and the
+screen shows what to open. Conditional import, like `address_bar`.
+
+#### What the reconnection confirmed
+
+	connected   2026-09-30 11:40:05
+	broke       2026-10-07 11:41:59    seven days and one minute
+	granted     2026-10-07 16:49:00
+
+And Google was asked rather than the row believed: all seven
+scopes came back, which is worth checking because a half-ticked
+consent yields a token missing scopes without complaint. This
+consent screen had no granular boxes at all.
+
+`when to set off` had been failing every five minutes for twelve
+hours and now reads `leaving_due found nothing`, which is the
+healthy answer.
+
+**It will die again around 14 October.** The rule added earlier
+will say so within half an hour.
+
+
 ## 12. Maintaining this file
 
 When the owner states a preference, makes a decision, or corrects something,

@@ -5,6 +5,7 @@ import 'package:flutter/material.dart';
 
 import '../api/models.dart';
 import '../design/design.dart';
+import '../open_url.dart';
 import '../state/app_state.dart';
 import 'knows.dart';
 
@@ -14,6 +15,7 @@ enum SettingsModule {
   clients('Clients', Icons.devices_other_outlined),
   reminders('Reminders', Icons.alarm_outlined),
   rules('Rules', Icons.rule_outlined),
+  google('Google', Icons.link_outlined),
   personality('Personality', Icons.psychology_outlined),
   knows('What it knows', Icons.travel_explore_outlined),
   server('Server', Icons.dns_outlined);
@@ -89,6 +91,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
   void _read(SettingsModule module) {
     if (module == SettingsModule.reminders) widget.state.loadReminders();
     if (module == SettingsModule.rules) widget.state.loadRules();
+    if (module == SettingsModule.google) widget.state.loadGoogle();
     if (module == SettingsModule.personality) widget.state.loadPersonality();
     if (module == SettingsModule.clients) widget.state.loadClients();
   }
@@ -194,6 +197,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
                           state: state,
                         ),
                         SettingsModule.rules => _RulesModule(state: state),
+                        SettingsModule.google => _GoogleModule(state: state),
                         SettingsModule.personality => _PersonalityModule(
                           state: state,
                         ),
@@ -601,6 +605,105 @@ class _PersonalityModuleState extends State<_PersonalityModule> {
     return held.mine
         ? 'Your words$when. The nightly rewrite will replace them.'
         : 'Written by the assistant$when.';
+  }
+}
+
+/// _GoogleModule : Whether the assistant can still reach Google, and
+/// the way to grant it again.
+///
+/// The server has had every endpoint for this since September and the
+/// callback has always redirected here -- settings_url names this very
+/// page -- but nothing was ever built to land on. So the permission
+/// could only be granted by hand, which matters more than it sounds:
+/// the client is in Testing on purpose, and Google expires a refresh
+/// token after seven days while it is. This is a weekly errand.
+class _GoogleModule extends StatelessWidget {
+  const _GoogleModule({required this.state});
+
+  final AppState state;
+
+  @override
+  Widget build(BuildContext context) {
+    final colors = context.colors;
+    final held = state.google;
+
+    return _Section(
+      title: 'Google',
+      subtitle:
+          'The permission to read your calendar, tasks and mail. It '
+          'expires every seven days while the app is in Testing, and '
+          'everything that reads your diary quietly does nothing until '
+          'it is granted again.',
+      action: _SectionLink(label: 'Refresh', onTap: state.loadGoogle),
+      child: switch (held) {
+        null => Text(
+          'Reading it…',
+          style: context.text.caption.copyWith(color: colors.textSecondary),
+        ),
+        final g when !g.configurable => Text(
+          'This server has no Google client configured, so there is '
+              'nothing to connect.',
+          style: context.text.caption.copyWith(color: colors.textSecondary),
+        ),
+        final g => Column(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            Row(
+              children: [
+                Icon(
+                  g.connected ? Icons.check : Icons.error_outline,
+                  size: 15,
+                  color: g.connected ? colors.textSecondary : colors.warning,
+                ),
+                const SizedBox(width: AppSpacing.sm),
+                Expanded(
+                  child: Text(
+                    g.email.isEmpty ? 'Nothing connected' : g.email,
+                    style: context.text.body,
+                  ),
+                ),
+              ],
+            ),
+            if (_state(g) case final line?) ...[
+              const SizedBox(height: AppSpacing.xxs),
+              Text(
+                line,
+                style: context.text.caption.copyWith(color: colors.textMuted),
+              ),
+            ],
+            const SizedBox(height: AppSpacing.md),
+            AppButton(
+              label: g.connected ? 'Grant again' : 'Connect Google',
+              onPressed: () => _connect(context, state),
+            ),
+          ],
+        ),
+      },
+    );
+  }
+}
+
+/// _state : What to say under the address.
+String? _state(GoogleAccount g) {
+  if (g.broken.isNotEmpty) return g.broken;
+  if (!g.connected) return null;
+  if (g.refreshedAt case final at?) {
+    return 'Last worked ${_clock(at)}. Granted ${_clock(g.connectedAt ?? at)}.';
+  }
+  return g.connectedAt == null ? null : 'Granted ${_clock(g.connectedAt!)}.';
+}
+
+/// _connect : Starts the grant and sends the browser to Google.
+///
+/// Google brings it back here when it is done, which is why the address
+/// replaces this page rather than opening beside it.
+Future<void> _connect(BuildContext context, AppState state) async {
+  final url = await state.connectGoogle();
+  if (url == null || !context.mounted) return;
+  if (!openUrl(url)) {
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(content: Text('Open this to grant permission: $url')),
+    );
   }
 }
 

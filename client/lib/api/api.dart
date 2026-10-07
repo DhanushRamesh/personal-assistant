@@ -433,6 +433,22 @@ class AssistantApi {
     Reminder.fromJson,
   );
 
+  /// googleAccount : What permission the assistant has to reach Google.
+  Future<GoogleAccount> googleAccount() async =>
+      GoogleAccount.fromJson(await _send('GET', '/v1/google/account'));
+
+  /// beginGoogle : Starts granting permission, returning the address of
+  /// Google's consent screen.
+  ///
+  /// The address rather than a redirect, because what asks is a script
+  /// in a page and a redirect it cannot follow is no use to it. The
+  /// state that comes back is held by the server that issued it, so
+  /// this and the consent must belong to the same running server.
+  Future<String> beginGoogle() async {
+    final body = await _send('POST', '/v1/google/authorize');
+    return body['url'] as String? ?? '';
+  }
+
   /// listRules : The standing rules, newest first.
   ///
   /// What is standing, unless past is asked for: a rule that was

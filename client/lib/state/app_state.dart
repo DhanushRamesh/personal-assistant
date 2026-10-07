@@ -274,6 +274,7 @@ class AppState extends ChangeNotifier {
     _clients = const [];
     _reminders = const [];
     _rules = null;
+    _google = null;
     _turns = const [];
     _conversationId = null;
     _error = null;
@@ -730,6 +731,42 @@ class AppState extends ChangeNotifier {
   Future<void> togglePastRules() async {
     _showPastRules = !_showPastRules;
     await loadRules();
+  }
+
+  GoogleAccount? _google;
+
+  /// google : What permission the assistant has to reach Google, or
+  /// null before it has been read.
+  GoogleAccount? get google => _google;
+
+  /// loadGoogle : Reads whether Google can still be reached.
+  Future<void> loadGoogle() async {
+    _set(busy: true, error: null);
+    try {
+      _google = await api.googleAccount();
+    } on Object catch (e) {
+      _error = _explain(e);
+    }
+    _set(busy: false);
+  }
+
+  /// connectGoogle : Starts granting permission and returns where to
+  /// send the browser, or null when it could not be started.
+  ///
+  /// The address is returned rather than opened here, because the
+  /// opening is a thing the screen does and this does not know about
+  /// windows.
+  Future<String?> connectGoogle() async {
+    _set(busy: true, error: null);
+    String? to;
+    try {
+      final url = await api.beginGoogle();
+      if (url.isNotEmpty) to = url;
+    } on Object catch (e) {
+      _error = _explain(e);
+    }
+    _set(busy: false);
+    return to;
   }
 
   /// loadRules : Reads the standing rules, for the settings screen.
