@@ -107,6 +107,27 @@ var hot = []string{
 	// chosen by it, and cancelling takes one identifier out of what
 	// that returned.
 	"rule_add",
+
+	// By the same evidence a third time, 7 October 2026. Owner:
+	// *"why is it saying it doesn't know? When in doubt it should
+	// do a web search automatically, right?"*
+	//
+	// Asked whether Tamil appears on Mauritian currency, the model
+	// answered: *"That is a fact about the world rather than about
+	// you, and I would need to look it up."* Which is the persona's
+	// own rule, quoted back -- *where the answer is genuinely not
+	// about them at all, look it up on the web rather than saying
+	// you cannot* -- recited rather than obeyed.
+	//
+	// So it knew the question was one for the web and did not
+	// believe it could search. That is the lesson above exactly,
+	// and the clearest instance of it yet: not a tool it worked
+	// around, but one it described out loud and then did not use.
+	//
+	// web_read stays deferred. It follows a search rather than
+	// starting anything, so by the time it is wanted the model is
+	// already in the domain and can ask.
+	"web_search",
 }
 
 // hotSet : hot, for looking up.

@@ -47,6 +47,44 @@ func Tools(service search.Service) []tool.Tool {
 	return []tool.Tool{lookUp(service), readPage(service)}
 }
 
+// keepLooking : What to do with a search that did not answer, and
+// how to say what did.
+//
+// Owner, 7 October 2026, on two answers in a row: *"it should do
+// research until it finds out, always bring a positive message,
+// and don't say search results."*
+//
+// Asked whether somebody was married it said the results were
+// fragmentary and the first one was incomplete. Asked who had been
+// eliminated from Big Boss it said the search had returned the
+// Telugu show rather than the Tamil one. Both are true, both were
+// one search, and five rounds are allowed.
+//
+// The Avoid line above was the cause of the first half. It said not
+// to make a second search, meaning do not confirm what you already
+// found, and was read as one search only -- so a thin result became
+// a report of a thin result instead of a better query.
+//
+// The other half is that a search is machinery and they did not ask
+// about it. "The search returned results for Big Boss Telugu" is a
+// sentence about a tool; "Srishti Vyakaranam went from the Telugu
+// version two days ago, and I have not found the Tamil one" is the
+// same facts as a sentence about the world.
+var keepLooking = "One search is a first attempt, not an answer. Five rounds are allowed and nobody " +
+	"is counting them. " +
+	"If what comes back is thin, cut off, or about the wrong thing, search again with " +
+	"different words -- name the series, the season, the year, the place, the language, " +
+	"whichever of those the results got wrong. If a result looks like it holds the answer " +
+	"but the summary stops short, read the page. " +
+	"Give up only when a differently worded search has failed too, and then say what you " +
+	"did find rather than what you did not. " +
+	"Never describe the searching. Not the results, not the sources, not what came back, " +
+	"not that the first one was incomplete: they asked about the world and a sentence about " +
+	"your own machinery answers nothing and tells them to go and look themselves. " +
+	"Say the thing you found as a fact about the world, then what is still missing, in that " +
+	"order -- and if the nearest you have is about something adjacent, say what it is of " +
+	"and let them judge it."
+
 // lookUp : Search the web.
 func lookUp(searcher search.Searcher) tool.Tool {
 	return tool.Tool{
@@ -63,15 +101,17 @@ func lookUp(searcher search.Searcher) tool.Tool {
 			"what a film is showing at. " +
 			"If you find yourself about to answer from memory about the world, search instead " +
 			"-- being out of date sounds exactly like being wrong, and they cannot tell which " +
-			"you are.",
+			"you are. " + keepLooking,
 		Avoid: "Not for anything about them. Their day, their diary, their calls, where they " +
 			"were, what they asked you to remember: those have their own tools and the web " +
 			"does not know any of it. " +
 			"Not for arithmetic, for what a word means, or for anything you can simply answer " +
 			"-- searching to confirm what you already know spends seconds they are waiting " +
 			"through. " +
-			"And not for a second search to check the first: if the answer disagrees with " +
-			"itself, say so.",
+			"And not to confirm what the first search already told you: where it answered, " +
+			"that is the answer, and asking again to be sure spends their seconds on nothing. " +
+			"Searching again because you have not got the answer yet is a different thing " +
+			"and is what you should do.",
 		Channels: []chat.Channel{chat.ChannelVoice, chat.ChannelDirect},
 		Params: tool.Schema{
 			Required: []string{"query"},

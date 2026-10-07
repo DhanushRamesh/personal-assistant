@@ -13261,6 +13261,64 @@ read the evidence again -- the same lesson as the first version
 of this page, relearned one screen further on.
 
 
+### One search is a first attempt
+
+Owner, 7 October 2026, on two answers in a row: *"it should do
+research until it finds out, always bring a positive message, and
+don't say search results."*
+
+	The search suggests he may have a wife, but the results are
+	fragmentary and the first one is incomplete.
+
+	The search returned results for Big Boss Telugu 10, not Big
+	Boss Tamil Season 10. That is not what you asked for, sir.
+
+Both true, both one search, and `MaxToolHops` is five. It had four
+rounds left and stopped.
+
+#### The instruction that caused it
+
+In `web_search`'s own Avoid:
+
+	And not for a second search to check the first: if the answer
+	disagrees with itself, say so.
+
+Written to stop it confirming what it had already found. Read as
+*one search only*, so a thin result became a report of a thin
+result instead of a better query. The two cases are opposites and
+the sentence did not separate them: do not search again to be
+sure, and do search again when you have not got it yet.
+
+#### And a search is machinery nobody asked about
+
+"The search returned results for Big Boss Telugu" is a sentence
+about a tool. The same facts as a sentence about the world are
+"Srishti Vyakaranam went from the Telugu version two days ago,
+and I have not found the Tamil one". The first tells them to go
+and look themselves; the second is an answer with a gap in it.
+
+So: never describe the searching -- not the results, not the
+sources, not that the first one was incomplete -- and say what was
+found before what is missing, in that order.
+
+#### Afterwards
+
+Same question, same evening:
+
+	3 web_search calls
+
+	Last week Ananthi and Lakshmi Priya were evicted from Bigg
+	Boss Tamil Season 10, sir -- that was week three. There was
+	also a twist where Lakshmi Priya, Savinya and Javeeth were
+	brought back as wildcards.
+
+#### What is not measured
+
+This widens a tool description, and the standing rule here is to
+measure that both ways rather than reason about it -- a wider
+description buys over-reach. `make evals` has not been run on it.
+
+
 ## 12. Maintaining this file
 
 When the owner states a preference, makes a decision, or corrects something,
