@@ -74,6 +74,49 @@ func (s *Store) Keep(ctx context.Context, j job.Job) error {
 	return nil
 }
 
+// Change : Replaces a job that exists, and forgets what it last
+// said.
+//
+// The sentence is dropped because the rule is not the rule it was.
+// What it is holding back is no longer a repeat of anything, and
+// somebody who has just changed a rule wants to hear whether it
+// works rather than silence from a comparison with the old one.
+func (s *Store) Change(ctx context.Context, j job.Job) error {
+	if s == nil || s.db == nil {
+		return fmt.Errorf("job: there is nowhere to keep jobs")
+	}
+	steps, err := json.Marshal(j.Steps)
+	if err != nil {
+		return fmt.Errorf("job: %w", err)
+	}
+	fields := map[string]any{
+		"name":       j.Name,
+		"schedule":   j.Schedule,
+		"steps":      string(steps),
+		"keep":       j.Keep,
+		"state":      string(j.State),
+		"last_said":  "",
+		"why":        "",
+		"updated_at": time.Now().UTC(),
+	}
+	if j.Next.IsZero() {
+		fields["next_at"] = nil
+	} else {
+		fields["next_at"] = j.Next.UTC()
+	}
+
+	out := s.db.WithContext(ctx).Model(&row{}).
+		Where("id = ? AND user_id = ?", j.ID, j.UserID).
+		Updates(fields)
+	if out.Error != nil {
+		return fmt.Errorf("job: changing %s: %w", j.ID, out.Error)
+	}
+	if out.RowsAffected == 0 {
+		return fmt.Errorf("job: there is no rule %s to change", j.ID)
+	}
+	return nil
+}
+
 // Due : Jobs whose time has come, soonest first.
 func (s *Store) Due(ctx context.Context, at time.Time, limit int) ([]job.Job, error) {
 	if s == nil || s.db == nil {

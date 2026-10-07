@@ -209,8 +209,8 @@ func TestWritingRulesInsistsOnReadingThemFirst(t *testing.T) {
 	if lists != 1 {
 		t.Errorf("%d tools list rules, want exactly one for a write to read first", lists)
 	}
-	if writes != 2 {
-		t.Errorf("%d tools write rules, want add and cancel", writes)
+	if writes != 3 {
+		t.Errorf("%d tools write rules, want add, update and cancel", writes)
 	}
 }
 
@@ -347,5 +347,120 @@ func TestListingSaysNothingAboutARoutineNobodyHasYet(t *testing.T) {
 
 	if got := call(t, by["rule_list"], `{}`); strings.Contains(got.Content, "usually") {
 		t.Errorf("it spoke about a routine nobody has:\n%s", got.Content)
+	}
+}
+
+// TestChangingARuleLeavesTheRestOfItAlone : A rule could be made and
+// called off and nothing else, so moving a threshold meant writing a
+// new rule and cancelling the old one. Six near-duplicate battery
+// rules are what that looks like after a week: tuning one was more
+// work than adding another.
+//
+// Everything a rule is made of can be read back off its steps, so a
+// change can name one thing and leave the rest.
+func TestChangingARuleLeavesTheRestOfItAlone(t *testing.T) {
+	store, by := made()
+
+	made := call(t, by["rule_add"], `{
+		"name": "low battery",
+		"schedule": "when battery.level < 20",
+		"when": "presence is here",
+		"ask": "say how low it is",
+		"look_up": [{"tool":"calendar_events","args":"{\"days\":1}"}]
+	}`)
+	if made.Outcome == conversation.OutcomeFailed {
+		t.Fatalf("could not make one: %s", made.Content)
+	}
+	held, _ := store.Mine(context.Background(), "usr_1", "rule", 10)
+	if len(held) != 1 {
+		t.Fatalf("made %d rules", len(held))
+	}
+	id := held[0].ID
+
+	// Only the threshold.
+	got := call(t, by["rule_update"], `{"id":"`+id+`","schedule":"when battery.level < 25"}`)
+	if got.Outcome == conversation.OutcomeFailed {
+		t.Fatalf("could not change it: %s", got.Content)
+	}
+
+	held, _ = store.Mine(context.Background(), "usr_1", "rule", 10)
+	if len(held) != 1 {
+		t.Fatalf("changing it left %d rules, want the one mended", len(held))
+	}
+	after := held[0]
+	if after.Schedule != "when battery.level < 25" {
+		t.Errorf("schedule is %q", after.Schedule)
+	}
+	if after.Name != "low battery" {
+		t.Errorf("the name was lost: %q", after.Name)
+	}
+	if len(after.Steps) != 3 {
+		t.Fatalf("it has %d steps, want the lookup, check and write it had: %+v",
+			len(after.Steps), after.Steps)
+	}
+	if after.Steps[0].Tool != "calendar_events" {
+		t.Errorf("the lookup was lost: %+v", after.Steps[0])
+	}
+	if after.Steps[1].When != "presence is here" {
+		t.Errorf("the condition was lost: %+v", after.Steps[1])
+	}
+	if after.Steps[2].Ask != "say how low it is" {
+		t.Errorf("what it says was lost: %+v", after.Steps[2])
+	}
+}
+
+// TestChangingToFixedWordsDropsTheQuestion : Words and a question are
+// alternatives, so naming one takes the other away. Without that,
+// turning a rule from a worked-out sentence into fixed words would be
+// refused for having both.
+func TestChangingToFixedWordsDropsTheQuestion(t *testing.T) {
+	store, by := made()
+	call(t, by["rule_add"], `{"name":"n","schedule":"every 10m","ask":"work it out"}`)
+	held, _ := store.Mine(context.Background(), "usr_1", "rule", 10)
+	id := held[0].ID
+
+	got := call(t, by["rule_update"], `{"id":"`+id+`","say":"the fixed words"}`)
+	if got.Outcome == conversation.OutcomeFailed {
+		t.Fatalf("could not change it: %s", got.Content)
+	}
+	held, _ = store.Mine(context.Background(), "usr_1", "rule", 10)
+	last := held[0].Steps[len(held[0].Steps)-1]
+	if last.Do != job.Announce || last.Say != "the fixed words" {
+		t.Errorf("it still works the sentence out: %+v", last)
+	}
+}
+
+// TestChangingARuleThatIsNotThere : An identifier from a listing
+// somebody remembered rather than made this turn.
+func TestChangingARuleThatIsNotThere(t *testing.T) {
+	_, by := made()
+	got := call(t, by["rule_update"],
+		`{"id":"job_01M48E09RJW0G247RBST6712D9","schedule":"every 5m"}`)
+	if got.Outcome != conversation.OutcomeFailed {
+		t.Errorf("it changed a rule that does not exist: %s", got.Content)
+	}
+}
+
+// TestARuleCannotBeEditedIntoSomethingItCouldNotHaveBeen : The change
+// goes through job.New, so a schedule is read by the same thing that
+// reads a new one.
+func TestARuleCannotBeEditedIntoSomethingItCouldNotHaveBeen(t *testing.T) {
+	store, by := made()
+	call(t, by["rule_add"], `{"name":"n","schedule":"every 10m","say":"hello"}`)
+	held, _ := store.Mine(context.Background(), "usr_1", "rule", 10)
+	id := held[0].ID
+
+	for _, bad := range []string{
+		`{"id":"` + id + `","schedule":"whenever I feel like it"}`,
+		`{"id":"` + id + `","when":"hour >= 99"}`,
+		`{"id":"` + id + `","keep":"a while"}`,
+	} {
+		if got := call(t, by["rule_update"], bad); got.Outcome != conversation.OutcomeFailed {
+			t.Errorf("%s was accepted: %s", bad, got.Content)
+		}
+	}
+	held, _ = store.Mine(context.Background(), "usr_1", "rule", 10)
+	if held[0].Schedule != "every 10m" {
+		t.Errorf("a refused change still landed: %q", held[0].Schedule)
 	}
 }

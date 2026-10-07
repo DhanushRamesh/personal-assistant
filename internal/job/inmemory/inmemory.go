@@ -61,6 +61,18 @@ func (s *Store) Mine(_ context.Context, userID, kind string, limit int,
 	return out, nil
 }
 
+// Change : Replaces one that exists, and forgets what it last said.
+func (s *Store) Change(_ context.Context, j job.Job) error {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	if _, ok := s.jobs[j.ID]; !ok {
+		return nil
+	}
+	j.Said, j.Why = "", ""
+	s.jobs[j.ID] = j
+	return nil
+}
+
 // Arm : Sets when a waiting rule runs, without recording a run.
 func (s *Store) Arm(_ context.Context, id string, at time.Time) error {
 	s.mu.Lock()

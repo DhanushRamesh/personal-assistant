@@ -41,6 +41,9 @@ const Kind = "rule"
 type Store interface {
 	Mine(ctx context.Context, userID, kind string, limit int, states ...job.State) ([]job.Job, error)
 	Keep(ctx context.Context, j job.Job) error
+	// Change : Replaces one that exists, and forgets what it last
+	// said.
+	Change(ctx context.Context, j job.Job) error
 	Stop(ctx context.Context, userID, id string) (bool, error)
 }
 
@@ -155,6 +158,7 @@ func All(store Store, clock Clock, id func() string, look Lookup, usually routin
 	return []tool.Tool{
 		list(store, clock, usually),
 		add(store, clock, id, look),
+		update(store, clock, look),
 		cancel(store),
 	}
 }
@@ -249,20 +253,7 @@ func add(store Store, clock Clock, id func() string, look Lookup) tool.Tool {
 					Type:        "array",
 					Description: howToLookUp,
 					MaxItems:    &most,
-					Items: &tool.Property{
-						Type:     "object",
-						Required: []string{"tool"},
-						Properties: map[string]tool.Property{
-							"tool": {
-								Type:        "string",
-								Description: "The tool's name, such as event_recent or calendar_events.",
-							},
-							"args": {
-								Type:        "string",
-								Description: howToArgue,
-							},
-						},
-					},
+					Items:       lookUpItem(),
 				},
 			},
 		},
@@ -327,6 +318,187 @@ func add(store Store, clock Clock, id func() string, look Lookup) tool.Tool {
 	}
 }
 
+// parts : A rule's arguments, read back off its steps.
+//
+// The sequence is assembled from these and never stored as them,
+// so changing one of them means taking the rest back out. It is
+// exact rather than nearly so: [assemble] writes one step per
+// thing and nothing else goes in, which is what makes reading it
+// back a matter of looking rather than of guessing.
+func parts(j job.Job) (when, say, ask string, reads []lookUp, mayCall []string) {
+	for _, step := range j.Steps {
+		switch step.Do {
+		case job.Call:
+			reads = append(reads, lookUp{Tool: step.Tool, Args: string(step.Args)})
+		case job.Check:
+			when = step.When
+		case job.Announce:
+			say = step.Say
+		case job.Write:
+			ask, mayCall = step.Ask, step.Tools
+		}
+	}
+	return when, say, ask, reads, mayCall
+}
+
+// given : The new value where one was given, and the old where
+// none was.
+//
+// A change names what is changing and nothing else. Somebody
+// moving a threshold should not have to say the words again, and
+// asking them to is how the second rule gets written instead of
+// the first being mended.
+func given(now *string, before string) string {
+	if now == nil {
+		return before
+	}
+	return strings.TrimSpace(*now)
+}
+
+// update : Changes one, without making a second.
+//
+// Owner, 7 October 2026, on what the engine could not do: a rule
+// could be made and called off and nothing else. So moving a
+// threshold meant writing a new rule and cancelling the old one,
+// and the six battery rules are what that looks like after a
+// week -- near-duplicates, because tuning one was more work than
+// adding another.
+//
+// Everything a rule is made of can be read back off its steps, so
+// a change can name one thing and leave the rest alone.
+func update(store Store, clock Clock, look Lookup) tool.Tool {
+	return tool.Tool{
+		Name:    "rule_update",
+		Domain:  Kind,
+		Writes:  true,
+		Purpose: "Change a standing rule, leaving alone whatever is not mentioned.",
+		UseWhen: "They want one altered rather than replaced: make it twenty-five instead of twenty, " +
+			"only on weekdays, say it differently, check it every ten minutes. Anything of the form " +
+			"change, move, make it, instead of.",
+		Avoid: "Not for a reminder; that is reminder_update. The identifier must come from a listing in " +
+			"this turn, never from one you remember. To stop one running use rule_cancel, not this.",
+		Channels: []chat.Channel{chat.ChannelVoice, chat.ChannelDirect},
+		Params: tool.Schema{
+			Required: []string{"id"},
+			Properties: map[string]tool.Property{
+				"id": {
+					Type:        "string",
+					Description: "The rule's identifier, exactly as the listing gave it.",
+					Pattern:     idPattern,
+				},
+				"name":     {Type: "string", Description: "A new name for it."},
+				"schedule": {Type: "string", Description: howToSchedule},
+				"say":      {Type: "string", Description: "New fixed words for it to say."},
+				"ask":      {Type: "string", Description: "A new thing for it to work out and say."},
+				"when":     {Type: "string", Description: howToCondition},
+				"keep":     {Type: "string", Description: howLongToKeep},
+				"tools": {
+					Type:        "array",
+					Description: howToTools,
+					MaxItems:    &most,
+					Items:       &tool.Property{Type: "string"},
+				},
+				"look_up": {Type: "array", Description: howToLookUp, MaxItems: &most, Items: lookUpItem()},
+			},
+		},
+		Examples: []tool.Example{
+			{
+				Ask:  "make the battery one twenty-five instead of twenty",
+				Args: `{"saying":"changing that","id":"job_01M48E09RJW0G247RBST6712D3","schedule":"when battery.level < 25"}`,
+			},
+			{
+				Ask:  "only tell me that on weekdays",
+				Args: `{"saying":"changing that","id":"job_01M48E09RJW0G247RBST6712D3","when":"day is weekday"}`,
+			},
+		},
+		Run: func(ctx context.Context, in tool.Invocation) tool.Result {
+			var args struct {
+				ID       string   `json:"id"`
+				Name     *string  `json:"name"`
+				Schedule *string  `json:"schedule"`
+				Say      *string  `json:"say"`
+				Ask      *string  `json:"ask"`
+				When     *string  `json:"when"`
+				Keep     *string  `json:"keep"`
+				LookUp   []lookUp `json:"look_up"`
+				Tools    []string `json:"tools"`
+			}
+			if err := json.Unmarshal(in.Args, &args); err != nil {
+				return tool.Failed("Those arguments could not be read.")
+			}
+			if store == nil {
+				return tool.Failed("There is nowhere to keep rules on this server.")
+			}
+			if in.Caller.UserID == "" {
+				return tool.Failed("This request did not come from a known person.")
+			}
+
+			held, err := store.Mine(ctx, in.Caller.UserID, Kind, job.Limit)
+			if err != nil {
+				return tool.Failed(err.Error())
+			}
+			var was job.Job
+			for _, j := range held {
+				if j.ID == args.ID {
+					was = j
+					break
+				}
+			}
+			if was.ID == "" {
+				return tool.Failed("There is no rule with that identifier.")
+			}
+
+			when, say, ask, reads, mayCall := parts(was)
+			// Words and a question are alternatives, so naming one
+			// takes the other away. Otherwise changing a rule from
+			// fixed words to a worked-out sentence would be
+			// refused for having both.
+			if args.Say != nil {
+				ask = ""
+			}
+			if args.Ask != nil {
+				say = ""
+			}
+			if args.LookUp != nil {
+				reads = args.LookUp
+			}
+			if args.Tools != nil {
+				mayCall = args.Tools
+			}
+
+			steps, bad := assemble(given(args.When, when), reads, mayCall,
+				given(args.Say, say), given(args.Ask, ask), look)
+			if bad != "" {
+				return tool.Failed(bad)
+			}
+			if err := job.Kept(given(args.Keep, was.Keep)); err != nil {
+				return tool.Failed(readable(err))
+			}
+
+			// Through job.New, so a changed schedule is read by the
+			// same thing that reads a new one and a rule cannot be
+			// edited into a state it could not have been made in.
+			made, err := job.New(was.ID, was.UserID,
+				given(args.Name, was.Name), Kind,
+				given(args.Schedule, was.Schedule), steps,
+				clock.now().In(clock.where()))
+			if err != nil {
+				return tool.Failed(readable(err))
+			}
+			made.Keep = given(args.Keep, was.Keep)
+			// What it last said is dropped on purpose. The rule is
+			// not the rule it was, so the sentence it is holding
+			// back is no longer a repeat of anything -- and
+			// somebody who has just changed a rule wants to hear
+			// whether it works.
+			if err := store.Change(ctx, made); err != nil {
+				return tool.Failed(err.Error())
+			}
+			return tool.OK(prompt.Text("Changed:", one(made, clock)))
+		},
+	}
+}
+
 // cancel : Calls one off.
 func cancel(store Store) tool.Tool {
 	return tool.Tool{
@@ -376,6 +548,24 @@ func cancel(store Store) tool.Tool {
 				))
 			}
 			return tool.OK("Removed. It will not run again.")
+		},
+	}
+}
+
+// lookUpItem : What one lookup looks like, for a schema.
+//
+// Shared by making a rule and changing one, so the two cannot
+// describe the same argument differently.
+func lookUpItem() *tool.Property {
+	return &tool.Property{
+		Type:     "object",
+		Required: []string{"tool"},
+		Properties: map[string]tool.Property{
+			"tool": {
+				Type:        "string",
+				Description: "The tool's name, such as event_recent or calendar_events.",
+			},
+			"args": {Type: "string", Description: howToArgue},
 		},
 	}
 }

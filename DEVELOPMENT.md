@@ -12856,6 +12856,49 @@ has no opinion -- reminders, the renaming, the greeting -- saying
 exactly what it said before.
 
 
+### Changing a rule instead of writing a second one
+
+A rule could be made and called off and nothing else. So moving a
+threshold meant writing a new rule and cancelling the old one, and
+the six battery rules are what that looks like after a week:
+near-duplicates, because tuning one was more work than adding
+another. The owner means to add many more, which makes this the
+limitation that compounds.
+
+	rule_update, id and whatever is changing
+
+#### Read back off the steps
+
+A rule's arguments are assembled into a sequence and never stored
+as themselves, so changing one means taking the rest back out.
+That is exact rather than nearly so: `assemble` writes one step
+per thing and nothing else goes in, so `parts` is a matter of
+looking rather than guessing.
+
+	job.Call      -> a lookup, with its arguments
+	job.Check     -> the condition
+	job.Announce  -> the fixed words
+	job.Write     -> the question, and what it may call
+
+**Naming one alternative takes the other away.** Words and a
+question cannot both be there, so a change that gives `say` drops
+`ask` before assembling. Without that, turning a worked-out
+sentence into fixed words would be refused for having both --
+which is the commonest change anybody would want to make.
+
+**Through `job.New`.** A changed schedule is read by the same
+thing that reads a new one, so a rule cannot be edited into a
+state it could not have been made in. Tested: an unreadable
+schedule, an hour of 99, and a keep of "a while" are all refused
+and leave the rule as it was.
+
+**And it forgets what it last said.** The rule is not the rule it
+was, so the sentence it was holding back is no longer a repeat of
+anything -- and somebody who has just changed a rule wants to
+hear whether it works, not silence from a comparison with the old
+one.
+
+
 ## 12. Maintaining this file
 
 When the owner states a preference, makes a decision, or corrects something,
