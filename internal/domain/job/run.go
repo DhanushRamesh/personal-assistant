@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"log/slog"
+	"strings"
 	"sync"
 	"sync/atomic"
 	"time"
@@ -174,8 +175,21 @@ type Outcome struct {
 type Record struct {
 	// UserID : Whose rule it was.
 	UserID string
+	// JobID : Which rule. The name is what it was called at the
+	// time and a rule may be renamed or rewritten; this is what
+	// joins the two halves of its life.
+	JobID string
 	// Name : What the rule is called.
 	Name string
+	// Schedule : How it was written at the time, for the same
+	// reason as the name.
+	Schedule string
+	// Took : How long the whole sequence took, so a rule that got
+	// slower can be found rather than noticed.
+	Took time.Duration
+	// Steps : What each step did, in order. What makes "why did
+	// this behave differently" answerable.
+	Steps []Tried
 	// At : When it ran.
 	At time.Time
 	// Said : What was spoken, empty when nothing was.
@@ -186,6 +200,51 @@ type Record struct {
 	Stopped bool
 	// Failed : Whether a step failed.
 	Failed bool
+}
+
+// Tried : What one step of a run did.
+//
+// Says what the step was rather than where it sat, because a
+// sequence whose third step changed is not the same as one with a
+// step inserted second, and comparing two shapes of one rule is
+// the whole reason this is written down.
+type Tried struct {
+	// Do : Which kind of step.
+	Do Task `json:"do"`
+	// Use : The tool it called, where it called one.
+	Use string `json:"use,omitempty"`
+	// When : The condition it read, where it read one.
+	When string `json:"when,omitempty"`
+	// Came : What came of it -- [Went], [Halted] or [Errored].
+	Came string `json:"came"`
+	// Took : How long it took, in milliseconds.
+	Took int64 `json:"took_ms"`
+	// Why : What it decided or what went wrong. Short: the whole
+	// of a tool's answer belongs in the conversation, not here.
+	Why string `json:"why,omitempty"`
+}
+
+// Went, Halted, Errored : What one step came to.
+const (
+	Went    = "ran"
+	Halted  = "stopped"
+	Errored = "failed"
+)
+
+// most : How much of a reason is kept beside a step.
+//
+// Enough to tell two outcomes apart and not enough to be a
+// transcript. What a tool actually returned belongs in the
+// conversation; this column is read a thousand rows at a time.
+const most = 200
+
+// shorten : A reason, cut to something a column can hold.
+func shorten(s string) string {
+	s = strings.TrimSpace(s)
+	if len(s) <= most {
+		return s
+	}
+	return s[:most] + "..."
 }
 
 // Journal : Where each run is written down.
@@ -593,10 +652,27 @@ func (r *Runner) one(ctx context.Context, j Job, now time.Time, pass *Pass) {
 	var why, spoke, remember string
 	var stopped, failed bool
 	var already []Ran
+	// What each step did, collected as it goes. A run is written
+	// down once at the end, so this is the only record of the
+	// steps that came before whichever one ended it.
+	tried := make([]Tried, 0, len(j.Steps))
+	began := r.clock()
 	for _, step := range j.Steps {
+		at := r.clock()
 		done, err := r.Doer.Do(ctx,
 			Turn{UserID: j.UserID, Already: already, Before: j.Said,
 				Worth: j.Worth(), Anywhere: j.Anywhere}, step)
+		note := Tried{
+			Do: step.Do, Use: step.Tool, When: step.When, Came: Went,
+			Took: r.clock().Sub(at).Milliseconds(),
+		}
+		switch {
+		case err != nil:
+			note.Came, note.Why = Errored, shorten(err.Error())
+		case done.Stop:
+			note.Came, note.Why = Halted, shorten(done.Why)
+		}
+		tried = append(tried, note)
 		if step.Do == Call && step.Tool != "" {
 			already = append(already, Ran{Tool: step.Tool, Got: done.Got})
 		}
@@ -674,8 +750,10 @@ func (r *Runner) one(ctx context.Context, j Job, now time.Time, pass *Pass) {
 		// of what was considered saying. One that only ever runs a
 		// tool considered nothing.
 		r.wrote(ctx, Record{
-			UserID: j.UserID, Name: j.Name, At: now,
-			Said: spoke, Why: why, Stopped: stopped, Failed: failed,
+			UserID: j.UserID, JobID: j.ID, Name: j.Name,
+			Schedule: j.Schedule, At: now, Took: r.clock().Sub(began),
+			Steps: tried,
+			Said:  spoke, Why: why, Stopped: stopped, Failed: failed,
 		})
 	}
 	// Quiet for a while, where the rule asked for it and there was

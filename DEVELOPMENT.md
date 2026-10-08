@@ -14483,6 +14483,50 @@ from it for reading aloud. Which is the same inversion the whole
 rule object is making.
 
 
+### What a rule did, before changing what a rule is
+
+Owner, having settled the structured rule and asked for the sixteen
+live ones to be converted: *"before that -- these rules will get
+executed at some point right, we have to collect the execution
+logs."*
+
+The right instinct and the right order. Converting sixteen rules at
+once with nothing to compare against is changing sixteen things and
+having no way to say whether any of them still does what it did.
+
+Something was already written down: one row per run in `remarks`,
+with the outcome and the first thing that stopped it. Three things
+were missing and all three are about surviving a rewrite.
+
+The name was the only handle. `remarks.label` is `j.Name`, and the
+conversion renames rules -- `anything amiss` becomes two -- so the
+moment a name changes its history is orphaned. The id is written
+down now, and with it the name and the schedule *as they were at the
+time*: a row saying "anything amiss, every 2m, declined" stays true
+after that rule has become two rules with other names, and the
+job_id joins the two halves of its life.
+
+Only the first stopping step was kept, so what had already been done
+when a rule stopped was lost. Every step is written now -- what it
+was, what came of it, how long it took, and what it decided.
+
+And nothing was timed, so "has this got slower" and "did the
+conversion make it cheaper" were both unanswerable.
+
+Its own table and not more columns on `remarks`. That table is
+where things the assistant *considered saying* are written, and a
+rule that stopped at its first condition never considered saying
+anything; squeezing it in made every quiet tick look like a remark
+declined. One answers "what did it nearly say", the other "what did
+it do".
+
+Sixteen hundred rows a day, kept a month: about fifty thousand
+standing, against a third of a million a year unswept. A month is
+longer than anybody compares a rule with itself across, and the
+sweep is its own loop so that failing to drop old rows cannot stop
+the loop that drops old position readings.
+
+
 ## 12. Maintaining this file
 
 When the owner states a preference, makes a decision, or corrects something,

@@ -259,6 +259,10 @@ func run() error {
 	// One store for what the person's devices saw, shared by the endpoint
 	// they report to and the tool that reads it back.
 	deviceEvents := eventmysql.New(db)
+	// What every rule did. Kept apart from the rules themselves
+	// because it outlives them: a rule rewritten or deleted keeps
+	// its history, and nothing here is ever read by the engine.
+	ranLog := jobmysql.NewRuns(db.DB)
 
 	// One store, shared by the tools that make reminders and the loop that
 	// says them.
@@ -611,6 +615,17 @@ func run() error {
 	logger.Info("forgetting old position readings daily",
 		slog.Duration("every", forgetEvery), slog.Duration("keeping", event.Keep))
 
+	// What every rule did, which is worth a month and not a year.
+	watching.Add(1)
+	go func() {
+		defer watching.Done()
+		logging.Surviving(remindCtx, logger.Logger, "forgetting old rule history", func() {
+			forgetRunsDaily(remindCtx, ranLog, cfg.Assistant.Now, logger.Logger)
+		})
+	}()
+	logger.Info("forgetting old rule history daily",
+		slog.Duration("every", forgetEvery), slog.Duration("keeping", runsKeep))
+
 	// What is said at the door. A model writes it from what has
 	// happened since the two of them last spoke, and falls back to one
 	// of the fixed sentences when it cannot in time.
@@ -697,7 +712,7 @@ func run() error {
 			now: cfg.Assistant.Now, logger: logger.Logger,
 		},
 		Readings: look,
-		Journal:  keeping{notes: remarked},
+		Journal:  keeping{notes: remarked, runs: ranLog, log: logger.Logger},
 		Where:    cfg.Assistant.Location,
 		Now:      cfg.Assistant.Now,
 		Logger:   logger.Logger,
@@ -1558,6 +1573,55 @@ const forgetTimeout = 10 * time.Minute
 //
 // A failure is logged and the next day tries again. There is nothing to
 // recover: the rows are still there and a day late is a day of rows.
+// runsKeep : How long a rule's own history is worth keeping.
+//
+// A month. At roughly sixteen hundred runs a day that is about
+// fifty thousand rows standing, against a third of a million a
+// year if nothing swept them -- and the thing they are for is
+// comparing a rule with itself before and after a change, which
+// nobody does across a year.
+const runsKeep = 30 * 24 * time.Hour
+
+// forgetRunsDaily : Drops rule history older than [runsKeep].
+//
+// Its own loop rather than a second errand inside the readings
+// one, so that a failure to sweep one cannot stop the other.
+func forgetRunsDaily(
+	ctx context.Context,
+	forgetting interface {
+		Forget(ctx context.Context, before time.Time) (int64, error)
+	},
+	now func() time.Time,
+	logger *slog.Logger,
+) {
+	timer := time.NewTimer(forgetFirst)
+	defer timer.Stop()
+
+	for {
+		select {
+		case <-ctx.Done():
+			return
+		case <-timer.C:
+		}
+		timer.Reset(forgetEvery)
+
+		pass, cancel := context.WithTimeout(ctx, forgetTimeout)
+		before := now().Add(-runsKeep)
+		gone, err := forgetting.Forget(pass, before)
+		cancel()
+		if err != nil {
+			logger.Warn("cannot forget what the rules did",
+				slog.Any("error", err))
+			continue
+		}
+		if gone == 0 {
+			continue
+		}
+		logger.Info("forgot old rule history",
+			slog.Int64("rows", gone), slog.Time("older_than", before))
+	}
+}
+
 func forgetDaily(
 	ctx context.Context,
 	forgetting interface {
@@ -2121,10 +2185,31 @@ func (d doing) Do(ctx context.Context, run job.Turn, s job.Step) (job.Outcome, e
 // didn't speak, if spoken what it spoke."* That question is the
 // same one whether the thing deciding was a watcher written in Go
 // or a rule in a row, so it is answered from the same table.
-type keeping struct{ notes notice.Notes }
+type keeping struct {
+	notes notice.Notes
+	// runs : The fuller record, which outlives the rule it is
+	// about. The remarks row answers "what did it nearly say" and
+	// is what the page shows; this answers "what did it do", step
+	// by step, and is what tells whether a rule rewritten still
+	// behaves as it did.
+	runs *jobmysql.Runs
+	// log : Where a journal that could not be written is noted. A
+	// rule must not stop running because the thing watching it
+	// broke.
+	log *slog.Logger
+}
 
-// Wrote : Records one run.
+// Wrote : Records one run, in both places.
 func (k keeping) Wrote(ctx context.Context, r job.Record) error {
+	if k.runs != nil {
+		if err := k.runs.Wrote(ctx, r); err != nil && k.log != nil {
+			// Logged and swallowed. The remarks row below is what
+			// the person sees, and losing the fuller record must
+			// not lose that too.
+			k.log.WarnContext(ctx, "cannot write down what a rule did",
+				slog.String("rule", r.Name), slog.Any("error", err))
+		}
+	}
 	if k.notes == nil {
 		return nil
 	}

@@ -574,3 +574,97 @@ func TestAnActionThatFailedDoesNotStopTheSequence(t *testing.T) {
 		t.Errorf("did not count the failure: %+v", pass)
 	}
 }
+
+// writes : A journal that keeps what it was given.
+type writes struct{ got []job.Record }
+
+func (w *writes) Wrote(_ context.Context, r job.Record) error {
+	w.got = append(w.got, r)
+	return nil
+}
+
+// TestARunWritesDownWhatEachStepDid : Sixteen rules are about to be
+// converted to another shape, and the only way to say whether a
+// converted one still does what it did is to have what it did.
+//
+// The id matters more than the name: a rule being renamed or
+// rewritten is exactly the occasion this is for, and a name is the
+// one thing that will not survive it.
+func TestARunWritesDownWhatEachStepDid(t *testing.T) {
+	s, h := inmemory.New(), &hands{stopAt: "battery.level >= 5", says: "never said"}
+	j := put(t, s, "every 10m",
+		job.Step{Do: job.Call, Tool: "event_recent"},
+		job.Step{Do: job.Check, When: "battery.level >= 5"},
+		job.Step{Do: job.Write, Ask: "say how the battery is"})
+
+	kept := &writes{}
+	r := runner(s, h, noon)
+	r.Journal = kept
+	r.Once(context.Background())
+
+	if len(kept.got) != 1 {
+		t.Fatalf("wrote %d records, want 1", len(kept.got))
+	}
+	rec := kept.got[0]
+	if rec.JobID != j.ID {
+		t.Errorf("recorded job %q, want %q", rec.JobID, j.ID)
+	}
+	if rec.Schedule != "every 10m" {
+		t.Errorf("did not keep the schedule as it was: %q", rec.Schedule)
+	}
+
+	// The step that ended it, and every step before it. A record
+	// of only the last one could not say what had already been
+	// done when it stopped.
+	if len(rec.Steps) != 2 {
+		t.Fatalf("recorded %d steps, want 2: %+v", len(rec.Steps), rec.Steps)
+	}
+	if rec.Steps[0].Do != job.Call || rec.Steps[0].Use != "event_recent" ||
+		rec.Steps[0].Came != job.Went {
+		t.Errorf("first step recorded as %+v", rec.Steps[0])
+	}
+	if rec.Steps[1].Do != job.Check || rec.Steps[1].Came != job.Halted {
+		t.Errorf("the step that stopped it recorded as %+v", rec.Steps[1])
+	}
+	if rec.Steps[1].When != "battery.level >= 5" {
+		t.Errorf("did not keep which condition stopped it: %q", rec.Steps[1].When)
+	}
+	// The write step never ran, so it is not in the record.
+	for _, st := range rec.Steps {
+		if st.Do == job.Write {
+			t.Error("recorded a step that never ran")
+		}
+	}
+}
+
+// TestAFailedStepIsRecordedAsFailed : Told apart from a step that
+// ran and from one that withheld, because the three are three
+// different things to read on a page.
+func TestAFailedStepIsRecordedAsFailed(t *testing.T) {
+	s, h := inmemory.New(), &hands{
+		failAt:  "reminder_set",
+		failure: errors.New("the phone did not answer"),
+		says:    "You asked to be reminded, sir.",
+	}
+	put(t, s, "every 10m",
+		job.Step{Do: job.Call, Tool: "reminder_set"},
+		job.Step{Do: job.Write, Ask: "say the words"})
+
+	kept := &writes{}
+	r := runner(s, h, noon)
+	r.Journal = kept
+	r.Once(context.Background())
+
+	rec := kept.got[0]
+	if len(rec.Steps) != 2 {
+		t.Fatalf("recorded %d steps, want 2", len(rec.Steps))
+	}
+	if rec.Steps[0].Came != job.Errored || rec.Steps[0].Why == "" {
+		t.Errorf("the failure recorded as %+v", rec.Steps[0])
+	}
+	// An act that failed does not stop the sequence, so the step
+	// after it ran and the record has to show that it did.
+	if rec.Steps[1].Came != job.Went {
+		t.Errorf("the step after a failed act recorded as %+v", rec.Steps[1])
+	}
+}
