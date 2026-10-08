@@ -14562,6 +14562,25 @@ live in `when` and the steps are only doing, so this cannot be written
 wrongly at all. Worth doing today because the saving is real now and
 the conversion is not.
 
+All nine rules that have a condition were put through the same
+ordering, not the two that were costing the most. Four of the battery
+ladder fetched six readings before asking whether the level had
+crossed anything, which is twelve milliseconds rather than twelve
+hundred -- but the reason to fix them is not the twelve milliseconds.
+A rule written after these, copied from whichever one was nearest,
+copies the order it finds. Leaving four examples of the wrong shape
+in place is how the wrong shape survives the fix.
+
+	low battery with something on   1255ms -> 4ms
+
+Not every rule moved: five were already cheapest-first, which is how
+the ordering was found to be a rule rather than a preference.
+
+One thing learned on the way: `jobs.updated_at` is stamped by every
+*run*, not by an edit, so it cannot say when a rule was last changed
+and is no use as a before-and-after marker. The run journal's own
+timestamps are the answer, which is what it is for.
+
 
 ## 12. Maintaining this file
 
