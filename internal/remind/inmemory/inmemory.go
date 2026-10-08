@@ -173,6 +173,21 @@ func (s *Store) Mentioned(_ context.Context, ids []string, at time.Time) error {
 	return nil
 }
 
+// Armed : Records that the phone was asked for these alarms.
+func (s *Store) Armed(_ context.Context, ids []string, at time.Time) error {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+
+	when := at.UTC()
+	for _, id := range ids {
+		if r, ok := s.kept[id]; ok && r.AlarmAskedAt == nil {
+			r.AlarmAskedAt = &when
+			s.kept[id] = r
+		}
+	}
+	return nil
+}
+
 // Hold : Keeps a reminder back because nobody was there to hear it.
 func (s *Store) Hold(_ context.Context, id string, at time.Time) error {
 	s.mu.Lock()

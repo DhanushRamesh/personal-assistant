@@ -266,3 +266,30 @@ func TestAWholeMinuteIsLeftWhereItIs(t *testing.T) {
 		t.Errorf("08:00 became %s", got)
 	}
 }
+
+// TestReachesOnlyWithinADay : An alarm holds a time and not a date,
+// so one asked for further ahead than a day rings on the wrong one.
+//
+// The boundary matters in both directions. Exactly a day ahead is the
+// same clock face coming round once, which is right; a moment already
+// gone rings a day late, which is the same fault backwards.
+func TestReachesOnlyWithinADay(t *testing.T) {
+	now := time.Date(2026, 10, 8, 14, 14, 0, 0, time.UTC)
+	for _, c := range []struct {
+		what string
+		at   time.Time
+		want bool
+	}{
+		{"in an hour", now.Add(time.Hour), true},
+		{"later today", now.Add(6 * time.Hour), true},
+		{"exactly a day", now.Add(24 * time.Hour), true},
+		{"a minute past a day", now.Add(24*time.Hour + time.Minute), false},
+		{"the booking two days out", time.Date(2026, 10, 10, 14, 14, 0, 0, time.UTC), false},
+		{"now", now, false},
+		{"a minute ago", now.Add(-time.Minute), false},
+	} {
+		if got := alarm.Reaches(c.at, now); got != c.want {
+			t.Errorf("%s: Reaches = %v, want %v", c.what, got, c.want)
+		}
+	}
+}

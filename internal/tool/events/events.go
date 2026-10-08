@@ -148,7 +148,7 @@ func kinds(reader Reader, clock Clock) tool.Tool {
 
 			found, err := reader.Kinds(ctx, in.Caller.UserID)
 			if err != nil {
-				return tool.Failed(err.Error())
+				return tool.Broke("What their devices report could not be listed.", err)
 			}
 			if len(found) == 0 {
 				return tool.OK("Their devices have reported nothing at all yet.")
@@ -376,7 +376,7 @@ func recent(reader Reader, clock Clock) tool.Tool {
 
 			found, err := reader.Recent(ctx, in.Caller.UserID, q)
 			if err != nil {
-				return tool.Failed(err.Error())
+				return tool.Broke("What their devices reported could not be read.", err)
 			}
 
 			if len(found) == 0 {

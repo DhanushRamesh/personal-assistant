@@ -55,7 +55,7 @@ func Due(watch *leaving.Watcher) tool.Tool {
 
 			said, err := watch.Look(ctx, in.Caller.UserID)
 			if err != nil {
-				return tool.Failed(err.Error())
+				return tool.Broke("When to set off could not be worked out.", err)
 			}
 			if strings.TrimSpace(said) == "" {
 				return tool.OK(prompt.Silence)

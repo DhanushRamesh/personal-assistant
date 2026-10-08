@@ -188,7 +188,7 @@ func lookUp(searcher search.Searcher) tool.Tool {
 				Query: query, Limit: limit, Days: args.Days, News: args.News,
 			})
 			if err != nil {
-				return tool.Failed(err.Error())
+				return tool.Broke("The search could not be done.", err)
 			}
 			return tool.OK(search.Describe(query, found))
 		},
@@ -259,7 +259,7 @@ func readPage(reader search.Reader) tool.Tool {
 
 			pages, err := reader.Read(ctx, wanted)
 			if err != nil {
-				return tool.Failed(err.Error())
+				return tool.Broke("That page could not be read.", err)
 			}
 			return tool.OK(search.Said(pages, Longest))
 		},

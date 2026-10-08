@@ -79,7 +79,7 @@ func list(repo chat.Repository) tool.Tool {
 
 			found, err := listing(ctx, repo, in.Caller.UserID, args.Limit, args.Archived)
 			if err != nil {
-				return tool.Failed(err.Error())
+				return tool.Broke("Their conversations could not be read.", err)
 			}
 			if len(found) == 0 {
 				return tool.OK("There are no conversations.")
@@ -120,7 +120,7 @@ func find(repo chat.Repository) tool.Tool {
 
 			found, err := listing(ctx, repo, in.Caller.UserID, 50, false)
 			if err != nil {
-				return tool.Failed(err.Error())
+				return tool.Broke("Their conversations could not be read.", err)
 			}
 
 			matched := matching(found, args.Name)
@@ -257,7 +257,7 @@ func create(repo chat.Repository) tool.Tool {
 
 			c := chat.NewConversation(in.Caller.UserID, args.Title)
 			if err := repo.CreateConversation(ctx, c); err != nil {
-				return tool.Failed("The conversation could not be created: " + err.Error())
+				return tool.Broke("The conversation could not be created.", err)
 			}
 			if made, err := repo.GetConversation(ctx, c.ID); err != nil || made == nil {
 				return tool.Unverified("Creating the conversation", "it cannot be read back")
@@ -267,7 +267,8 @@ func create(repo chat.Repository) tool.Tool {
 					// Made but not switched to, which is a partial outcome
 					// and has to be reported as one: saying "done" would
 					// have the person talking into the old one.
-					return tool.Partial("The conversation was created but this client could not be switched to it: " + err.Error())
+					return tool.Partial("The conversation was created but this client could not be " +
+						"switched to it.").Because(err)
 				}
 			}
 			return tool.OK(fmt.Sprintf("Created and read back. There %s %d %s before, and %s now. ",

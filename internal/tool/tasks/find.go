@@ -74,7 +74,7 @@ func findATask(lists Lists, clock Clock) tool.Tool {
 				Name string `json:"name"`
 			}
 			if err := json.Unmarshal(in.Args, &args); err != nil {
-				return tool.Failed("the name could not be read: " + err.Error())
+				return tool.Broke("The name could not be read.", err)
 			}
 			want := strings.TrimSpace(args.Name)
 			if want == "" {

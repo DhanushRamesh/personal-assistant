@@ -19,21 +19,22 @@ import (
 // persistence tags. The timestamps disable GORM's automatic ones, which
 // would otherwise overwrite what the domain recorded.
 type row struct {
-	ID          string     `gorm:"column:id;primaryKey"`
-	UserID      string     `gorm:"column:user_id"`
-	ClientID    *string    `gorm:"column:client_id"`
-	Scope       string     `gorm:"column:scope"`
-	Title       string     `gorm:"column:title"`
-	Body        string     `gorm:"column:body"`
-	SaidLate    *string    `gorm:"column:said_late"`
-	DueAt       time.Time  `gorm:"column:due_at"`
-	Repeats     *string    `gorm:"column:repeats"`
-	Status      string     `gorm:"column:status"`
-	CreatedAt   time.Time  `gorm:"column:created_at;autoCreateTime:false"`
-	UpdatedAt   time.Time  `gorm:"column:updated_at;autoUpdateTime:false"`
-	LastFiredAt *time.Time `gorm:"column:last_fired_at"`
-	MentionedAt *time.Time `gorm:"column:mentioned_at"`
-	Fires       int        `gorm:"column:fires"`
+	ID           string     `gorm:"column:id;primaryKey"`
+	UserID       string     `gorm:"column:user_id"`
+	ClientID     *string    `gorm:"column:client_id"`
+	Scope        string     `gorm:"column:scope"`
+	Title        string     `gorm:"column:title"`
+	Body         string     `gorm:"column:body"`
+	SaidLate     *string    `gorm:"column:said_late"`
+	DueAt        time.Time  `gorm:"column:due_at"`
+	Repeats      *string    `gorm:"column:repeats"`
+	Status       string     `gorm:"column:status"`
+	CreatedAt    time.Time  `gorm:"column:created_at;autoCreateTime:false"`
+	UpdatedAt    time.Time  `gorm:"column:updated_at;autoUpdateTime:false"`
+	AlarmAskedAt *time.Time `gorm:"column:alarm_asked_at"`
+	LastFiredAt  *time.Time `gorm:"column:last_fired_at"`
+	MentionedAt  *time.Time `gorm:"column:mentioned_at"`
+	Fires        int        `gorm:"column:fires"`
 }
 
 // TableName : Names the table this row maps to.
@@ -64,27 +65,32 @@ func (r *row) toReminder() remind.Reminder {
 		at := r.MentionedAt.UTC()
 		out.MentionedAt = &at
 	}
+	if r.AlarmAskedAt != nil {
+		at := r.AlarmAskedAt.UTC()
+		out.AlarmAskedAt = &at
+	}
 	return out
 }
 
 // toRow : Converts a reminder into the row that stores it.
 func toRow(r *remind.Reminder) *row {
 	return &row{
-		ID:          r.ID,
-		UserID:      r.UserID,
-		ClientID:    nullable(r.ClientID),
-		Scope:       string(r.Scope),
-		Title:       r.Title,
-		Body:        r.Body,
-		SaidLate:    nullable(r.SaidLate),
-		DueAt:       r.DueAt.UTC(),
-		Repeats:     nullable(string(r.Repeats)),
-		Status:      string(r.Status),
-		CreatedAt:   r.CreatedAt,
-		UpdatedAt:   r.UpdatedAt,
-		LastFiredAt: r.LastFiredAt,
-		MentionedAt: r.MentionedAt,
-		Fires:       r.Fires,
+		ID:           r.ID,
+		UserID:       r.UserID,
+		ClientID:     nullable(r.ClientID),
+		Scope:        string(r.Scope),
+		Title:        r.Title,
+		Body:         r.Body,
+		SaidLate:     nullable(r.SaidLate),
+		DueAt:        r.DueAt.UTC(),
+		Repeats:      nullable(string(r.Repeats)),
+		Status:       string(r.Status),
+		CreatedAt:    r.CreatedAt,
+		UpdatedAt:    r.UpdatedAt,
+		LastFiredAt:  r.LastFiredAt,
+		MentionedAt:  r.MentionedAt,
+		AlarmAskedAt: r.AlarmAskedAt,
+		Fires:        r.Fires,
 	}
 }
 
@@ -267,6 +273,20 @@ func (s *Store) Mentioned(ctx context.Context, ids []string, at time.Time) error
 		Update("mentioned_at", at.UTC()).Error
 	if err != nil {
 		return fmt.Errorf("remind: recording that a miss was mentioned: %w", err)
+	}
+	return nil
+}
+
+// Armed : Records that the phone was asked for these alarms.
+func (s *Store) Armed(ctx context.Context, ids []string, at time.Time) error {
+	if len(ids) == 0 {
+		return nil
+	}
+	err := s.db.WithContext(ctx).Model(&row{}).
+		Where("id IN ? AND alarm_asked_at IS NULL", ids).
+		Update("alarm_asked_at", at.UTC()).Error
+	if err != nil {
+		return fmt.Errorf("remind: recording that an alarm was asked for: %w", err)
 	}
 	return nil
 }

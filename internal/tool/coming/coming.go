@@ -144,7 +144,7 @@ func settled(warnings Warnings, clock Clock) tool.Tool {
 			now := clock.now()
 			held, err := warnings.Held(ctx, in.Caller.UserID, now)
 			if err != nil {
-				return tool.Failed(err.Error())
+				return tool.Broke("What is coming could not be read.", err)
 			}
 
 			// Only the ones that have actually been warned about and
@@ -171,14 +171,14 @@ func settled(warnings Warnings, clock Clock) tool.Tool {
 			// would silence the shirt along with the present.
 			if left := remaining(args.Left); left != "" {
 				if err := warnings.Trim(ctx, in.Caller.UserID, chosen.EventID, left, now); err != nil {
-					return tool.Failed(err.Error())
+					return tool.Broke("That could not be settled.", err)
 				}
 				return tool.OK(fmt.Sprintf("Noted against %q. The warning nearer the time "+
 					"will ask only for: %s", chosen.Title, left))
 			}
 
 			if err := warnings.Settle(ctx, in.Caller.UserID, chosen.EventID, now); err != nil {
-				return tool.Failed(err.Error())
+				return tool.Broke("That could not be settled.", err)
 			}
 			return tool.OK(fmt.Sprintf("Nothing more will be said about %q before it. "+
 				"It stays in their diary; only the warning is dropped.", chosen.Title))

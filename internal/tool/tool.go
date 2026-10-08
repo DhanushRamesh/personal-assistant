@@ -148,6 +148,14 @@ type Result struct {
 	// Outcome : Whether it worked, did not, or did part of it.
 	Outcome conversation.Outcome
 
+	// Detail : What actually went wrong, kept exactly.
+	//
+	// Never put in front of the model: it reads Content and says it,
+	// so a driver's error in here would be spoken aloud. This is for
+	// the log, and for answering somebody who asks what exactly
+	// failed. Empty unless the result came from [Broke].
+	Detail string
+
 	// MustSay : Facts the person has to be told, checked against the
 	// answer once the turn is finished.
 	//
@@ -212,14 +220,71 @@ func OK(content string) Result {
 }
 
 // Failed : A result that did nothing, saying exactly why.
+//
+// The sentence is written for a person to hear, because that is where
+// it ends up: the model reads it and says it. Anything that came out
+// of a library, a driver or a service goes to [Broke] instead.
 func Failed(why string) Result {
 	return Result{Outcome: conversation.OutcomeFailed, Content: why}
+}
+
+// Broke : A result that did nothing because something went wrong,
+// with the sentence to say and the fault kept behind it.
+//
+// Two audiences and only one of them wants the fault. Handing the
+// model err.Error() means the person is read a database driver's
+// timeout in the assistant's own voice, which happened: a wrapped
+// repository error reached the model as the whole of what to say.
+//
+// So the sentence is what the model is given, and the detail is
+// logged and kept for somebody who asks what exactly went wrong. A
+// nil error is still a failure -- the sentence stands on its own --
+// so this is safe to call wherever the error might be nil.
+func Broke(saying string, err error) Result {
+	r := Result{Outcome: conversation.OutcomeFailed, Content: saying}
+	if err != nil {
+		r.Detail = err.Error()
+	}
+	return r
+}
+
+// Plainly : A validation error with its package prefix taken off.
+//
+// Go's convention is that an error says where it came from --
+// "memory: a memory needs a subject" -- and the rest of that sentence
+// is exactly what somebody should be told. Only the prefix is
+// machinery, so only the prefix goes.
+//
+// For errors written to be read. Anything from a driver or a service
+// is not made speakable by trimming it, and belongs in [Broke].
+func Plainly(err error) string {
+	if err == nil {
+		return ""
+	}
+	said := err.Error()
+	if at := strings.Index(said, ": "); at > 0 && !strings.ContainsAny(said[:at], " \t") {
+		return said[at+2:]
+	}
+	return said
 }
 
 // Partial : A result that did some of what was asked. The content says which
 // parts, since "partly done" on its own tells a model nothing it can report.
 func Partial(what string) Result {
 	return Result{Outcome: conversation.OutcomePartial, Content: what}
+}
+
+// Because : The same result with the fault behind it kept.
+//
+// For an outcome that is not a plain failure and still had something
+// go wrong -- a write that happened and a follow-on that did not --
+// where what to say and what went wrong are still two different
+// things. A nil error changes nothing.
+func (r Result) Because(err error) Result {
+	if err != nil {
+		r.Detail = err.Error()
+	}
+	return r
 }
 
 // Reaches : Whether this tool may be called from the given channel.

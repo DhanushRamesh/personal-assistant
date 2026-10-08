@@ -65,7 +65,7 @@ func find(events Events, checks []situation.Check, clock func() time.Time) tool.
 				Since: now.Add(-situation.Behind),
 			})
 			if err != nil {
-				return tool.Failed(err.Error())
+				return tool.Broke("That could not be worked out.", err)
 			}
 
 			// The first that finds something, in the order they

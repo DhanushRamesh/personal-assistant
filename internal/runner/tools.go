@@ -208,10 +208,18 @@ func (r *Runner) runTools(
 			}
 		}
 
-		r.logger.InfoContext(ctx, "tool ran",
+		// The fault, where there was one. It is deliberately not in
+		// the result the model reads -- it would be said aloud -- so
+		// the log is the only place it survives.
+		fields := []any{
 			slog.String("tool", c.Name),
 			slog.String("outcome", string(result.Outcome)),
-			slog.Duration("took", time.Since(started)))
+			slog.Duration("took", time.Since(started)),
+		}
+		if result.Detail != "" {
+			fields = append(fields, slog.String("detail", result.Detail))
+		}
+		r.logger.InfoContext(ctx, "tool ran", fields...)
 
 		ran = append(ran, result)
 		got = append(got, conversation.ToolResult{

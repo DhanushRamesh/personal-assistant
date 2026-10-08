@@ -689,3 +689,64 @@ func TestOneIsNotSaidLongBefore(t *testing.T) {
 		t.Errorf("a reminder was said a minute early")
 	}
 }
+
+// asked : Every alarm the phone was asked for.
+type asked struct {
+	mu   sync.Mutex
+	want []alarm.Alarm
+}
+
+func (a *asked) Want(_ context.Context, _ string, al alarm.Alarm) error {
+	a.mu.Lock()
+	defer a.mu.Unlock()
+	a.want = append(a.want, al)
+	return nil
+}
+
+func (a *asked) count() int {
+	a.mu.Lock()
+	defer a.mu.Unlock()
+	return len(a.want)
+}
+
+// TestAnAlarmIsAskedForOnlyOnceItIsWithinADay : And then only once.
+//
+// An alarm holds an hour and a minute and no date, so one asked for
+// two days ahead rings tomorrow -- which is how a booking reminder
+// correctly set for the 10th put an alarm on the phone for the 9th,
+// and no amount of moving the reminder could move it.
+func TestAnAlarmIsAskedForOnlyOnceItIsWithinADay(t *testing.T) {
+	at := time.Date(2026, 10, 8, 14, 14, 0, 0, time.UTC)
+	l, store, _ := loop(t, at)
+	phone := &asked{}
+	l.Alarm = phone
+
+	near := put(t, store, at.Add(3*time.Hour), "")
+	far := put(t, store, at.Add(48*time.Hour), "")
+
+	l.Once(context.Background())
+	if phone.count() != 1 {
+		t.Fatalf("asked for %d alarms, want only the one inside a day", phone.count())
+	}
+	if got := phone.want[0].Key; got != near.ID {
+		t.Errorf("asked for %q, want the near one %q", got, near.ID)
+	}
+
+	// Again, and the phone must not be asked twice: it cannot tell a
+	// second alarm from the first and only one can be taken back.
+	l.Once(context.Background())
+	if phone.count() != 1 {
+		t.Errorf("asked %d times over two passes, want once", phone.count())
+	}
+
+	// The far one comes into range, and is asked for then.
+	later, _, _ := loop(t, at.Add(30*time.Hour))
+	later.Store, later.Alarm = store, phone
+	later.Once(context.Background())
+	if phone.count() != 2 {
+		t.Fatalf("asked for %d after it came into range, want the far one too", phone.count())
+	}
+	if got := phone.want[1].Key; got != far.ID {
+		t.Errorf("asked for %q, want the far one %q", got, far.ID)
+	}
+}

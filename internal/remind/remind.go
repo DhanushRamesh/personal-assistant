@@ -168,6 +168,15 @@ type Reminder struct {
 	// MentionedAt : When a miss was brought up, or nil if it has not been.
 	// Only ever set on a missed one, and only once.
 	MentionedAt *time.Time
+	// AlarmAskedAt : When the phone was asked for this one's alarm,
+	// or nil if it has not been asked yet.
+	//
+	// An alarm cannot be asked for until the reminder is inside a
+	// day -- see [alarm.Within] -- so for anything further out this
+	// stays nil until the sweep reaches it. What it prevents is
+	// asking twice: the phone has no way to tell a second alarm
+	// from the first, so a repeat is two alarms, not one.
+	AlarmAskedAt *time.Time
 	// Fires : How many times it has been said.
 	Fires int
 }

@@ -142,7 +142,7 @@ func visits(reader Reader, clock Clock) tool.Tool {
 			}
 			if len(in.Args) > 0 {
 				if err := json.Unmarshal(in.Args, &args); err != nil {
-					return tool.Failed("those arguments could not be read: " + err.Error())
+					return tool.Broke("Those arguments could not be read.", err)
 				}
 			}
 			days := args.Days
@@ -167,7 +167,7 @@ func visits(reader Reader, clock Clock) tool.Tool {
 			found, err := reader.Recent(ctx, in.Caller.UserID, event.Query{
 				Prefix: "place.", Since: since.Add(-7 * 24 * time.Hour)})
 			if err != nil {
-				return tool.Failed("their movements could not be read: " + err.Error())
+				return tool.Broke("Their movements could not be read.", err)
 			}
 
 			been := gather(found, now)

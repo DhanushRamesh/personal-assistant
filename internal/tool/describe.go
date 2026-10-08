@@ -69,7 +69,7 @@ func Describing(r *Registry) Tool {
 				Names []string `json:"names"`
 			}
 			if err := json.Unmarshal(in.Args, &args); err != nil {
-				return Failed("the names could not be read: " + err.Error())
+				return Broke("The names could not be read.", err)
 			}
 			if len(args.Names) == 0 {
 				return Failed("no tool was named, so there is nothing to describe.")

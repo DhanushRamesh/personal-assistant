@@ -92,7 +92,7 @@ func whenTrouble(err error) tool.Result {
 		return tool.Failed("The Google connection has lapsed and must be granted again on " +
 			"the settings screen. Tell them that, and do not say the calendar is empty.")
 	default:
-		return tool.Failed(err.Error())
+		return tool.Broke("The calendar could not be reached.", err)
 	}
 }
 
@@ -196,7 +196,7 @@ func add(diary Diary, clock Clock) tool.Tool {
 
 			starts, err := when(args.Starts, clock.where())
 			if err != nil {
-				return tool.Failed(err.Error())
+				return tool.Failed(tool.Plainly(err))
 			}
 			minutes := args.Minutes
 			if minutes <= 0 {
@@ -214,7 +214,7 @@ func add(diary Diary, clock Clock) tool.Tool {
 			if last := strings.TrimSpace(args.Ends); last != "" {
 				until, err := when(last, clock.where())
 				if err != nil {
-					return tool.Failed(err.Error())
+					return tool.Failed(tool.Plainly(err))
 				}
 				if until.Before(starts) {
 					return tool.Failed("That ends before it starts. Give the later day as 'ends'.")
@@ -336,7 +336,7 @@ func amend(diary Diary, clock Clock) tool.Tool {
 			if strings.TrimSpace(args.Starts) != "" {
 				starts, err := when(args.Starts, clock.where())
 				if err != nil {
-					return tool.Failed(err.Error())
+					return tool.Failed(tool.Plainly(err))
 				}
 				change.Starts = &starts
 
@@ -365,7 +365,7 @@ func amend(diary Diary, clock Clock) tool.Tool {
 			if last := strings.TrimSpace(args.Ends); last != "" {
 				until, err := when(last, clock.where())
 				if err != nil {
-					return tool.Failed(err.Error())
+					return tool.Failed(tool.Plainly(err))
 				}
 				from := was.Starts
 				if change.Starts != nil {
@@ -546,7 +546,7 @@ func agenda(diary Diary, clock Clock) tool.Tool {
 
 			from, to, said, err := window(args.From, args.To, args.Days, clock)
 			if err != nil {
-				return tool.Failed(err.Error())
+				return tool.Failed(tool.Plainly(err))
 			}
 
 			// Named, it is one of the person's own and read only. Left
@@ -732,7 +732,7 @@ func free(diary Diary, clock Clock) tool.Tool {
 
 			from, err := when(args.From, clock.where())
 			if err != nil {
-				return tool.Failed(err.Error())
+				return tool.Failed(tool.Plainly(err))
 			}
 			minutes := args.Minutes
 			if minutes <= 0 {

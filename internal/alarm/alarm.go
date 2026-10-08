@@ -90,6 +90,33 @@ type Setter interface {
 	Clear(ctx context.Context, a Alarm) error
 }
 
+// Within : How far ahead an alarm can be asked for and still ring on
+// the right day.
+//
+// An alarm holds an hour and a minute and no date at all, so one
+// asked for now goes off at the next time the clock reads that --
+// today if it is still to come, otherwise tomorrow. For anything due
+// inside a day that is the right moment. For anything further out it
+// is the wrong day, and a phone that rings on the wrong day is worse
+// than one that does not ring: somebody acts on it.
+//
+// Found on 8 October 2026 from a booking reminder set for the 10th at
+// 2:14pm. The reminder was right, the phone was right, and they
+// disagreed -- the alarm was going to ring at 2:14 the following
+// afternoon, two days early, and the owner asked three times why it
+// could not be moved. Nothing was wrong with it that could be moved.
+const Within = 24 * time.Hour
+
+// Reaches : Whether an alarm asked for now would ring at the right
+// moment rather than the next time that clock face comes round.
+//
+// False for anything already past as well. An alarm for a moment
+// gone by rings a day late, which is the same fault read backwards.
+func Reaches(at, now time.Time) bool {
+	ahead := at.Sub(now)
+	return ahead > 0 && ahead <= Within
+}
+
 // Holds : Whether the phone keeps this alarm on its own, which is
 // also exactly when it cannot be taken back.
 //

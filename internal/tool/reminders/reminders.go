@@ -153,8 +153,14 @@ func update(store remind.Store, clock Clock, alarms Alarms) tool.Tool {
 		Writes:  true,
 		Purpose: "Change a reminder that has not happened yet: what it is called, what it says, when it is due, how often it repeats.",
 		UseWhen: "The person wants an existing one altered rather than replaced -- rename it, move it, " +
-			"change what it says, make it repeat or stop repeating.",
-		Avoid: "Give only what is changing; everything left out stays as it is. Do not cancel one and set " +
+			"change what it says, make it repeat or stop repeating. " +
+			"This is also how an alarm already on their phone is moved: the alarm in the phone's " +
+			"clock app belongs to the reminder, so changing the time here takes the old alarm off " +
+			"the phone and puts the new one on. Asked to change an alarm on their phone, find the " +
+			"reminder and change it; do not say the phone's clock is out of reach.",
+		Avoid: "A repeating reminder's alarm cannot be taken off the phone from here -- Android has no " +
+			"way in -- so moving one leaves the old alarm standing and says so. " +
+			"Give only what is changing; everything left out stays as it is. Do not cancel one and set " +
 			"another in its place: that loses how many times it has already gone off and gives it a new " +
 			"identifier. Use reminder_snooze to put one off rather than this, since that is what it is " +
 			"for and it handles a repeating one properly.",
@@ -242,7 +248,7 @@ func update(store remind.Store, clock Clock, alarms Alarms) tool.Tool {
 			// diff they were never given.
 			before, err := store.Get(ctx, in.Caller.UserID, args.ID)
 			if err != nil && !errors.Is(err, remind.ErrNotFound) {
-				return tool.Failed(err.Error())
+				return tool.Broke("That reminder could not be read.", err)
 			}
 
 			changed, err := remind.Amend(ctx, store, in.Caller.UserID, args.ID, change)
@@ -256,7 +262,7 @@ func update(store remind.Store, clock Clock, alarms Alarms) tool.Tool {
 				return tool.Failed(fmt.Sprintf(
 					"There is no reminder with the identifier %s. List them rather than guessing.", args.ID))
 			case err != nil:
-				return tool.Failed(err.Error())
+				return tool.Broke("That reminder could not be changed.", err)
 			}
 
 			// Read it back. Amend returned what it believes it wrote;
@@ -341,15 +347,15 @@ func recent(store remind.Store, clock Clock) tool.Tool {
 
 			said, err := store.LastSpoken(ctx, in.Caller.UserID, since)
 			if err != nil {
-				return tool.Failed(err.Error())
+				return tool.Broke("Their reminders could not be read.", err)
 			}
 			missed, err := store.List(ctx, in.Caller.UserID, remind.Missed)
 			if err != nil {
-				return tool.Failed(err.Error())
+				return tool.Broke("Their reminders could not be read.", err)
 			}
 			held, err := store.Waiting(ctx, in.Caller.UserID)
 			if err != nil {
-				return tool.Failed(err.Error())
+				return tool.Broke("Their reminders could not be read.", err)
 			}
 
 			return tool.OK(recap(said, within(missed, since), held, hours, len(said), clock))
@@ -509,7 +515,7 @@ func snooze(store remind.Store, clock Clock, alarms Alarms) tool.Tool {
 						"%q was %s, so there is nothing to put off. Set it again instead.",
 						existing.Title, existing.Status))
 				}
-				return tool.Failed(err.Error())
+				return tool.Broke("That reminder could not be put off.", err)
 			}
 
 			// A repeating one was not moved, and saying it was would have
@@ -589,10 +595,15 @@ func laterBy(clock Clock, seconds, minutes int, written string) (time.Time, stri
 // set : Arranges for something to be said later.
 func set(store remind.Store, clock Clock, alarms Alarms) tool.Tool {
 	return tool.Tool{
-		Name:    "reminder_set",
-		Domain:  "reminder",
-		Purpose: "Arrange for something to be said out loud at a time, once or repeatedly.",
+		Name:   "reminder_set",
+		Domain: "reminder",
+		Purpose: "Arrange for something to be said out loud at a time, once or repeatedly, and " +
+			"set an alarm on their phone for it.",
 		UseWhen: "The person asks to be reminded, wants a timer, or wants telling at a time or on a day. " +
+			"This is also how an alarm on their phone is set: a reminder puts a real alarm into " +
+			"the phone's own clock app, so \"set an alarm for six\" is this tool. There is no " +
+			"separate alarm anywhere and no other way to reach the phone's clock, so never say " +
+			"an alarm on their phone is beyond you. " +
 			"Nothing needs looking up first. A reminder takes up no time and can clash with " +
 			"nothing, so do not read the diary or check whether they are free before setting " +
 			"one: \"remind me to call the plumber at four\" is this tool and no other.",
@@ -708,11 +719,11 @@ func set(store remind.Store, clock Clock, alarms Alarms) tool.Tool {
 			r, err := remind.NewLate(in.Caller.UserID, in.Caller.ClientID, scope,
 				args.Title, args.Say, args.Late, due, remind.Repeat(args.Repeats))
 			if err != nil {
-				return tool.Failed(err.Error())
+				return tool.Failed(tool.Plainly(err))
 			}
 			before := count(ctx, store, in.Caller.UserID)
 			if err := store.Create(ctx, r); err != nil {
-				return tool.Failed(err.Error())
+				return tool.Broke("That reminder could not be written down.", err)
 			}
 
 			// Read it back. A create that reported success and stored
@@ -731,7 +742,7 @@ func set(store remind.Store, clock Clock, alarms Alarms) tool.Tool {
 				"happen, in their words rather than as a date.%s",
 				stored.Title, spell(stored.DueAt, clock.where()), repeating(stored.Repeats), stored.ID,
 				wasWere(before), before, wasWere(before+1), count(ctx, store, in.Caller.UserID),
-				alarmed(ctx, alarms, in.Caller.UserID, stored, clock.where())))
+				alarmed(ctx, alarms, in.Caller.UserID, stored, clock.where(), clock.now())))
 		},
 	}
 }
@@ -785,7 +796,7 @@ func list(store remind.Store, clock Clock) tool.Tool {
 
 			found, err := store.List(ctx, in.Caller.UserID, states...)
 			if err != nil {
-				return tool.Failed(err.Error())
+				return tool.Broke("Their reminders could not be read.", err)
 			}
 			if len(found) == 0 {
 				return tool.OK("There is nothing waiting to be said.")
@@ -855,7 +866,7 @@ func cancel(store remind.Store, clock Clock, alarms Alarms) tool.Tool {
 						return tool.Failed(fmt.Sprintf(
 							"There is no reminder with the identifier %s. List them rather than guessing.", id))
 					}
-					return tool.Failed(err.Error())
+					return tool.Broke("That reminder could not be cancelled.", err)
 				}
 				titles = append(titles, existing.Title)
 				was = append(was, *existing)
@@ -864,7 +875,7 @@ func cancel(store remind.Store, clock Clock, alarms Alarms) tool.Tool {
 			before := count(ctx, store, in.Caller.UserID)
 			for _, id := range args.IDs {
 				if err := store.Cancel(ctx, in.Caller.UserID, id); err != nil {
-					return tool.Failed(err.Error())
+					return tool.Broke("That reminder could not be cancelled.", err)
 				}
 			}
 
@@ -1071,7 +1082,7 @@ func repeatWords() []string {
 // now is that the alarm has been asked for. If it never arrives
 // the sender says so itself, which is the only place that knows.
 func alarmed(ctx context.Context, alarms Alarms, userID string,
-	r *remind.Reminder, where *time.Location) string {
+	r *remind.Reminder, where *time.Location, now time.Time) string {
 	if alarms == nil {
 		return " There is no way to reach their phone from here, so no alarm was asked for: say so."
 	}
@@ -1079,6 +1090,15 @@ func alarmed(ctx context.Context, alarms Alarms, userID string,
 		// Turned off deliberately. Not a failure and not worth a
 		// sentence: they know, they set it.
 		return ""
+	}
+	// Too far ahead to express. An alarm carries an hour and a
+	// minute, so one asked for now would ring the next time the
+	// clock reads that -- the wrong day, days early, and acted on.
+	// The sweep in remind.Loop asks for it once it is near.
+	if !alarm.Reaches(r.DueAt, now) {
+		return " It is too far off for an alarm on their phone yet -- an alarm clock holds a time " +
+			"and not a date -- so one will be set nearer the day. Say that in one clause, as a " +
+			"thing being taken care of, and never describe why."
 	}
 	// In their zone, not the one it is stored in. An alarm clock
 	// knows nothing about UTC.

@@ -270,7 +270,7 @@ func list(store Store, clock Clock, usually routine.Store) tool.Tool {
 			}
 			found, err := store.Mine(ctx, in.Caller.UserID, Kind, job.Limit)
 			if err != nil {
-				return tool.Failed(err.Error())
+				return tool.Broke("Their rules could not be read.", err)
 			}
 			return tool.OK(prompt.Block(
 				describe(found, clock),
@@ -399,7 +399,7 @@ func add(store Store, clock Clock, id func() string, look Lookup, try Trier) too
 			made.Cool = strings.TrimSpace(args.Cool)
 			made.Anywhere = args.Anywhere
 			if err := store.Keep(ctx, made); err != nil {
-				return tool.Failed(err.Error())
+				return tool.Broke("That rule could not be written down.", err)
 			}
 			return tool.OK(prompt.Block(
 				prompt.Text("Created:", one(made, clock)),
@@ -534,7 +534,7 @@ func update(store Store, clock Clock, look Lookup, try Trier) tool.Tool {
 
 			held, err := store.Mine(ctx, in.Caller.UserID, Kind, job.Limit)
 			if err != nil {
-				return tool.Failed(err.Error())
+				return tool.Broke("Their rules could not be read.", err)
 			}
 			var was job.Job
 			for _, j := range held {
@@ -599,7 +599,7 @@ func update(store Store, clock Clock, look Lookup, try Trier) tool.Tool {
 			// somebody who has just changed a rule wants to hear
 			// whether it works.
 			if err := store.Change(ctx, made); err != nil {
-				return tool.Failed(err.Error())
+				return tool.Broke("That rule could not be changed.", err)
 			}
 			return tool.OK(prompt.Block(
 				prompt.Text("Changed:", one(made, clock)),
@@ -680,7 +680,7 @@ func quieten(store Store, clock Clock) tool.Tool {
 				until = clock.now().Add(long)
 			}
 			if err := store.Quiet(ctx, in.Caller.UserID, args.ID, until); err != nil {
-				return tool.Failed(err.Error())
+				return tool.Broke("That rule could not be put aside.", err)
 			}
 			if until.IsZero() {
 				return tool.OK("That rule is running again.")
@@ -731,7 +731,7 @@ func cancel(store Store) tool.Tool {
 
 			stopped, err := store.Stop(ctx, in.Caller.UserID, strings.TrimSpace(args.ID))
 			if err != nil {
-				return tool.Failed(err.Error())
+				return tool.Broke("That rule could not be stopped.", err)
 			}
 			if !stopped {
 				return tool.Failed(prompt.Text(

@@ -104,7 +104,7 @@ func list(recall *memory.Recall) tool.Tool {
 			for _, tier := range memory.Tiers() {
 				found, err := store.All(ctx, in.Caller.UserID, tier)
 				if err != nil {
-					return tool.Failed(err.Error())
+					return tool.Broke("What they have asked you to remember could not be read.", err)
 				}
 				held = append(held, found...)
 			}
@@ -241,7 +241,7 @@ func remember(recall *memory.Recall) tool.Tool {
 
 			m, err := memory.New(in.Caller.UserID, tier, args.Subject, args.Body)
 			if err != nil {
-				return tool.Failed(err.Error())
+				return tool.Failed(tool.Plainly(err))
 			}
 			if held := alreadyHeld(ctx, recall, in.Caller.UserID, m.Text()); held != nil {
 				return tool.Failed(fmt.Sprintf(
@@ -249,7 +249,7 @@ func remember(recall *memory.Recall) tool.Tool {
 						"say something else, and otherwise say nothing about it.", held.ID, held.Text()))
 			}
 			if err := store.Create(ctx, m); err != nil {
-				return tool.Failed(err.Error())
+				return tool.Broke("That could not be remembered.", err)
 			}
 
 			// Without a vector it is found only by its wording until the next
@@ -314,7 +314,7 @@ func search(recall *memory.Recall) tool.Tool {
 
 			found, err := looking.For(ctx, in.Caller.UserID, args.About)
 			if err != nil {
-				return tool.Failed(err.Error())
+				return tool.Broke("Their memories could not be searched.", err)
 			}
 			if len(found) == 0 {
 				return tool.OK("Nothing is remembered about that.")
@@ -383,7 +383,7 @@ func update(recall *memory.Recall) tool.Tool {
 				existing.Tier = memory.TierAlways
 			}
 			if err := store.Update(ctx, existing); err != nil {
-				return tool.Failed(err.Error())
+				return tool.Broke("That memory could not be changed.", err)
 			}
 
 			if err := recall.EmbedOne(ctx, existing); err != nil {
@@ -492,7 +492,7 @@ func forget(recall *memory.Recall) tool.Tool {
 			before := kept(ctx, store, in.Caller.UserID)
 			for _, want := range args.Memories {
 				if err := store.Forget(ctx, in.Caller.UserID, want.ID); err != nil {
-					return tool.Failed(err.Error())
+					return tool.Broke("That memory could not be forgotten.", err)
 				}
 			}
 			for _, want := range args.Memories {

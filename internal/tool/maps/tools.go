@@ -54,7 +54,7 @@ func findPlace(m Finding) tool.Tool {
 
 			found, err := m.Find(ctx, args.Place, Country, 4)
 			if err != nil {
-				return tool.Failed(err.Error())
+				return tool.Failed(tool.Plainly(err))
 			}
 			if len(found) == 0 {
 				return tool.OK(fmt.Sprintf("No place on the map answers to %q. "+
@@ -125,7 +125,7 @@ func nearMe(m Nearing, reader Reader, clock Clock) tool.Tool {
 
 			lat, lon, err := here(ctx, reader, clock, in.Caller.UserID)
 			if err != nil {
-				return tool.Failed(err.Error())
+				return tool.Failed(tool.Plainly(err))
 			}
 
 			metres := float64(args.Metres)
@@ -138,7 +138,7 @@ func nearMe(m Nearing, reader Reader, clock Clock) tool.Tool {
 
 			found, err := m.Near(ctx, lat, lon, args.Sort, metres, 8)
 			if err != nil {
-				return tool.Failed(err.Error())
+				return tool.Broke("Nothing nearby could be looked up.", err)
 			}
 			if len(found) == 0 {
 				return tool.OK(fmt.Sprintf("Nothing of that sort within %s of them. "+
@@ -219,7 +219,7 @@ func howLong(m Maps, reader Reader, clock Clock) tool.Tool {
 
 			to, err := one(ctx, m, args.To)
 			if err != nil {
-				return tool.Failed(err.Error())
+				return tool.Failed(tool.Plainly(err))
 			}
 
 			var fromLat, fromLon float64
@@ -232,7 +232,7 @@ func howLong(m Maps, reader Reader, clock Clock) tool.Tool {
 				fromLat, fromLon, whence = start.Lat, start.Lon, start.Name
 			}
 			if err != nil {
-				return tool.Failed(err.Error())
+				return tool.Failed(tool.Plainly(err))
 			}
 
 			mode := place.Driving
@@ -241,7 +241,7 @@ func howLong(m Maps, reader Reader, clock Clock) tool.Tool {
 			}
 			went, err := m.Route(ctx, fromLat, fromLon, to.Lat, to.Lon, mode)
 			if err != nil {
-				return tool.Failed(err.Error())
+				return tool.Broke("The way there could not be worked out.", err)
 			}
 			if went.Metres == 0 && went.Takes == 0 {
 				return tool.OK(fmt.Sprintf("No road from %s to %s was found. "+
@@ -262,10 +262,15 @@ func howLong(m Maps, reader Reader, clock Clock) tool.Tool {
 }
 
 // one : The best match for a named place.
+//
+// Two failures and only one of them is worth repeating. Nothing on
+// the map by that name is the person's answer; the map service being
+// unreachable is not, so it is wrapped rather than handed on, and
+// what came back from it is kept behind the sentence.
 func one(ctx context.Context, f Finding, text string) (place.Spot, error) {
 	found, err := f.Find(ctx, text, Country, 1)
 	if err != nil {
-		return place.Spot{}, err
+		return place.Spot{}, fmt.Errorf("the map could not be reached: %w", err)
 	}
 	if len(found) == 0 {
 		return place.Spot{}, fmt.Errorf("no place on the map answers to %q", text)

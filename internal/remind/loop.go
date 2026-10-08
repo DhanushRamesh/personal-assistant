@@ -164,7 +164,63 @@ func (l *Loop) Once(ctx context.Context) Pass {
 	}
 
 	l.retire(ctx, at, &pass)
+	l.arm(ctx, at)
 	return pass
+}
+
+// arm : Asks the phone for the alarms of reminders that have come
+// within a day.
+//
+// An alarm holds an hour and a minute and no date, so one asked for
+// further ahead than that rings the next time the clock reads it --
+// days early, and acted on. So it is not asked for when the reminder
+// is made; it is asked for here, once the day it belongs to is the
+// next one that clock face comes round.
+//
+// Asked once. The phone cannot tell a second alarm from the first, so
+// a repeat leaves two on it and only one can be taken back, which is
+// what [Store.Armed] is for.
+//
+// A repeating reminder is left alone: the phone holds those itself
+// where it can, and where it cannot they are re-armed as they fire.
+func (l *Loop) arm(ctx context.Context, at time.Time) {
+	if l.Alarm == nil || l.Store == nil {
+		return
+	}
+
+	soon, err := l.Store.Due(ctx, at.Add(alarm.Within), DefaultDueLimit)
+	if err != nil {
+		l.log(ctx, "cannot read what is coming into range for an alarm", err)
+		return
+	}
+
+	var armed []string
+	for i := range soon {
+		r := &soon[i]
+		if r.AlarmAskedAt != nil || !alarm.Reaches(r.DueAt, at) {
+			continue
+		}
+		if len(AlarmDays(r.Repeats, r.DueAt)) > 0 {
+			continue
+		}
+		a := alarm.Alarm{
+			At:    alarm.OnTheMinute(r.DueAt.In(l.where())),
+			Label: r.Title,
+			Key:   r.ID,
+		}
+		if err := l.Alarm.Want(ctx, r.UserID, a); err != nil {
+			l.log(ctx, "cannot ask for an alarm coming into range", err)
+			continue
+		}
+		armed = append(armed, r.ID)
+	}
+
+	if err := l.Store.Armed(ctx, armed, at); err != nil {
+		// Asked for and not written down, which means it will be
+		// asked for again on the next pass and the phone will hold
+		// two. Loud, because the second cannot be taken back.
+		l.log(ctx, "an alarm was asked for but not recorded, so it may be asked for twice", err)
+	}
 }
 
 // retire : Gives up on reminders held back for too long.

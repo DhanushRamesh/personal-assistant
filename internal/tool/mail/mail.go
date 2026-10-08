@@ -217,7 +217,7 @@ func search(box Mailbox) tool.Tool {
 				Most       int    `json:"most"`
 			}
 			if err := json.Unmarshal(in.Args, &args); err != nil {
-				return tool.Failed("the search could not be read: " + err.Error())
+				return tool.Broke("The search could not be read.", err)
 			}
 
 			query := gmailQuery(criteria{
@@ -380,7 +380,7 @@ func thread(box Mailbox) tool.Tool {
 				Most       int    `json:"most"`
 			}
 			if err := json.Unmarshal(in.Args, &args); err != nil {
-				return tool.Failed("the search could not be read: " + err.Error())
+				return tool.Broke("The search could not be read.", err)
 			}
 
 			// Unanswered is asked of Gmail as best it can: received
@@ -499,7 +499,7 @@ func read(box Mailbox) tool.Tool {
 				ID string `json:"id"`
 			}
 			if err := json.Unmarshal(in.Args, &args); err != nil {
-				return tool.Failed("the identifier could not be read: " + err.Error())
+				return tool.Broke("The identifier could not be read.", err)
 			}
 			id := strings.TrimSpace(args.ID)
 			if id == "" {
@@ -647,7 +647,7 @@ func trouble(err error) tool.Result {
 	if errors.Is(err, context.Canceled) || errors.Is(err, context.DeadlineExceeded) {
 		return tool.Failed("Reading the mail took too long and was given up on.")
 	}
-	return tool.Failed("Google would not answer: " + err.Error())
+	return tool.Broke("Google would not answer.", err)
 }
 
 // orElse : A string, or a stand-in when it is empty.

@@ -54,6 +54,13 @@ type Store interface {
 	// up once and not on every turn afterwards.
 	Mentioned(ctx context.Context, ids []string, at time.Time) error
 
+	// Armed : Records that the phone was asked for these reminders'
+	// alarms, so it is asked once.
+	//
+	// The phone cannot tell a second alarm from the first, so asking
+	// twice leaves two on it and only one can be taken back.
+	Armed(ctx context.Context, ids []string, at time.Time) error
+
 	// Hold : Keeps a reminder back because nobody was there to hear it.
 	//
 	// Its due time is left alone: it says when the reminder was for, and
