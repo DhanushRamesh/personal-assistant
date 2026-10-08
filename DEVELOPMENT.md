@@ -13979,6 +13979,43 @@ platform/logging importing records/chat, which fails with "platform
 may only import [platform]".
 
 
+### Four rules in config that cannot fire
+
+Auditing platform for whether the tests cover what each module is
+for. Coverage said 75 to 92 per cent, which hid the thing worth
+finding: of the twenty-one validation rules in config, ten had never
+been run by a test. Config decides whether the server starts and with
+what, and a rule that rejects a bad value but has never been shown to
+is a rule taken on trust.
+
+Writing the ten found that four of them are unreachable. value()
+treats an empty setting as unset on purpose -- so that
+ASSISTANT_SERVER_ADDR= in a shell script falls through rather than
+binding nowhere -- and addr, host, user and name all have non-empty
+fallbacks. "Must not be empty" is guaranteed before validation sees
+it, so the four checks that say so can never run.
+
+The guarantee is the real behaviour and nothing tested it either, so
+that is what is tested now, from a file and from the environment. The
+four checks are left where they are: they cost nothing and they would
+matter the day a fallback becomes empty.
+
+The one rule worth its own test rather than a row in a table is the
+one about somebody else getting in: production refuses a public bind
+over plain HTTP, because bearer tokens go over it in clear and a
+misconfiguration that publishes them is silent.
+
+Two other things came out of it. logging.Repeatedly was dead --
+written that morning alongside Surviving, never used, never called --
+and is gone. And storage's Fatalf says in its doc that it does not
+exit, unlike the logger goose installs by default; nothing checked
+that, and the way anybody would have found out is the server
+disappearing in the middle of a migration.
+
+	logging  85.5 -> 87.7     config   79.0 -> 82.3
+	storage  81.2 -> 83.2     failure  75.0 -> 100
+
+
 ## 12. Maintaining this file
 
 When the owner states a preference, makes a decision, or corrects something,

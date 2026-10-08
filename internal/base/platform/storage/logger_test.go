@@ -150,3 +150,35 @@ func TestGormMessagesRouteThroughSlog(t *testing.T) {
 		t.Errorf("level = %v, want ERROR", rec["level"])
 	}
 }
+
+// TestAFatalMigrationMessageDoesNotEndTheProcess : goose installs a
+// logger that calls os.Exit, and this one deliberately does not.
+//
+// The claim is in the doc comment and nothing checked it. If goose
+// ever changes which of its messages go through Fatalf, or this
+// adapter is replaced by something that does exit, the way anybody
+// would find out is the server disappearing in the middle of a
+// migration -- and a migration is exactly when there is least to be
+// learned from a process that is simply gone.
+//
+// Reaching the line after the call is the whole proof: os.Exit does
+// not return, so a test that finishes has shown it was not called.
+func TestAFatalMigrationMessageDoesNotEndTheProcess(t *testing.T) {
+	var out bytes.Buffer
+	l := &gooseLogger{logger: slog.New(slog.NewTextHandler(&out, nil))}
+
+	l.Fatalf("migration %d failed: %v\n", 47, errors.New("duplicate column"))
+
+	said := out.String()
+	if !strings.Contains(said, "duplicate column") {
+		t.Errorf("the failure was not recorded: %q", said)
+	}
+	if !strings.Contains(said, "level=ERROR") {
+		t.Errorf("a fatal message was not logged as an error: %q", said)
+	}
+	// goose ends its messages with a newline and slog does not want
+	// one, which is what gooseMessage is for.
+	if strings.Contains(said, "failed: duplicate column\\n") {
+		t.Errorf("the trailing newline reached the log: %q", said)
+	}
+}

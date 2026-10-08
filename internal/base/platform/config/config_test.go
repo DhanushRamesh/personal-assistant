@@ -439,3 +439,111 @@ func TestAsidesAreSilentUnlessAskedFor(t *testing.T) {
 		t.Error("asking for asides did not turn them on")
 	}
 }
+
+// TestEveryValidationRuleRefusesWhatItGuards : A rule that rejects a
+// bad value and has never been shown to is a rule taken on trust.
+//
+// Ten of the twenty-one here had never been run by a test. Config
+// decides whether the server starts at all and with what, so a guard
+// that quietly stopped working would not be noticed until something
+// it was meant to prevent had already happened -- and one of these
+// prevents every bearer token being readable by anyone on the
+// network.
+func TestEveryValidationRuleRefusesWhatItGuards(t *testing.T) {
+	for _, c := range []struct {
+		what  string
+		ini   string
+		wants string
+	}{
+		{"an unknown log format", "[log]\nformat = yaml\n", "yaml"},
+		{"no connections allowed at all", "[database]\nmax_open_conns = 0\n", "at least 1"},
+		{"a negative duration", "[database]\nconn_max_lifetime = -5m\n", "conn_max_lifetime"},
+		{"a duration that is not one", "[database]\nconn_max_lifetime = soon\n", "conn_max_lifetime"},
+	} {
+		t.Run(c.what, func(t *testing.T) {
+			_, err := config.Load(writeINI(t, c.ini), env(nil))
+			if err == nil {
+				t.Fatalf("%s was accepted", c.what)
+			}
+			if !strings.Contains(err.Error(), c.wants) {
+				t.Errorf("error = %v, want it to name %q", err, c.wants)
+			}
+		})
+	}
+}
+
+// TestABlankSettingIsNotSetAtAll : Written out because four of the
+// validation rules are about it and none of them can ever run.
+//
+// value() treats an empty value as unset on purpose, so that
+// ASSISTANT_SERVER_ADDR= in a shell script falls through to the next
+// layer rather than binding nowhere. Every one of those four settings
+// has a non-empty fallback, so "must not be empty" is already
+// guaranteed before validation sees it: addr, host, user and name
+// cannot be empty and the checks that say so are unreachable.
+//
+// The guarantee is real and nothing tested it. This does.
+func TestABlankSettingIsNotSetAtAll(t *testing.T) {
+	cfg, err := config.Load(writeINI(t, `
+[server]
+addr =
+[database]
+host =
+user =
+name =
+`), env(nil))
+	if err != nil {
+		t.Fatalf("a blank setting was treated as a value: %v", err)
+	}
+	for _, c := range []struct{ what, got string }{
+		{"server addr", cfg.Server.Addr},
+		{"database host", cfg.Database.Host},
+		{"database user", cfg.Database.User},
+		{"database name", cfg.Database.Name},
+	} {
+		if c.got == "" {
+			t.Errorf("%s came through empty, so the fallback did not apply", c.what)
+		}
+	}
+
+	// And the same from the environment, which is the reason it works
+	// this way at all.
+	cfg, err = config.Load("", env(map[string]string{"ASSISTANT_SERVER_ADDR": ""}))
+	if err != nil {
+		t.Fatalf("a blank variable was treated as a value: %v", err)
+	}
+	if cfg.Server.Addr == "" {
+		t.Error("a blank variable overrode the fallback instead of falling through")
+	}
+}
+
+// TestPlainHTTPIsNotServedToTheNetwork : The one rule here that is
+// about somebody else getting in.
+//
+// Bearer tokens go over this in clear. A misconfiguration that
+// publishes them is silent, which is why it is refused outright
+// rather than warned about -- and why it is worth a test of its own
+// rather than a line in a table.
+func TestPlainHTTPIsNotServedToTheNetwork(t *testing.T) {
+	const settings = `env = production
+[database]
+password = something
+[server]
+addr = 0.0.0.0:8080
+`
+
+	_, err := config.Load(writeINI(t, settings), env(nil))
+	if err == nil {
+		t.Fatal("production accepted a public bind over plain HTTP")
+	}
+	if !strings.Contains(err.Error(), "allow_public_bind") {
+		t.Errorf("error = %v, want it to say how to allow this deliberately", err)
+	}
+
+	// And allowed when something else is terminating TLS, which is
+	// the only reason the setting exists.
+	allowed := settings + "allow_public_bind = true\n"
+	if _, err := config.Load(writeINI(t, allowed), env(nil)); err != nil {
+		t.Errorf("allow_public_bind did not allow it: %v", err)
+	}
+}

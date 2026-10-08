@@ -80,3 +80,58 @@ func TestTheCauseStaysReachable(t *testing.T) {
 		t.Error("errors.Is cannot see through the failure to its cause")
 	}
 }
+
+// TestWhatIsSaidAndWhatIsKeptAreDifferent : Every combination of the
+// two, because the split is the whole point of this package.
+//
+// Sentence is what somebody hears and never varies with the detail.
+// Full is what the log gets and must not be empty just because half
+// of it is missing: a failure with a status and no detail still says
+// which status, and one with neither still says which kind it was.
+func TestWhatIsSaidAndWhatIsKeptAreDifferent(t *testing.T) {
+	for _, c := range []struct {
+		what         string
+		err          *failure.Error
+		full, errors string
+	}{
+		{"both", failure.FromStatus(503, "dial tcp 127.0.0.1:3306: i/o timeout", nil),
+			"dial tcp 127.0.0.1:3306: i/o timeout (HTTP 503)",
+			"unavailable: dial tcp 127.0.0.1:3306: i/o timeout (HTTP 503)"},
+		{"detail only", failure.New(failure.Timeout, "context deadline exceeded", nil),
+			"context deadline exceeded", "timeout: context deadline exceeded"},
+		{"status only", failure.FromStatus(500, "", nil),
+			"HTTP 500", "unexpected: HTTP 500"},
+		{"neither", failure.New(failure.Unexpected, "", nil),
+			"", "unexpected"},
+	} {
+		t.Run(c.what, func(t *testing.T) {
+			if got := c.err.Full(); got != c.full {
+				t.Errorf("Full() = %q, want %q", got, c.full)
+			}
+			if got := c.err.Error(); got != c.errors {
+				t.Errorf("Error() = %q, want %q", got, c.errors)
+			}
+			// Whatever is kept, what is said is a whole sentence
+			// written for a person.
+			said := c.err.Sentence()
+			if said == "" {
+				t.Error("Sentence() is empty, so there is nothing to say")
+			}
+			if strings.Contains(said, "HTTP") || strings.Contains(said, c.err.Detail) && c.err.Detail != "" {
+				t.Errorf("Sentence() = %q, want it free of the machinery in %q", said, c.err.Full())
+			}
+		})
+	}
+}
+
+// TestTheCauseIsStillReachable : Wrapping must not hide what went
+// wrong from errors.Is, or a caller cannot tell a cancelled context
+// from a real failure.
+func TestTheCauseIsStillReachable(t *testing.T) {
+	cause := errors.New("the socket closed")
+	err := failure.New(failure.Unreachable, "gateway", cause)
+
+	if !errors.Is(err, cause) {
+		t.Error("errors.Is cannot reach the cause through the failure")
+	}
+}

@@ -48,12 +48,3 @@ func Surviving(ctx context.Context, logger *slog.Logger, what string, work func(
 	}()
 	work()
 }
-
-// Repeatedly : Wraps a function so every call of it survives a panic.
-//
-// For a loop whose body is called many times, where wrapping the
-// whole loop would mean one panic ending it for good. The next call
-// happens as it would have.
-func Repeatedly(ctx context.Context, logger *slog.Logger, what string, work func()) func() {
-	return func() { Surviving(ctx, logger, what, work) }
-}
