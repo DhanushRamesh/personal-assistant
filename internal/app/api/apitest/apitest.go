@@ -43,6 +43,8 @@ import (
 	"personal-assistant/internal/base/records/chat"
 	"personal-assistant/internal/base/records/chat/memory"
 	"personal-assistant/internal/base/thinking/environment"
+	"personal-assistant/internal/base/thinking/environment/platformai"
+	"personal-assistant/internal/base/thinking/llm"
 	"personal-assistant/internal/base/world/announce"
 	eventmemory "personal-assistant/internal/base/world/event/inmemory"
 	"personal-assistant/internal/base/world/events"
@@ -200,9 +202,15 @@ func NewWith(t *testing.T, opts Options) *Env {
 
 	e := &Env{
 		Server: api.New(api.Options{
-			Logger:           logger.Logger,
-			DB:               opts.DB,
-			Chats:            repo,
+			Logger: logger.Logger,
+			DB:     opts.DB,
+			Chats:  repo,
+			// The real catalogue, so a test that sets a client's
+			// model exercises the same refusal production does:
+			// a vendor this endpoint speaks to is not the set of
+			// models it routes, and choosing a refused one leaves
+			// that client failing every prompt afterwards.
+			Models:           reachable(),
 			Messages:         repo,
 			Reminders:        opts.Reminders,
 			Announcer:        opts.Announcer,
@@ -600,4 +608,22 @@ func deviceEvents(store eventsapi.Store) eventsapi.Store {
 		return store
 	}
 	return eventmemory.New()
+}
+
+// reachable : The models this endpoint routes, joined to what is
+// known about each, exactly as the server does it.
+//
+// Both lists are needed and neither is the other: a vendor the
+// service speaks to is not the set of models it routes, and a model
+// it routes is no use without the context window that sizes the
+// history sent to it.
+func reachable() []llm.Model {
+	refs := platformai.Models()
+	out := make([]llm.Model, 0, len(refs))
+	for _, ref := range refs {
+		if m, ok := llm.Find(ref.Vendor, ref.ID); ok {
+			out = append(out, m)
+		}
+	}
+	return out
 }

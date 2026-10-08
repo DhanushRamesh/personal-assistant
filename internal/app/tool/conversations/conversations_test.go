@@ -1,8 +1,14 @@
 package conversations_test
 
 import (
+	"context"
+	"strconv"
 	"strings"
 	"testing"
+
+	"personal-assistant/internal/base/records/chat/memory"
+	"personal-assistant/internal/base/records/conversation"
+	"personal-assistant/internal/base/records/user"
 
 	"personal-assistant/internal/app/tool"
 	"personal-assistant/internal/app/tool/conversations"
@@ -68,5 +74,116 @@ func TestEveryExampleMatchesItsSchema(t *testing.T) {
 					x.Name, e.Args)
 			}
 		}
+	}
+}
+
+// held : A repository with one conversation in it, and who owns it.
+func held(t *testing.T, title string) (*memory.Repository, string, string) {
+	t.Helper()
+	repo := memory.New()
+	ctx := context.Background()
+
+	person, err := user.NewUser("dhanush", "a-hash")
+	if err != nil {
+		t.Fatalf("NewUser: %v", err)
+	}
+	if err := repo.CreateUser(ctx, person); err != nil {
+		t.Fatalf("CreateUser: %v", err)
+	}
+	c := chat.NewConversation(person.ID, title)
+	if err := repo.CreateConversation(ctx, c); err != nil {
+		t.Fatalf("CreateConversation: %v", err)
+	}
+	return repo, person.ID, c.ID
+}
+
+// deleting : Calls conversation_delete as the given person.
+func deleting(t *testing.T, repo *memory.Repository, userID, args string) tool.Result {
+	t.Helper()
+	r, err := tool.NewRegistry(conversations.All(repo)...)
+	if err != nil {
+		t.Fatalf("NewRegistry: %v", err)
+	}
+	// Listed first, because a write refuses until its domain has
+	// been read in the same turn -- which is itself a guard, and the
+	// first thing these tests ran into.
+	return r.Call(context.Background(), "conversation_delete", tool.Invocation{
+		Caller: tool.Caller{UserID: userID, Channel: chat.ChannelDirect},
+		Args:   []byte(args),
+		Ran:    []string{"conversation_list"},
+	})
+}
+
+// TestNothingIsDeletedUnlessTheNameMatches : The title is the cheapest
+// possible proof that the model looked before it acted.
+//
+// An identifier it invented or misremembered would otherwise destroy a
+// real conversation and everything said in it, and there is nothing to
+// undo it with.
+func TestNothingIsDeletedUnlessTheNameMatches(t *testing.T) {
+	repo, userID, id := held(t, "Roof Quotes")
+
+	for _, wrong := range []string{"", "roof quotes", "Roof Quote", "Something Else"} {
+		got := deleting(t, repo, userID, `{"conversation_id":"`+id+`","confirm_title":`+strconv.Quote(wrong)+`}`)
+		if got.Outcome != conversation.OutcomeFailed {
+			t.Errorf("a title of %q deleted it anyway", wrong)
+		}
+		if still, err := repo.GetConversation(context.Background(), id); err != nil || still == nil {
+			t.Fatalf("it was deleted with the title %q", wrong)
+		}
+	}
+
+	// And the exact name does.
+	got := deleting(t, repo, userID, `{"conversation_id":"`+id+`","confirm_title":"Roof Quotes"}`)
+	if got.Outcome == conversation.OutcomeFailed {
+		t.Fatalf("the right title did not delete it: %s", got.Content)
+	}
+	if still, _ := repo.GetConversation(context.Background(), id); still != nil {
+		t.Error("it said it deleted it and it is still there")
+	}
+}
+
+// TestSomebodyElsesConversationIsNotFound : Not refused, which would
+// tell them it exists. Somebody guessing identifiers learns nothing.
+func TestSomebodyElsesConversationIsNotFound(t *testing.T) {
+	repo, _, id := held(t, "Roof Quotes")
+
+	got := deleting(t, repo, "usr_somebody_else",
+		`{"conversation_id":"`+id+`","confirm_title":"Roof Quotes"}`)
+	if got.Outcome != conversation.OutcomeFailed {
+		t.Fatal("somebody deleted a conversation that was not theirs")
+	}
+	if still, _ := repo.GetConversation(context.Background(), id); still == nil {
+		t.Fatal("it is gone")
+	}
+	if strings.Contains(got.Content, "Roof Quotes") {
+		t.Errorf("the refusal named the conversation: %q", got.Content)
+	}
+}
+
+// TestDeletingRefusesUntilTheListingHasRun : Found by writing the
+// tests above, which failed until they listed first.
+//
+// It is the guard that makes the title check meaningful: without it a
+// model could pair an invented identifier with an invented title and
+// both would be its own invention. With it, the identifier has to
+// have come from a listing in this turn.
+func TestDeletingRefusesUntilTheListingHasRun(t *testing.T) {
+	repo, userID, id := held(t, "Roof Quotes")
+
+	r, err := tool.NewRegistry(conversations.All(repo)...)
+	if err != nil {
+		t.Fatalf("NewRegistry: %v", err)
+	}
+	got := r.Call(context.Background(), "conversation_delete", tool.Invocation{
+		Caller: tool.Caller{UserID: userID, Channel: chat.ChannelDirect},
+		Args:   []byte(`{"conversation_id":"` + id + `","confirm_title":"Roof Quotes"}`),
+		// Nothing read this turn.
+	})
+	if got.Outcome != conversation.OutcomeFailed {
+		t.Fatal("it deleted a conversation without having read the listing")
+	}
+	if still, _ := repo.GetConversation(context.Background(), id); still == nil {
+		t.Fatal("it is gone")
 	}
 }

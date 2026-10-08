@@ -4,6 +4,7 @@ import (
 	"net/http"
 	"personal-assistant/internal/base/records/client"
 	"personal-assistant/internal/base/records/user"
+	"strings"
 	"testing"
 
 	"personal-assistant/internal/app/api/apitest"
@@ -274,4 +275,62 @@ func listedClients(t *testing.T, e *apitest.Env, query string) map[string]bool {
 		ids[c.ID] = true
 	}
 	return ids
+}
+
+// TestAModelTheAssistantCannotReachIsRefused : Choosing one is how
+// voice broke before.
+//
+// A vendor the endpoint speaks to is not the set of models it routes:
+// it reaches Anthropic and refuses claude-haiku-4-5 while answering to
+// the same model under its dated name. A client set to a refused model
+// fails every prompt afterwards, and the failure is at the far end
+// where nothing here can see it -- which is why it is caught at the
+// moment somebody chooses, and why that is worth a test.
+func TestAModelTheAssistantCannotReachIsRefused(t *testing.T) {
+	e := apitest.New(t)
+	phone := e.Login(t, "my phone")
+	where := "/v1/clients/" + phone.Client.ID + "/model"
+
+	for _, c := range []struct{ what, body string }{
+		{"a model nobody routes", `{"vendor":"anthropic","model":"claude-sonnet-9-9"}`},
+		{"the right model under a wrong vendor", `{"vendor":"openai","model":"claude-sonnet-4-6"}`},
+		{"a vendor that is refused outright", `{"vendor":"google","model":"gemini-2.5-pro"}`},
+		{"a name spelled with dots instead of hyphens", `{"vendor":"anthropic","model":"claude-sonnet-5.5"}`},
+	} {
+		t.Run(c.what, func(t *testing.T) {
+			rec := e.AsBody(t, phone.Token, http.MethodPost, where, c.body)
+			if rec.Code != http.StatusBadRequest {
+				t.Errorf("status = %d, want 400: %s", rec.Code, rec.Body)
+			}
+		})
+	}
+
+	// And the empty choice is always allowed: it means the server's
+	// own model, which is what every client starts as.
+	rec := e.AsBody(t, phone.Token, http.MethodPost, where, `{"vendor":"","model":""}`)
+	if rec.Code != http.StatusOK {
+		t.Errorf("clearing the choice: status = %d, want 200: %s", rec.Code, rec.Body)
+	}
+}
+
+// TestAModelIsSetOnTheClientThatAsked : And on no other, since each
+// client chooses for itself.
+func TestAModelIsSetOnTheClientThatAsked(t *testing.T) {
+	e := apitest.New(t)
+	phone := e.Login(t, "my phone")
+	laptop := e.Login(t, "my laptop")
+
+	rec := e.AsBody(t, phone.Token, http.MethodPost,
+		"/v1/clients/"+phone.Client.ID+"/model",
+		`{"vendor":"anthropic","model":"claude-haiku-4-5-20251001"}`)
+	if rec.Code != http.StatusOK {
+		t.Fatalf("setting a routed model: status = %d: %s", rec.Code, rec.Body)
+	}
+	if !strings.Contains(rec.Body.String(), "claude-haiku-4-5-20251001") {
+		t.Errorf("the listing does not show the choice: %s", rec.Body)
+	}
+	if strings.Count(rec.Body.String(), "claude-haiku-4-5-20251001") != 1 {
+		t.Errorf("the choice reached more than the client that asked: %s", rec.Body)
+	}
+	_ = laptop
 }

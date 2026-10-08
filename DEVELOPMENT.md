@@ -14130,6 +14130,41 @@ somebody else's API, and that is the right shape for them. What
 matters is that the logic inside them is covered now.
 
 
+### The guards on the two things that cannot be taken back
+
+Auditing app. Its own infrastructure is the best covered thing here --
+api at 100, health at 100, middleware at 98.3, httpx at 94.7 -- and
+the gaps are in handlers and tools, where the numbers are low because
+most of each is wiring.
+
+So the audit went after guards rather than percentages, and both of
+the ones it found were on something irreversible.
+
+conversation_delete was at 3.8 per cent and has four guards: typed
+only, because on voice a misheard sentence is the whole
+authorisation; an exact title, which forces a listing first and is the
+cheapest proof the model looked before it acted; somebody else's
+conversation reported as missing rather than refused, so guessing
+identifiers teaches nothing; and read-before-write. None was proven.
+The fourth was found by the tests failing on it, which is the best way
+to learn a guard is real.
+
+SetModel refuses a model the endpoint does not route, and that guard
+exists because choosing one broke voice: the client fails every prompt
+afterwards and the failure is at the far end where nothing here can
+see it. It was untested. It is now, including the dotted spelling the
+gateway itself corrects -- claude-sonnet-5.5 for claude-sonnet-5-5.
+
+The positive half could not be written until the test harness carried
+a model catalogue, because with none every model is refused. It builds
+one the way the server does now: the routed list joined to what is
+known about each, since a vendor the service speaks to is not the set
+of models it routes, and a routed model is no use without the context
+window that sizes what is sent to it.
+
+	tool/conversations  3.8 -> 22.3      api/clients  43.2 -> 56.8
+
+
 ## 12. Maintaining this file
 
 When the owner states a preference, makes a decision, or corrects something,
