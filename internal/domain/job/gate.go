@@ -39,6 +39,38 @@ const Presence = "presence"
 // and recovers is not worth a sentence.
 const Links = "link."
 
+// Hass : What every gate source that reads Home Assistant is
+// called.
+//
+//	check ha.sensor.pixel_7_battery_state is charging
+//
+// Owner, on where the charger check belongs: *"I want it in the
+// rule engine as a job where the condition should be a HA variable
+// value."*
+//
+// Everything else a rule can read is something a device sent us,
+// which means it is as old as whenever it was sent. Home Assistant
+// holds what the phone says about itself *now*, and for a rule that
+// waits twenty minutes before it looks, now is the only answer
+// worth having: a rule armed when the cable went in and asking
+// afterwards whether it is still charging must ask the phone, not
+// the twenty-minute-old event that armed it.
+//
+// A namespace and not one word per entity, so a rule about a new
+// sensor needs nothing here. What follows the prefix is the entity
+// id exactly as Home Assistant spells it, because that is what the
+// owner will read off the screen.
+//
+// Its time is last_changed, so "older than 1h" asks how long it has
+// stood at what it says. Every operator already there works on it:
+// a state is a word for `is`, a number for `<`, and a moment for
+// `within`.
+//
+// Never a trigger. Nothing here arrives -- it is asked, and only
+// when a rule is already running -- so [Gate.Arrives] refuses it
+// for the same reason it refuses a connection.
+const Hass = "ha."
+
 // Working, Broken : What a connection gate may be compared
 // against.
 const (
@@ -612,17 +644,34 @@ func (g Gate) Measures() bool {
 //
 // Everything a device reports does. The clock does not, presence
 // does not, a routine does not -- a time of day is worked out and
-// kept -- and neither does a connection, which is read when
-// somebody asks and reports how it was the last time it was
-// used.
+// kept -- and neither does a connection or a Home Assistant
+// entity, both of which are read when somebody asks rather than
+// delivered.
 func (g Gate) Arrives() bool {
-	return g.Needs() != "" && !routine.Mine(g.Source) && !Linked(g.Source)
+	return g.Needs() != "" && !routine.Mine(g.Source) &&
+		!Linked(g.Source) && !Hassed(g.Source)
 }
 
 // Linked : Whether a gate source asks about a connection to
 // somewhere else rather than about the person.
 func Linked(source string) bool {
 	return strings.HasPrefix(strings.ToLower(strings.TrimSpace(source)), Links)
+}
+
+// Hassed : Whether a gate source asks Home Assistant what something
+// is right now.
+func Hassed(source string) bool {
+	return strings.HasPrefix(strings.ToLower(strings.TrimSpace(source)), Hass)
+}
+
+// Entity : The Home Assistant entity a gate source names, or empty
+// if it does not name one.
+func Entity(source string) string {
+	source = strings.ToLower(strings.TrimSpace(source))
+	if !Hassed(source) {
+		return ""
+	}
+	return strings.TrimPrefix(source, Hass)
 }
 
 // Reading : The latest the server has of one event kind.

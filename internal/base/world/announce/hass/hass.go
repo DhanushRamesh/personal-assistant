@@ -401,33 +401,63 @@ func (s *Speaker) pause(ctx context.Context, d time.Duration) error {
 
 // state : What the satellite is doing, as Home Assistant reports it.
 func (s *Speaker) state(ctx context.Context) (string, error) {
+	got, _, err := s.State(ctx, s.cfg.Satellite)
+	return got, err
+}
+
+// ErrNoEntity : Home Assistant has no such entity. Separate from a
+// call that failed, because a rule standing on an entity that was
+// renamed should be able to say which of the two happened.
+var ErrNoEntity = errors.New("hass: no such entity")
+
+// State : What one entity says right now, and when it last changed.
+//
+// The whole of what a rule needs from Home Assistant. A condition
+// asks what the phone is doing at the moment it is asked, which is
+// a thing no stored event can answer: an event is as old as the
+// moment it was sent, and a rule that waited twenty minutes before
+// looking wants to know about now.
+//
+// Unknown and unavailable come back as they are rather than as an
+// error. They are Home Assistant saying it does not know, a
+// condition comparing against them does not hold, and that is the
+// right answer -- not knowing is not a fault to be logged every two
+// minutes.
+func (s *Speaker) State(ctx context.Context, entity string) (string, time.Time, error) {
+	if s == nil || strings.TrimSpace(entity) == "" {
+		return "", time.Time{}, ErrNotConfigured
+	}
 	ctx, cancel := context.WithTimeout(ctx, s.cfg.Timeout)
 	defer cancel()
 
-	url := s.cfg.URL + "/api/states/" + s.cfg.Satellite
+	url := s.cfg.URL + "/api/states/" + strings.TrimSpace(entity)
 	req, err := http.NewRequestWithContext(ctx, http.MethodGet, url, nil)
 	if err != nil {
-		return "", fmt.Errorf("hass: building state request: %w", err)
+		return "", time.Time{}, fmt.Errorf("hass: building state request: %w", err)
 	}
 	req.Header.Set("Authorization", "Bearer "+s.cfg.Token.Reveal())
 
 	resp, err := s.http.Do(req)
 	if err != nil {
-		return "", fmt.Errorf("hass: reading satellite state: %w", err)
+		return "", time.Time{}, fmt.Errorf("hass: reading %s: %w", entity, err)
 	}
 	defer resp.Body.Close()
 
 	body, _ := io.ReadAll(io.LimitReader(resp.Body, maxResponseBytes))
+	if resp.StatusCode == http.StatusNotFound {
+		return "", time.Time{}, fmt.Errorf("%w: %s", ErrNoEntity, entity)
+	}
 	if resp.StatusCode >= 400 {
-		return "", fmt.Errorf("hass: reading satellite state: %s: %s",
-			resp.Status, strings.TrimSpace(string(body)))
+		return "", time.Time{}, fmt.Errorf("hass: reading %s: %s: %s",
+			entity, resp.Status, strings.TrimSpace(string(body)))
 	}
 
 	var parsed struct {
-		State string `json:"state"`
+		State   string    `json:"state"`
+		Changed time.Time `json:"last_changed"`
 	}
 	if err := json.Unmarshal(body, &parsed); err != nil {
-		return "", fmt.Errorf("hass: satellite state was not usable: %w", err)
+		return "", time.Time{}, fmt.Errorf("hass: %s was not usable: %w", entity, err)
 	}
-	return parsed.State, nil
+	return parsed.State, parsed.Changed, nil
 }

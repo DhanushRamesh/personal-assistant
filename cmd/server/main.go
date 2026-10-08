@@ -678,6 +678,7 @@ func run() error {
 		linked: map[string]func(context.Context, string) (string, time.Time, error){
 			"link.google": googleHealth(googleLink),
 		},
+		hass:  entityState(speaker),
 		where: cfg.Assistant.Location, now: cfg.Assistant.Now}
 
 	running = &job.Runner{
@@ -2151,6 +2152,11 @@ type readings struct {
 	// name a gate calls it. Nil leaves those conditions unknown,
 	// and an unknown reading never passes.
 	linked map[string]func(ctx context.Context, userID string) (string, time.Time, error)
+	// hass : What one Home Assistant entity says right now. Nil
+	// leaves those conditions unknown, which is how a server with
+	// no Home Assistant behaves: rules standing on an entity do
+	// nothing rather than fire on a guess.
+	hass func(ctx context.Context, entity string) (string, time.Time, error)
 	// where : Their zone, which is what an hour means.
 	where *time.Location
 	// now : The clock, so the hour a routine describes is placed on
@@ -2166,6 +2172,9 @@ func (r readings) Latest(ctx context.Context, userID, kind string, n int) ([]job
 	if job.Linked(kind) {
 		return r.connection(ctx, userID, kind)
 	}
+	if job.Hassed(kind) {
+		return r.entity(ctx, kind)
+	}
 	found, err := r.events.Recent(ctx, userID, event.Query{Kind: kind, Limit: n})
 	if err != nil {
 		return nil, err
@@ -2179,6 +2188,65 @@ func (r readings) Latest(ctx context.Context, userID, kind string, n int) ([]job
 		})
 	}
 	return out, nil
+}
+
+// entityState : How a rule reads Home Assistant, or nothing at all
+// when there is no Home Assistant to read.
+//
+// The speaker already holds the address and the token and already
+// asks Home Assistant what the satellite is doing before it
+// interrupts it. A second client would be a second place for the
+// address to be wrong.
+//
+// Asked of whatever is announcing rather than built from config,
+// so a server announcing into silence -- no Home Assistant at all
+// -- gets nothing here either, and the two cannot disagree about
+// whether there is one.
+func entityState(a announce.Announcer) func(context.Context, string) (string, time.Time, error) {
+	asker, ok := a.(interface {
+		State(ctx context.Context, entity string) (string, time.Time, error)
+	})
+	if !ok {
+		return nil
+	}
+	return asker.State
+}
+
+// entity : What Home Assistant says an entity is, as a reading.
+//
+// One reading and never two, like a routine: there is no history
+// here to compare against, only what it says at the moment it is
+// asked, which is why [job.Gate.Arrives] refuses these as
+// triggers.
+//
+// A missing entity is unknown and not an error. The owner renames
+// things in Home Assistant, and the cost of that should be a rule
+// that quietly does nothing until he notices -- the same cost as
+// every other unknown reading -- rather than an error in the log
+// every two minutes for a rule he has forgotten about.
+func (r readings) entity(ctx context.Context, kind string) ([]job.Reading, error) {
+	if r.hass == nil {
+		return nil, nil
+	}
+	name := job.Entity(kind)
+	if name == "" {
+		return nil, nil
+	}
+	state, changed, err := r.hass(ctx, name)
+	if err != nil {
+		if errors.Is(err, hass.ErrNoEntity) || errors.Is(err, hass.ErrNotConfigured) {
+			return nil, nil
+		}
+		return nil, err
+	}
+	// Home Assistant's own words for not knowing. A condition
+	// against them never holds, and saying so here keeps every
+	// gate from having to know them.
+	switch strings.ToLower(strings.TrimSpace(state)) {
+	case "", "unknown", "unavailable", "none":
+		return nil, nil
+	}
+	return []job.Reading{{Value: state, At: changed, Known: true}}, nil
 }
 
 // usual : A routine as a reading, placed on today.

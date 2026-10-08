@@ -659,3 +659,85 @@ func TestAPhoneThatStoppedReportingIsNotAPhoneThatStoppedCharging(t *testing.T) 
 		t.Error("a level reported three times and never moving did not read as stuck")
 	}
 }
+
+// TestAConditionCanAskHomeAssistant : Everything else a rule reads
+// is as old as whenever a device sent it. A rule that waits twenty
+// minutes and then asks whether the phone is still charging must
+// ask the phone, and this is the only source that answers now.
+func TestAConditionCanAskHomeAssistant(t *testing.T) {
+	g, err := job.ParseGate("ha.sensor.pixel_7_battery_state is charging")
+	if err != nil {
+		t.Fatalf("could not read a Home Assistant condition: %v", err)
+	}
+	if !job.Hassed(g.Source) {
+		t.Errorf("did not recognise %q as a Home Assistant source", g.Source)
+	}
+	if got := job.Entity(g.Source); got != "sensor.pixel_7_battery_state" {
+		t.Errorf("entity is %q, want the id as Home Assistant spells it", got)
+	}
+	if g.Needs() != g.Source {
+		t.Errorf("a Home Assistant gate has to be fetched; Needs gave %q", g.Needs())
+	}
+
+	// Nothing here arrives. It is asked, and only while a rule is
+	// already running, so it can never set one off.
+	if g.Arrives() {
+		t.Error("let a Home Assistant entity be a trigger")
+	}
+
+	// An event kind is still an event kind.
+	ev, err := job.ParseGate("battery.level < 25")
+	if err != nil {
+		t.Fatalf("broke an ordinary condition: %v", err)
+	}
+	if job.Hassed(ev.Source) || job.Entity(ev.Source) != "" {
+		t.Errorf("read the event kind %q as a Home Assistant entity", ev.Source)
+	}
+	if !ev.Arrives() {
+		t.Error("stopped an event kind being a trigger")
+	}
+}
+
+// TestWhatHomeAssistantSaysIsComparedLikeAnythingElse : The point of
+// a namespace rather than a word per entity is that every operator
+// already there goes on working. A state is a word, a level is a
+// number, and last_changed is a moment.
+func TestWhatHomeAssistantSaysIsComparedLikeAnythingElse(t *testing.T) {
+	at := time.Date(2026, 10, 8, 18, 0, 0, 0, time.UTC)
+	stood := job.Reading{Value: "charging", At: at.Add(-90 * time.Minute), Known: true}
+
+	for _, c := range []struct {
+		cond string
+		want bool
+	}{
+		{"ha.sensor.pixel_7_battery_state is charging", true},
+		{"ha.sensor.pixel_7_battery_state is not charging", false},
+		{"ha.sensor.pixel_7_battery_state is discharging", false},
+		{"ha.sensor.pixel_7_battery_state older than 1h", true},
+		{"ha.sensor.pixel_7_battery_state older than 3h", false},
+		{"ha.sensor.pixel_7_battery_state within 30m", false},
+	} {
+		g, err := job.ParseGate(c.cond)
+		if err != nil {
+			t.Fatalf("%q: %v", c.cond, err)
+		}
+		if got := g.Passes(stood, false, at); got != c.want {
+			t.Errorf("%q gave %v, want %v", c.cond, got, c.want)
+		}
+	}
+
+	// Numbers compare as numbers.
+	level := job.Reading{Value: "41", At: at, Known: true}
+	g, err := job.ParseGate("ha.sensor.pixel_7_battery_level < 95")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !g.Passes(level, false, at) {
+		t.Error("would not compare a Home Assistant level as a number")
+	}
+
+	// Not knowing is not a fault, and never passes.
+	if g.Passes(job.Reading{}, false, at) {
+		t.Error("a condition held against an entity nothing is known about")
+	}
+}
