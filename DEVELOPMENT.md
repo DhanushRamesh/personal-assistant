@@ -14442,6 +14442,47 @@ gives up, because "cron 0 0 30 2 *" parses perfectly and can never
 happen, and the answer to that is a refusal and not a loop.
 
 
+### Never invent a notation
+
+Owner, on `{"source": "counted call.missed by value within 2h"}` in
+a structured rule: *"how will it be evaluated in code? It is more
+string and an AI can make a mistake."*
+
+He is right and it was a shortcut. The string is parsed twice --
+once by `ParseGate` into a source, and again by `ReadCount` deep in
+the resolver at evaluation time -- and it was done that way to avoid
+changing the `Readings` interface. In a structured rule it is worse
+than untidy: it is a grammar nothing has ever seen, sitting inside a
+schema whose entire purpose was that there would be no grammar to
+get wrong.
+
+**Never invent a notation. Use a universal one, or use structure.**
+
+The test is not whether a field is a string. It is whether the thing
+writing it already knows the notation. `cron 0 9 * * 1-5` stays a
+string: every model writes cron reliably, because cron existed
+before any of this. `counted call.missed by value within 2h` was
+invented one afternoon and nothing has ever seen it. One is a
+format; the other is a trap.
+
+Two fields fail the test today and both become structure:
+
+	{"count": {"kind":"call.missed","by":"value","within":"2h"}, "op":">=", "value":"2"}
+	{"source": "battery.level", "op": "<=", "ago": "15m"}
+
+The second is the worse of the two, because `"15m ago"` looks like
+an ordinary value. Something writing `"value": "15m"` instead gets a
+rule that parses, runs, and compares the battery against the number
+fifteen.
+
+What this costs of the grammar already written is nothing, only a
+change of job. `ReadCount` stops being how a count is stored and
+becomes how a dictated one is read -- surface syntax, with the
+structure underneath as the truth and the sentence rendered back
+from it for reading aloud. Which is the same inversion the whole
+rule object is making.
+
+
 ## 12. Maintaining this file
 
 When the owner states a preference, makes a decision, or corrects something,
