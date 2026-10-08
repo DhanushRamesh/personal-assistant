@@ -14888,6 +14888,53 @@ And the heartbeat will not show any of this. It counts the level
 before processing on purpose, so that it reports what the microphone
 gave rather than what suppression left of it.
 
+### The side effect was the one I did not predict
+
+Owner, twenty minutes later: *"the continuous conversation is going
+to idle so fast."*
+
+It was, and it was mine. Suppression off and gain on, measured over
+the turns on either side of the change:
+
+	                                   before   after
+	VAD fired within 1.3s of opening      37%      92%
+	and then ran longer than 1.0s         71%      38%
+
+The window was not short. It was being spent before anybody spoke:
+the mic opens, a second later the detector says speech, seven tenths
+later it says silence, and the recogniser is handed a second of
+room noise. `speech_seconds` is 0.3 and `silence_seconds` is 0.7, so
+one second of amplified hiss is a whole turn.
+
+I had warned about the wrong side effect. Suppression at maximum was
+holding something down, and I said it was false wake words; what it
+was holding down was the voice detector.
+
+The measurement that should have been made first, speech *and*
+noise through each level at gain 15:
+
+	 ns   speech   noise   ratio
+	  0      563     214    2.6
+	  1      323     108    3.0
+	  2      270      61    4.4
+	  3      236      39    6.0
+	  4      207      28    7.5
+
+Which says the thing the first measurement could not: **gain does
+not change the ratio at all.** It scales speech and noise together,
+and only suppression changes which is which. So the detector was
+never tripping because the ratio got worse -- it was tripping
+because the absolute noise went from about twelve to two hundred,
+and its threshold is absolute.
+
+What was wanted was speech above two hundred, where the recogniser
+works, and noise near forty, where the detector was quiet. Gain 15
+with suppression High: speech 236, which is two and a half times
+what it was, and noise 39, a fifth of what tripped it.
+
+Off was a step too far, and measuring one signal instead of two is
+how I took it.
+
 
 ## 12. Maintaining this file
 
