@@ -114,16 +114,20 @@ func TestAReminderThatWasNotHeardIsNotWrittenDown(t *testing.T) {
 }
 
 // TestAReminderGoesFurtherThanTheRoom : A reminder is the one
-// announcement whose point is to arrive when nobody is there, so it
-// reaches the phone as well as the satellite.
+// TestAReminderStaysInTheRoom : It is said where somebody is, and
+// goes no further.
 //
-// The greeting must not, and that is the reason this exists as a test
-// rather than a comment: a greeting is said because somebody has just
-// walked up to the laptop, so a copy in their pocket arrives at the one
-// moment it is certainly not wanted. Getting there also means the words
-// leaving the network, which is worth it for a reminder and not for
-// housekeeping.
-func TestAReminderGoesFurtherThanTheRoom(t *testing.T) {
+// It used to go further, on the reasoning that a reminder is the one
+// thing worth the trip. The owner decided otherwise on 8 October,
+// asked directly whether reminders should be pushed to the phone:
+// no. Getting to a phone means the words leaving the network through
+// a push service, and they would rather miss a reminder than have
+// every reminder go out through Google.
+//
+// What travels now is only what a rule asked to travel -- see
+// [job.Job.Anywhere] -- which is a thing chosen one rule at a time
+// rather than a whole kind at once.
+func TestAReminderStaysInTheRoom(t *testing.T) {
 	say := &mouth{}
 	aloud := remind.Aloud{Announcer: say, Now: due().DueAt.UTC}
 
@@ -134,7 +138,7 @@ func TestAReminderGoesFurtherThanTheRoom(t *testing.T) {
 	if len(say.said) != 1 {
 		t.Fatalf("spoke %v, want it said in the room", say.said)
 	}
-	if len(say.reached) != 1 {
-		t.Errorf("reached %v, want the reminder sent on as well", say.reached)
+	if len(say.reached) != 0 {
+		t.Errorf("reached %v, want a reminder to go no further than the room", say.reached)
 	}
 }

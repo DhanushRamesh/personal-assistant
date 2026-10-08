@@ -13591,6 +13591,132 @@ left at 10:56, near the ten the routine worked out, so there was
 nothing to say.
 
 
+### A pause is longest at the start of a sentence
+
+The gap that ends a spoken turn grew from 0.7s to 3.5s the longer
+somebody kept talking, but it did not begin growing until two
+seconds of speech had gone by. Nine of 125 turns in a day ended
+mid-sentence, and every one of them was inside that flat stretch:
+
+	3.8s   Who is the
+	3.4s   Jarvis look at the
+	2.9s   Whenever I
+	2.5s   When was the
+
+Two to four words is well under two seconds, so the owner had
+0.7s to think before the turn was taken away -- and then said the
+whole thing again. A sentence is paused in longest while its
+opening words are being chosen, so the least patient part of the
+curve was sitting exactly where the pauses fall.
+
+The floor is 1.2s, the flat stretch 1.0s, and the curve reaches
+its ceiling in four rather than seven:
+
+	spoke for      was      is
+	  under 1s    0.70    1.20
+	        2s    0.70    1.71
+	        4s    1.40    2.41
+	        7s    2.13    2.99
+	       12s    2.83    3.35
+
+The shortest questions pay about half a second more before they
+are answered. That is the whole of the cost and the owner took it.
+
+The gate is what made this visible. Before it, room noise read as
+speech in 88% of frames and propped the turn open through any
+pause, so a floor of 0.7s was never reached. Silencing the quiet
+is what let turns end at all, and what exposed a floor that had
+always been too tight.
+
+### A turn that noise started has to end somewhere
+
+The same day's logs: 153 windows went to transcription, 30.4
+minutes of audio in all. Six of them were 19 of those minutes.
+
+	11:36  258.0s  (nothing)
+	12:44  168.7s  Hey,
+	12:49  301.1s  (nothing)
+	14:31  301.1s  Yeah.
+
+Noise crosses the threshold that starts a command, keeps crossing
+the one that sustains it, and the silence countdown is reset
+forever. start_timeout_seconds does not help: that budget is for
+speech that never begins, and here it began. Nothing ended these
+but timeout_seconds, which was 300.
+
+The longest thing the owner has actually said in one turn is 20s,
+a dictated rule. The ceiling is 45.
+
+
+### Something that can hear how a sentence ended
+
+The gap was widened to 1.2s in the morning because a pause at the
+start of a sentence read as the end of one. It worked, and it charged
+every short question half a second for the privilege. That is the
+wrong half of the trade to keep paying once something can tell the two
+apart, so the gap is back to 0.7s and the telling-apart is done by a
+model.
+
+Smart Turn v3, 8MB of ONNX, reads the waveform rather than the words:
+a finished sentence falls in pitch, one being thought through is held
+flat. It runs as turn-detector.service on the host, because the thing
+wants onnxruntime and a feature extractor and Home Assistant's
+container is replaced on every update. Inside the container there are
+four lines.
+
+The seam is _speech_to_text_stream in pipeline.py, which already has
+the audio and is already async, so the call is awaited rather than
+blocking. At the one moment the segmenter says a command has ended --
+once per turn, never per chunk -- the last eight seconds are offered
+for a second opinion, and keep_going() in vad.py puts back what
+reset() cleared if the answer is that the speaking is not over.
+
+It fails open every way it can: no service, a slow one, a bad answer,
+and the turn ends on the timer exactly as it did before. About 125ms
+when it does answer, which is the cost of asking.
+
+Its accuracy on this voice is **not measured**. Two attempts to
+measure it failed, both on the samples rather than the model: phrases
+performed into a recorder are not hesitation, and every clip held two
+or three attempts with pauses between them. Home Assistant is now
+keeping the audio of real turns, and the four cut-offs a day the log
+already identifies will label themselves. Until that says otherwise,
+this is being tried rather than relied on.
+
+
+### A rule that follows them out of the room
+
+Phone at four percent and nothing said. The rule had fired, and what
+it wrote was the right thing:
+
+	The battery is still dropping, sir -- nine percent now, and if
+	you are heading out this morning you will want to charge it
+	before you go.
+
+Written 09:20:59, stale 09:26:24, unsaid on both clients. Nobody was
+in the room. Which is the one place that sentence is no use: the phone
+shows its own percentage, and what the rule adds is the diary, which
+matters most to somebody already on their way out.
+
+Every rule announcement fires as `immediate`, and immediate is
+`{Asked, Drop, 5m}` -- the room, discarded if nobody is in it. Right
+for almost everything it covers and wrong for this one.
+
+So the rule says, not the kind. `anywhere` is the same shape of answer
+as `keep` in 00044: a rule knows what its kind cannot. It picks
+`reaching` instead of `immediate`, which is `{Everywhere, Hold, 1h}`.
+
+Two things the owner decided along the way. Reminders no longer
+travel -- asked directly whether to push them to the phone, no, they
+would rather miss one than have every reminder leave the house through
+Google. And `notify` is filled in at last, but it now reaches only the
+kinds that ask for it, which today is one rule.
+
+Three tests failed on the way through, all of them guarding the
+audience table, all of them right to. That table is worth the tests it
+has.
+
+
 ## 12. Maintaining this file
 
 When the owner states a preference, makes a decision, or corrects something,

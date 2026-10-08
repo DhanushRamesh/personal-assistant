@@ -30,6 +30,7 @@ type row struct {
 	Why       string     `gorm:"column:why"`
 	LastSaid  string     `gorm:"column:last_said"`
 	Keep      string     `gorm:"column:keep"`
+	Anywhere  bool       `gorm:"column:anywhere"`
 	Cool      string     `gorm:"column:cool"`
 	QuietAt   *time.Time `gorm:"column:quiet_until"`
 	CreatedAt time.Time  `gorm:"column:created_at"`
@@ -64,7 +65,8 @@ func (s *Store) Keep(ctx context.Context, j job.Job) error {
 	r := row{
 		ID: j.ID, UserID: j.UserID, Name: j.Name, Kind: j.Kind,
 		Schedule: j.Schedule, Steps: string(steps), State: string(j.State),
-		Why: j.Why, Keep: j.Keep, Cool: j.Cool, CreatedAt: now, UpdatedAt: now,
+		Why: j.Why, Keep: j.Keep, Cool: j.Cool, Anywhere: j.Anywhere,
+		CreatedAt: now, UpdatedAt: now,
 	}
 	if !j.Next.IsZero() {
 		at := j.Next.UTC()
@@ -96,6 +98,7 @@ func (s *Store) Change(ctx context.Context, j job.Job) error {
 		"schedule":   j.Schedule,
 		"steps":      string(steps),
 		"keep":       j.Keep,
+		"anywhere":   j.Anywhere,
 		"cool":       j.Cool,
 		"state":      string(j.State),
 		"last_said":  "",
@@ -327,7 +330,7 @@ func assemble(r row) (job.Job, error) {
 	j := job.Job{
 		ID: r.ID, UserID: r.UserID, Name: r.Name, Kind: r.Kind,
 		Schedule: r.Schedule, Steps: steps, State: job.State(r.State),
-		Why: r.Why, Said: r.LastSaid, Keep: r.Keep, Cool: r.Cool,
+		Why: r.Why, Said: r.LastSaid, Keep: r.Keep, Cool: r.Cool, Anywhere: r.Anywhere,
 	}
 	if r.QuietAt != nil {
 		j.Quiet = r.QuietAt.UTC()

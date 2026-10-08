@@ -179,6 +179,14 @@ var howLongToKeep = prompt.Lines(
 	"Leave it out for anything about this moment. A warning that the battery was at four percent, read out at the door that evening, is worse than saying nothing.",
 )
 
+// whetherToFollow : Whether a rule's words are worth following them
+// out of the room, written for the model.
+var whetherToFollow = prompt.Lines(
+	"Whether what this rule says should reach them when they are not in the room. Leave it out for almost every rule.",
+	"Only for something that matters most when they are out: the phone about to run out before they get home, a door left unlocked.",
+	"Not for anything the room is the point of. Said anywhere, the words go out to their phone through a push service, so ask for it only when being out is exactly when they need to know.",
+)
+
 // howLongToCool : How long a rule holds off after speaking,
 // written for the model.
 var howLongToCool = prompt.Lines(
@@ -309,9 +317,10 @@ func add(store Store, clock Clock, id func() string, look Lookup, try Trier) too
 						"\"say what is in the diary today\". You will be asked this each time the rule runs, " +
 						"and may answer that there is nothing worth saying. Give this or say, never both.",
 				},
-				"when": {Type: "string", Description: howToCondition},
-				"keep": {Type: "string", Description: howLongToKeep},
-				"cool": {Type: "string", Description: howLongToCool},
+				"when":     {Type: "string", Description: howToCondition},
+				"keep":     {Type: "string", Description: howLongToKeep},
+				"cool":     {Type: "string", Description: howLongToCool},
+				"anywhere": {Type: "boolean", Description: whetherToFollow},
 				"tools": {
 					Type:        "array",
 					Description: howToTools,
@@ -352,6 +361,7 @@ func add(store Store, clock Clock, id func() string, look Lookup, try Trier) too
 				When     string   `json:"when"`
 				Keep     string   `json:"keep"`
 				Cool     string   `json:"cool"`
+				Anywhere bool     `json:"anywhere"`
 				LookUp   []lookUp `json:"look_up"`
 				Tools    []string `json:"tools"`
 			}
@@ -387,6 +397,7 @@ func add(store Store, clock Clock, id func() string, look Lookup, try Trier) too
 				return tool.Failed(readable(err))
 			}
 			made.Cool = strings.TrimSpace(args.Cool)
+			made.Anywhere = args.Anywhere
 			if err := store.Keep(ctx, made); err != nil {
 				return tool.Failed(err.Error())
 			}
@@ -477,6 +488,7 @@ func update(store Store, clock Clock, look Lookup, try Trier) tool.Tool {
 				"when":     {Type: "string", Description: howToCondition},
 				"keep":     {Type: "string", Description: howLongToKeep},
 				"cool":     {Type: "string", Description: howLongToCool},
+				"anywhere": {Type: "boolean", Description: whetherToFollow},
 				"tools": {
 					Type:        "array",
 					Description: howToTools,
@@ -506,6 +518,7 @@ func update(store Store, clock Clock, look Lookup, try Trier) tool.Tool {
 				When     *string  `json:"when"`
 				Keep     *string  `json:"keep"`
 				Cool     *string  `json:"cool"`
+				Anywhere *bool    `json:"anywhere"`
 				LookUp   []lookUp `json:"look_up"`
 				Tools    []string `json:"tools"`
 			}
@@ -576,6 +589,10 @@ func update(store Store, clock Clock, look Lookup, try Trier) tool.Tool {
 				return tool.Failed(readable(err))
 			}
 			made.Cool = given(args.Cool, was.Cool)
+			made.Anywhere = was.Anywhere
+			if args.Anywhere != nil {
+				made.Anywhere = *args.Anywhere
+			}
 			// What it last said is dropped on purpose. The rule is
 			// not the rule it was, so the sentence it is holding
 			// back is no longer a repeat of anything -- and
@@ -949,6 +966,9 @@ func one(j job.Job, clock Clock) string {
 	}
 	if j.Cool != "" {
 		parts = append(parts, "quiet for "+j.Cool+" after speaking")
+	}
+	if j.Anywhere {
+		parts = append(parts, "said wherever they are")
 	}
 	if !j.Quiet.IsZero() && j.Quiet.After(clock.now()) {
 		parts = append(parts, "quiet until "+j.Quiet.In(clock.where()).Format("Mon 2 Jan 3:04 pm"))

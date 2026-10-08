@@ -113,6 +113,14 @@ type Turn struct {
 	// written sentence is held to it: words fixed when the rule
 	// was made are meant to repeat.
 	Before string
+	// Anywhere : Whether what this rule says should follow them out
+	// of the room, from [Job.Anywhere].
+	//
+	// Carried on the turn with Worth, and for the same reason: by
+	// the time there are words to publish the job is behind us, and
+	// what the publisher needs to know about it has to have come
+	// with them.
+	Anywhere bool
 	// Trying : Whether this is a trial rather than the rule
 	// running.
 	//
@@ -463,7 +471,7 @@ func (r *Runner) Try(ctx context.Context, j Job) Trial {
 	for _, step := range j.Steps {
 		done, err := r.Doer.Do(ctx,
 			Turn{UserID: j.UserID, Already: already, Before: j.Said,
-				Worth: j.Worth(), Trying: true}, step)
+				Worth: j.Worth(), Anywhere: j.Anywhere, Trying: true}, step)
 		out.Steps = append(out.Steps, step)
 
 		switch {
@@ -558,7 +566,7 @@ func (r *Runner) one(ctx context.Context, j Job, now time.Time, pass *Pass) {
 	for _, step := range j.Steps {
 		done, err := r.Doer.Do(ctx,
 			Turn{UserID: j.UserID, Already: already, Before: j.Said,
-				Worth: j.Worth()}, step)
+				Worth: j.Worth(), Anywhere: j.Anywhere}, step)
 		if step.Do == Call && step.Tool != "" {
 			already = append(already, Ran{Tool: step.Tool, Got: done.Got})
 		}

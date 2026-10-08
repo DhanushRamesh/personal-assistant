@@ -308,6 +308,7 @@ func TestEveryAnnouncementHasAnAudience(t *testing.T) {
 		conversation.ReminderAnnouncement,
 		conversation.PresenceAnnouncement,
 		conversation.Immediate,
+		conversation.Reaching,
 		conversation.Coming,
 		conversation.Renaming,
 	}
@@ -329,12 +330,21 @@ func TestEveryAnnouncementHasAnAudience(t *testing.T) {
 	}
 }
 
-// TestOnlyAReminderGoesEverywhere : The others are caused by one client
-// and belong to it. A greeting following somebody out of the house
-// arrives at the one moment it is not wanted.
-func TestOnlyAReminderGoesEverywhere(t *testing.T) {
+// TestOnlyWhatWasAskedToTravelTravels : The rest are caused by one
+// client and belong to it. A greeting following somebody out of the
+// house arrives at the one moment it is not wanted.
+//
+// The reminder used to be the exception, on the reasoning that it is
+// the one thing worth the trip. The owner decided otherwise on 8
+// October: the trip means the words going out through a push service,
+// and they would rather hear a reminder in the room than have it
+// leave the house. What travels now is what a rule explicitly asked
+// to travel.
+func TestOnlyWhatWasAskedToTravelTravels(t *testing.T) {
 	want := map[conversation.Kind]conversation.Audience{
-		conversation.ReminderAnnouncement: conversation.Everywhere,
+		conversation.Reaching:             conversation.Everywhere,
+		conversation.ReminderAnnouncement: conversation.Asked,
+		conversation.Immediate:            conversation.Asked,
 		conversation.PresenceAnnouncement: conversation.Asked,
 		conversation.Renaming:             conversation.Asked,
 	}

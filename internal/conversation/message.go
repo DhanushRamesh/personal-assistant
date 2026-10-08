@@ -106,6 +106,20 @@ const (
 	// otherwise.
 	Immediate Kind = "immediate"
 
+	// Reaching : An immediate announcement a rule said to follow them with.
+	//
+	// The same moment as [Immediate] and a different audience. A rule
+	// knows something the kind cannot: most of what fires at once is
+	// only worth hearing where they are standing, and a few things --
+	// the phone about to die before they go out -- are worth most
+	// exactly when they are not. [job.Job.Anywhere] is how a rule says
+	// which it is, as [job.Job.Keep] says how long it stays worth
+	// saying.
+	//
+	// Held rather than dropped, because the point of it is somebody
+	// who is not there yet.
+	Reaching Kind = "reaching"
+
 	// Coming : Warning of something in the diary before it arrives.
 	//
 	// Its own kind rather than a reminder, because nobody asked for
@@ -231,7 +245,11 @@ type Policy struct {
 // meant reading both to find out what it should do. This is the same
 // lesson as known() below -- adding a kind should be one edit.
 var announcements = map[Kind]Policy{
-	ReminderAnnouncement: {Everywhere, Hold, time.Hour, 5, true},
+	// The room, by the owner's decision on 8 October. It was
+	// Everywhere, on the reasoning that a reminder is the one thing
+	// worth the trip; the trip means the words going out through
+	// Google's push service, and that is the part they did not want.
+	ReminderAnnouncement: {Asked, Hold, time.Hour, 5, true},
 	PresenceAnnouncement: {Asked, Drop, 20 * time.Second, 1, false},
 	// The room, and only the room. A remark is the assistant being
 	// company, which is a thing that belongs where the person is
@@ -243,7 +261,11 @@ var announcements = map[Kind]Policy{
 	// anywhere: it is only made when somebody is there to hear it,
 	// and a phone reports its own battery without help.
 	Immediate: {Asked, Drop, 5 * time.Minute, 3, true},
-	Renaming:  {Asked, Drop, time.Hour, 1, false},
+	// The same thing a rule asked to be followed with. An hour rather
+	// than five minutes: the five is for a thing worth saying only
+	// while they stand there, and this is the opposite of that.
+	Reaching: {Everywhere, Hold, time.Hour, 5, true},
+	Renaming: {Asked, Drop, time.Hour, 1, false},
 	// Nothing asked for it and it is about something hours or days
 	// away, so where they happen to be standing decides nothing.
 	Coming: {Everywhere, Hold, 6 * time.Hour, 5, true},

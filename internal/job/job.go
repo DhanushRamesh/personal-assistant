@@ -188,6 +188,22 @@ type Job struct {
 	// five minutes while a missed call nobody returned is worth the
 	// afternoon.
 	Keep string
+	// Anywhere : Whether what this rule says is worth following them
+	// out of the room. False keeps it to the room, which is where
+	// almost everything belongs.
+	//
+	// The same kind of thing as [Job.Keep], and for the same reason:
+	// a rule knows what its kind cannot. Every announcement a rule
+	// makes fires the moment it has something to say, and that is
+	// usually only worth hearing where somebody is standing -- but
+	// the phone running out before they leave is worth most when
+	// they are already out, which is the one case the room can never
+	// cover.
+	//
+	// Costly enough to be asked for rather than assumed: it is the
+	// words going out through a push service, which nothing else
+	// here does.
+	Anywhere bool
 	// Said : The sentence this rule last said, so it does not say
 	// it again.
 	//

@@ -157,9 +157,10 @@ func (s *spoke) Available() bool { return !s.off }
 // TestSpeakSendsAReminderEverywhereAndTheRestToTheRoom : The audience
 // decides the transport, so a caller cannot disagree with what is
 // written down.
-func TestSpeakSendsAReminderEverywhereAndTheRestToTheRoom(t *testing.T) {
+func TestSpeakSendsWhatWasAskedToTravelEverywhereAndTheRestToTheRoom(t *testing.T) {
 	to := &spoke{}
 	for _, k := range []conversation.Kind{
+		conversation.Reaching,
 		conversation.ReminderAnnouncement,
 		conversation.PresenceAnnouncement,
 		conversation.Renaming,
@@ -168,11 +169,11 @@ func TestSpeakSendsAReminderEverywhereAndTheRestToTheRoom(t *testing.T) {
 			t.Fatalf("%s: %v", k, err)
 		}
 	}
-	if len(to.reached) != 1 || to.reached[0] != string(conversation.ReminderAnnouncement) {
-		t.Errorf("only a reminder should leave the room, got %v", to.reached)
+	if len(to.reached) != 1 || to.reached[0] != string(conversation.Reaching) {
+		t.Errorf("only what a rule asked to follow them should leave the room, got %v", to.reached)
 	}
-	if len(to.said) != 2 {
-		t.Errorf("the other two belong in the room, got %v", to.said)
+	if len(to.said) != 3 {
+		t.Errorf("the other three belong in the room, got %v", to.said)
 	}
 }
 

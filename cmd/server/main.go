@@ -1990,6 +1990,18 @@ type doing struct {
 
 // Do : Carries out one step. Never stops the sequence yet -- the
 // step that can is the checking one, which comes with prompts.
+// heard : Which kind a rule's announcement is, for where it should go.
+//
+// The moment is the same either way -- it fires because something has
+// just become true. All that differs is whether being out of the room
+// means missing it, and the rule is what knows: see [job.Job.Anywhere].
+func heard(anywhere bool) conversation.Kind {
+	if anywhere {
+		return conversation.Reaching
+	}
+	return conversation.Immediate
+}
+
 func (d doing) Do(ctx context.Context, run job.Turn, s job.Step) (job.Outcome, error) {
 	if err := s.Valid(); err != nil {
 		return job.Outcome{}, err
@@ -2006,15 +2018,16 @@ func (d doing) Do(ctx context.Context, run job.Turn, s job.Step) (job.Outcome, e
 		// Published, which is where announcements go now, and
 		// spoken, which is the only way one is currently heard.
 		// The second half goes when a client collects.
+		kind := heard(run.Anywhere)
 		o, err := outbox.Keeping(outboxmysql.ID(), run.UserID,
-			conversation.Immediate, s.Say, d.now(), run.Worth)
+			kind, s.Say, d.now(), run.Worth)
 		if err != nil {
 			return job.Outcome{}, err
 		}
 		if err := d.to.Publish(ctx, o); err != nil {
 			return job.Outcome{}, err
 		}
-		if err := announcement.Speak(ctx, d.speaker, conversation.Immediate, s.Say); err != nil {
+		if err := announcement.Speak(ctx, d.speaker, kind, s.Say); err != nil {
 			return job.Outcome{}, err
 		}
 		d.written.Announced(ctx, run.UserID, s.Say)
@@ -2268,15 +2281,16 @@ func (d doing) publish(ctx context.Context, run job.Turn, said string) error {
 		return nil
 	}
 	userID, worth := run.UserID, run.Worth
+	kind := heard(run.Anywhere)
 	o, err := outbox.Keeping(outboxmysql.ID(), userID,
-		conversation.Immediate, said, d.now(), worth)
+		kind, said, d.now(), worth)
 	if err != nil {
 		return err
 	}
 	if err := d.to.Publish(ctx, o); err != nil {
 		return err
 	}
-	if err := announcement.Speak(ctx, d.speaker, conversation.Immediate, said); err != nil {
+	if err := announcement.Speak(ctx, d.speaker, kind, said); err != nil {
 		return err
 	}
 	d.written.Announced(ctx, userID, said)
