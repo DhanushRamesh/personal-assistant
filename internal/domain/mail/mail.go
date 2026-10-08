@@ -36,6 +36,7 @@ import (
 	"strings"
 	"sync"
 	"time"
+	"unicode/utf8"
 
 	gmail "google.golang.org/api/gmail/v1"
 	"google.golang.org/api/option"
@@ -410,5 +411,15 @@ func shorten(body string) string {
 	if len(body) <= Longest {
 		return body
 	}
-	return body[:Longest] + "\n\n[the rest of this message was not read]"
+	// Cut on a rune, not a byte. Longest is a byte count because
+	// that is what a prompt is budgeted in, but slicing there lands
+	// inside a character in any script that is not Latin -- three
+	// bytes a letter in Tamil, four in an emoji -- and what comes
+	// out is not text at all. It then goes into a prompt, and from
+	// there to whatever is listening.
+	cut := Longest
+	for cut > 0 && !utf8.RuneStart(body[cut]) {
+		cut--
+	}
+	return body[:cut] + "\n\n[the rest of this message was not read]"
 }

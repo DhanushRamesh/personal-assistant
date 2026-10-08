@@ -172,3 +172,57 @@ func TestItIsToldWhichFailureIsWorse(t *testing.T) {
 		t.Errorf("the prompt does not say which way to err:\n%s", got)
 	}
 }
+
+// TestASentenceWrittenByTheServerSoundsLikeTheSameAssistant : Without
+// this, a server-written line lands in the middle of a conversation
+// where every other sentence has called the person sir.
+//
+// The failure case is the clearest one: the single reply the model had
+// no hand in is the one that sounds like somebody else.
+func TestASentenceWrittenByTheServerSoundsLikeTheSameAssistant(t *testing.T) {
+	for _, c := range []struct {
+		what, sentence, already, want string
+	}{
+		{"before the full stop", "That could not be done.", "",
+			"That could not be done, sir."},
+		{"with no full stop", "Reading your reminders", "",
+			"Reading your reminders, sir"},
+		{"already said in the reply", "That could not be done.",
+			"I am afraid not, sir.", "That could not be done."},
+		{"already said, whatever the case", "That could not be done.",
+			"I am afraid not, SIR.", "That could not be done."},
+		{"a question keeps its mark", "Shall I?", "", "Shall I?, sir"},
+		{"nothing to say", "", "", ""},
+	} {
+		t.Run(c.what, func(t *testing.T) {
+			if got := persona.Addressed(c.sentence, "sir", c.already); got != c.want {
+				t.Errorf("Addressed(%q, sir, %q) = %q, want %q",
+					c.sentence, c.already, got, c.want)
+			}
+		})
+	}
+
+	// A persona that calls them nothing leaves the sentence alone.
+	if got := persona.Addressed("That could not be done.", "", ""); got != "That could not be done." {
+		t.Errorf("a persona with no address changed the sentence to %q", got)
+	}
+	if got := persona.Addressed("That could not be done.", "   ", ""); got != "That could not be done." {
+		t.Errorf("whitespace was treated as an address, giving %q", got)
+	}
+}
+
+// TestWhatEachPersonaCallsThem : And that an identifier nobody knows
+// is answered with nothing rather than an error, because an assistant
+// that answers plainly is a working assistant.
+func TestWhatEachPersonaCallsThem(t *testing.T) {
+	for _, p := range persona.All() {
+		if got := persona.AddressFor(p.ID); got != p.Address {
+			t.Errorf("AddressFor(%q) = %q, want %q", p.ID, got, p.Address)
+		}
+	}
+	for _, unknown := range []string{"", "nobody", "SIR", "jarvis "} {
+		if got := persona.AddressFor(unknown); got != "" {
+			t.Errorf("AddressFor(%q) = %q, want nothing", unknown, got)
+		}
+	}
+}

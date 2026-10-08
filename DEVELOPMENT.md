@@ -14092,6 +14092,44 @@ notice is an interface with no statements. store was the same and both
 are right as they are.
 
 
+### A mail in Tamil, cut in half a letter
+
+Auditing domain. The low numbers are mostly honest: calendar at 13.5
+per cent, mail and tasks at none, are Google clients, and what is
+untested in them is the part that calls Google. Covering that needs a
+fake service and would measure the fake.
+
+So the audit went after what is logic rather than what is a wrapper,
+and found a bug. shorten() cuts a long mail at Longest bytes, which
+is right as a budget -- a prompt is counted in bytes -- and wrong as
+a cut: three bytes a letter in Tamil, four in an emoji, and the
+slice lands inside a character. What comes out is not text. It then
+goes into a prompt and from there to whatever is listening. It cuts
+on a rune now.
+
+tasks.Pick is the other piece of real logic in either: which list
+somebody meant, matched by likeness because what reaches it has been
+through a speech recogniser. Covered now, including the case where
+two are alike and it must ask rather than choose -- a task added to
+the wrong list is not findable by the person who added it.
+
+outbox.Spent and Owing.Stale are the two halves of whether an
+announcement is still worth saying, and both were untested. They are
+what decided every battery warning that was never heard: written at
+09:20, stale at 09:25, said to nobody.
+
+persona.Addressed puts the manner on a sentence the server wrote
+rather than the model. Without it the one reply the model had no hand
+in is the one that sounds like a different assistant.
+
+	outbox  56.2 -> 59.4      persona  26.3 -> 45.6
+	tasks   none -> 6.2       mail     none -> 12.2
+
+The percentages stay low because most of those packages are calls to
+somebody else's API, and that is the right shape for them. What
+matters is that the logic inside them is covered now.
+
+
 ## 12. Maintaining this file
 
 When the owner states a preference, makes a decision, or corrects something,

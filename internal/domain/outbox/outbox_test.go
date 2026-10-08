@@ -330,3 +330,83 @@ func TestARuleSaysHowLongItMatters(t *testing.T) {
 		t.Error("it outlasted the time it asked for")
 	}
 }
+
+// TestWhenAClientHasTriedAsOftenAsItMay : The kind decides how many
+// attempts an announcement is worth, and this is what reads it.
+//
+// Said wrongly in either direction it goes badly: too few and a
+// client that hiccupped once never says the thing at all, too many
+// and a client that cannot speak retries until the announcement goes
+// stale underneath it.
+func TestWhenAClientHasTriedAsOftenAsItMay(t *testing.T) {
+	at := time.Date(2026, 10, 8, 9, 20, 0, 0, time.UTC)
+	owing, err := outbox.Keeping("owd_1", "usr_1", conversation.Reaching, "the battery is nearly gone", at, 0)
+	if err != nil {
+		t.Fatalf("Keeping: %v", err)
+	}
+	rule, _ := conversation.Reaching.Rule()
+
+	for tries := 0; tries < rule.Tries; tries++ {
+		d := outbox.Delivery{Owing: owing, Tries: tries}
+		if d.Spent() {
+			t.Errorf("after %d of %d tries it was given up on", tries, rule.Tries)
+		}
+	}
+	if !(outbox.Delivery{Owing: owing, Tries: rule.Tries}).Spent() {
+		t.Errorf("after all %d tries it was still being retried", rule.Tries)
+	}
+
+	// A kind with no rule is not an announcement, and nothing may be
+	// spent on it.
+	plain := outbox.Delivery{Owing: outbox.Owing{Kind: conversation.Chat}, Tries: 99}
+	if plain.Spent() {
+		t.Error("something that is not an announcement was given up on")
+	}
+}
+
+// TestWhenAnAnnouncementIsTooLateToSay : The other half of the same
+// judgement, and the one that decided every battery warning that was
+// never heard: written at 09:20, stale at 09:25, said to nobody.
+func TestWhenAnAnnouncementIsTooLateToSay(t *testing.T) {
+	at := time.Date(2026, 10, 8, 9, 20, 0, 0, time.UTC)
+
+	// Immediate is worth five minutes and is dropped rather than held.
+	quick, err := outbox.Keeping("owd_1", "usr_1", conversation.Immediate, "eight percent", at, 0)
+	if err != nil {
+		t.Fatalf("Keeping: %v", err)
+	}
+	if quick.Stale(at) || quick.Stale(at.Add(4*time.Minute)) {
+		t.Error("it went stale before its moment had passed")
+	}
+	if !quick.Stale(at.Add(5 * time.Minute)) {
+		t.Error("it was still worth saying after the kind said it was not")
+	}
+
+	// A rule that knows better overrides the kind, which is what
+	// keep is for: a missed call nobody returned is worth the
+	// afternoon and a battery reading is not.
+	longer, err := outbox.Keeping("owd_2", "usr_1", conversation.Immediate, "a call nobody returned", at, 6*time.Hour)
+	if err != nil {
+		t.Fatalf("Keeping: %v", err)
+	}
+	if longer.Stale(at.Add(5 * time.Hour)) {
+		t.Error("the rule's own judgement was ignored in favour of the kind's")
+	}
+	if !longer.Stale(at.Add(6 * time.Hour)) {
+		t.Error("it outlasted what the rule asked for")
+	}
+}
+
+// TestNothingIsOwedWithoutWordsOrAKindThatSpeaks : Both refusals
+// matter: an announcement with no text is a client woken to say
+// nothing, and a kind that is not an announcement must not be
+// broadcast by being put in here.
+func TestNothingIsOwedWithoutWordsOrAKindThatSpeaks(t *testing.T) {
+	at := time.Now().UTC()
+	if _, err := outbox.Keeping("owd_1", "usr_1", conversation.Immediate, "", at, 0); err == nil {
+		t.Error("an announcement with nothing to say was accepted")
+	}
+	if _, err := outbox.Keeping("owd_1", "usr_1", conversation.Chat, "an answer", at, 0); err == nil {
+		t.Error("a reply was accepted as something to announce")
+	}
+}
