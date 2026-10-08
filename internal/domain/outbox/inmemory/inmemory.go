@@ -12,7 +12,7 @@ import (
 	"sync"
 	"time"
 
-	"github.com/DhanushRamesh/personal-assistant/internal/domain/outbox"
+	"personal-assistant/internal/domain/outbox"
 )
 
 // Store : What is owed, in memory.

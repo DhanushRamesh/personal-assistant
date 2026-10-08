@@ -10,8 +10,8 @@ import (
 	"gorm.io/gorm"
 	"gorm.io/gorm/clause"
 
-	"github.com/DhanushRamesh/personal-assistant/internal/base/event"
-	"github.com/DhanushRamesh/personal-assistant/internal/base/storage"
+	"personal-assistant/internal/base/event"
+	"personal-assistant/internal/base/storage"
 )
 
 // row : The events table, as GORM sees it.

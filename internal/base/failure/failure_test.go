@@ -7,7 +7,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/DhanushRamesh/personal-assistant/internal/base/failure"
+	"personal-assistant/internal/base/failure"
 )
 
 func TestEveryCodeHasASentence(t *testing.T) {

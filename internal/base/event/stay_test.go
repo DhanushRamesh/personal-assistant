@@ -6,7 +6,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/DhanushRamesh/personal-assistant/internal/base/event"
+	"personal-assistant/internal/base/event"
 )
 
 // at : A reading, so many minutes into the day.

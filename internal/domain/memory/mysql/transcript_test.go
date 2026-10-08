@@ -2,19 +2,19 @@ package mysql_test
 
 import (
 	"context"
-	"github.com/DhanushRamesh/personal-assistant/internal/base/user"
+	"personal-assistant/internal/base/user"
 	"strings"
 	"testing"
 	"time"
 
-	"github.com/DhanushRamesh/personal-assistant/internal/base/chat"
-	chatmysql "github.com/DhanushRamesh/personal-assistant/internal/base/chat/mysql"
-	"github.com/DhanushRamesh/personal-assistant/internal/base/config"
-	"github.com/DhanushRamesh/personal-assistant/internal/base/conversation"
-	"github.com/DhanushRamesh/personal-assistant/internal/base/embed"
-	"github.com/DhanushRamesh/personal-assistant/internal/base/storage"
-	"github.com/DhanushRamesh/personal-assistant/internal/domain/memory"
-	memorymysql "github.com/DhanushRamesh/personal-assistant/internal/domain/memory/mysql"
+	"personal-assistant/internal/base/chat"
+	chatmysql "personal-assistant/internal/base/chat/mysql"
+	"personal-assistant/internal/base/config"
+	"personal-assistant/internal/base/conversation"
+	"personal-assistant/internal/base/embed"
+	"personal-assistant/internal/base/storage"
+	"personal-assistant/internal/domain/memory"
+	memorymysql "personal-assistant/internal/domain/memory/mysql"
 )
 
 // spoken : A conversation with one exchange in it, and who owns it.

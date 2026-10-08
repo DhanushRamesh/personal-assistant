@@ -2,16 +2,16 @@ package chats_test
 
 import (
 	"encoding/json"
-	"github.com/DhanushRamesh/personal-assistant/internal/base/user"
 	"net/http"
+	"personal-assistant/internal/base/user"
 	"strings"
 	"testing"
 	"time"
 
-	"github.com/DhanushRamesh/personal-assistant/internal/app/api/apitest"
-	"github.com/DhanushRamesh/personal-assistant/internal/app/api/views"
-	"github.com/DhanushRamesh/personal-assistant/internal/base/chat"
-	"github.com/DhanushRamesh/personal-assistant/internal/base/environment"
+	"personal-assistant/internal/app/api/apitest"
+	"personal-assistant/internal/app/api/views"
+	"personal-assistant/internal/base/chat"
+	"personal-assistant/internal/base/environment"
 )
 
 // Where a prompt lands, and what happens to what was already running there,

@@ -3,7 +3,7 @@ package prompt_test
 import (
 	"testing"
 
-	"github.com/DhanushRamesh/personal-assistant/internal/base/prompt"
+	"personal-assistant/internal/base/prompt"
 )
 
 // Sentences are joined by exactly one space, however they were written.

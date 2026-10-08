@@ -9,8 +9,8 @@ import (
 	"testing"
 	"time"
 
-	"github.com/DhanushRamesh/personal-assistant/internal/base/event"
-	"github.com/DhanushRamesh/personal-assistant/internal/domain/greet"
+	"personal-assistant/internal/base/event"
+	"personal-assistant/internal/domain/greet"
 )
 
 // india : The zone the hour is written in.

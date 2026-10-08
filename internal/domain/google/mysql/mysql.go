@@ -11,9 +11,9 @@ import (
 	"gorm.io/gorm"
 	"gorm.io/gorm/clause"
 
-	"github.com/DhanushRamesh/personal-assistant/internal/base/logging"
-	"github.com/DhanushRamesh/personal-assistant/internal/base/storage"
-	"github.com/DhanushRamesh/personal-assistant/internal/domain/google"
+	"personal-assistant/internal/base/logging"
+	"personal-assistant/internal/base/storage"
+	"personal-assistant/internal/domain/google"
 )
 
 // row : One person's permission, as stored.

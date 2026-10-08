@@ -37,9 +37,9 @@ import (
 	"sync"
 	"time"
 
-	"github.com/DhanushRamesh/personal-assistant/internal/base/logging"
 	gmail "google.golang.org/api/gmail/v1"
 	"google.golang.org/api/option"
+	"personal-assistant/internal/base/logging"
 )
 
 // Scope : What this needs granted.

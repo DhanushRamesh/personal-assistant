@@ -7,7 +7,7 @@ import (
 	"sync"
 	"time"
 
-	"github.com/DhanushRamesh/personal-assistant/internal/domain/job"
+	"personal-assistant/internal/domain/job"
 )
 
 // Store : Jobs, in memory.

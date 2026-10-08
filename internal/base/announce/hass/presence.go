@@ -9,7 +9,7 @@ import (
 	"strings"
 	"time"
 
-	"github.com/DhanushRamesh/personal-assistant/internal/base/logging"
+	"personal-assistant/internal/base/logging"
 )
 
 // Presence : Whether somebody is in the room, as Home Assistant sees it.

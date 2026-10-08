@@ -4,7 +4,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/DhanushRamesh/personal-assistant/internal/base/conversation"
+	"personal-assistant/internal/base/conversation"
 )
 
 // The exchange to fold in is in the prompt, labelled by who said it.

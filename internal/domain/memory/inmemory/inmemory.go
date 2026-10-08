@@ -16,8 +16,8 @@ import (
 	"sync"
 	"time"
 
-	"github.com/DhanushRamesh/personal-assistant/internal/base/embed"
-	"github.com/DhanushRamesh/personal-assistant/internal/domain/memory"
+	"personal-assistant/internal/base/embed"
+	"personal-assistant/internal/domain/memory"
 )
 
 // Store : An in-memory memory.Store.

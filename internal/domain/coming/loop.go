@@ -5,7 +5,7 @@ import (
 	"log/slog"
 	"time"
 
-	"github.com/DhanushRamesh/personal-assistant/internal/domain/calendar"
+	"personal-assistant/internal/domain/calendar"
 )
 
 // Diary : What this needs of the calendar.

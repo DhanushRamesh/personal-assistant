@@ -9,10 +9,10 @@ import (
 	"testing"
 	"time"
 
-	"github.com/DhanushRamesh/personal-assistant/internal/app/api/apitest"
-	"github.com/DhanushRamesh/personal-assistant/internal/app/api/assist"
-	"github.com/DhanushRamesh/personal-assistant/internal/app/api/chats"
-	"github.com/DhanushRamesh/personal-assistant/internal/base/chat"
+	"personal-assistant/internal/app/api/apitest"
+	"personal-assistant/internal/app/api/assist"
+	"personal-assistant/internal/app/api/chats"
+	"personal-assistant/internal/base/chat"
 )
 
 // Home Assistant will not finish setting an integration up if the server

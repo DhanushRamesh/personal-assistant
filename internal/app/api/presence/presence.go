@@ -26,18 +26,18 @@ import (
 
 	"github.com/go-chi/chi/v5"
 
-	"github.com/DhanushRamesh/personal-assistant/internal/app/api/authn"
-	"github.com/DhanushRamesh/personal-assistant/internal/app/api/httpx"
-	"github.com/DhanushRamesh/personal-assistant/internal/base/announce"
-	"github.com/DhanushRamesh/personal-assistant/internal/base/conversation"
-	"github.com/DhanushRamesh/personal-assistant/internal/base/event"
-	"github.com/DhanushRamesh/personal-assistant/internal/base/logging"
-	"github.com/DhanushRamesh/personal-assistant/internal/domain/announcement"
-	"github.com/DhanushRamesh/personal-assistant/internal/domain/calendar"
-	"github.com/DhanushRamesh/personal-assistant/internal/domain/greet"
-	"github.com/DhanushRamesh/personal-assistant/internal/domain/outbox"
-	"github.com/DhanushRamesh/personal-assistant/internal/domain/remind"
-	"github.com/DhanushRamesh/personal-assistant/internal/domain/tasks"
+	"personal-assistant/internal/app/api/authn"
+	"personal-assistant/internal/app/api/httpx"
+	"personal-assistant/internal/base/announce"
+	"personal-assistant/internal/base/conversation"
+	"personal-assistant/internal/base/event"
+	"personal-assistant/internal/base/logging"
+	"personal-assistant/internal/domain/announcement"
+	"personal-assistant/internal/domain/calendar"
+	"personal-assistant/internal/domain/greet"
+	"personal-assistant/internal/domain/outbox"
+	"personal-assistant/internal/domain/remind"
+	"personal-assistant/internal/domain/tasks"
 )
 
 // SpeakingFor : How long a greeting and everything behind it may take to

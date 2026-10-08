@@ -4,7 +4,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/DhanushRamesh/personal-assistant/internal/base/conversation"
+	"personal-assistant/internal/base/conversation"
 )
 
 // call : A tool call, for a test that does not care about the arguments.

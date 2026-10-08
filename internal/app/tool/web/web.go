@@ -12,9 +12,9 @@ import (
 	"encoding/json"
 	"strings"
 
-	"github.com/DhanushRamesh/personal-assistant/internal/app/tool"
-	"github.com/DhanushRamesh/personal-assistant/internal/base/chat"
-	"github.com/DhanushRamesh/personal-assistant/internal/base/search"
+	"personal-assistant/internal/app/tool"
+	"personal-assistant/internal/base/chat"
+	"personal-assistant/internal/base/search"
 )
 
 // Default, Most : How many results come back.

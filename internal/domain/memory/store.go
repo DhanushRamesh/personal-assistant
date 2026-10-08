@@ -3,7 +3,7 @@ package memory
 import (
 	"context"
 
-	"github.com/DhanushRamesh/personal-assistant/internal/base/embed"
+	"personal-assistant/internal/base/embed"
 )
 
 // Store : Where memories are kept.

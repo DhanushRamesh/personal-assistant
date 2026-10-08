@@ -14,10 +14,10 @@ import (
 
 	"github.com/go-chi/chi/v5"
 
-	"github.com/DhanushRamesh/personal-assistant/internal/app/api/authn"
-	"github.com/DhanushRamesh/personal-assistant/internal/app/api/httpx"
-	"github.com/DhanushRamesh/personal-assistant/internal/app/api/views"
-	"github.com/DhanushRamesh/personal-assistant/internal/domain/remind"
+	"personal-assistant/internal/app/api/authn"
+	"personal-assistant/internal/app/api/httpx"
+	"personal-assistant/internal/app/api/views"
+	"personal-assistant/internal/domain/remind"
 )
 
 // ListResponse : What a listing answers with.

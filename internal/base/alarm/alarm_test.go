@@ -9,7 +9,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/DhanushRamesh/personal-assistant/internal/base/alarm"
+	"personal-assistant/internal/base/alarm"
 )
 
 var six = time.Date(2026, 10, 6, 6, 5, 0, 0, time.UTC)

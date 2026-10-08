@@ -7,8 +7,8 @@ import (
 	"sync"
 	"time"
 
-	"github.com/DhanushRamesh/personal-assistant/internal/base/logging"
-	"github.com/DhanushRamesh/personal-assistant/internal/domain/google"
+	"personal-assistant/internal/base/logging"
+	"personal-assistant/internal/domain/google"
 )
 
 // Store : Permissions held in a map.

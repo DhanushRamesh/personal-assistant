@@ -27,7 +27,7 @@ import (
 	"strings"
 	"time"
 
-	"github.com/DhanushRamesh/personal-assistant/internal/base/event"
+	"personal-assistant/internal/base/event"
 )
 
 // Found : Something worth saying, and what makes it this thing

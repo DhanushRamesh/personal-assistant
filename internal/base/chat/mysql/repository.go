@@ -9,16 +9,16 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"github.com/DhanushRamesh/personal-assistant/internal/base/client"
-	"github.com/DhanushRamesh/personal-assistant/internal/base/store"
-	"github.com/DhanushRamesh/personal-assistant/internal/base/user"
+	"personal-assistant/internal/base/client"
+	"personal-assistant/internal/base/store"
+	"personal-assistant/internal/base/user"
 	"time"
 
 	"gorm.io/gorm"
 	"gorm.io/gorm/clause"
 
-	"github.com/DhanushRamesh/personal-assistant/internal/base/chat"
-	"github.com/DhanushRamesh/personal-assistant/internal/base/storage"
+	"personal-assistant/internal/base/chat"
+	"personal-assistant/internal/base/storage"
 )
 
 // Repository : A store.Repository backed by MySQL.

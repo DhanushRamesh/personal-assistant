@@ -19,10 +19,10 @@ import (
 
 	"github.com/go-chi/chi/v5"
 
-	"github.com/DhanushRamesh/personal-assistant/internal/app/api/authn"
-	"github.com/DhanushRamesh/personal-assistant/internal/app/api/httpx"
-	"github.com/DhanushRamesh/personal-assistant/internal/app/profile"
-	"github.com/DhanushRamesh/personal-assistant/internal/domain/memory"
+	"personal-assistant/internal/app/api/authn"
+	"personal-assistant/internal/app/api/httpx"
+	"personal-assistant/internal/app/profile"
+	"personal-assistant/internal/domain/memory"
 )
 
 // Response : The description, as the client reads it.

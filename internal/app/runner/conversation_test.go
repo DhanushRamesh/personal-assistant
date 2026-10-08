@@ -6,11 +6,11 @@ import (
 	"testing"
 	"time"
 
-	"github.com/DhanushRamesh/personal-assistant/internal/app/runner"
-	"github.com/DhanushRamesh/personal-assistant/internal/app/tool"
-	"github.com/DhanushRamesh/personal-assistant/internal/base/chat"
-	"github.com/DhanushRamesh/personal-assistant/internal/base/conversation"
-	"github.com/DhanushRamesh/personal-assistant/internal/base/environment"
+	"personal-assistant/internal/app/runner"
+	"personal-assistant/internal/app/tool"
+	"personal-assistant/internal/base/chat"
+	"personal-assistant/internal/base/conversation"
+	"personal-assistant/internal/base/environment"
 )
 
 // contents : What was said in a conversation, as plain strings.

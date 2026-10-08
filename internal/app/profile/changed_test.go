@@ -6,8 +6,8 @@ import (
 	"testing"
 	"time"
 
-	"github.com/DhanushRamesh/personal-assistant/internal/app/profile"
-	"github.com/DhanushRamesh/personal-assistant/internal/base/event"
+	"personal-assistant/internal/app/profile"
+	"personal-assistant/internal/base/event"
 )
 
 var asOf = time.Date(2026, 10, 4, 12, 0, 0, 0, time.UTC)

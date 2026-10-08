@@ -8,13 +8,13 @@ import (
 	"testing"
 	"time"
 
-	"github.com/DhanushRamesh/personal-assistant/internal/app/tool"
-	"github.com/DhanushRamesh/personal-assistant/internal/app/tool/reminders"
-	"github.com/DhanushRamesh/personal-assistant/internal/base/alarm"
-	"github.com/DhanushRamesh/personal-assistant/internal/base/chat"
-	"github.com/DhanushRamesh/personal-assistant/internal/base/conversation"
-	"github.com/DhanushRamesh/personal-assistant/internal/domain/remind"
-	"github.com/DhanushRamesh/personal-assistant/internal/domain/remind/inmemory"
+	"personal-assistant/internal/app/tool"
+	"personal-assistant/internal/app/tool/reminders"
+	"personal-assistant/internal/base/alarm"
+	"personal-assistant/internal/base/chat"
+	"personal-assistant/internal/base/conversation"
+	"personal-assistant/internal/domain/remind"
+	"personal-assistant/internal/domain/remind/inmemory"
 )
 
 const (

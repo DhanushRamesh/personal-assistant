@@ -10,8 +10,8 @@ import (
 	"testing"
 	"time"
 
-	"github.com/DhanushRamesh/personal-assistant/internal/base/config"
-	"github.com/DhanushRamesh/personal-assistant/internal/base/storage"
+	"personal-assistant/internal/base/config"
+	"personal-assistant/internal/base/storage"
 )
 
 func discard() *slog.Logger { return slog.New(slog.NewJSONHandler(io.Discard, nil)) }

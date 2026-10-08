@@ -6,8 +6,8 @@ import (
 	"strings"
 	"time"
 
-	"github.com/DhanushRamesh/personal-assistant/internal/base/prompt"
-	"github.com/DhanushRamesh/personal-assistant/internal/domain/calendar"
+	"personal-assistant/internal/base/prompt"
+	"personal-assistant/internal/domain/calendar"
 )
 
 // Asking : What the model is told before it reads an entry.

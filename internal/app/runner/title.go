@@ -4,10 +4,10 @@ import (
 	"context"
 	"log/slog"
 
-	"github.com/DhanushRamesh/personal-assistant/internal/base/chat"
-	"github.com/DhanushRamesh/personal-assistant/internal/base/conversation"
-	"github.com/DhanushRamesh/personal-assistant/internal/base/environment"
-	"github.com/DhanushRamesh/personal-assistant/internal/domain/announcement"
+	"personal-assistant/internal/base/chat"
+	"personal-assistant/internal/base/conversation"
+	"personal-assistant/internal/base/environment"
+	"personal-assistant/internal/domain/announcement"
 )
 
 // title : Gives a conversation a name, once, from what has been said in it.

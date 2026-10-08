@@ -2,16 +2,16 @@ package announcement_test
 
 import (
 	"context"
-	"github.com/DhanushRamesh/personal-assistant/internal/base/client"
-	"github.com/DhanushRamesh/personal-assistant/internal/base/user"
+	"personal-assistant/internal/base/client"
+	"personal-assistant/internal/base/user"
 	"strings"
 	"testing"
 	"time"
 
-	"github.com/DhanushRamesh/personal-assistant/internal/base/chat"
-	"github.com/DhanushRamesh/personal-assistant/internal/base/chat/memory"
-	"github.com/DhanushRamesh/personal-assistant/internal/base/conversation"
-	"github.com/DhanushRamesh/personal-assistant/internal/domain/announcement"
+	"personal-assistant/internal/base/chat"
+	"personal-assistant/internal/base/chat/memory"
+	"personal-assistant/internal/base/conversation"
+	"personal-assistant/internal/domain/announcement"
 )
 
 // at : A fixed afternoon, so the written hour is the same every run.

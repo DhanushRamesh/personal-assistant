@@ -7,9 +7,9 @@ import (
 	"strings"
 	"time"
 
-	"github.com/DhanushRamesh/personal-assistant/internal/base/announce"
-	"github.com/DhanushRamesh/personal-assistant/internal/base/conversation"
-	"github.com/DhanushRamesh/personal-assistant/internal/domain/announcement"
+	"personal-assistant/internal/base/announce"
+	"personal-assistant/internal/base/conversation"
+	"personal-assistant/internal/domain/announcement"
 )
 
 // LateBy : How far behind its time a reminder must be before it is said to

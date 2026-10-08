@@ -5,7 +5,7 @@ import (
 	"sort"
 	"time"
 
-	"github.com/DhanushRamesh/personal-assistant/internal/base/conversation"
+	"personal-assistant/internal/base/conversation"
 )
 
 // Append : Stores a message at the end of its conversation.

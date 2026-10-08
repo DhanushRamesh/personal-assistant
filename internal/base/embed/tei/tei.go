@@ -11,7 +11,7 @@ import (
 	"strings"
 	"time"
 
-	"github.com/DhanushRamesh/personal-assistant/internal/base/embed"
+	"personal-assistant/internal/base/embed"
 )
 
 // DefaultURL : Where the embedding server answers.

@@ -5,7 +5,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/DhanushRamesh/personal-assistant/internal/app/tool"
+	"personal-assistant/internal/app/tool"
 )
 
 // ids : A list-of-identifiers property, the shape every batch removal uses.

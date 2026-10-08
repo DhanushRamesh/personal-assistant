@@ -7,9 +7,9 @@ import (
 	"strings"
 	"time"
 
-	"github.com/DhanushRamesh/personal-assistant/internal/app/tool"
-	"github.com/DhanushRamesh/personal-assistant/internal/base/chat"
-	"github.com/DhanushRamesh/personal-assistant/internal/base/conversation"
+	"personal-assistant/internal/app/tool"
+	"personal-assistant/internal/base/chat"
+	"personal-assistant/internal/base/conversation"
 )
 
 // prefetch : Runs the tools that ask to go first, and returns them as

@@ -7,8 +7,8 @@ import (
 	"testing"
 	"time"
 
-	"github.com/DhanushRamesh/personal-assistant/internal/base/event"
-	"github.com/DhanushRamesh/personal-assistant/internal/domain/vocabulary"
+	"personal-assistant/internal/base/event"
+	"personal-assistant/internal/domain/vocabulary"
 )
 
 // reported : One thing a device said happened.

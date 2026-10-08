@@ -6,11 +6,11 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/DhanushRamesh/personal-assistant/internal/app/tool"
-	mailtool "github.com/DhanushRamesh/personal-assistant/internal/app/tool/mail"
-	"github.com/DhanushRamesh/personal-assistant/internal/base/chat"
-	"github.com/DhanushRamesh/personal-assistant/internal/base/conversation"
-	"github.com/DhanushRamesh/personal-assistant/internal/domain/mail"
+	"personal-assistant/internal/app/tool"
+	mailtool "personal-assistant/internal/app/tool/mail"
+	"personal-assistant/internal/base/chat"
+	"personal-assistant/internal/base/conversation"
+	"personal-assistant/internal/domain/mail"
 )
 
 // box : A mailbox that records the query it was asked for.

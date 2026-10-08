@@ -8,9 +8,9 @@ import (
 	"testing"
 	"time"
 
-	"github.com/DhanushRamesh/personal-assistant/internal/base/environment"
-	"github.com/DhanushRamesh/personal-assistant/internal/base/environment/platformai"
-	"github.com/DhanushRamesh/personal-assistant/internal/base/prompt"
+	"personal-assistant/internal/base/environment"
+	"personal-assistant/internal/base/environment/platformai"
+	"personal-assistant/internal/base/prompt"
 )
 
 // lookFirstDraft : A copy of the runner's lookBefore, so the suite

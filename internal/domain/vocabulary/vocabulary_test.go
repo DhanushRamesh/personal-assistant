@@ -7,8 +7,8 @@ import (
 	"testing"
 	"time"
 
-	"github.com/DhanushRamesh/personal-assistant/internal/base/conversation"
-	"github.com/DhanushRamesh/personal-assistant/internal/domain/vocabulary"
+	"personal-assistant/internal/base/conversation"
+	"personal-assistant/internal/domain/vocabulary"
 )
 
 // said : Messages to build from.

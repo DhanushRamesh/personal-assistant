@@ -3,20 +3,20 @@ package mysql_test
 import (
 	"context"
 	"errors"
-	"github.com/DhanushRamesh/personal-assistant/internal/base/user"
 	"io"
 	"log/slog"
 	"os"
+	"personal-assistant/internal/base/user"
 	"strings"
 	"testing"
 	"time"
 
-	chatmysql "github.com/DhanushRamesh/personal-assistant/internal/base/chat/mysql"
-	"github.com/DhanushRamesh/personal-assistant/internal/base/config"
-	"github.com/DhanushRamesh/personal-assistant/internal/base/embed"
-	"github.com/DhanushRamesh/personal-assistant/internal/base/storage"
-	"github.com/DhanushRamesh/personal-assistant/internal/domain/memory"
-	memorymysql "github.com/DhanushRamesh/personal-assistant/internal/domain/memory/mysql"
+	chatmysql "personal-assistant/internal/base/chat/mysql"
+	"personal-assistant/internal/base/config"
+	"personal-assistant/internal/base/embed"
+	"personal-assistant/internal/base/storage"
+	"personal-assistant/internal/domain/memory"
+	memorymysql "personal-assistant/internal/domain/memory/mysql"
 )
 
 // discard : A logger that writes nowhere.

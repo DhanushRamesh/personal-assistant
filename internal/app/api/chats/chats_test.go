@@ -2,21 +2,21 @@ package chats_test
 
 import (
 	"bytes"
-	"github.com/DhanushRamesh/personal-assistant/internal/base/user"
 	"net/http"
 	"net/http/httptest"
+	"personal-assistant/internal/base/user"
 	"strings"
 	"testing"
 	"time"
 
 	"encoding/json"
-	"github.com/DhanushRamesh/personal-assistant/internal/app/api/apitest"
-	"github.com/DhanushRamesh/personal-assistant/internal/app/api/chats"
-	"github.com/DhanushRamesh/personal-assistant/internal/app/api/httpx"
-	"github.com/DhanushRamesh/personal-assistant/internal/app/api/views"
-	"github.com/DhanushRamesh/personal-assistant/internal/base/chat"
-	"github.com/DhanushRamesh/personal-assistant/internal/base/conversation"
-	"github.com/DhanushRamesh/personal-assistant/internal/base/environment"
+	"personal-assistant/internal/app/api/apitest"
+	"personal-assistant/internal/app/api/chats"
+	"personal-assistant/internal/app/api/httpx"
+	"personal-assistant/internal/app/api/views"
+	"personal-assistant/internal/base/chat"
+	"personal-assistant/internal/base/conversation"
+	"personal-assistant/internal/base/environment"
 )
 
 func TestGetUnknownChatIsNotFound(t *testing.T) {

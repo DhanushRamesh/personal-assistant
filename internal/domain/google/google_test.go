@@ -12,9 +12,9 @@ import (
 
 	"golang.org/x/oauth2"
 
-	"github.com/DhanushRamesh/personal-assistant/internal/base/logging"
-	"github.com/DhanushRamesh/personal-assistant/internal/domain/google"
-	"github.com/DhanushRamesh/personal-assistant/internal/domain/google/inmemory"
+	"personal-assistant/internal/base/logging"
+	"personal-assistant/internal/domain/google"
+	"personal-assistant/internal/domain/google/inmemory"
 )
 
 // at : A fixed moment, so stored times are the same every run.

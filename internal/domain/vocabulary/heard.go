@@ -8,7 +8,7 @@ import (
 	"strings"
 	"time"
 
-	"github.com/DhanushRamesh/personal-assistant/internal/base/event"
+	"personal-assistant/internal/base/event"
 )
 
 // Reported : How far back the names their devices gave are read.

@@ -8,7 +8,7 @@ import (
 
 	"golang.org/x/crypto/bcrypt"
 
-	"github.com/DhanushRamesh/personal-assistant/internal/base/auth"
+	"personal-assistant/internal/base/auth"
 )
 
 func TestHashAndMatch(t *testing.T) {

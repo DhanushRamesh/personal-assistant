@@ -4,7 +4,7 @@ import (
 	"context"
 	"fmt"
 
-	"github.com/DhanushRamesh/personal-assistant/internal/base/conversation"
+	"personal-assistant/internal/base/conversation"
 )
 
 // Publisher : Puts an announcement where the clients that should

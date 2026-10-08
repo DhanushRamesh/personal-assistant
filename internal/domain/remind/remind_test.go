@@ -6,7 +6,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/DhanushRamesh/personal-assistant/internal/domain/remind"
+	"personal-assistant/internal/domain/remind"
 )
 
 // What a reminder needs before it can be stored.

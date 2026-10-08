@@ -4,16 +4,16 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"github.com/DhanushRamesh/personal-assistant/internal/base/user"
 	"os"
+	"personal-assistant/internal/base/user"
 	"strings"
 	"syscall"
 	"time"
 
 	"golang.org/x/term"
 
-	"github.com/DhanushRamesh/personal-assistant/internal/base/auth"
-	chatmysql "github.com/DhanushRamesh/personal-assistant/internal/base/chat/mysql"
+	"personal-assistant/internal/base/auth"
+	chatmysql "personal-assistant/internal/base/chat/mysql"
 )
 
 // createUser : Creates a person from the terminal.

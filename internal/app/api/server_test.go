@@ -9,8 +9,8 @@ import (
 
 	"github.com/go-chi/chi/v5"
 
-	"github.com/DhanushRamesh/personal-assistant/internal/app/api/middleware"
-	"github.com/DhanushRamesh/personal-assistant/internal/base/chat/memory"
+	"personal-assistant/internal/app/api/middleware"
+	"personal-assistant/internal/base/chat/memory"
 )
 
 // These tests are inside the package because they reach the router and the

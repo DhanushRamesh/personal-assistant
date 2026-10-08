@@ -4,7 +4,7 @@ import (
 	"errors"
 	"testing"
 
-	"github.com/DhanushRamesh/personal-assistant/internal/domain/calendar"
+	"personal-assistant/internal/domain/calendar"
 )
 
 // TestPickHeardNames : Names that arrived through speech still find the

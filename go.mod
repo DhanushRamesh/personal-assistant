@@ -1,4 +1,4 @@
-module github.com/DhanushRamesh/personal-assistant
+module personal-assistant
 
 go 1.26.0
 

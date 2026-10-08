@@ -7,7 +7,7 @@ import (
 	"sync"
 	"time"
 
-	"github.com/DhanushRamesh/personal-assistant/internal/base/errand"
+	"personal-assistant/internal/base/errand"
 )
 
 // Store : Errands, in memory.

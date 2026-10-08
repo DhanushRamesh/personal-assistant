@@ -35,8 +35,8 @@ import (
 	"time"
 	"unicode"
 
-	"github.com/DhanushRamesh/personal-assistant/internal/base/conversation"
-	"github.com/DhanushRamesh/personal-assistant/internal/base/event"
+	"personal-assistant/internal/base/conversation"
+	"personal-assistant/internal/base/event"
 )
 
 // Window : How far back a rebuild reads.

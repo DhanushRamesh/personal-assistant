@@ -14,7 +14,7 @@ import (
 	"log/slog"
 	"net/http"
 
-	"github.com/DhanushRamesh/personal-assistant/internal/base/logging"
+	"personal-assistant/internal/base/logging"
 )
 
 // MaxRequestBody : The largest request body accepted. A prompt is text typed

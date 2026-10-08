@@ -8,11 +8,11 @@ import (
 	"strings"
 	"time"
 
-	"github.com/DhanushRamesh/personal-assistant/internal/app/tool"
-	"github.com/DhanushRamesh/personal-assistant/internal/base/conversation"
-	"github.com/DhanushRamesh/personal-assistant/internal/base/event"
-	"github.com/DhanushRamesh/personal-assistant/internal/base/prompt"
-	"github.com/DhanushRamesh/personal-assistant/internal/base/routine"
+	"personal-assistant/internal/app/tool"
+	"personal-assistant/internal/base/conversation"
+	"personal-assistant/internal/base/event"
+	"personal-assistant/internal/base/prompt"
+	"personal-assistant/internal/base/routine"
 )
 
 // Together : Repeats of the same thing closer than this are one

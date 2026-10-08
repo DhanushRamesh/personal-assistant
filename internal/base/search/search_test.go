@@ -7,7 +7,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/DhanushRamesh/personal-assistant/internal/base/search"
+	"personal-assistant/internal/base/search"
 )
 
 var at = time.Date(2026, 10, 4, 12, 0, 0, 0, time.UTC)

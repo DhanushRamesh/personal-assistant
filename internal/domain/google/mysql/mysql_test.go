@@ -5,20 +5,20 @@ package mysql_test
 import (
 	"context"
 	"fmt"
-	"github.com/DhanushRamesh/personal-assistant/internal/base/user"
 	"io"
 	"log/slog"
 	"os"
+	"personal-assistant/internal/base/user"
 	"strings"
 	"testing"
 	"time"
 
-	chatmysql "github.com/DhanushRamesh/personal-assistant/internal/base/chat/mysql"
-	"github.com/DhanushRamesh/personal-assistant/internal/base/config"
-	"github.com/DhanushRamesh/personal-assistant/internal/base/logging"
-	"github.com/DhanushRamesh/personal-assistant/internal/base/storage"
-	"github.com/DhanushRamesh/personal-assistant/internal/domain/google"
-	googlemysql "github.com/DhanushRamesh/personal-assistant/internal/domain/google/mysql"
+	chatmysql "personal-assistant/internal/base/chat/mysql"
+	"personal-assistant/internal/base/config"
+	"personal-assistant/internal/base/logging"
+	"personal-assistant/internal/base/storage"
+	"personal-assistant/internal/domain/google"
+	googlemysql "personal-assistant/internal/domain/google/mysql"
 )
 
 // testEnv : A dedicated database, never the one the server uses.

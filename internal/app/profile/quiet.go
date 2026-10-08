@@ -4,8 +4,8 @@ import (
 	"fmt"
 	"time"
 
-	"github.com/DhanushRamesh/personal-assistant/internal/base/event"
-	"github.com/DhanushRamesh/personal-assistant/internal/base/prompt"
+	"personal-assistant/internal/base/event"
+	"personal-assistant/internal/base/prompt"
 )
 
 // Still : The shortest silence worth counting.

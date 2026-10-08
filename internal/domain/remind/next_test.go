@@ -4,7 +4,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/DhanushRamesh/personal-assistant/internal/domain/remind"
+	"personal-assistant/internal/domain/remind"
 )
 
 // india : Where the person is, for these.

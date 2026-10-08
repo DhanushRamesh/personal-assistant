@@ -27,7 +27,7 @@ import (
 	"errors"
 	"time"
 
-	"github.com/DhanushRamesh/personal-assistant/internal/base/conversation"
+	"personal-assistant/internal/base/conversation"
 )
 
 // State : What one client has done about one announcement.

@@ -5,7 +5,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/DhanushRamesh/personal-assistant/internal/domain/memory"
+	"personal-assistant/internal/domain/memory"
 )
 
 // A memory needs an owner, a tier, something to say what it is about, and

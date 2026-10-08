@@ -21,7 +21,7 @@ import (
 	"strings"
 	"time"
 
-	"github.com/DhanushRamesh/personal-assistant/internal/base/search"
+	"personal-assistant/internal/base/search"
 )
 
 // URL : Where searches are sent.

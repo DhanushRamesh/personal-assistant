@@ -3,7 +3,7 @@ package platformai
 import (
 	"testing"
 
-	"github.com/DhanushRamesh/personal-assistant/internal/base/environment"
+	"personal-assistant/internal/base/environment"
 )
 
 // TestOnlyJudgementReasons : Owner: *"use a high reasoning model

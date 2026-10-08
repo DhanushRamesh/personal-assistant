@@ -4,8 +4,8 @@ import (
 	"fmt"
 	"strings"
 
-	"github.com/DhanushRamesh/personal-assistant/internal/base/conversation"
-	"github.com/DhanushRamesh/personal-assistant/internal/domain/persona"
+	"personal-assistant/internal/base/conversation"
+	"personal-assistant/internal/domain/persona"
 )
 
 // Change : One thing that moved, and what it moved between.

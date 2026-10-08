@@ -17,15 +17,15 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"github.com/DhanushRamesh/personal-assistant/internal/base/client"
-	"github.com/DhanushRamesh/personal-assistant/internal/base/store"
 	"log/slog"
+	"personal-assistant/internal/base/client"
+	"personal-assistant/internal/base/store"
 	"strings"
 	"time"
 
-	"github.com/DhanushRamesh/personal-assistant/internal/base/announce"
-	"github.com/DhanushRamesh/personal-assistant/internal/base/chat"
-	"github.com/DhanushRamesh/personal-assistant/internal/base/conversation"
+	"personal-assistant/internal/base/announce"
+	"personal-assistant/internal/base/chat"
+	"personal-assistant/internal/base/conversation"
 )
 
 // address : What the assistant calls the person, for the word said

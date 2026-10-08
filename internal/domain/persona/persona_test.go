@@ -4,7 +4,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/DhanushRamesh/personal-assistant/internal/domain/persona"
+	"personal-assistant/internal/domain/persona"
 )
 
 // Every persona has to be describable, since a listing offers them by name

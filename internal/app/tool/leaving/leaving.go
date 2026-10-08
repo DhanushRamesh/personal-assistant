@@ -11,10 +11,10 @@ import (
 	"context"
 	"strings"
 
-	"github.com/DhanushRamesh/personal-assistant/internal/app/tool"
-	"github.com/DhanushRamesh/personal-assistant/internal/base/chat"
-	"github.com/DhanushRamesh/personal-assistant/internal/base/leaving"
-	"github.com/DhanushRamesh/personal-assistant/internal/base/prompt"
+	"personal-assistant/internal/app/tool"
+	"personal-assistant/internal/base/chat"
+	"personal-assistant/internal/base/leaving"
+	"personal-assistant/internal/base/prompt"
 )
 
 // Due : Whether it is time to set off for anything.

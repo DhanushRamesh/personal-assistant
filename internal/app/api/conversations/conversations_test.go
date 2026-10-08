@@ -1,15 +1,15 @@
 package conversations_test
 
 import (
-	"github.com/DhanushRamesh/personal-assistant/internal/base/user"
 	"net/http"
+	"personal-assistant/internal/base/user"
 	"strings"
 	"testing"
 
-	"github.com/DhanushRamesh/personal-assistant/internal/app/api/apitest"
-	"github.com/DhanushRamesh/personal-assistant/internal/app/api/conversations"
-	"github.com/DhanushRamesh/personal-assistant/internal/app/api/views"
-	"github.com/DhanushRamesh/personal-assistant/internal/base/chat"
+	"personal-assistant/internal/app/api/apitest"
+	"personal-assistant/internal/app/api/conversations"
+	"personal-assistant/internal/app/api/views"
+	"personal-assistant/internal/base/chat"
 )
 
 // Creating a conversation moves this client into it, since starting one almost

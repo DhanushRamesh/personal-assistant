@@ -5,9 +5,9 @@ import (
 	"testing"
 	"time"
 
-	"github.com/DhanushRamesh/personal-assistant/internal/app/profile"
-	"github.com/DhanushRamesh/personal-assistant/internal/base/conversation"
-	"github.com/DhanushRamesh/personal-assistant/internal/domain/memory"
+	"personal-assistant/internal/app/profile"
+	"personal-assistant/internal/base/conversation"
+	"personal-assistant/internal/domain/memory"
 )
 
 // when : A fixed evening to measure the replies from.

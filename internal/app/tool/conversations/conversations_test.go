@@ -4,9 +4,9 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/DhanushRamesh/personal-assistant/internal/app/tool"
-	"github.com/DhanushRamesh/personal-assistant/internal/app/tool/conversations"
-	"github.com/DhanushRamesh/personal-assistant/internal/base/chat"
+	"personal-assistant/internal/app/tool"
+	"personal-assistant/internal/app/tool/conversations"
+	"personal-assistant/internal/base/chat"
 )
 
 // Every conversation tool has to survive registration, which is where a

@@ -11,7 +11,7 @@ import (
 	"strings"
 	"time"
 
-	"github.com/DhanushRamesh/personal-assistant/internal/base/logging"
+	"personal-assistant/internal/base/logging"
 )
 
 // DefaultAsideTimeout : How long the call that speaks an aside may take.

@@ -6,9 +6,9 @@ import (
 	"testing"
 	"time"
 
-	"github.com/DhanushRamesh/personal-assistant/internal/app/api/apitest"
-	"github.com/DhanushRamesh/personal-assistant/internal/base/chat"
-	"github.com/DhanushRamesh/personal-assistant/internal/base/environment"
+	"personal-assistant/internal/app/api/apitest"
+	"personal-assistant/internal/base/chat"
+	"personal-assistant/internal/base/environment"
 )
 
 // lateFinisher : Says something at once and then takes its time

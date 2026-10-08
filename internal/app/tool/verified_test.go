@@ -4,7 +4,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/DhanushRamesh/personal-assistant/internal/app/tool"
+	"personal-assistant/internal/app/tool"
 )
 
 // A change carries both ends, because the person is listening and has

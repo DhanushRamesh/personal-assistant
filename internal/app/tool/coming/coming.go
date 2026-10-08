@@ -21,9 +21,9 @@ import (
 	"strings"
 	"time"
 
-	"github.com/DhanushRamesh/personal-assistant/internal/app/tool"
-	"github.com/DhanushRamesh/personal-assistant/internal/base/chat"
-	"github.com/DhanushRamesh/personal-assistant/internal/domain/coming"
+	"personal-assistant/internal/app/tool"
+	"personal-assistant/internal/base/chat"
+	"personal-assistant/internal/domain/coming"
 )
 
 // Warnings : What this needs of the look-ahead's record.

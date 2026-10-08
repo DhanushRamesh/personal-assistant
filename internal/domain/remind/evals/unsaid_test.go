@@ -21,13 +21,13 @@ import (
 	"testing"
 	"time"
 
-	"github.com/DhanushRamesh/personal-assistant/internal/base/config"
-	"github.com/DhanushRamesh/personal-assistant/internal/base/conversation"
-	"github.com/DhanushRamesh/personal-assistant/internal/base/environment"
-	"github.com/DhanushRamesh/personal-assistant/internal/base/environment/platformai"
-	"github.com/DhanushRamesh/personal-assistant/internal/domain/memory"
-	"github.com/DhanushRamesh/personal-assistant/internal/domain/persona"
-	"github.com/DhanushRamesh/personal-assistant/internal/domain/remind"
+	"personal-assistant/internal/base/config"
+	"personal-assistant/internal/base/conversation"
+	"personal-assistant/internal/base/environment"
+	"personal-assistant/internal/base/environment/platformai"
+	"personal-assistant/internal/domain/memory"
+	"personal-assistant/internal/domain/persona"
+	"personal-assistant/internal/domain/remind"
 )
 
 // opened : The things somebody says that give the assistant least excuse

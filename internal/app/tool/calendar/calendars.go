@@ -6,9 +6,9 @@ import (
 	"fmt"
 	"strings"
 
-	"github.com/DhanushRamesh/personal-assistant/internal/app/tool"
-	"github.com/DhanushRamesh/personal-assistant/internal/base/chat"
-	"github.com/DhanushRamesh/personal-assistant/internal/domain/calendar"
+	"personal-assistant/internal/app/tool"
+	"personal-assistant/internal/base/chat"
+	"personal-assistant/internal/domain/calendar"
 )
 
 // calendars : The calendars themselves, as opposed to what is in them.

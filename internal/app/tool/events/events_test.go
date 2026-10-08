@@ -8,11 +8,11 @@ import (
 	"testing"
 	"time"
 
-	"github.com/DhanushRamesh/personal-assistant/internal/app/tool"
-	eventstool "github.com/DhanushRamesh/personal-assistant/internal/app/tool/events"
-	"github.com/DhanushRamesh/personal-assistant/internal/base/conversation"
-	"github.com/DhanushRamesh/personal-assistant/internal/base/event"
-	"github.com/DhanushRamesh/personal-assistant/internal/base/event/inmemory"
+	"personal-assistant/internal/app/tool"
+	eventstool "personal-assistant/internal/app/tool/events"
+	"personal-assistant/internal/base/conversation"
+	"personal-assistant/internal/base/event"
+	"personal-assistant/internal/base/event/inmemory"
 )
 
 // kolkata : The person's zone, which is what a written hour means.

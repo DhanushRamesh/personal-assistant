@@ -17,11 +17,11 @@ import (
 	"strings"
 	"time"
 
-	"github.com/DhanushRamesh/personal-assistant/internal/app/tool"
-	"github.com/DhanushRamesh/personal-assistant/internal/base/chat"
-	"github.com/DhanushRamesh/personal-assistant/internal/base/prompt"
-	"github.com/DhanushRamesh/personal-assistant/internal/base/routine"
-	"github.com/DhanushRamesh/personal-assistant/internal/domain/job"
+	"personal-assistant/internal/app/tool"
+	"personal-assistant/internal/base/chat"
+	"personal-assistant/internal/base/prompt"
+	"personal-assistant/internal/base/routine"
+	"personal-assistant/internal/domain/job"
 )
 
 // idPattern : The shape of a rule identifier, so one the model

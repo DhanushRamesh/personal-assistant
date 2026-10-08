@@ -41,11 +41,11 @@ import (
 	"sync"
 	"time"
 
-	"github.com/DhanushRamesh/personal-assistant/internal/base/conversation"
-	"github.com/DhanushRamesh/personal-assistant/internal/base/event"
-	"github.com/DhanushRamesh/personal-assistant/internal/base/prompt"
-	"github.com/DhanushRamesh/personal-assistant/internal/base/routine"
-	"github.com/DhanushRamesh/personal-assistant/internal/domain/memory"
+	"personal-assistant/internal/base/conversation"
+	"personal-assistant/internal/base/event"
+	"personal-assistant/internal/base/prompt"
+	"personal-assistant/internal/base/routine"
+	"personal-assistant/internal/domain/memory"
 )
 
 // Subject : How the profile memory is recognised among the others.

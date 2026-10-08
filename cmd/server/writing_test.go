@@ -4,7 +4,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/DhanushRamesh/personal-assistant/internal/domain/job"
+	"personal-assistant/internal/domain/job"
 )
 
 // TestARuleIsToldWhatAnOrdinaryDayLooksLike : A rule decides whether

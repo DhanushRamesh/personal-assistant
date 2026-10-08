@@ -13926,6 +13926,27 @@ types second is the order that works; twice it was done the other way
 and twice the file had to be restored from HEAD.
 
 
+### The module is called what it is, not where it is
+
+Owner: *"why does github have to do anything here."*
+
+It does not. A Go module path has to be a URL only if somebody is
+going to fetch it, and nothing fetches this one: it is a server
+binary, nothing imports it, and production is sent a built binary
+rather than a module to resolve. The repository does live at that
+address, which is why the Documentation lines in the unit files still
+say so -- that is where it is, and it was never what it is called.
+
+What it buys is thirty-eight characters off every import line, which
+matters more since the layers made the paths longer:
+
+	github.com/DhanushRamesh/personal-assistant/internal/base/store
+	personal-assistant/internal/base/store
+
+What it costs is go install from the URL, which was never how this is
+built or deployed.
+
+
 ## 12. Maintaining this file
 
 When the owner states a preference, makes a decision, or corrects something,

@@ -9,9 +9,9 @@ import (
 	"gorm.io/gorm"
 	"gorm.io/gorm/clause"
 
-	"github.com/DhanushRamesh/personal-assistant/internal/base/embed"
-	"github.com/DhanushRamesh/personal-assistant/internal/base/storage"
-	"github.com/DhanushRamesh/personal-assistant/internal/domain/memory"
+	"personal-assistant/internal/base/embed"
+	"personal-assistant/internal/base/storage"
+	"personal-assistant/internal/domain/memory"
 )
 
 // MaxScanned : The most exchanges one search compares against.

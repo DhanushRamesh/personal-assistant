@@ -5,12 +5,12 @@ import (
 	"log/slog"
 	"time"
 
-	"github.com/DhanushRamesh/personal-assistant/internal/app/tool"
-	"github.com/DhanushRamesh/personal-assistant/internal/base/chat"
-	"github.com/DhanushRamesh/personal-assistant/internal/base/conversation"
-	"github.com/DhanushRamesh/personal-assistant/internal/base/environment"
-	"github.com/DhanushRamesh/personal-assistant/internal/base/prompt"
-	"github.com/DhanushRamesh/personal-assistant/internal/domain/persona"
+	"personal-assistant/internal/app/tool"
+	"personal-assistant/internal/base/chat"
+	"personal-assistant/internal/base/conversation"
+	"personal-assistant/internal/base/environment"
+	"personal-assistant/internal/base/prompt"
+	"personal-assistant/internal/domain/persona"
 )
 
 // MaxToolHops : How many rounds of tool calls one question may take.

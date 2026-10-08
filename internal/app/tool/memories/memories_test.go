@@ -6,14 +6,14 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/DhanushRamesh/personal-assistant/internal/app/profile"
-	"github.com/DhanushRamesh/personal-assistant/internal/app/tool"
-	"github.com/DhanushRamesh/personal-assistant/internal/app/tool/memories"
-	"github.com/DhanushRamesh/personal-assistant/internal/base/chat"
-	"github.com/DhanushRamesh/personal-assistant/internal/base/conversation"
-	"github.com/DhanushRamesh/personal-assistant/internal/base/embed"
-	"github.com/DhanushRamesh/personal-assistant/internal/domain/memory"
-	"github.com/DhanushRamesh/personal-assistant/internal/domain/memory/inmemory"
+	"personal-assistant/internal/app/profile"
+	"personal-assistant/internal/app/tool"
+	"personal-assistant/internal/app/tool/memories"
+	"personal-assistant/internal/base/chat"
+	"personal-assistant/internal/base/conversation"
+	"personal-assistant/internal/base/embed"
+	"personal-assistant/internal/domain/memory"
+	"personal-assistant/internal/domain/memory/inmemory"
 )
 
 const user = "usr_01M3D477HXQ4YNQX7BNXJZZCV0"

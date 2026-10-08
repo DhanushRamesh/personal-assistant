@@ -11,8 +11,8 @@ import (
 	"testing"
 	"time"
 
-	"github.com/DhanushRamesh/personal-assistant/internal/base/announce/hass"
-	"github.com/DhanushRamesh/personal-assistant/internal/base/logging"
+	"personal-assistant/internal/base/announce/hass"
+	"personal-assistant/internal/base/logging"
 )
 
 // satellite : A Home Assistant that reports the given states in turn and

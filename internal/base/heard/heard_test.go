@@ -4,7 +4,7 @@ import (
 	"errors"
 	"testing"
 
-	"github.com/DhanushRamesh/personal-assistant/internal/base/heard"
+	"personal-assistant/internal/base/heard"
 )
 
 // TestBestOnWhatWasActuallyHeard : Every spoken form here was said to the

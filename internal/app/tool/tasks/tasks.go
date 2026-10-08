@@ -19,9 +19,9 @@ import (
 	"strings"
 	"time"
 
-	"github.com/DhanushRamesh/personal-assistant/internal/app/tool"
-	"github.com/DhanushRamesh/personal-assistant/internal/domain/google"
-	"github.com/DhanushRamesh/personal-assistant/internal/domain/tasks"
+	"personal-assistant/internal/app/tool"
+	"personal-assistant/internal/domain/google"
+	"personal-assistant/internal/domain/tasks"
 )
 
 // Clock : What the tools need to know about time.

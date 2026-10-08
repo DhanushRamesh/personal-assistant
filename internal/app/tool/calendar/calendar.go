@@ -18,12 +18,12 @@ import (
 	"strings"
 	"time"
 
-	"github.com/DhanushRamesh/personal-assistant/internal/app/tool"
-	"github.com/DhanushRamesh/personal-assistant/internal/base/chat"
-	"github.com/DhanushRamesh/personal-assistant/internal/base/heard"
-	"github.com/DhanushRamesh/personal-assistant/internal/base/prompt"
-	"github.com/DhanushRamesh/personal-assistant/internal/domain/calendar"
-	"github.com/DhanushRamesh/personal-assistant/internal/domain/google"
+	"personal-assistant/internal/app/tool"
+	"personal-assistant/internal/base/chat"
+	"personal-assistant/internal/base/heard"
+	"personal-assistant/internal/base/prompt"
+	"personal-assistant/internal/domain/calendar"
+	"personal-assistant/internal/domain/google"
 )
 
 // Clock : What the tools need to know about time.

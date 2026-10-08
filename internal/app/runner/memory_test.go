@@ -2,20 +2,20 @@ package runner_test
 
 import (
 	"context"
-	"github.com/DhanushRamesh/personal-assistant/internal/base/user"
+	"personal-assistant/internal/base/user"
 	"strings"
 	"testing"
 	"time"
 
-	"github.com/DhanushRamesh/personal-assistant/internal/app/runner"
-	"github.com/DhanushRamesh/personal-assistant/internal/base/chat"
-	chatmemory "github.com/DhanushRamesh/personal-assistant/internal/base/chat/memory"
-	"github.com/DhanushRamesh/personal-assistant/internal/base/embed"
-	"github.com/DhanushRamesh/personal-assistant/internal/base/events"
-	"github.com/DhanushRamesh/personal-assistant/internal/domain/memory"
-	"github.com/DhanushRamesh/personal-assistant/internal/domain/memory/inmemory"
-	"github.com/DhanushRamesh/personal-assistant/internal/domain/remind"
-	remindmemory "github.com/DhanushRamesh/personal-assistant/internal/domain/remind/inmemory"
+	"personal-assistant/internal/app/runner"
+	"personal-assistant/internal/base/chat"
+	chatmemory "personal-assistant/internal/base/chat/memory"
+	"personal-assistant/internal/base/embed"
+	"personal-assistant/internal/base/events"
+	"personal-assistant/internal/domain/memory"
+	"personal-assistant/internal/domain/memory/inmemory"
+	"personal-assistant/internal/domain/remind"
+	remindmemory "personal-assistant/internal/domain/remind/inmemory"
 )
 
 // remembering : A runner whose conversation belongs to somebody, with the

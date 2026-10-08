@@ -17,7 +17,7 @@ import (
 	"syscall"
 	"time"
 
-	"github.com/DhanushRamesh/personal-assistant/internal/base/environment"
+	"personal-assistant/internal/base/environment"
 )
 
 // tokenRefreshMargin : How long before expiry a cached token is replaced,

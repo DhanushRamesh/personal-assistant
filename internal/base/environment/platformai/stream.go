@@ -9,7 +9,7 @@ import (
 	"io"
 	"strings"
 
-	"github.com/DhanushRamesh/personal-assistant/internal/base/environment"
+	"personal-assistant/internal/base/environment"
 )
 
 // Streaming : What the endpoint is asked for.

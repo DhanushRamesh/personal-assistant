@@ -6,8 +6,8 @@ import (
 	"time"
 	"unicode"
 
-	"github.com/DhanushRamesh/personal-assistant/internal/base/conversation"
-	"github.com/DhanushRamesh/personal-assistant/internal/base/prompt"
+	"personal-assistant/internal/base/conversation"
+	"personal-assistant/internal/base/prompt"
 )
 
 // Part : One section of the description.

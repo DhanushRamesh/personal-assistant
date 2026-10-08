@@ -5,8 +5,8 @@ import (
 	"sort"
 	"sync"
 
-	"github.com/DhanushRamesh/personal-assistant/internal/base/embed"
-	"github.com/DhanushRamesh/personal-assistant/internal/domain/memory"
+	"personal-assistant/internal/base/embed"
+	"personal-assistant/internal/domain/memory"
 )
 
 // Transcript : An in-memory memory.Transcript.

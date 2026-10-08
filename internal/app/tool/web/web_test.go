@@ -7,10 +7,10 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/DhanushRamesh/personal-assistant/internal/app/tool"
-	webtool "github.com/DhanushRamesh/personal-assistant/internal/app/tool/web"
-	"github.com/DhanushRamesh/personal-assistant/internal/base/conversation"
-	"github.com/DhanushRamesh/personal-assistant/internal/base/search"
+	"personal-assistant/internal/app/tool"
+	webtool "personal-assistant/internal/app/tool/web"
+	"personal-assistant/internal/base/conversation"
+	"personal-assistant/internal/base/search"
 )
 
 // searcher : A web that answers however a test tells it to.

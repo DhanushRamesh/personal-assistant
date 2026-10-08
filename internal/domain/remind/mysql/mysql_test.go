@@ -3,20 +3,20 @@ package mysql_test
 import (
 	"context"
 	"errors"
-	"github.com/DhanushRamesh/personal-assistant/internal/base/user"
 	"io"
 	"log/slog"
 	"os"
+	"personal-assistant/internal/base/user"
 	"strings"
 	"testing"
 	"time"
 
-	chatmysql "github.com/DhanushRamesh/personal-assistant/internal/base/chat/mysql"
-	"github.com/DhanushRamesh/personal-assistant/internal/base/config"
-	"github.com/DhanushRamesh/personal-assistant/internal/base/storage"
-	"github.com/DhanushRamesh/personal-assistant/internal/domain/remind"
-	remindmysql "github.com/DhanushRamesh/personal-assistant/internal/domain/remind/mysql"
-	"github.com/DhanushRamesh/personal-assistant/internal/domain/remind/storetest"
+	chatmysql "personal-assistant/internal/base/chat/mysql"
+	"personal-assistant/internal/base/config"
+	"personal-assistant/internal/base/storage"
+	"personal-assistant/internal/domain/remind"
+	remindmysql "personal-assistant/internal/domain/remind/mysql"
+	"personal-assistant/internal/domain/remind/storetest"
 )
 
 // The same cases the in-memory store runs. Both must answer alike, or a

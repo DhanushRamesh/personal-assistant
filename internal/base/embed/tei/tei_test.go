@@ -9,8 +9,8 @@ import (
 	"sync/atomic"
 	"testing"
 
-	"github.com/DhanushRamesh/personal-assistant/internal/base/embed"
-	"github.com/DhanushRamesh/personal-assistant/internal/base/embed/tei"
+	"personal-assistant/internal/base/embed"
+	"personal-assistant/internal/base/embed/tei"
 )
 
 // embedCall : The body of an /embed call, as the server received it.

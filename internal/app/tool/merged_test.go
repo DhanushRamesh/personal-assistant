@@ -4,7 +4,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/DhanushRamesh/personal-assistant/internal/app/tool"
+	"personal-assistant/internal/app/tool"
 )
 
 // TestFourDeletionsOweOneCount : Removing four things owes the net change,

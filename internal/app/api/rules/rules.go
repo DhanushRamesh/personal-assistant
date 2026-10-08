@@ -29,10 +29,10 @@ import (
 
 	"github.com/go-chi/chi/v5"
 
-	"github.com/DhanushRamesh/personal-assistant/internal/app/api/authn"
-	"github.com/DhanushRamesh/personal-assistant/internal/app/api/httpx"
-	"github.com/DhanushRamesh/personal-assistant/internal/base/routine"
-	"github.com/DhanushRamesh/personal-assistant/internal/domain/job"
+	"personal-assistant/internal/app/api/authn"
+	"personal-assistant/internal/app/api/httpx"
+	"personal-assistant/internal/base/routine"
+	"personal-assistant/internal/domain/job"
 )
 
 // DefaultLimit, MaxLimit : How many are returned.

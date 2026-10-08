@@ -7,8 +7,8 @@ import (
 	"testing"
 	"time"
 
-	"github.com/DhanushRamesh/personal-assistant/internal/base/errand"
-	"github.com/DhanushRamesh/personal-assistant/internal/base/errand/inmemory"
+	"personal-assistant/internal/base/errand"
+	"personal-assistant/internal/base/errand/inmemory"
 )
 
 var noon = time.Date(2026, 10, 6, 12, 0, 0, 0, time.UTC)

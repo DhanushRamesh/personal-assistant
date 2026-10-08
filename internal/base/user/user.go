@@ -3,7 +3,7 @@ package user
 import (
 	"context"
 	"errors"
-	"github.com/DhanushRamesh/personal-assistant/internal/base/stored"
+	"personal-assistant/internal/base/stored"
 	"regexp"
 	"strings"
 	"time"

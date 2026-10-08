@@ -6,9 +6,9 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/DhanushRamesh/personal-assistant/internal/base/embed"
-	"github.com/DhanushRamesh/personal-assistant/internal/domain/memory"
-	"github.com/DhanushRamesh/personal-assistant/internal/domain/memory/inmemory"
+	"personal-assistant/internal/base/embed"
+	"personal-assistant/internal/domain/memory"
+	"personal-assistant/internal/domain/memory/inmemory"
 )
 
 // store : A store holding the given memories, all embedded.

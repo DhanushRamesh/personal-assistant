@@ -3,7 +3,7 @@ package conversation
 import (
 	"fmt"
 
-	"github.com/DhanushRamesh/personal-assistant/internal/base/prompt"
+	"personal-assistant/internal/base/prompt"
 )
 
 // CutOff : That the recording stopped while the person was still speaking.

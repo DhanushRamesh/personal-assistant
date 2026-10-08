@@ -7,10 +7,10 @@ import (
 	"testing"
 	"time"
 
-	"github.com/DhanushRamesh/personal-assistant/internal/app/tool"
-	places "github.com/DhanushRamesh/personal-assistant/internal/app/tool/places"
-	"github.com/DhanushRamesh/personal-assistant/internal/base/chat"
-	"github.com/DhanushRamesh/personal-assistant/internal/base/event"
+	"personal-assistant/internal/app/tool"
+	places "personal-assistant/internal/app/tool/places"
+	"personal-assistant/internal/base/chat"
+	"personal-assistant/internal/base/event"
 )
 
 // india : Where their days are counted.

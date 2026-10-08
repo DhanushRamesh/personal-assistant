@@ -7,8 +7,8 @@ import (
 	"testing"
 	"time"
 
-	"github.com/DhanushRamesh/personal-assistant/internal/domain/calendar"
-	"github.com/DhanushRamesh/personal-assistant/internal/domain/coming"
+	"personal-assistant/internal/domain/calendar"
+	"personal-assistant/internal/domain/coming"
 )
 
 var kolkata = time.FixedZone("IST", 5*3600+1800)

@@ -7,7 +7,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/DhanushRamesh/personal-assistant/internal/domain/remind"
+	"personal-assistant/internal/domain/remind"
 )
 
 // mouth : An announcer that keeps what it was given, or refuses.

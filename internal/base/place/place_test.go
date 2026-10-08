@@ -7,7 +7,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/DhanushRamesh/personal-assistant/internal/base/place"
+	"personal-assistant/internal/base/place"
 )
 
 // answering : A stand-in for Geoapify that returns a fixed body.

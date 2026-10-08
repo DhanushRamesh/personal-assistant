@@ -5,9 +5,9 @@ import (
 	"testing"
 	"time"
 
-	"github.com/DhanushRamesh/personal-assistant/internal/base/conversation"
-	"github.com/DhanushRamesh/personal-assistant/internal/domain/outbox"
-	"github.com/DhanushRamesh/personal-assistant/internal/domain/outbox/inmemory"
+	"personal-assistant/internal/base/conversation"
+	"personal-assistant/internal/domain/outbox"
+	"personal-assistant/internal/domain/outbox/inmemory"
 )
 
 // noon : The moment the clock is held at.

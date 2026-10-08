@@ -25,9 +25,9 @@ import (
 	"testing"
 	"time"
 
-	"github.com/DhanushRamesh/personal-assistant/internal/base/config"
-	"github.com/DhanushRamesh/personal-assistant/internal/base/environment"
-	"github.com/DhanushRamesh/personal-assistant/internal/base/environment/platformai"
+	"personal-assistant/internal/base/config"
+	"personal-assistant/internal/base/environment"
+	"personal-assistant/internal/base/environment/platformai"
 )
 
 // asking : The models to try, beyond the ones already catalogued.

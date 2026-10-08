@@ -5,7 +5,7 @@ import (
 	"log/slog"
 	"time"
 
-	"github.com/DhanushRamesh/personal-assistant/internal/base/logging"
+	"personal-assistant/internal/base/logging"
 )
 
 // Every : How often what is still pending is looked over.

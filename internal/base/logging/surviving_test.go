@@ -7,7 +7,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/DhanushRamesh/personal-assistant/internal/base/logging"
+	"personal-assistant/internal/base/logging"
 )
 
 // TestAPanicIsLoggedAndSurvived : The whole point. A loop that panics

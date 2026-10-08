@@ -20,11 +20,11 @@ import (
 	"testing"
 	"time"
 
-	"github.com/DhanushRamesh/personal-assistant/internal/base/config"
-	"github.com/DhanushRamesh/personal-assistant/internal/base/environment"
-	"github.com/DhanushRamesh/personal-assistant/internal/base/environment/platformai"
-	"github.com/DhanushRamesh/personal-assistant/internal/domain/memory"
-	"github.com/DhanushRamesh/personal-assistant/internal/domain/persona"
+	"personal-assistant/internal/base/config"
+	"personal-assistant/internal/base/environment"
+	"personal-assistant/internal/base/environment/platformai"
+	"personal-assistant/internal/domain/memory"
+	"personal-assistant/internal/domain/persona"
 )
 
 // beyondIt : Things there is no tool for. Every one of these has to be

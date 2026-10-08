@@ -14,7 +14,7 @@ import (
 	"sync"
 	"time"
 
-	"github.com/DhanushRamesh/personal-assistant/internal/domain/remind"
+	"personal-assistant/internal/domain/remind"
 )
 
 // Store : An in-memory remind.Store.

@@ -5,13 +5,13 @@ import (
 	"testing"
 	"time"
 
-	"github.com/DhanushRamesh/personal-assistant/internal/app/tool"
-	calendartool "github.com/DhanushRamesh/personal-assistant/internal/app/tool/calendar"
-	"github.com/DhanushRamesh/personal-assistant/internal/app/tool/conversations"
-	"github.com/DhanushRamesh/personal-assistant/internal/app/tool/memories"
-	"github.com/DhanushRamesh/personal-assistant/internal/app/tool/reminders"
-	taskstool "github.com/DhanushRamesh/personal-assistant/internal/app/tool/tasks"
-	"github.com/DhanushRamesh/personal-assistant/internal/base/chat"
+	"personal-assistant/internal/app/tool"
+	calendartool "personal-assistant/internal/app/tool/calendar"
+	"personal-assistant/internal/app/tool/conversations"
+	"personal-assistant/internal/app/tool/memories"
+	"personal-assistant/internal/app/tool/reminders"
+	taskstool "personal-assistant/internal/app/tool/tasks"
+	"personal-assistant/internal/base/chat"
 )
 
 // TestOnlyMemoryIsReadBeforeTheQuestion : Memory is fetched before the

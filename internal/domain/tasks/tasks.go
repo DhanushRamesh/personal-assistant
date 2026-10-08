@@ -31,10 +31,10 @@ import (
 	"sync"
 	"time"
 
-	"github.com/DhanushRamesh/personal-assistant/internal/base/heard"
-	"github.com/DhanushRamesh/personal-assistant/internal/base/logging"
 	"google.golang.org/api/googleapi"
 	"google.golang.org/api/option"
+	"personal-assistant/internal/base/heard"
+	"personal-assistant/internal/base/logging"
 
 	gtasks "google.golang.org/api/tasks/v1"
 )

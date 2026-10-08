@@ -5,7 +5,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/DhanushRamesh/personal-assistant/internal/base/leaving"
+	"personal-assistant/internal/base/leaving"
 )
 
 var film = leaving.Appointment{

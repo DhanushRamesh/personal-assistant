@@ -11,8 +11,8 @@ import (
 	"gorm.io/gorm"
 	"gorm.io/gorm/clause"
 
-	"github.com/DhanushRamesh/personal-assistant/internal/base/storage"
-	"github.com/DhanushRamesh/personal-assistant/internal/domain/vocabulary"
+	"personal-assistant/internal/base/storage"
+	"personal-assistant/internal/domain/vocabulary"
 )
 
 // separator : What divides one term from the next in storage.

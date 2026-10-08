@@ -1,14 +1,14 @@
 package clients_test
 
 import (
-	"github.com/DhanushRamesh/personal-assistant/internal/base/client"
-	"github.com/DhanushRamesh/personal-assistant/internal/base/user"
 	"net/http"
+	"personal-assistant/internal/base/client"
+	"personal-assistant/internal/base/user"
 	"testing"
 
-	"github.com/DhanushRamesh/personal-assistant/internal/app/api/apitest"
-	"github.com/DhanushRamesh/personal-assistant/internal/app/api/clients"
-	"github.com/DhanushRamesh/personal-assistant/internal/base/chat"
+	"personal-assistant/internal/app/api/apitest"
+	"personal-assistant/internal/app/api/clients"
+	"personal-assistant/internal/base/chat"
 )
 
 // Me reports who is calling, from what, and where a prompt will land.

@@ -5,8 +5,8 @@ import (
 	"testing"
 	"time"
 
-	"github.com/DhanushRamesh/personal-assistant/internal/app/profile"
-	"github.com/DhanushRamesh/personal-assistant/internal/domain/calendar"
+	"personal-assistant/internal/app/profile"
+	"personal-assistant/internal/domain/calendar"
 )
 
 var here = time.FixedZone("IST", 5*3600+1800)

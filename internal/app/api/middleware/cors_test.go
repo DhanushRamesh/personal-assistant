@@ -6,7 +6,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/DhanushRamesh/personal-assistant/internal/app/api/middleware"
+	"personal-assistant/internal/app/api/middleware"
 )
 
 // serve : Runs a request through CrossOrigin wrapping a handler that

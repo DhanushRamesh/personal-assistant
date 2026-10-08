@@ -5,18 +5,18 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
-	"github.com/DhanushRamesh/personal-assistant/internal/base/store"
 	"net/http"
 	"net/url"
 	"os"
+	"personal-assistant/internal/base/store"
 	"strings"
 	"time"
 
-	chatmysql "github.com/DhanushRamesh/personal-assistant/internal/base/chat/mysql"
-	"github.com/DhanushRamesh/personal-assistant/internal/base/config"
-	"github.com/DhanushRamesh/personal-assistant/internal/base/logging"
-	"github.com/DhanushRamesh/personal-assistant/internal/base/storage"
-	"github.com/DhanushRamesh/personal-assistant/internal/domain/google"
+	chatmysql "personal-assistant/internal/base/chat/mysql"
+	"personal-assistant/internal/base/config"
+	"personal-assistant/internal/base/logging"
+	"personal-assistant/internal/base/storage"
+	"personal-assistant/internal/domain/google"
 )
 
 // aliases : Short names Google returns alongside the full scope URLs.

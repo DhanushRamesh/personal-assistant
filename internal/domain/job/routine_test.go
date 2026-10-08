@@ -4,7 +4,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/DhanushRamesh/personal-assistant/internal/domain/job"
+	"personal-assistant/internal/domain/job"
 )
 
 // TestAMomentStillToComeSatisfiesNothing : A device reading is always

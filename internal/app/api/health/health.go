@@ -14,7 +14,7 @@ import (
 
 	"github.com/go-chi/chi/v5"
 
-	"github.com/DhanushRamesh/personal-assistant/internal/app/api/httpx"
+	"personal-assistant/internal/app/api/httpx"
 )
 
 // readinessTimeout : Bounds the dependency checks made by the readiness

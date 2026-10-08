@@ -11,7 +11,7 @@ import (
 	"gorm.io/gorm"
 	"gorm.io/gorm/clause"
 
-	"github.com/DhanushRamesh/personal-assistant/internal/domain/coming"
+	"personal-assistant/internal/domain/coming"
 )
 
 // Prefix : What an identifier here begins with.

@@ -19,18 +19,18 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
-	"github.com/DhanushRamesh/personal-assistant/internal/base/store"
 	"log/slog"
 	"net/http"
+	"personal-assistant/internal/base/store"
 	"strings"
 	"time"
 
 	"github.com/go-chi/chi/v5"
 
-	"github.com/DhanushRamesh/personal-assistant/internal/app/api/authn"
-	"github.com/DhanushRamesh/personal-assistant/internal/app/api/httpx"
-	"github.com/DhanushRamesh/personal-assistant/internal/base/chat"
-	"github.com/DhanushRamesh/personal-assistant/internal/base/events"
+	"personal-assistant/internal/app/api/authn"
+	"personal-assistant/internal/app/api/httpx"
+	"personal-assistant/internal/base/chat"
+	"personal-assistant/internal/base/events"
 )
 
 const (

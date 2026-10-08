@@ -7,7 +7,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/DhanushRamesh/personal-assistant/internal/base/environment"
+	"personal-assistant/internal/base/environment"
 )
 
 // Stub must satisfy the interface it exists to stand in for.

@@ -2,15 +2,15 @@ package reminders_test
 
 import (
 	"encoding/json"
-	"github.com/DhanushRamesh/personal-assistant/internal/base/user"
 	"net/http"
+	"personal-assistant/internal/base/user"
 	"testing"
 	"time"
 
-	"github.com/DhanushRamesh/personal-assistant/internal/app/api/apitest"
-	"github.com/DhanushRamesh/personal-assistant/internal/app/api/reminders"
-	"github.com/DhanushRamesh/personal-assistant/internal/domain/remind"
-	"github.com/DhanushRamesh/personal-assistant/internal/domain/remind/inmemory"
+	"personal-assistant/internal/app/api/apitest"
+	"personal-assistant/internal/app/api/reminders"
+	"personal-assistant/internal/domain/remind"
+	"personal-assistant/internal/domain/remind/inmemory"
 )
 
 // env : A server with a reminder store behind it.

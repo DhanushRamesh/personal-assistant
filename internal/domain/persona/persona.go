@@ -9,7 +9,7 @@ import (
 	"strings"
 	"sync"
 
-	"github.com/DhanushRamesh/personal-assistant/internal/base/prompt"
+	"personal-assistant/internal/base/prompt"
 )
 
 // spokenRules : How every reply is shaped, whichever persona is answering.

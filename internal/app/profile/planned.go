@@ -7,8 +7,8 @@ import (
 	"strings"
 	"time"
 
-	"github.com/DhanushRamesh/personal-assistant/internal/base/prompt"
-	"github.com/DhanushRamesh/personal-assistant/internal/domain/calendar"
+	"personal-assistant/internal/base/prompt"
+	"personal-assistant/internal/domain/calendar"
 )
 
 // Entries : The most diary entries given to a description.

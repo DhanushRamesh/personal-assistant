@@ -5,7 +5,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/DhanushRamesh/personal-assistant/internal/domain/remind"
+	"personal-assistant/internal/domain/remind"
 )
 
 var ist = time.FixedZone("IST", 5*3600+1800)

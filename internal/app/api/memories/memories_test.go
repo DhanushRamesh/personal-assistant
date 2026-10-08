@@ -7,10 +7,10 @@ import (
 	"testing"
 	"time"
 
-	"github.com/DhanushRamesh/personal-assistant/internal/app/api/apitest"
-	"github.com/DhanushRamesh/personal-assistant/internal/app/api/memories"
-	"github.com/DhanushRamesh/personal-assistant/internal/domain/memory"
-	"github.com/DhanushRamesh/personal-assistant/internal/domain/memory/inmemory"
+	"personal-assistant/internal/app/api/apitest"
+	"personal-assistant/internal/app/api/memories"
+	"personal-assistant/internal/domain/memory"
+	"personal-assistant/internal/domain/memory/inmemory"
 )
 
 func kept(t *testing.T, s *inmemory.Store, user, tier, subject string, uses int, used *time.Time) {

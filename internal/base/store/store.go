@@ -13,9 +13,9 @@
 package store
 
 import (
-	"github.com/DhanushRamesh/personal-assistant/internal/base/chat"
-	"github.com/DhanushRamesh/personal-assistant/internal/base/client"
-	"github.com/DhanushRamesh/personal-assistant/internal/base/user"
+	"personal-assistant/internal/base/chat"
+	"personal-assistant/internal/base/client"
+	"personal-assistant/internal/base/user"
 )
 
 // Repository : Everything the server stores about chats and who has

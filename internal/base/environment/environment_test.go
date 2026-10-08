@@ -3,7 +3,7 @@ package environment_test
 import (
 	"testing"
 
-	"github.com/DhanushRamesh/personal-assistant/internal/base/environment"
+	"personal-assistant/internal/base/environment"
 )
 
 func TestKindPredicates(t *testing.T) {

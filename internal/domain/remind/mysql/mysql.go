@@ -9,8 +9,8 @@ import (
 
 	"gorm.io/gorm"
 
-	"github.com/DhanushRamesh/personal-assistant/internal/base/storage"
-	"github.com/DhanushRamesh/personal-assistant/internal/domain/remind"
+	"personal-assistant/internal/base/storage"
+	"personal-assistant/internal/domain/remind"
 )
 
 // row : The reminders table, as GORM sees it.

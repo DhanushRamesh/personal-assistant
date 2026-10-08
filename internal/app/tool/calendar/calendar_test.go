@@ -8,10 +8,10 @@ import (
 	"testing"
 	"time"
 
-	"github.com/DhanushRamesh/personal-assistant/internal/app/tool"
-	calendartool "github.com/DhanushRamesh/personal-assistant/internal/app/tool/calendar"
-	"github.com/DhanushRamesh/personal-assistant/internal/domain/calendar"
-	"github.com/DhanushRamesh/personal-assistant/internal/domain/google"
+	"personal-assistant/internal/app/tool"
+	calendartool "personal-assistant/internal/app/tool/calendar"
+	"personal-assistant/internal/domain/calendar"
+	"personal-assistant/internal/domain/google"
 )
 
 // india : The zone the tools read written times in.

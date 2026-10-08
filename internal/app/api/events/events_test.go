@@ -10,10 +10,10 @@ import (
 	"testing"
 	"time"
 
-	"github.com/DhanushRamesh/personal-assistant/internal/app/api/apitest"
-	"github.com/DhanushRamesh/personal-assistant/internal/app/api/events"
-	"github.com/DhanushRamesh/personal-assistant/internal/base/event"
-	"github.com/DhanushRamesh/personal-assistant/internal/base/event/inmemory"
+	"personal-assistant/internal/app/api/apitest"
+	"personal-assistant/internal/app/api/events"
+	"personal-assistant/internal/base/event"
+	"personal-assistant/internal/base/event/inmemory"
 )
 
 func post(t *testing.T, e *apitest.Env, body string) (int, events.BatchResponse) {

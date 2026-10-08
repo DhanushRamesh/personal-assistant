@@ -16,9 +16,9 @@ import (
 
 	"gorm.io/gorm"
 
-	"github.com/DhanushRamesh/personal-assistant/internal/base/embed"
-	"github.com/DhanushRamesh/personal-assistant/internal/base/storage"
-	"github.com/DhanushRamesh/personal-assistant/internal/domain/memory"
+	"personal-assistant/internal/base/embed"
+	"personal-assistant/internal/base/storage"
+	"personal-assistant/internal/domain/memory"
 )
 
 // row : The memories table, as GORM sees it.

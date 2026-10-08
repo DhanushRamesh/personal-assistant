@@ -7,7 +7,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/DhanushRamesh/personal-assistant/internal/base/leaving"
+	"personal-assistant/internal/base/leaving"
 )
 
 // watcher : One wired up around a fixed clock, counting what it did.

@@ -5,8 +5,8 @@ import (
 	"sort"
 	"time"
 
-	"github.com/DhanushRamesh/personal-assistant/internal/base/event"
-	"github.com/DhanushRamesh/personal-assistant/internal/base/prompt"
+	"personal-assistant/internal/base/event"
+	"personal-assistant/internal/base/prompt"
 )
 
 // Lately : How much of the four weeks counts as now.

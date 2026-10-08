@@ -7,10 +7,10 @@ import (
 	"net/http/httptest"
 	"testing"
 
-	"github.com/DhanushRamesh/personal-assistant/internal/app/api/apitest"
-	"github.com/DhanushRamesh/personal-assistant/internal/app/api/tools"
-	"github.com/DhanushRamesh/personal-assistant/internal/app/tool"
-	"github.com/DhanushRamesh/personal-assistant/internal/base/chat"
+	"personal-assistant/internal/app/api/apitest"
+	"personal-assistant/internal/app/api/tools"
+	"personal-assistant/internal/app/tool"
+	"personal-assistant/internal/base/chat"
 )
 
 // registry : A few tools across two domains, so grouping has something to

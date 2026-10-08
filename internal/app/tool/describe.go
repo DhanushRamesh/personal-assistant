@@ -7,8 +7,8 @@ import (
 	"sort"
 	"strings"
 
-	"github.com/DhanushRamesh/personal-assistant/internal/base/chat"
-	"github.com/DhanushRamesh/personal-assistant/internal/base/conversation"
+	"personal-assistant/internal/base/chat"
+	"personal-assistant/internal/base/conversation"
 )
 
 // DescribeName : The tool that describes the others.

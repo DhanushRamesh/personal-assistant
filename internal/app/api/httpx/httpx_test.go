@@ -9,7 +9,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/DhanushRamesh/personal-assistant/internal/app/api/httpx"
+	"personal-assistant/internal/app/api/httpx"
 )
 
 // body : A request shape to decode into.

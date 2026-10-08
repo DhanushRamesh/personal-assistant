@@ -7,10 +7,10 @@ import (
 	"testing"
 	"time"
 
-	"github.com/DhanushRamesh/personal-assistant/internal/app/tool"
-	taskstool "github.com/DhanushRamesh/personal-assistant/internal/app/tool/tasks"
-	"github.com/DhanushRamesh/personal-assistant/internal/base/chat"
-	"github.com/DhanushRamesh/personal-assistant/internal/domain/tasks"
+	"personal-assistant/internal/app/tool"
+	taskstool "personal-assistant/internal/app/tool/tasks"
+	"personal-assistant/internal/base/chat"
+	"personal-assistant/internal/domain/tasks"
 )
 
 func india() *time.Location { return time.FixedZone("IST", 5*3600+1800) }

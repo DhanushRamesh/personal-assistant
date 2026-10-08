@@ -9,19 +9,19 @@ package conversations
 import (
 	"context"
 	"errors"
-	"github.com/DhanushRamesh/personal-assistant/internal/base/store"
 	"log/slog"
 	"net/http"
+	"personal-assistant/internal/base/store"
 	"sort"
 	"strconv"
 
 	"github.com/go-chi/chi/v5"
 
-	"github.com/DhanushRamesh/personal-assistant/internal/app/api/authn"
-	"github.com/DhanushRamesh/personal-assistant/internal/app/api/httpx"
-	"github.com/DhanushRamesh/personal-assistant/internal/app/api/views"
-	"github.com/DhanushRamesh/personal-assistant/internal/base/chat"
-	"github.com/DhanushRamesh/personal-assistant/internal/base/conversation"
+	"personal-assistant/internal/app/api/authn"
+	"personal-assistant/internal/app/api/httpx"
+	"personal-assistant/internal/app/api/views"
+	"personal-assistant/internal/base/chat"
+	"personal-assistant/internal/base/conversation"
 )
 
 // CreateRequest : The body of a request to start a conversation.

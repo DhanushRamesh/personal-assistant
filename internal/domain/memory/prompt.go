@@ -3,7 +3,7 @@ package memory
 import (
 	"strings"
 
-	"github.com/DhanushRamesh/personal-assistant/internal/base/prompt"
+	"personal-assistant/internal/base/prompt"
 )
 
 // precedence : The choice to make before any recalled line is used.

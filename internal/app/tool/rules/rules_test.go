@@ -7,13 +7,13 @@ import (
 	"testing"
 	"time"
 
-	"github.com/DhanushRamesh/personal-assistant/internal/app/tool"
-	"github.com/DhanushRamesh/personal-assistant/internal/app/tool/rules"
-	"github.com/DhanushRamesh/personal-assistant/internal/base/chat"
-	"github.com/DhanushRamesh/personal-assistant/internal/base/conversation"
-	"github.com/DhanushRamesh/personal-assistant/internal/base/routine"
-	"github.com/DhanushRamesh/personal-assistant/internal/domain/job"
-	"github.com/DhanushRamesh/personal-assistant/internal/domain/job/inmemory"
+	"personal-assistant/internal/app/tool"
+	"personal-assistant/internal/app/tool/rules"
+	"personal-assistant/internal/base/chat"
+	"personal-assistant/internal/base/conversation"
+	"personal-assistant/internal/base/routine"
+	"personal-assistant/internal/domain/job"
+	"personal-assistant/internal/domain/job/inmemory"
 )
 
 var india = time.FixedZone("IST", 5*3600+1800)

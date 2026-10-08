@@ -8,9 +8,9 @@ import (
 	"testing"
 	"time"
 
-	"github.com/DhanushRamesh/personal-assistant/internal/base/alarm"
-	"github.com/DhanushRamesh/personal-assistant/internal/domain/remind"
-	"github.com/DhanushRamesh/personal-assistant/internal/domain/remind/inmemory"
+	"personal-assistant/internal/base/alarm"
+	"personal-assistant/internal/domain/remind"
+	"personal-assistant/internal/domain/remind/inmemory"
 )
 
 // heard : A Speaker that records what it was given, and can refuse.

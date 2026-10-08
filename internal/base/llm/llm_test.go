@@ -3,7 +3,7 @@ package llm_test
 import (
 	"testing"
 
-	"github.com/DhanushRamesh/personal-assistant/internal/base/llm"
+	"personal-assistant/internal/base/llm"
 )
 
 // The model configuration actually selects has to be findable, or the window

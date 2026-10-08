@@ -7,8 +7,8 @@ import (
 	"testing"
 	"time"
 
-	"github.com/DhanushRamesh/personal-assistant/internal/base/event"
-	"github.com/DhanushRamesh/personal-assistant/internal/base/event/inmemory"
+	"personal-assistant/internal/base/event"
+	"personal-assistant/internal/base/event/inmemory"
 )
 
 func at(t *testing.T, userID, kind string, when time.Time) *event.Event {

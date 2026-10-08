@@ -6,8 +6,8 @@ import (
 	"testing"
 	"time"
 
-	"github.com/DhanushRamesh/personal-assistant/internal/domain/remind"
-	"github.com/DhanushRamesh/personal-assistant/internal/domain/remind/inmemory"
+	"personal-assistant/internal/domain/remind"
+	"personal-assistant/internal/domain/remind/inmemory"
 )
 
 // spoken : A reminder said at the given moment.

@@ -23,10 +23,10 @@ import (
 	"strings"
 	"time"
 
-	"github.com/DhanushRamesh/personal-assistant/internal/base/chat"
-	"github.com/DhanushRamesh/personal-assistant/internal/base/event"
+	"personal-assistant/internal/base/chat"
+	"personal-assistant/internal/base/event"
 
-	"github.com/DhanushRamesh/personal-assistant/internal/app/tool"
+	"personal-assistant/internal/app/tool"
 )
 
 // DefaultDays : How far back a question reaches when it does not say.

@@ -25,16 +25,16 @@ import (
 	"testing"
 	"time"
 
-	"github.com/DhanushRamesh/personal-assistant/internal/app/tool"
-	reminders "github.com/DhanushRamesh/personal-assistant/internal/app/tool/reminders"
-	"github.com/DhanushRamesh/personal-assistant/internal/base/chat"
-	"github.com/DhanushRamesh/personal-assistant/internal/base/config"
-	"github.com/DhanushRamesh/personal-assistant/internal/base/conversation"
-	"github.com/DhanushRamesh/personal-assistant/internal/base/environment"
-	"github.com/DhanushRamesh/personal-assistant/internal/base/environment/platformai"
-	"github.com/DhanushRamesh/personal-assistant/internal/domain/memory"
-	"github.com/DhanushRamesh/personal-assistant/internal/domain/persona"
-	"github.com/DhanushRamesh/personal-assistant/internal/domain/remind/inmemory"
+	"personal-assistant/internal/app/tool"
+	reminders "personal-assistant/internal/app/tool/reminders"
+	"personal-assistant/internal/base/chat"
+	"personal-assistant/internal/base/config"
+	"personal-assistant/internal/base/conversation"
+	"personal-assistant/internal/base/environment"
+	"personal-assistant/internal/base/environment/platformai"
+	"personal-assistant/internal/domain/memory"
+	"personal-assistant/internal/domain/persona"
+	"personal-assistant/internal/domain/remind/inmemory"
 )
 
 // model : Which model to ask. EVAL_MODEL overrides, so the same eval can

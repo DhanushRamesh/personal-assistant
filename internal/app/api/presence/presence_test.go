@@ -13,12 +13,12 @@ import (
 	"testing"
 	"time"
 
-	"github.com/DhanushRamesh/personal-assistant/internal/app/api/apitest"
-	"github.com/DhanushRamesh/personal-assistant/internal/app/api/presence"
-	"github.com/DhanushRamesh/personal-assistant/internal/domain/greet"
-	"github.com/DhanushRamesh/personal-assistant/internal/domain/outbox"
-	"github.com/DhanushRamesh/personal-assistant/internal/domain/remind"
-	"github.com/DhanushRamesh/personal-assistant/internal/domain/remind/inmemory"
+	"personal-assistant/internal/app/api/apitest"
+	"personal-assistant/internal/app/api/presence"
+	"personal-assistant/internal/domain/greet"
+	"personal-assistant/internal/domain/outbox"
+	"personal-assistant/internal/domain/remind"
+	"personal-assistant/internal/domain/remind/inmemory"
 )
 
 // discard : A logger that writes nowhere.

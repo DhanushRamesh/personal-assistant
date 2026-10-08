@@ -7,9 +7,9 @@ import (
 	"testing"
 	"time"
 
-	"github.com/DhanushRamesh/personal-assistant/internal/app/tool"
-	comingtool "github.com/DhanushRamesh/personal-assistant/internal/app/tool/coming"
-	"github.com/DhanushRamesh/personal-assistant/internal/domain/coming"
+	"personal-assistant/internal/app/tool"
+	comingtool "personal-assistant/internal/app/tool/coming"
+	"personal-assistant/internal/domain/coming"
 )
 
 var (

@@ -15,8 +15,8 @@ import (
 
 	"github.com/go-chi/chi/v5"
 
-	"github.com/DhanushRamesh/personal-assistant/internal/app/api/httpx"
-	"github.com/DhanushRamesh/personal-assistant/internal/domain/vocabulary"
+	"personal-assistant/internal/app/api/httpx"
+	"personal-assistant/internal/domain/vocabulary"
 )
 
 // Response : The list, as whatever fetched it reads it.

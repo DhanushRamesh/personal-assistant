@@ -9,8 +9,8 @@ import (
 	"sync"
 	"time"
 
-	"github.com/DhanushRamesh/personal-assistant/internal/base/heard"
-	"github.com/DhanushRamesh/personal-assistant/internal/base/logging"
+	"personal-assistant/internal/base/heard"
+	"personal-assistant/internal/base/logging"
 
 	gcal "google.golang.org/api/calendar/v3"
 )

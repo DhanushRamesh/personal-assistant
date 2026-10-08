@@ -6,7 +6,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/DhanushRamesh/personal-assistant/internal/base/chat"
+	"personal-assistant/internal/base/chat"
 )
 
 // mustNew : Creates a chat, failing the test if the prompt is rejected.

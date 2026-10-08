@@ -5,8 +5,8 @@ import (
 	"testing"
 	"time"
 
-	"github.com/DhanushRamesh/personal-assistant/internal/base/event"
-	"github.com/DhanushRamesh/personal-assistant/internal/domain/situation"
+	"personal-assistant/internal/base/event"
+	"personal-assistant/internal/domain/situation"
 )
 
 var midday = time.Date(2026, 10, 6, 12, 0, 0, 0, time.UTC)

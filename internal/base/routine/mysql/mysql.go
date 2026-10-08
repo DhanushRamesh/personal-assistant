@@ -11,7 +11,7 @@ import (
 
 	"github.com/oklog/ulid/v2"
 
-	"github.com/DhanushRamesh/personal-assistant/internal/base/routine"
+	"personal-assistant/internal/base/routine"
 )
 
 // Prefix : What a routine identifier begins with, so one is

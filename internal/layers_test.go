@@ -7,7 +7,7 @@ import (
 )
 
 // prefix : Where this module's own packages live.
-const prefix = "github.com/DhanushRamesh/personal-assistant/internal/"
+const prefix = "personal-assistant/internal/"
 
 // above : What each layer is allowed to import, itself included.
 //

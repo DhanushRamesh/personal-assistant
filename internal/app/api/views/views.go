@@ -9,15 +9,15 @@
 package views
 
 import (
-	"github.com/DhanushRamesh/personal-assistant/internal/base/client"
-	"github.com/DhanushRamesh/personal-assistant/internal/base/user"
+	"personal-assistant/internal/base/client"
+	"personal-assistant/internal/base/user"
 	"time"
 
-	"github.com/DhanushRamesh/personal-assistant/internal/base/chat"
-	"github.com/DhanushRamesh/personal-assistant/internal/base/conversation"
-	"github.com/DhanushRamesh/personal-assistant/internal/base/llm"
-	"github.com/DhanushRamesh/personal-assistant/internal/domain/persona"
-	"github.com/DhanushRamesh/personal-assistant/internal/domain/remind"
+	"personal-assistant/internal/base/chat"
+	"personal-assistant/internal/base/conversation"
+	"personal-assistant/internal/base/llm"
+	"personal-assistant/internal/domain/persona"
+	"personal-assistant/internal/domain/remind"
 )
 
 // Chat : A chat as the API returns it.

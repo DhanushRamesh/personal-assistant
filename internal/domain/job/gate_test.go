@@ -5,8 +5,8 @@ import (
 	"testing"
 	"time"
 
-	"github.com/DhanushRamesh/personal-assistant/internal/domain/job"
-	"github.com/DhanushRamesh/personal-assistant/internal/domain/job/inmemory"
+	"personal-assistant/internal/domain/job"
+	"personal-assistant/internal/domain/job/inmemory"
 )
 
 // reading : A known reading of a given age.

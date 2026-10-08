@@ -6,8 +6,8 @@ import (
 	"testing"
 	"time"
 
-	"github.com/DhanushRamesh/personal-assistant/internal/base/embed"
-	"github.com/DhanushRamesh/personal-assistant/internal/domain/memory"
+	"personal-assistant/internal/base/embed"
+	"personal-assistant/internal/domain/memory"
 )
 
 // An exchange is the message and the reply together, both named, since a

@@ -4,7 +4,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/DhanushRamesh/personal-assistant/internal/base/routine"
+	"personal-assistant/internal/base/routine"
 )
 
 // TestAFactAnswersToASource : The name is what somebody writes in a

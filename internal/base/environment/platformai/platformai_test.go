@@ -14,11 +14,11 @@ import (
 	"testing"
 	"time"
 
-	"github.com/DhanushRamesh/personal-assistant/internal/base/environment"
-	"github.com/DhanushRamesh/personal-assistant/internal/base/environment/platformai"
-	"github.com/DhanushRamesh/personal-assistant/internal/base/failure"
-	"github.com/DhanushRamesh/personal-assistant/internal/base/llm"
-	"github.com/DhanushRamesh/personal-assistant/internal/base/logging"
+	"personal-assistant/internal/base/environment"
+	"personal-assistant/internal/base/environment/platformai"
+	"personal-assistant/internal/base/failure"
+	"personal-assistant/internal/base/llm"
+	"personal-assistant/internal/base/logging"
 )
 
 // discard : A logger that writes nowhere.

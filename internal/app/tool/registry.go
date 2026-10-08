@@ -6,7 +6,7 @@ import (
 	"sort"
 	"strings"
 
-	"github.com/DhanushRamesh/personal-assistant/internal/base/chat"
+	"personal-assistant/internal/base/chat"
 )
 
 // Registry : Every tool the assistant has.

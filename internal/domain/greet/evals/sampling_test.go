@@ -33,14 +33,14 @@ import (
 	"testing"
 	"time"
 
-	"github.com/DhanushRamesh/personal-assistant/internal/base/config"
-	"github.com/DhanushRamesh/personal-assistant/internal/base/environment"
-	"github.com/DhanushRamesh/personal-assistant/internal/base/environment/platformai"
-	"github.com/DhanushRamesh/personal-assistant/internal/base/event"
-	eventmysql "github.com/DhanushRamesh/personal-assistant/internal/base/event/mysql"
-	"github.com/DhanushRamesh/personal-assistant/internal/base/storage"
-	"github.com/DhanushRamesh/personal-assistant/internal/domain/greet"
-	"github.com/DhanushRamesh/personal-assistant/internal/domain/persona"
+	"personal-assistant/internal/base/config"
+	"personal-assistant/internal/base/environment"
+	"personal-assistant/internal/base/environment/platformai"
+	"personal-assistant/internal/base/event"
+	eventmysql "personal-assistant/internal/base/event/mysql"
+	"personal-assistant/internal/base/storage"
+	"personal-assistant/internal/domain/greet"
+	"personal-assistant/internal/domain/persona"
 )
 
 var (

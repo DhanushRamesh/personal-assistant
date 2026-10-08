@@ -9,7 +9,7 @@ import (
 	"github.com/oklog/ulid/v2"
 	"gorm.io/gorm"
 
-	"github.com/DhanushRamesh/personal-assistant/internal/base/notice"
+	"personal-assistant/internal/base/notice"
 )
 
 // row : The remarks table, as GORM sees it.

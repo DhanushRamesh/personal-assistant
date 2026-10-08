@@ -6,7 +6,7 @@ import (
 	"math"
 	"testing"
 
-	"github.com/DhanushRamesh/personal-assistant/internal/base/embed"
+	"personal-assistant/internal/base/embed"
 )
 
 // Identical text scores 1, and nothing scores higher than identical text.

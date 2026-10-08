@@ -2,9 +2,9 @@ package remind
 
 import (
 	"context"
-	"github.com/DhanushRamesh/personal-assistant/internal/base/alarm"
-	"github.com/DhanushRamesh/personal-assistant/internal/base/logging"
 	"log/slog"
+	"personal-assistant/internal/base/alarm"
+	"personal-assistant/internal/base/logging"
 	"time"
 )
 

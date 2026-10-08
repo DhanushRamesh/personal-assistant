@@ -15,7 +15,7 @@ import (
 	"github.com/oklog/ulid/v2"
 	"gorm.io/gorm"
 
-	"github.com/DhanushRamesh/personal-assistant/internal/base/errand"
+	"personal-assistant/internal/base/errand"
 )
 
 // Prefix : What an identifier here begins with.

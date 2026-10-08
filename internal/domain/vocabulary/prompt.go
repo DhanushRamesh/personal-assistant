@@ -3,8 +3,8 @@ package vocabulary
 import (
 	"strings"
 
-	"github.com/DhanushRamesh/personal-assistant/internal/base/conversation"
-	"github.com/DhanushRamesh/personal-assistant/internal/base/prompt"
+	"personal-assistant/internal/base/conversation"
+	"personal-assistant/internal/base/prompt"
 )
 
 // Prompt : What the model is asked, to find the names in what

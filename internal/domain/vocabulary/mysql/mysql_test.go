@@ -2,18 +2,18 @@ package mysql_test
 
 import (
 	"context"
-	"github.com/DhanushRamesh/personal-assistant/internal/base/user"
 	"io"
 	"log/slog"
 	"os"
+	"personal-assistant/internal/base/user"
 	"strings"
 	"testing"
 	"time"
 
-	chatmysql "github.com/DhanushRamesh/personal-assistant/internal/base/chat/mysql"
-	"github.com/DhanushRamesh/personal-assistant/internal/base/config"
-	"github.com/DhanushRamesh/personal-assistant/internal/base/storage"
-	vocabularymysql "github.com/DhanushRamesh/personal-assistant/internal/domain/vocabulary/mysql"
+	chatmysql "personal-assistant/internal/base/chat/mysql"
+	"personal-assistant/internal/base/config"
+	"personal-assistant/internal/base/storage"
+	vocabularymysql "personal-assistant/internal/domain/vocabulary/mysql"
 )
 
 // discard : A logger that writes nowhere.

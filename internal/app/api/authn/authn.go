@@ -10,19 +10,19 @@ package authn
 import (
 	"context"
 	"errors"
-	"github.com/DhanushRamesh/personal-assistant/internal/base/client"
-	"github.com/DhanushRamesh/personal-assistant/internal/base/store"
-	"github.com/DhanushRamesh/personal-assistant/internal/base/user"
 	"log/slog"
 	"net/http"
+	"personal-assistant/internal/base/client"
+	"personal-assistant/internal/base/store"
+	"personal-assistant/internal/base/user"
 
 	"github.com/go-chi/chi/v5"
 
-	"github.com/DhanushRamesh/personal-assistant/internal/app/api/httpx"
-	"github.com/DhanushRamesh/personal-assistant/internal/app/api/views"
-	"github.com/DhanushRamesh/personal-assistant/internal/base/auth"
-	"github.com/DhanushRamesh/personal-assistant/internal/base/chat"
-	"github.com/DhanushRamesh/personal-assistant/internal/base/logging"
+	"personal-assistant/internal/app/api/httpx"
+	"personal-assistant/internal/app/api/views"
+	"personal-assistant/internal/base/auth"
+	"personal-assistant/internal/base/chat"
+	"personal-assistant/internal/base/logging"
 )
 
 // header : The header carrying a device's token.

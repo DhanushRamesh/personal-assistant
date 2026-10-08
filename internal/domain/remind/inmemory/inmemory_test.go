@@ -3,9 +3,9 @@ package inmemory_test
 import (
 	"testing"
 
-	"github.com/DhanushRamesh/personal-assistant/internal/domain/remind"
-	"github.com/DhanushRamesh/personal-assistant/internal/domain/remind/inmemory"
-	"github.com/DhanushRamesh/personal-assistant/internal/domain/remind/storetest"
+	"personal-assistant/internal/domain/remind"
+	"personal-assistant/internal/domain/remind/inmemory"
+	"personal-assistant/internal/domain/remind/storetest"
 )
 
 // The in-memory store stands in for the real one, so it has to behave as

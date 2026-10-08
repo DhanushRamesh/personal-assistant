@@ -10,7 +10,7 @@ import (
 	"github.com/oklog/ulid/v2"
 	"gorm.io/gorm"
 
-	"github.com/DhanushRamesh/personal-assistant/internal/domain/job"
+	"personal-assistant/internal/domain/job"
 )
 
 // Prefix : What an identifier here begins with.

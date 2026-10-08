@@ -18,9 +18,9 @@ import (
 	"strings"
 	"time"
 
-	"github.com/DhanushRamesh/personal-assistant/internal/base/environment"
-	"github.com/DhanushRamesh/personal-assistant/internal/base/failure"
-	"github.com/DhanushRamesh/personal-assistant/internal/base/logging"
+	"personal-assistant/internal/base/environment"
+	"personal-assistant/internal/base/failure"
+	"personal-assistant/internal/base/logging"
 )
 
 const (

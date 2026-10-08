@@ -5,7 +5,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/DhanushRamesh/personal-assistant/internal/domain/memory"
+	"personal-assistant/internal/domain/memory"
 )
 
 // Nothing stored adds nothing to the prompt, rather than an empty heading.

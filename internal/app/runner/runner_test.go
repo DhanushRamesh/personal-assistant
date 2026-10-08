@@ -10,12 +10,12 @@ import (
 	"testing"
 	"time"
 
-	"github.com/DhanushRamesh/personal-assistant/internal/app/runner"
-	"github.com/DhanushRamesh/personal-assistant/internal/base/chat"
-	"github.com/DhanushRamesh/personal-assistant/internal/base/chat/memory"
-	"github.com/DhanushRamesh/personal-assistant/internal/base/environment"
-	"github.com/DhanushRamesh/personal-assistant/internal/base/events"
-	"github.com/DhanushRamesh/personal-assistant/internal/domain/announcement"
+	"personal-assistant/internal/app/runner"
+	"personal-assistant/internal/base/chat"
+	"personal-assistant/internal/base/chat/memory"
+	"personal-assistant/internal/base/environment"
+	"personal-assistant/internal/base/events"
+	"personal-assistant/internal/domain/announcement"
 )
 
 // discard : A logger that writes nowhere.

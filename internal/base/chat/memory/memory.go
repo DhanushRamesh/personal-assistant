@@ -13,15 +13,15 @@ package memory
 import (
 	"context"
 	"fmt"
-	"github.com/DhanushRamesh/personal-assistant/internal/base/client"
-	"github.com/DhanushRamesh/personal-assistant/internal/base/store"
-	"github.com/DhanushRamesh/personal-assistant/internal/base/user"
+	"personal-assistant/internal/base/client"
+	"personal-assistant/internal/base/store"
+	"personal-assistant/internal/base/user"
 	"sort"
 	"sync"
 	"time"
 
-	"github.com/DhanushRamesh/personal-assistant/internal/base/chat"
-	"github.com/DhanushRamesh/personal-assistant/internal/base/conversation"
+	"personal-assistant/internal/base/chat"
+	"personal-assistant/internal/base/conversation"
 )
 
 // Repository : An in-memory store.Repository.

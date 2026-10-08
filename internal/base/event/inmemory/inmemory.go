@@ -10,7 +10,7 @@ import (
 	"sync"
 	"time"
 
-	"github.com/DhanushRamesh/personal-assistant/internal/base/event"
+	"personal-assistant/internal/base/event"
 )
 
 // Store : Events, in memory.

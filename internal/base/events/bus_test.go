@@ -7,7 +7,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/DhanushRamesh/personal-assistant/internal/base/events"
+	"personal-assistant/internal/base/events"
 )
 
 // newBus : Returns a Bus that logs nowhere.

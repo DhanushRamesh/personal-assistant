@@ -16,11 +16,11 @@ import (
 	"strings"
 	"time"
 
-	"github.com/DhanushRamesh/personal-assistant/internal/app/tool"
-	"github.com/DhanushRamesh/personal-assistant/internal/base/alarm"
-	"github.com/DhanushRamesh/personal-assistant/internal/base/chat"
-	"github.com/DhanushRamesh/personal-assistant/internal/base/prompt"
-	"github.com/DhanushRamesh/personal-assistant/internal/domain/remind"
+	"personal-assistant/internal/app/tool"
+	"personal-assistant/internal/base/alarm"
+	"personal-assistant/internal/base/chat"
+	"personal-assistant/internal/base/prompt"
+	"personal-assistant/internal/domain/remind"
 )
 
 // idPattern : The shape of a reminder identifier, so one the model invented

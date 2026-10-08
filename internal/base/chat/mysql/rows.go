@@ -2,11 +2,11 @@ package mysql
 
 import (
 	"encoding/json"
-	"github.com/DhanushRamesh/personal-assistant/internal/base/client"
-	"github.com/DhanushRamesh/personal-assistant/internal/base/user"
+	"personal-assistant/internal/base/client"
+	"personal-assistant/internal/base/user"
 	"time"
 
-	"github.com/DhanushRamesh/personal-assistant/internal/base/chat"
+	"personal-assistant/internal/base/chat"
 )
 
 // chatRow : The chats table, as GORM sees it.
