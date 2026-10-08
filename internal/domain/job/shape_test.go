@@ -221,3 +221,196 @@ func TestALengthReadsAsItWasWritten(t *testing.T) {
 		}
 	}
 }
+
+// readings : What a reader would hand back for these sources.
+func readings(of map[string]string, at time.Time) map[string][]job.Reading {
+	out := map[string][]job.Reading{}
+	for source, value := range of {
+		out[source] = []job.Reading{{Value: value, At: at, Known: true}}
+	}
+	return out
+}
+
+// TestATreeHoldsOrDoesNot : The one thing the flat grammar could
+// never say. "and" between conditions and "or" within one gave a
+// single level; (a or b) and (c or d) had nowhere to be written.
+func TestATreeHoldsOrDoesNot(t *testing.T) {
+	at := time.Date(2026, 10, 9, 23, 0, 0, 0, india)
+	when := job.Occasion{
+		Wake: []job.Hook{{On: &job.Where{Source: "call.missed", Op: "arrives"}}},
+		All: []job.Where{
+			{Source: "call.missed", Op: "arrives"},
+			{Any: []job.Where{
+				{Source: "presence", Op: "==", Value: "here"},
+				{Source: "hour", Op: ">=", Value: 22},
+			}},
+		},
+	}
+	if err := when.Sound(); err != nil {
+		t.Fatalf("a sound rule was refused: %v", err)
+	}
+
+	got := readings(map[string]string{"call.missed": "amma"}, at)
+
+	// Away, but it is eleven at night, so the group holds.
+	if ok, why := when.Holds(got, true, at); !ok {
+		t.Errorf("did not hold at eleven at night: %s", why)
+	}
+	// Here, in the afternoon: the other half of the group.
+	noon := time.Date(2026, 10, 9, 14, 0, 0, 0, india)
+	if ok, why := when.Holds(got, false, noon); !ok {
+		t.Errorf("did not hold while they were in the room: %s", why)
+	}
+	// Away, in the afternoon: neither half.
+	ok, why := when.Holds(got, true, noon)
+	if ok {
+		t.Error("held when neither half of the group did")
+	}
+	if !strings.Contains(why, "none of") {
+		t.Errorf("did not say which group failed: %q", why)
+	}
+}
+
+// TestWhyItDidNotHold : A rule that said nothing has to say which
+// condition stopped it, or the page that shows the engine working
+// is useless at the moment somebody reads it.
+func TestWhyItDidNotHold(t *testing.T) {
+	at := time.Date(2026, 10, 9, 14, 0, 0, 0, india)
+	when := job.Occasion{
+		Wake: []job.Hook{{Every: "10m"}},
+		All: []job.Where{
+			{Source: "hour", Op: "<", Value: 18},
+			{Source: "battery.level", Op: "<", Value: 25},
+		},
+	}
+	got := readings(map[string]string{"battery.level": "62"}, at)
+	ok, why := when.Holds(got, false, at)
+	if ok {
+		t.Fatal("held with the battery at 62")
+	}
+	if !strings.Contains(why, "battery.level") || !strings.Contains(why, "25") {
+		t.Errorf("why reads %q, want it to name the condition", why)
+	}
+	// The first that failed, not the last: hour < 18 passed.
+	if strings.Contains(why, "hour") {
+		t.Errorf("blamed a condition that held: %q", why)
+	}
+}
+
+// TestNothingWouldEverWakeIt : The failure this codebase has least
+// patience with is a rule that never fires and never says why.
+func TestNothingWouldEverWakeIt(t *testing.T) {
+	for _, c := range []struct {
+		why  string
+		when job.Occasion
+	}{
+		{"no hook at all", job.Occasion{
+			All: []job.Where{{Source: "hour", Op: ">=", Value: 22}}}},
+		{"all and any together", job.Occasion{
+			Wake: []job.Hook{{Every: "10m"}},
+			All:  []job.Where{{Source: "hour", Op: "<", Value: 18}},
+			Any:  []job.Where{{Source: "hour", Op: "<", Value: 18}}}},
+		{"a hook on something that is asked, never delivered", job.Occasion{
+			Wake: []job.Hook{{On: &job.Where{Source: "presence", Op: "==", Value: "here"}}}}},
+		{"a hook on how old a reading is", job.Occasion{
+			Wake: []job.Hook{{On: &job.Where{Source: "battery.level", Op: "within", Value: "1h"}}}}},
+		{"a clock and an event in one hook", job.Occasion{
+			Wake: []job.Hook{{Every: "10m", On: &job.Where{Source: "x.y", Op: "arrives"}}}}},
+		{"a wait that is not a length of time", job.Occasion{
+			Wake: []job.Hook{{Every: "10m", After: "soonish"}}}},
+		{"a condition with nothing to compare", job.Occasion{
+			Wake: []job.Hook{{Every: "10m"}},
+			All:  []job.Where{{Source: "battery.level", Op: "<"}}}},
+	} {
+		if err := c.when.Sound(); err == nil {
+			t.Errorf("%s was accepted", c.why)
+		}
+	}
+}
+
+// TestTwoHooksOnOneRule : What the old shape could not hold. A
+// schedule was one sentence and a sentence has one trigger in it,
+// so "the door or the window" was two rules.
+func TestTwoHooksOnOneRule(t *testing.T) {
+	when := job.Occasion{Wake: []job.Hook{
+		{On: &job.Where{Source: "door.opened", Op: "arrives"}},
+		{On: &job.Where{Source: "window.opened", Op: "arrives"}},
+	}}
+	if err := when.Sound(); err != nil {
+		t.Fatalf("two triggers were refused: %v", err)
+	}
+	_, gates, err := when.Watching()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(gates) != 2 {
+		t.Fatalf("got %d triggers, want 2", len(gates))
+	}
+	if gates[0].Source != "door.opened" || gates[1].Source != "window.opened" {
+		t.Errorf("triggers read %+v", gates)
+	}
+}
+
+// TestTheSoonestClockWins : Several hooks mean any one of them
+// fires the rule, so its next moment is the soonest of them and
+// not the first one written down.
+func TestTheSoonestClockWins(t *testing.T) {
+	from := time.Date(2026, 10, 9, 8, 0, 0, 0, india)
+	when := job.Occasion{Wake: []job.Hook{
+		{Cron: "0 9 * * *"}, // an hour away
+		{Every: "10m"},      // ten minutes away
+	}}
+	at, err := when.Next(from, india)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if want := from.Add(10 * time.Minute); !at.Equal(want) {
+		t.Errorf("next is %v, want %v", at, want)
+	}
+}
+
+// TestACountIsRenderedOnlyToBeAnswered : The string nothing has
+// ever seen exists for the moment it takes to answer and never
+// anywhere a model is asked to write it.
+func TestACountIsRenderedOnlyToBeAnswered(t *testing.T) {
+	w := job.Where{
+		Count: &job.Counted{Kind: "call.missed", Is: "amma", By: "value", Within: "2h"},
+		Op:    ">=", Value: 2,
+	}
+	gate, err := w.Gate()
+	if err != nil {
+		t.Fatalf("a count would not lower to a condition: %v", err)
+	}
+	if want := "counted call.missed is amma by value within 2h"; gate.Source != want {
+		t.Errorf("rendered %q, want %q", gate.Source, want)
+	}
+	// And the parser that reads it back agrees with what was meant.
+	got, err := job.ReadCount(gate.Source)
+	if err != nil {
+		t.Fatalf("the resolver could not read it back: %v", err)
+	}
+	if got.Kind != "call.missed" || got.Match != "amma" || !got.Group ||
+		got.Window != 2*time.Hour {
+		t.Errorf("read back as %+v", got)
+	}
+	if gate.Op != ">=" || gate.Value != "2" {
+		t.Errorf("compared as %q %q", gate.Op, gate.Value)
+	}
+}
+
+// TestAJSONNumberIsNotAFloat : JSON gives 20 back as a float, and
+// a condition comparing against "20.000000" would hold against
+// nothing at all.
+func TestAJSONNumberIsNotAFloat(t *testing.T) {
+	var w job.Where
+	if err := json.Unmarshal([]byte(`{"source":"battery.level","op":"<","value":20}`), &w); err != nil {
+		t.Fatal(err)
+	}
+	gate, err := w.Gate()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if gate.Value != "20" {
+		t.Errorf("value came through as %q, want %q", gate.Value, "20")
+	}
+}

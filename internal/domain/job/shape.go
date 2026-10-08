@@ -3,6 +3,7 @@ package job
 import (
 	"encoding/json"
 	"fmt"
+	"math"
 	"strconv"
 	"strings"
 	"time"
@@ -332,4 +333,388 @@ func short(d time.Duration) string {
 		return strconv.Itoa(int(d/time.Second)) + "s"
 	}
 	return d.String()
+}
+
+// Gate : One condition, as the machinery that reads conditions
+// already understands it.
+//
+// The whole of how a structured rule is evaluated, and the reason
+// it was safe to change the shape at all: every operator, every
+// source, the counting and the Home Assistant reading are already
+// written and tested against [Gate], and none of them had to know
+// that a rule now arrives as a tree. The tree walking is new; what
+// is at the bottom of it is not.
+//
+// Refuses a group, which has no single condition to be.
+func (w Where) Gate() (Gate, error) {
+	if w.Group() {
+		return Gate{}, fmt.Errorf("%w: a group is not one condition", ErrUnreadableGate)
+	}
+	gate := Gate{Op: w.Op}
+	// Stored as a symbol, read as the word the parser knows.
+	if word, found := words[w.Op]; found {
+		gate.Op = word
+	}
+
+	switch {
+	case w.Count != nil:
+		gate.Source = w.Count.Source()
+	case w.Pattern != "":
+		return Gate{}, fmt.Errorf("%w: a pattern is not a condition yet", ErrUnreadableGate)
+	default:
+		gate.Source = strings.ToLower(strings.TrimSpace(w.Source))
+	}
+	if gate.Source == "" {
+		return Gate{}, fmt.Errorf("%w: a condition with nothing to read", ErrUnreadableGate)
+	}
+
+	switch {
+	case gate.Op == Any:
+	case w.Ago != "":
+		gate.Value = w.Ago + Ago
+	case w.Value != nil:
+		gate.Value = value(w.Value)
+	default:
+		return Gate{}, fmt.Errorf("%w: %q has nothing to compare with",
+			ErrUnreadableGate, gate.Source)
+	}
+	if err := gate.sound(); err != nil {
+		return Gate{}, err
+	}
+	return gate, nil
+}
+
+// Source : A count as the one line the resolver reads.
+//
+// Rendered rather than stored, so that the string nothing had ever
+// seen exists only for the moment it takes to answer, and never
+// anywhere a model could be asked to write it.
+func (c Counted) Source() string {
+	out := Counting + " " + c.Kind
+	if c.Is != "" {
+		out += " " + Is + " " + c.Is
+	}
+	if c.By != "" {
+		out += " " + By + " " + c.By
+	}
+	return out + " " + Within + " " + c.Within
+}
+
+// value : A number or a word, as the comparison reads it.
+//
+// JSON gives a number back as a float, and 20 that renders as "20"
+// and not "20.000000" is the whole of what this is for.
+func value(v any) string {
+	switch n := v.(type) {
+	case nil:
+		return ""
+	case string:
+		return n
+	case float64:
+		if n == math.Trunc(n) {
+			return strconv.FormatInt(int64(n), 10)
+		}
+		return strconv.FormatFloat(n, 'f', -1, 64)
+	case int:
+		return strconv.Itoa(n)
+	case bool:
+		return strconv.FormatBool(n)
+	}
+	return fmt.Sprint(v)
+}
+
+// Needs : Every source the conditions read, once each.
+func (o Occasion) Needs() []string {
+	seen := map[string]bool{}
+	out := []string{}
+	for _, w := range o.where() {
+		w.needs(seen, &out)
+	}
+	return out
+}
+
+// needs : This condition's source, and its children's.
+func (w Where) needs(seen map[string]bool, out *[]string) {
+	if w.Group() {
+		for _, in := range append(append([]Where{}, w.All...), w.Any...) {
+			in.needs(seen, out)
+		}
+		return
+	}
+	gate, err := w.Gate()
+	if err != nil {
+		return
+	}
+	kind := gate.Needs()
+	if kind == "" || seen[kind] {
+		return
+	}
+	seen[kind] = true
+	*out = append(*out, kind)
+}
+
+// Deep : How far back any condition looks, for the reader to fetch
+// enough readings to answer it.
+func (o Occasion) Deep() time.Duration {
+	var most time.Duration
+	for _, w := range o.where() {
+		if back := w.deep(); back > most {
+			most = back
+		}
+	}
+	return most
+}
+
+// deep : How far back this condition looks, and its children's.
+func (w Where) deep() time.Duration {
+	if w.Group() {
+		var most time.Duration
+		for _, in := range append(append([]Where{}, w.All...), w.Any...) {
+			if back := in.deep(); back > most {
+				most = back
+			}
+		}
+		return most
+	}
+	if w.Ago == "" {
+		return 0
+	}
+	back, err := time.ParseDuration(w.Ago)
+	if err != nil {
+		return 0
+	}
+	return back
+}
+
+// Holds : Whether the conditions hold, and the first that did not.
+//
+// The reason why, not just the answer. A rule that said nothing
+// has to be able to say which condition stopped it, and a tree
+// that answered only yes or no would make the page that shows the
+// engine working useless at exactly the moment somebody reads it.
+//
+// An Occasion with no conditions holds: it is a rule that runs
+// whenever it wakes.
+func (o Occasion) Holds(got map[string][]Reading, away bool, now time.Time) (bool, string) {
+	if len(o.Any) > 0 {
+		for _, w := range o.Any {
+			if ok, _ := w.holds(got, away, now); ok {
+				return true, ""
+			}
+		}
+		return false, "none of the conditions held"
+	}
+	for _, w := range o.All {
+		if ok, why := w.holds(got, away, now); !ok {
+			return false, why
+		}
+	}
+	return true, ""
+}
+
+// holds : Whether this condition holds, and why not.
+func (w Where) holds(got map[string][]Reading, away bool, now time.Time) (bool, string) {
+	if len(w.All) > 0 {
+		for _, in := range w.All {
+			if ok, why := in.holds(got, away, now); !ok {
+				return false, why
+			}
+		}
+		return true, ""
+	}
+	if len(w.Any) > 0 {
+		for _, in := range w.Any {
+			if ok, _ := in.holds(got, away, now); ok {
+				return true, ""
+			}
+		}
+		return false, "none of " + w.Describe() + " held"
+	}
+
+	gate, err := w.Gate()
+	if err != nil {
+		// Unreadable is not the same as not holding, and the
+		// difference matters: one is a rule that is waiting and
+		// the other is a rule that can never work. Both withhold.
+		return false, "a condition could not be read: " + err.Error()
+	}
+	if gate.Holds(got[gate.Needs()], away, now) {
+		return true, ""
+	}
+	return false, "the condition " + w.Describe() + " did not hold"
+}
+
+// Describe : A condition in the words somebody would say, for
+// reading a rule back and for saying which one stopped it.
+func (w Where) Describe() string {
+	if w.Group() {
+		parts := make([]string, 0, len(w.All)+len(w.Any))
+		join := " " + strings.TrimSpace(Or) + " "
+		in := w.Any
+		if len(w.All) > 0 {
+			in, join = w.All, " and "
+		}
+		for _, one := range in {
+			parts = append(parts, one.Describe())
+		}
+		return "(" + strings.Join(parts, join) + ")"
+	}
+	gate, err := w.Gate()
+	if err != nil {
+		return "something unreadable"
+	}
+	out := gate.Source + " " + gate.Op
+	if gate.Op == Any {
+		return out
+	}
+	return out + " " + gate.Value
+}
+
+// where : Whichever list of conditions this Occasion has.
+func (o Occasion) where() []Where {
+	if len(o.Any) > 0 {
+		return o.Any
+	}
+	return o.All
+}
+
+// Schedule : A hook as the clock already reads it, or empty when
+// it is not a clock.
+func (h Hook) Schedule() string {
+	switch {
+	case h.Every != "":
+		return Every + " " + h.Every
+	case h.At != "":
+		return At + " " + h.At
+	case h.Once != "":
+		return Once + " " + h.Once
+	case h.Cron != "":
+		return Cron + " " + h.Cron
+	}
+	return ""
+}
+
+// Waits : How long this hook holds off before running, or zero.
+func (h Hook) Waits() (time.Duration, error) {
+	if strings.TrimSpace(h.After) == "" {
+		return 0, nil
+	}
+	return Span(h.After)
+}
+
+// Ticking : The clock hooks, in the order they were written.
+func (o Occasion) Ticking() []Hook {
+	out := make([]Hook, 0, len(o.Wake))
+	for _, h := range o.Wake {
+		if h.Schedule() != "" {
+			out = append(out, h)
+		}
+	}
+	return out
+}
+
+// Watching : The event hooks, as gates, with the wait each carries.
+//
+// Several, where the old shape could hold one. "when the door
+// opens or the window opens" was two rules because a schedule was
+// one sentence and a sentence has one trigger in it; here it is
+// one rule with two hooks, and either fires it.
+func (o Occasion) Watching() ([]Hook, []Gate, error) {
+	hooks := make([]Hook, 0, len(o.Wake))
+	gates := make([]Gate, 0, len(o.Wake))
+	for _, h := range o.Wake {
+		if h.On == nil {
+			continue
+		}
+		gate, err := h.On.Gate()
+		if err != nil {
+			return nil, nil, err
+		}
+		if !gate.Arrives() {
+			return nil, nil, fmt.Errorf(
+				"%w: a rule can only wait for an event, and %q is not one",
+				ErrUnreadableGate, gate.Source)
+		}
+		if gate.Op == Older || gate.Op == Within {
+			return nil, nil, fmt.Errorf(
+				"%w: a reading landing is what sets a rule off, so %q could never be true when it does",
+				ErrUnreadableGate, gate.Op)
+		}
+		hooks = append(hooks, h)
+		gates = append(gates, gate)
+	}
+	return hooks, gates, nil
+}
+
+// Next : When this rule next comes round, or the zero time when no
+// clock sets it off.
+//
+// The earliest of its clocks. Several hooks mean any one of them
+// fires the rule, so the next moment is the soonest of them, not
+// the first one written.
+func (o Occasion) Next(after time.Time, where *time.Location) (time.Time, error) {
+	var soonest time.Time
+	for _, h := range o.Ticking() {
+		at, err := Following(h.Schedule(), after, where)
+		if err != nil {
+			return time.Time{}, err
+		}
+		if soonest.IsZero() || at.Before(soonest) {
+			soonest = at
+		}
+	}
+	return soonest, nil
+}
+
+// Sound : Whether this is a rule that could ever run, and why not.
+//
+// Asked when a rule is written rather than when it runs, because
+// the failure this codebase has least patience with is a rule that
+// never fires and never says why. A tree with no clock and nothing
+// that arrives is exactly that: every condition in it is asked, so
+// nothing would ever think to ask them.
+func (o Occasion) Sound() error {
+	if len(o.All) > 0 && len(o.Any) > 0 {
+		return fmt.Errorf("%w: a rule is all of its conditions or any of them, not both",
+			ErrUnreadableGate)
+	}
+	for _, w := range o.where() {
+		if err := w.sound(); err != nil {
+			return err
+		}
+	}
+	hooks, _, err := o.Watching()
+	if err != nil {
+		return err
+	}
+	if len(o.Ticking()) == 0 && len(hooks) == 0 {
+		return fmt.Errorf("%w: nothing would ever wake this rule", ErrUnreadable)
+	}
+	for _, h := range o.Wake {
+		if _, err := h.Waits(); err != nil {
+			return err
+		}
+		if h.Schedule() != "" && h.On != nil {
+			return fmt.Errorf("%w: a hook is a clock or an event, not both", ErrUnreadable)
+		}
+	}
+	return nil
+}
+
+// sound : Whether this condition could ever hold.
+func (w Where) sound() error {
+	if len(w.All) > 0 && len(w.Any) > 0 {
+		return fmt.Errorf("%w: a group is all of its conditions or any of them, not both",
+			ErrUnreadableGate)
+	}
+	if w.Group() {
+		for _, in := range append(append([]Where{}, w.All...), w.Any...) {
+			if err := in.sound(); err != nil {
+				return err
+			}
+		}
+		return nil
+	}
+	_, err := w.Gate()
+	return err
 }
