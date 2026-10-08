@@ -75,27 +75,48 @@ const instruction = "You write standing rules for a personal assistant. " +
 	"You answer with one JSON object and nothing else: no explanation, no markdown fence, no prose. " +
 	"If what they asked for cannot be written as a rule, answer with {\"cannot\": \"<one sentence saying why>\"}."
 
+// Request : What a rule is being written from.
+type Request struct {
+	// UserID : Whose rule it is.
+	UserID string
+	// Asked : What they want, in their own words.
+	Asked string
+	// Holding : Their other rules, as examples.
+	Holding string
+	// Was : The rule being changed, or nil for a new one.
+	//
+	// Given whole, because changing a rule is the case where
+	// everything not mentioned has to come back exactly as it
+	// was. A writer shown only the part that changes has nothing
+	// to put back.
+	Was *job.Job
+}
+
 // Written : A rule from what somebody asked for, or why not.
 //
 // The validation is the specification. Every refusal below is a
 // sentence somebody could read, and it is handed straight back to
 // the writer -- so a mistake is described in the same words whether
 // it is being explained to a person or corrected by a model.
-func (w Writer) Written(ctx context.Context, userID, asked, holding string, look Lookup) (job.Occasion, []job.Act, string) {
+func (w Writer) Written(ctx context.Context, r Request, look Lookup) (job.Occasion, []job.Act, string) {
 	if w.Ask == nil {
 		return job.Occasion{}, nil, "There is no model on this server to write a rule with."
 	}
-	if strings.TrimSpace(asked) == "" {
+	if strings.TrimSpace(r.Asked) == "" {
+		if r.Was != nil {
+			return job.Occasion{}, nil, "Say what about that rule should change."
+		}
 		return job.Occasion{}, nil, "Say what the rule should do."
 	}
 
 	brief := prompt.Block(
 		specification,
-		w.reported(ctx, userID),
+		w.reported(ctx, r.UserID),
 		w.available(),
-		holding,
-		prompt.Text("What they asked for:", strings.TrimSpace(asked)),
-		"Answer with the JSON object for this rule.",
+		r.Holding,
+		changing(r.Was),
+		prompt.Text("What they asked for:", strings.TrimSpace(r.Asked)),
+		ending(r.Was),
 	)
 
 	tries := w.Tries
@@ -131,6 +152,35 @@ func (w Writer) Written(ctx context.Context, userID, asked, holding string, look
 	// Its own words, because the person asked for something and the
 	// reason it could not be done is the only useful thing to say.
 	return job.Occasion{}, nil, wrong
+}
+
+// changing : The rule being changed, where one is.
+//
+// Whole, and said to be whole, because the commonest way to ruin a
+// rule is to mend one thing and drop another. The old tool asked
+// for the half that changed and kept the rest itself; this asks for
+// all of it back, so what is lost is lost visibly in an answer
+// somebody can read rather than quietly in a merge.
+func changing(was *job.Job) string {
+	if was == nil {
+		return ""
+	}
+	return prompt.Block(
+		prompt.Text("They are changing a rule they already have. This is it, whole:"),
+		"  "+describing(*was),
+	)
+}
+
+// ending : What to answer with, which differs when one is being
+// changed.
+func ending(was *job.Job) string {
+	if was == nil {
+		return "Answer with the JSON object for this rule."
+	}
+	return prompt.Text(
+		"Answer with the whole rule as it should now be, both halves, not only the part that changes.",
+		"Everything they did not ask about must come back exactly as it is above.",
+	)
 }
 
 // cannot : What the writer answers when the request is not a rule.
@@ -256,7 +306,7 @@ func describing(j job.Job) string {
 	if err != nil {
 		return ""
 	}
-	return "  " + string(out)
+	return string(out)
 }
 
 // examples : The rules they already have, as the writer should
@@ -274,7 +324,7 @@ func examples(held []job.Job) string {
 	lines = append(lines, "The rules they already have, written the same way:")
 	for _, j := range held {
 		if one := describing(j); one != "" {
-			lines = append(lines, one)
+			lines = append(lines, "  "+one)
 		}
 	}
 	if len(lines) == 1 {

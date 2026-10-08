@@ -90,6 +90,13 @@ func adding(args string) string {
 	return string(out)
 }
 
+// changing : rule_update arguments, the same way.
+//
+// A change goes through the writer too, so the halves travel in
+// asked exactly as they do for a new rule. The id, the name and
+// everything that is not about what the rule does stay arguments.
+func changing(args string) string { return adding(args) }
+
 // made : The tools over a fresh store.
 func made() (*inmemory.Store, map[string]tool.Tool) {
 	store := inmemory.New()
@@ -472,10 +479,13 @@ func TestChangingARuleLeavesTheRestOfItAlone(t *testing.T) {
 	// Only the when half, and all of it: a half given is given
 	// whole, so the condition has to be sent again with the
 	// changed threshold or it goes.
-	got := call(t, by["rule_update"], `{"id":"`+id+`","when":{
+	got := call(t, by["rule_update"], changing(`{"id":"`+id+`","when":{
 		"wake": [{"on":{"source":"battery.level","op":"<","value":25}}],
 		"all":  [{"source":"presence","op":"==","value":"here"}]
-	}}`)
+	},"perform":[
+		{"do":"tool","use":"calendar_events","with":{"days":1}},
+		{"do":"write","ask":"say how low it is"}
+	]}`))
 	if got.Outcome == conversation.OutcomeFailed {
 		t.Fatalf("could not change it: %s", got.Content)
 	}
@@ -519,8 +529,9 @@ func TestChangingToFixedWordsDropsTheQuestion(t *testing.T) {
 	held, _ := store.Mine(context.Background(), "usr_1", "rule", 10)
 	id := held[0].ID
 
-	got := call(t, by["rule_update"], `{"id":"`+id+`",
-		"perform":[{"do":"say","text":"the fixed words"}]}`)
+	got := call(t, by["rule_update"], changing(`{"id":"`+id+`",
+		"when":{"wake":[{"every":"10m"}]},
+		"perform":[{"do":"say","text":"the fixed words"}]}`))
 	if got.Outcome == conversation.OutcomeFailed {
 		t.Fatalf("could not change it: %s", got.Content)
 	}
@@ -536,7 +547,7 @@ func TestChangingToFixedWordsDropsTheQuestion(t *testing.T) {
 func TestChangingARuleThatIsNotThere(t *testing.T) {
 	_, by := made()
 	got := call(t, by["rule_update"],
-		`{"id":"job_01M48E09RJW0G247RBST6712D9","when":{"wake":[{"every":"5m"}]}}`)
+		changing(`{"id":"job_01M48E09RJW0G247RBST6712D9","when":{"wake":[{"every":"5m"}]}}`))
 	if got.Outcome != conversation.OutcomeFailed {
 		t.Errorf("it changed a rule that does not exist: %s", got.Content)
 	}
@@ -565,7 +576,7 @@ func TestARuleCannotBeEditedIntoSomethingItCouldNotHaveBeen(t *testing.T) {
 		`{"id":"` + id + `","perform":[]}`,
 		`{"id":"` + id + `","keep":"a while"}`,
 	} {
-		if got := call(t, by["rule_update"], bad); got.Outcome != conversation.OutcomeFailed {
+		if got := call(t, by["rule_update"], changing(bad)); got.Outcome != conversation.OutcomeFailed {
 			t.Errorf("%s was accepted: %s", bad, got.Content)
 		}
 	}
@@ -626,8 +637,12 @@ func TestChangingARuleKeepsEveryCondition(t *testing.T) {
 	held, _ := store.Mine(context.Background(), "usr_1", "rule", 10)
 	id := held[0].ID
 
-	got := call(t, by["rule_update"], `{"id":"`+id+`",
-		"perform":[{"do":"say","text":"the new words"}]}`)
+	got := call(t, by["rule_update"], changing(`{"id":"`+id+`",
+		"when":{"wake":[{"every":"20m"}], "all":[
+			{"source":"hour","op":">=","value":22},
+			{"source":"battery.level","op":"<","value":20}
+		]},
+		"perform":[{"do":"say","text":"the new words"}]}`))
 	if got.Outcome == conversation.OutcomeFailed {
 		t.Fatalf("could not change it: %s", got.Content)
 	}
@@ -750,7 +765,9 @@ func TestARuleIsTriedTheMomentItIsMade(t *testing.T) {
 	}
 	held, _ := store.Mine(context.Background(), "usr_1", "rule", 10)
 	changed := call(t, by2["rule_update"],
-		`{"id":"`+held[0].ID+`","say":"it is late, sir"}`)
+		changing(`{"id":"`+held[0].ID+`",
+			"when":{"wake":[{"every":"20m"}],"all":[{"source":"hour","op":">=","value":22}]},
+			"perform":[{"do":"say","text":"it is late, sir"}]}`))
 	if !strings.Contains(changed.Content, `it would say: "it is late, sir"`) {
 		t.Errorf("a change was not tried:\n%s", changed.Content)
 	}

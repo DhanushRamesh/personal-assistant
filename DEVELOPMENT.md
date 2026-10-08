@@ -14811,6 +14811,23 @@ The fast model, and no persona. This one is not speaking to anybody
 -- it answers with JSON -- and a manner would only be something else
 for it to spend its reply on.
 
+Changing one goes the same way, and is the harder case. The writer
+is shown the rule whole and told to answer with the whole of it
+back, because the commonest way to ruin a rule is to mend one thing
+and drop another. The old tool asked for the half that changed and
+kept the other half itself; this asks for all of it, so what is lost
+is lost visibly, in an answer somebody can read, rather than quietly
+in a merge nobody sees.
+
+The rule being changed is kept out of the examples beside it.
+Listed twice it would be read as a rule to copy as well as the rule
+to mend.
+
+And a change that is not about what the rule does does not go to the
+writer at all. Renaming one, or asking for it to reach them wherever
+they are, touches nothing it does -- and a rule rewritten in order
+to be renamed is a rule that could come back different.
+
 
 ## 12. Maintaining this file
 

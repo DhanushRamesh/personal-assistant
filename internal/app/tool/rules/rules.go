@@ -232,7 +232,7 @@ func All(store Store, clock Clock, id func() string, look Lookup,
 	return []tool.Tool{
 		list(store, clock, usually),
 		add(store, clock, id, look, try, writer),
-		update(store, clock, look, try),
+		update(store, clock, look, try, writer),
 		quieten(store, clock),
 		cancel(store),
 	}
@@ -361,8 +361,10 @@ func add(store Store, clock Clock, id func() string, look Lookup, try Trier, wri
 			if err != nil {
 				return tool.Broke("Their rules could not be read.", err)
 			}
-			when, acts, bad := writer.Written(ctx, in.Caller.UserID,
-				args.Asked, examples(held), look)
+			when, acts, bad := writer.Written(ctx, Request{
+				UserID: in.Caller.UserID, Asked: args.Asked,
+				Holding: examples(held),
+			}, look)
 			if bad != "" {
 				return tool.Failed(bad)
 			}
@@ -414,7 +416,7 @@ func given(now *string, before string) string {
 //
 // Everything a rule is made of can be read back off its steps, so
 // a change can name one thing and leave the rest alone.
-func update(store Store, clock Clock, look Lookup, try Trier) tool.Tool {
+func update(store Store, clock Clock, look Lookup, try Trier, writer Writer) tool.Tool {
 	return tool.Tool{
 		Name:    "rule_update",
 		Domain:  Kind,
@@ -435,16 +437,13 @@ func update(store Store, clock Clock, look Lookup, try Trier) tool.Tool {
 					Pattern:     idPattern,
 				},
 				"name": {Type: "string", Description: "A new name for it."},
-				"when": {
-					Type: "object",
-					Description: "The whole of when it looks and whether it holds, replacing what is " +
-						"there. Give all of it, not the part that changes: a rule listed as waking " +
-						"every ten minutes and keeping to weekdays, told only to wake every hour, " +
-						"would lose the weekdays.\n\n" + howToWake + "\n\n" + howToWhen,
-				},
-				"perform": {
-					Type:        "array",
-					Description: "The whole sequence, replacing what is there.\n\n" + howToPerform,
+				"asked": {
+					Type: "string",
+					Description: "What should change about it, in their own words. " +
+						"The same thing that writes rules is given this along with the rule as it " +
+						"stands, and changes only what they asked about. " +
+						"Leave it out when nothing about what the rule does is changing -- when they " +
+						"are only renaming it, or asking for it to reach them wherever they are.",
 				},
 				"keep":     {Type: "string", Description: howLongToKeep},
 				"cool":     {Type: "string", Description: howLongToCool},
@@ -455,12 +454,12 @@ func update(store Store, clock Clock, look Lookup, try Trier) tool.Tool {
 			{
 				Ask: "make the battery one twenty-five instead of twenty",
 				Args: `{"saying":"changing that","id":"job_01M48E09RJW0G247RBST6712D3",` +
-					`"when":{"wake":[{"on":{"source":"battery.level","op":"<","value":25}}]}}`,
+					`"asked":"set it off at twenty-five per cent instead of twenty"}`,
 			},
 			{
 				Ask: "only tell me that on weekdays",
 				Args: `{"saying":"changing that","id":"job_01M48E09RJW0G247RBST6712D3",` +
-					`"when":{"wake":[{"every":"10m"}],"all":[{"source":"day","op":"==","value":"weekday"}]}}`,
+					`"asked":"only say it on weekdays"}`,
 			},
 			{
 				Ask:  "stop sending that one to my phone",
@@ -469,13 +468,12 @@ func update(store Store, clock Clock, look Lookup, try Trier) tool.Tool {
 		},
 		Run: func(ctx context.Context, in tool.Invocation) tool.Result {
 			var args struct {
-				ID       string        `json:"id"`
-				Name     *string       `json:"name"`
-				When     *job.Occasion `json:"when"`
-				Perform  []job.Act     `json:"perform"`
-				Keep     *string       `json:"keep"`
-				Cool     *string       `json:"cool"`
-				Anywhere *bool         `json:"anywhere"`
+				ID       string  `json:"id"`
+				Name     *string `json:"name"`
+				Asked    string  `json:"asked"`
+				Keep     *string `json:"keep"`
+				Cool     *string `json:"cool"`
+				Anywhere *bool   `json:"anywhere"`
 			}
 			if err := json.Unmarshal(in.Args, &args); err != nil {
 				return tool.Failed("Those arguments could not be read.")
@@ -502,20 +500,21 @@ func update(store Store, clock Clock, look Lookup, try Trier) tool.Tool {
 				return tool.Failed("There is no rule with that identifier.")
 			}
 
-			// Each half is replaced whole or left alone. There is
-			// no merging a tree with another tree that anybody
-			// could predict, and a rule half changed is worse than
-			// one that refused to change at all.
+			// What the rule does is rewritten whole or left
+			// alone. Renaming one, or asking for it to reach them
+			// wherever they are, changes nothing about what it
+			// does -- and a rule rewritten in order to be renamed
+			// is a rule that could come back different.
 			when, acts := was.When, was.Perform
-			if args.When != nil {
-				when = *args.When
-			}
-			if args.Perform != nil {
-				acts = args.Perform
-			}
-			bad := allowed(acts, look)
-			if bad != "" {
-				return tool.Failed(bad)
+			if strings.TrimSpace(args.Asked) != "" {
+				var bad string
+				when, acts, bad = writer.Written(ctx, Request{
+					UserID: in.Caller.UserID, Asked: args.Asked,
+					Holding: examples(others(held, was.ID)), Was: &was,
+				}, look)
+				if bad != "" {
+					return tool.Failed(bad)
+				}
 			}
 			if err := job.Kept(given(args.Keep, was.Keep)); err != nil {
 				return tool.Failed(readable(err))
@@ -751,6 +750,21 @@ func allowed(acts []job.Act, look Lookup) string {
 		)
 	}
 	return ""
+}
+
+// others : Their rules, without the one being changed.
+//
+// That one is shown whole and on its own, as the thing being
+// changed. Listing it twice would have the writer reading it as an
+// example of a rule to copy as well as the rule to mend.
+func others(held []job.Job, id string) []job.Job {
+	out := make([]job.Job, 0, len(held))
+	for _, j := range held {
+		if j.ID != id {
+			out = append(out, j)
+		}
+	}
+	return out
 }
 
 // reading : The tools a write may call, refusing any that write.

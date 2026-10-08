@@ -4,9 +4,11 @@ import (
 	"context"
 	"strings"
 	"testing"
+	"time"
 
 	"personal-assistant/internal/app/tool/rules"
 	"personal-assistant/internal/base/world/event"
+	"personal-assistant/internal/domain/job"
 )
 
 // answering : A writer that gives these answers in turn, and
@@ -47,7 +49,7 @@ func TestAMistakeIsHandedBackWithTheReason(t *testing.T) {
 			`"perform":[{"do":"say","text":"low"}]}`,
 		good,
 	)
-	when, acts, bad := w.Written(context.Background(), "usr_1", "tell me when the battery is low", "", look)
+	when, acts, bad := w.Written(context.Background(), rules.Request{UserID: "usr_1", Asked: "tell me when the battery is low", Holding: ""}, look)
 	if bad != "" {
 		t.Fatalf("a mendable mistake was not mended: %s", bad)
 	}
@@ -71,7 +73,7 @@ func TestAMistakeIsHandedBackWithTheReason(t *testing.T) {
 // done is the only useful thing left to say.
 func TestItGivesUpAndSaysWhy(t *testing.T) {
 	asked, w := answering(`{"when":{"wake":[{"every":"10m"}]},"perform":[]}`)
-	_, _, bad := w.Written(context.Background(), "usr_1", "do a thing", "", look)
+	_, _, bad := w.Written(context.Background(), rules.Request{UserID: "usr_1", Asked: "do a thing", Holding: ""}, look)
 	if bad == "" {
 		t.Fatal("a rule with nothing to do was accepted")
 	}
@@ -90,8 +92,10 @@ func TestItGivesUpAndSaysWhy(t *testing.T) {
 // actually arrived.
 func TestTheWriterIsToldWhatExists(t *testing.T) {
 	asked, w := answering(good)
-	w.Written(context.Background(), "usr_1", "tell me when the battery is low",
-		"The rules they already have:\n  {\"name\":\"an old one\"}", look)
+	w.Written(context.Background(), rules.Request{
+		UserID: "usr_1", Asked: "tell me when the battery is low",
+		Holding: "The rules they already have:\n  {\"name\":\"an old one\"}",
+	}, look)
 
 	brief := (*asked)[0]
 	for _, want := range []string{
@@ -112,7 +116,7 @@ func TestTheWriterIsToldWhatExists(t *testing.T) {
 // hears rather than three goes at writing it anyway.
 func TestARefusalFromTheWriterIsPassedOn(t *testing.T) {
 	asked, w := answering(`{"cannot":"Nothing a device reports says whether the bins are out."}`)
-	_, _, bad := w.Written(context.Background(), "usr_1", "tell me when the bins are out", "", look)
+	_, _, bad := w.Written(context.Background(), rules.Request{UserID: "usr_1", Asked: "tell me when the bins are out", Holding: ""}, look)
 	if !strings.Contains(bad, "bins") {
 		t.Errorf("it said %q", bad)
 	}
@@ -127,7 +131,7 @@ func TestARefusalFromTheWriterIsPassedOn(t *testing.T) {
 // nobody can act on.
 func TestAFenceIsNotARefusal(t *testing.T) {
 	_, w := answering("```json\n" + good + "\n```")
-	when, acts, bad := w.Written(context.Background(), "usr_1", "x", "", look)
+	when, acts, bad := w.Written(context.Background(), rules.Request{UserID: "usr_1", Asked: "x", Holding: ""}, look)
 	if bad != "" {
 		t.Fatalf("a fenced answer was refused: %s", bad)
 	}
@@ -139,11 +143,61 @@ func TestAFenceIsNotARefusal(t *testing.T) {
 // TestNoModelMeansNoGuessing : A server with nothing to write with
 // says so, rather than writing something.
 func TestNoModelMeansNoGuessing(t *testing.T) {
-	if _, _, bad := (rules.Writer{}).Written(context.Background(), "usr_1", "x", "", look); bad == "" {
+	if _, _, bad := (rules.Writer{}).Written(context.Background(), rules.Request{UserID: "usr_1", Asked: "x"}, look); bad == "" {
 		t.Error("a server with no model wrote a rule anyway")
 	}
 	_, w := answering(good)
-	if _, _, bad := w.Written(context.Background(), "usr_1", "  ", "", look); bad == "" {
+	if _, _, bad := w.Written(context.Background(), rules.Request{UserID: "usr_1", Asked: "  ", Holding: ""}, look); bad == "" {
 		t.Error("it wrote a rule from nothing at all")
+	}
+}
+
+// TestChangingOneIsShownTheWholeOfIt : The commonest way to ruin a
+// rule is to mend one thing and drop another. The old tool asked
+// for the half that changed and kept the rest itself; this asks for
+// all of it back, so what is lost is lost visibly in an answer
+// somebody can read rather than quietly in a merge.
+func TestChangingOneIsShownTheWholeOfIt(t *testing.T) {
+	was, err := job.Make("job_1", "usr_1", "low battery", "rule",
+		job.Occasion{
+			Wake: []job.Hook{{On: &job.Where{Source: "battery.level", Op: "<", Value: 20}}},
+			All:  []job.Where{{Source: "presence", Op: "==", Value: "here"}},
+		},
+		[]job.Act{{Do: job.DoSay, Text: "the battery is low"}},
+		time.Now())
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	asked, w := answering(good)
+	w.Written(context.Background(), rules.Request{
+		UserID: "usr_1", Asked: "make it twenty-five instead of twenty", Was: &was,
+	}, look)
+
+	brief := (*asked)[0]
+	for _, want := range []string{
+		"changing a rule they already have",
+		`"battery.level"`, `"presence"`, "the battery is low", // the whole of it
+		"not only the part that changes",
+		"must come back exactly as it is",
+		"make it twenty-five instead of twenty",
+	} {
+		if !strings.Contains(brief, want) {
+			t.Errorf("the brief never mentions %q", want)
+		}
+	}
+}
+
+// TestChangingOneSaysSoWhenNothingWasAsked : "Say what the rule
+// should do" is the wrong sentence for somebody who has a rule and
+// wants it different.
+func TestChangingOneSaysSoWhenNothingWasAsked(t *testing.T) {
+	was := job.Job{Name: "x"}
+	_, w := answering(good)
+	_, _, bad := w.Written(context.Background(), rules.Request{
+		UserID: "usr_1", Was: &was,
+	}, look)
+	if !strings.Contains(bad, "change") {
+		t.Errorf("it said %q", bad)
 	}
 }
