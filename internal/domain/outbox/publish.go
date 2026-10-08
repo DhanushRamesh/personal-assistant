@@ -4,7 +4,7 @@ import (
 	"context"
 	"fmt"
 
-	"personal-assistant/internal/base/conversation"
+	"personal-assistant/internal/base/records/conversation"
 )
 
 // Publisher : Puts an announcement where the clients that should

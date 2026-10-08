@@ -7,7 +7,7 @@ import (
 	"time"
 
 	"personal-assistant/internal/app/profile"
-	"personal-assistant/internal/base/event"
+	"personal-assistant/internal/base/world/event"
 )
 
 // nights : A fortnight of somebody stopping at one in the morning

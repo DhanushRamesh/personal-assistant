@@ -31,7 +31,7 @@ import (
 
 	"personal-assistant/internal/app/api/authn"
 	"personal-assistant/internal/app/api/httpx"
-	"personal-assistant/internal/base/event"
+	"personal-assistant/internal/base/world/event"
 )
 
 // maxRequestBody : The largest batch that will be read.

@@ -5,7 +5,7 @@ import (
 	"testing"
 	"time"
 
-	"personal-assistant/internal/base/conversation"
+	"personal-assistant/internal/base/records/conversation"
 	"personal-assistant/internal/domain/outbox"
 	"personal-assistant/internal/domain/outbox/inmemory"
 )

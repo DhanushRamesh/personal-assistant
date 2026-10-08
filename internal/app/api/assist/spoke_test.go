@@ -7,8 +7,8 @@ import (
 	"time"
 
 	"personal-assistant/internal/app/api/apitest"
-	"personal-assistant/internal/base/chat"
-	"personal-assistant/internal/base/environment"
+	"personal-assistant/internal/base/records/chat"
+	"personal-assistant/internal/base/thinking/environment"
 )
 
 // lateFinisher : Says something at once and then takes its time

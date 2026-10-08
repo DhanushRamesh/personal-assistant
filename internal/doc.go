@@ -8,6 +8,9 @@
 //   - base   -- the floor. chat, prompt, event, logging and the rest
 //     of what everything leans on. Nothing here may import anything
 //     above it, which is what makes it safe to change what is above.
+//     It is not flat either: twenty-seven packages hid a three-deep
+//     ordering, so platform is the floor of the floor, world and
+//     thinking stand on it, and records stands on both.
 //   - domain -- what the assistant knows about: reminders, rules, the
 //     diary, the person's mail, and the stores that keep them.
 //   - app    -- the wiring. The HTTP surface, the tools, the thing

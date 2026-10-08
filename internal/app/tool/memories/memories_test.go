@@ -9,9 +9,9 @@ import (
 	"personal-assistant/internal/app/profile"
 	"personal-assistant/internal/app/tool"
 	"personal-assistant/internal/app/tool/memories"
-	"personal-assistant/internal/base/chat"
-	"personal-assistant/internal/base/conversation"
-	"personal-assistant/internal/base/embed"
+	"personal-assistant/internal/base/records/chat"
+	"personal-assistant/internal/base/records/conversation"
+	"personal-assistant/internal/base/thinking/embed"
 	"personal-assistant/internal/domain/memory"
 	"personal-assistant/internal/domain/memory/inmemory"
 )

@@ -22,9 +22,9 @@ import (
 	"testing"
 	"time"
 
-	"personal-assistant/internal/base/config"
-	"personal-assistant/internal/base/environment"
-	"personal-assistant/internal/base/environment/platformai"
+	"personal-assistant/internal/base/platform/config"
+	"personal-assistant/internal/base/thinking/environment"
+	"personal-assistant/internal/base/thinking/environment/platformai"
 	"personal-assistant/internal/domain/memory"
 	"personal-assistant/internal/domain/persona"
 )

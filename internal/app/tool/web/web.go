@@ -13,8 +13,8 @@ import (
 	"strings"
 
 	"personal-assistant/internal/app/tool"
-	"personal-assistant/internal/base/chat"
-	"personal-assistant/internal/base/search"
+	"personal-assistant/internal/base/records/chat"
+	"personal-assistant/internal/base/thinking/search"
 )
 
 // Default, Most : How many results come back.

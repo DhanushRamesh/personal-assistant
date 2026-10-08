@@ -2,17 +2,17 @@ package mysql_test
 
 import (
 	"context"
-	"personal-assistant/internal/base/user"
+	"personal-assistant/internal/base/records/user"
 	"strings"
 	"testing"
 	"time"
 
-	"personal-assistant/internal/base/chat"
-	chatmysql "personal-assistant/internal/base/chat/mysql"
-	"personal-assistant/internal/base/config"
-	"personal-assistant/internal/base/conversation"
-	"personal-assistant/internal/base/embed"
-	"personal-assistant/internal/base/storage"
+	"personal-assistant/internal/base/platform/config"
+	"personal-assistant/internal/base/platform/storage"
+	"personal-assistant/internal/base/records/chat"
+	chatmysql "personal-assistant/internal/base/records/chat/mysql"
+	"personal-assistant/internal/base/records/conversation"
+	"personal-assistant/internal/base/thinking/embed"
 	"personal-assistant/internal/domain/memory"
 	memorymysql "personal-assistant/internal/domain/memory/mysql"
 )

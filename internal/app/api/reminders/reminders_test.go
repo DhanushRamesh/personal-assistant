@@ -3,7 +3,7 @@ package reminders_test
 import (
 	"encoding/json"
 	"net/http"
-	"personal-assistant/internal/base/user"
+	"personal-assistant/internal/base/records/user"
 	"testing"
 	"time"
 

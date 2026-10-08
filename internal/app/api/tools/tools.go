@@ -21,7 +21,7 @@ import (
 	"personal-assistant/internal/app/api/authn"
 	"personal-assistant/internal/app/api/httpx"
 	"personal-assistant/internal/app/tool"
-	"personal-assistant/internal/base/chat"
+	"personal-assistant/internal/base/records/chat"
 )
 
 // Listed : One tool, as a listing shows it.

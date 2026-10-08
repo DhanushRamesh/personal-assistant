@@ -4,8 +4,8 @@ import (
 	"strings"
 	"testing"
 
-	"personal-assistant/internal/base/chat"
-	utterance "personal-assistant/internal/base/speech"
+	"personal-assistant/internal/base/records/chat"
+	utterance "personal-assistant/internal/base/world/speech"
 )
 
 func TestACutOffVoiceChatIsToldSo(t *testing.T) {

@@ -41,10 +41,10 @@ import (
 	"sync"
 	"time"
 
-	"personal-assistant/internal/base/conversation"
-	"personal-assistant/internal/base/event"
-	"personal-assistant/internal/base/prompt"
-	"personal-assistant/internal/base/routine"
+	"personal-assistant/internal/base/records/conversation"
+	"personal-assistant/internal/base/thinking/prompt"
+	"personal-assistant/internal/base/world/event"
+	"personal-assistant/internal/base/world/routine"
 	"personal-assistant/internal/domain/memory"
 )
 

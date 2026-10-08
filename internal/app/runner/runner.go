@@ -10,25 +10,25 @@ import (
 	"errors"
 	"fmt"
 	"log/slog"
-	"personal-assistant/internal/base/store"
+	"personal-assistant/internal/base/records/store"
 	"strings"
 	"sync"
 	"time"
 
-	"personal-assistant/internal/base/announce"
-	"personal-assistant/internal/base/chat"
-	"personal-assistant/internal/base/conversation"
-	"personal-assistant/internal/base/environment"
-	"personal-assistant/internal/base/events"
-	"personal-assistant/internal/base/llm"
-	"personal-assistant/internal/base/logging"
+	"personal-assistant/internal/base/platform/logging"
+	"personal-assistant/internal/base/records/chat"
+	"personal-assistant/internal/base/records/conversation"
+	"personal-assistant/internal/base/thinking/environment"
+	"personal-assistant/internal/base/thinking/llm"
+	"personal-assistant/internal/base/world/announce"
+	"personal-assistant/internal/base/world/events"
 	"personal-assistant/internal/domain/memory"
 	"personal-assistant/internal/domain/persona"
 	"personal-assistant/internal/domain/remind"
 	// Aliased: aside.go already has a speech of its own, which is the one
 	// being spoken rather than the one that was heard.
 	"personal-assistant/internal/app/tool"
-	utterance "personal-assistant/internal/base/speech"
+	utterance "personal-assistant/internal/base/world/speech"
 )
 
 const (

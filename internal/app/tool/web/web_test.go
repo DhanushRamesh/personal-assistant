@@ -9,8 +9,8 @@ import (
 
 	"personal-assistant/internal/app/tool"
 	webtool "personal-assistant/internal/app/tool/web"
-	"personal-assistant/internal/base/conversation"
-	"personal-assistant/internal/base/search"
+	"personal-assistant/internal/base/records/conversation"
+	"personal-assistant/internal/base/thinking/search"
 )
 
 // searcher : A web that answers however a test tells it to.

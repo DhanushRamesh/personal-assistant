@@ -6,7 +6,7 @@ import (
 
 	"personal-assistant/internal/app/tool"
 	"personal-assistant/internal/app/tool/conversations"
-	"personal-assistant/internal/base/chat"
+	"personal-assistant/internal/base/records/chat"
 )
 
 // Every conversation tool has to survive registration, which is where a

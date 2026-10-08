@@ -11,10 +11,10 @@ import (
 	"time"
 
 	"personal-assistant/internal/app/runner"
-	"personal-assistant/internal/base/chat"
-	"personal-assistant/internal/base/chat/memory"
-	"personal-assistant/internal/base/environment"
-	"personal-assistant/internal/base/events"
+	"personal-assistant/internal/base/records/chat"
+	"personal-assistant/internal/base/records/chat/memory"
+	"personal-assistant/internal/base/thinking/environment"
+	"personal-assistant/internal/base/world/events"
 	"personal-assistant/internal/domain/announcement"
 )
 

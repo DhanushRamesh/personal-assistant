@@ -33,12 +33,12 @@ import (
 	"testing"
 	"time"
 
-	"personal-assistant/internal/base/config"
-	"personal-assistant/internal/base/environment"
-	"personal-assistant/internal/base/environment/platformai"
-	"personal-assistant/internal/base/event"
-	eventmysql "personal-assistant/internal/base/event/mysql"
-	"personal-assistant/internal/base/storage"
+	"personal-assistant/internal/base/platform/config"
+	"personal-assistant/internal/base/platform/storage"
+	"personal-assistant/internal/base/thinking/environment"
+	"personal-assistant/internal/base/thinking/environment/platformai"
+	"personal-assistant/internal/base/world/event"
+	eventmysql "personal-assistant/internal/base/world/event/mysql"
 	"personal-assistant/internal/domain/greet"
 	"personal-assistant/internal/domain/persona"
 )

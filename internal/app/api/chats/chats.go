@@ -12,7 +12,7 @@ import (
 	"errors"
 	"log/slog"
 	"net/http"
-	"personal-assistant/internal/base/store"
+	"personal-assistant/internal/base/records/store"
 	"strconv"
 	"time"
 
@@ -21,9 +21,9 @@ import (
 	"personal-assistant/internal/app/api/authn"
 	"personal-assistant/internal/app/api/httpx"
 	"personal-assistant/internal/app/api/views"
-	"personal-assistant/internal/base/chat"
-	"personal-assistant/internal/base/conversation"
-	"personal-assistant/internal/base/events"
+	"personal-assistant/internal/base/records/chat"
+	"personal-assistant/internal/base/records/conversation"
+	"personal-assistant/internal/base/world/events"
 )
 
 const (

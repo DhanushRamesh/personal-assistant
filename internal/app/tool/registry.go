@@ -6,7 +6,7 @@ import (
 	"sort"
 	"strings"
 
-	"personal-assistant/internal/base/chat"
+	"personal-assistant/internal/base/records/chat"
 )
 
 // Registry : Every tool the assistant has.

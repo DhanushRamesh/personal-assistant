@@ -9,10 +9,10 @@ import (
 	"time"
 
 	"personal-assistant/internal/app/tool"
-	"personal-assistant/internal/base/conversation"
-	"personal-assistant/internal/base/event"
-	"personal-assistant/internal/base/prompt"
-	"personal-assistant/internal/base/routine"
+	"personal-assistant/internal/base/records/conversation"
+	"personal-assistant/internal/base/thinking/prompt"
+	"personal-assistant/internal/base/world/event"
+	"personal-assistant/internal/base/world/routine"
 )
 
 // Together : Repeats of the same thing closer than this are one

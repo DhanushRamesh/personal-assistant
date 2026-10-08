@@ -16,8 +16,8 @@ import (
 
 	"personal-assistant/internal/app/profile"
 	"personal-assistant/internal/app/tool"
-	"personal-assistant/internal/base/chat"
-	"personal-assistant/internal/base/prompt"
+	"personal-assistant/internal/base/records/chat"
+	"personal-assistant/internal/base/thinking/prompt"
 	"personal-assistant/internal/domain/memory"
 )
 

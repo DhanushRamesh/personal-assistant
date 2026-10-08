@@ -4,8 +4,8 @@ import (
 	"sort"
 	"strings"
 
-	"personal-assistant/internal/base/chat"
-	"personal-assistant/internal/base/prompt"
+	"personal-assistant/internal/base/records/chat"
+	"personal-assistant/internal/base/thinking/prompt"
 )
 
 // hot : The tools described in full on every request.

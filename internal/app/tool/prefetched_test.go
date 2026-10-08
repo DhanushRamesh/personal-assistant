@@ -11,7 +11,7 @@ import (
 	"personal-assistant/internal/app/tool/memories"
 	"personal-assistant/internal/app/tool/reminders"
 	taskstool "personal-assistant/internal/app/tool/tasks"
-	"personal-assistant/internal/base/chat"
+	"personal-assistant/internal/base/records/chat"
 )
 
 // TestOnlyMemoryIsReadBeforeTheQuestion : Memory is fetched before the

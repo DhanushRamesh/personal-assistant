@@ -6,8 +6,8 @@ import (
 	"time"
 	"unicode"
 
-	"personal-assistant/internal/base/conversation"
-	"personal-assistant/internal/base/prompt"
+	"personal-assistant/internal/base/records/conversation"
+	"personal-assistant/internal/base/thinking/prompt"
 )
 
 // Part : One section of the description.

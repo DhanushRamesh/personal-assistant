@@ -19,7 +19,7 @@ import (
 
 	"personal-assistant/internal/app/api/authn"
 	"personal-assistant/internal/app/api/httpx"
-	"personal-assistant/internal/base/notice"
+	"personal-assistant/internal/base/world/notice"
 )
 
 // DefaultLimit, MaxLimit : How many are returned.

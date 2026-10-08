@@ -10,8 +10,8 @@ import (
 	"errors"
 	"log/slog"
 	"net/http"
-	"personal-assistant/internal/base/client"
-	"personal-assistant/internal/base/store"
+	"personal-assistant/internal/base/records/client"
+	"personal-assistant/internal/base/records/store"
 	"strings"
 
 	"github.com/go-chi/chi/v5"
@@ -19,9 +19,9 @@ import (
 	"personal-assistant/internal/app/api/authn"
 	"personal-assistant/internal/app/api/httpx"
 	"personal-assistant/internal/app/api/views"
-	"personal-assistant/internal/base/chat"
-	"personal-assistant/internal/base/conversation"
-	"personal-assistant/internal/base/llm"
+	"personal-assistant/internal/base/records/chat"
+	"personal-assistant/internal/base/records/conversation"
+	"personal-assistant/internal/base/thinking/llm"
 	"personal-assistant/internal/domain/persona"
 )
 

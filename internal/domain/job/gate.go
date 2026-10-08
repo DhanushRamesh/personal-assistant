@@ -7,7 +7,7 @@ import (
 	"strings"
 	"time"
 
-	"personal-assistant/internal/base/routine"
+	"personal-assistant/internal/base/world/routine"
 )
 
 // Presence : The gate source that asks whether the person is in the

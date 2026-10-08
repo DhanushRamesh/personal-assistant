@@ -10,7 +10,7 @@ import (
 	"personal-assistant/internal/app/api/apitest"
 	"personal-assistant/internal/app/api/tools"
 	"personal-assistant/internal/app/tool"
-	"personal-assistant/internal/base/chat"
+	"personal-assistant/internal/base/records/chat"
 )
 
 // registry : A few tools across two domains, so grouping has something to

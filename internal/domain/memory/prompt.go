@@ -3,7 +3,7 @@ package memory
 import (
 	"strings"
 
-	"personal-assistant/internal/base/prompt"
+	"personal-assistant/internal/base/thinking/prompt"
 )
 
 // precedence : The choice to make before any recalled line is used.

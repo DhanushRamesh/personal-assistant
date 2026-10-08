@@ -10,9 +10,9 @@ import (
 
 	"personal-assistant/internal/app/tool"
 	"personal-assistant/internal/app/tool/reminders"
-	"personal-assistant/internal/base/alarm"
-	"personal-assistant/internal/base/chat"
-	"personal-assistant/internal/base/conversation"
+	"personal-assistant/internal/base/records/chat"
+	"personal-assistant/internal/base/records/conversation"
+	"personal-assistant/internal/base/world/alarm"
 	"personal-assistant/internal/domain/remind"
 	"personal-assistant/internal/domain/remind/inmemory"
 )

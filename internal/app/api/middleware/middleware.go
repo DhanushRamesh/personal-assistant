@@ -14,7 +14,7 @@ import (
 
 	chimw "github.com/go-chi/chi/v5/middleware"
 
-	"personal-assistant/internal/base/logging"
+	"personal-assistant/internal/base/platform/logging"
 )
 
 // quietPaths : Paths logged at debug rather than info. Health checks are

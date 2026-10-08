@@ -18,7 +18,7 @@ import (
 	"github.com/go-chi/chi/v5"
 
 	"personal-assistant/internal/app/api/httpx"
-	"personal-assistant/internal/base/speech"
+	"personal-assistant/internal/base/world/speech"
 )
 
 // maxRequestBody : A transcript and a number. Generous for the longest

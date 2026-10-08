@@ -3,15 +3,15 @@ package chats_test
 import (
 	"encoding/json"
 	"net/http"
-	"personal-assistant/internal/base/user"
+	"personal-assistant/internal/base/records/user"
 	"strings"
 	"testing"
 	"time"
 
 	"personal-assistant/internal/app/api/apitest"
 	"personal-assistant/internal/app/api/views"
-	"personal-assistant/internal/base/chat"
-	"personal-assistant/internal/base/environment"
+	"personal-assistant/internal/base/records/chat"
+	"personal-assistant/internal/base/thinking/environment"
 )
 
 // Where a prompt lands, and what happens to what was already running there,

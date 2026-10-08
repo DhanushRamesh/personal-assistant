@@ -4,7 +4,7 @@ import (
 	"bytes"
 	"net/http"
 	"net/http/httptest"
-	"personal-assistant/internal/base/user"
+	"personal-assistant/internal/base/records/user"
 	"strings"
 	"testing"
 	"time"
@@ -14,9 +14,9 @@ import (
 	"personal-assistant/internal/app/api/chats"
 	"personal-assistant/internal/app/api/httpx"
 	"personal-assistant/internal/app/api/views"
-	"personal-assistant/internal/base/chat"
-	"personal-assistant/internal/base/conversation"
-	"personal-assistant/internal/base/environment"
+	"personal-assistant/internal/base/records/chat"
+	"personal-assistant/internal/base/records/conversation"
+	"personal-assistant/internal/base/thinking/environment"
 )
 
 func TestGetUnknownChatIsNotFound(t *testing.T) {

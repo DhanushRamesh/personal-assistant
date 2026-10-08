@@ -2,13 +2,13 @@ package clients_test
 
 import (
 	"net/http"
-	"personal-assistant/internal/base/client"
-	"personal-assistant/internal/base/user"
+	"personal-assistant/internal/base/records/client"
+	"personal-assistant/internal/base/records/user"
 	"testing"
 
 	"personal-assistant/internal/app/api/apitest"
 	"personal-assistant/internal/app/api/clients"
-	"personal-assistant/internal/base/chat"
+	"personal-assistant/internal/base/records/chat"
 )
 
 // Me reports who is calling, from what, and where a prompt will land.

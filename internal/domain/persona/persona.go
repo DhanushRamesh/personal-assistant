@@ -9,7 +9,7 @@ import (
 	"strings"
 	"sync"
 
-	"personal-assistant/internal/base/prompt"
+	"personal-assistant/internal/base/thinking/prompt"
 )
 
 // spokenRules : How every reply is shaped, whichever persona is answering.

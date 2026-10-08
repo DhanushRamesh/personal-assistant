@@ -7,8 +7,8 @@ import (
 	"sort"
 	"strings"
 
-	"personal-assistant/internal/base/chat"
-	"personal-assistant/internal/base/conversation"
+	"personal-assistant/internal/base/records/chat"
+	"personal-assistant/internal/base/records/conversation"
 )
 
 // DescribeName : The tool that describes the others.

@@ -6,9 +6,9 @@ import (
 	"log/slog"
 	"strings"
 
-	"personal-assistant/internal/base/chat"
-	"personal-assistant/internal/base/conversation"
-	"personal-assistant/internal/base/environment"
+	"personal-assistant/internal/base/records/chat"
+	"personal-assistant/internal/base/records/conversation"
+	"personal-assistant/internal/base/thinking/environment"
 )
 
 // errNoAnswer : Returned when a provider's stream ends without a result.

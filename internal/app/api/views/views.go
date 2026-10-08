@@ -9,13 +9,13 @@
 package views
 
 import (
-	"personal-assistant/internal/base/client"
-	"personal-assistant/internal/base/user"
+	"personal-assistant/internal/base/records/client"
+	"personal-assistant/internal/base/records/user"
 	"time"
 
-	"personal-assistant/internal/base/chat"
-	"personal-assistant/internal/base/conversation"
-	"personal-assistant/internal/base/llm"
+	"personal-assistant/internal/base/records/chat"
+	"personal-assistant/internal/base/records/conversation"
+	"personal-assistant/internal/base/thinking/llm"
 	"personal-assistant/internal/domain/persona"
 	"personal-assistant/internal/domain/remind"
 )

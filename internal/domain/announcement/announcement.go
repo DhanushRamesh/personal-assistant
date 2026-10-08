@@ -18,14 +18,14 @@ import (
 	"errors"
 	"fmt"
 	"log/slog"
-	"personal-assistant/internal/base/client"
-	"personal-assistant/internal/base/store"
+	"personal-assistant/internal/base/records/client"
+	"personal-assistant/internal/base/records/store"
 	"strings"
 	"time"
 
-	"personal-assistant/internal/base/announce"
-	"personal-assistant/internal/base/chat"
-	"personal-assistant/internal/base/conversation"
+	"personal-assistant/internal/base/records/chat"
+	"personal-assistant/internal/base/records/conversation"
+	"personal-assistant/internal/base/world/announce"
 )
 
 // address : What the assistant calls the person, for the word said

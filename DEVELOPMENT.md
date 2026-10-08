@@ -13947,6 +13947,38 @@ What it costs is go install from the URL, which was never how this is
 built or deployed.
 
 
+### The floor has its own floor
+
+Owner, on base holding twenty-seven packages: *"they should be
+categorised hierarchically, it might lead to circular dependency."*
+
+It cannot. Go rejects an import cycle at compile time, so client
+importing chat and chat importing client is a build failure rather
+than a thing that creeps in. What was really there was an ordering
+nobody could see: twenty-one of the twenty-seven imported nothing,
+four imported only those, and two stood on the four.
+
+Grouped by what they are for rather than by how deep they sit, and
+checked for a cycle among the groups before anything moved -- there
+was none:
+
+	platform   logging config storage auth failure
+	world      event events routine heard speech place leaving
+	           notice announce alarm errand
+	thinking   environment llm prompt embed search
+	records    chat user client store stored conversation
+
+platform is the floor of the floor and imports nothing. world and
+thinking stand on it. records stands on platform and thinking,
+because a conversation is made of prompts.
+
+TestBaseIsOrderedWithin enforces it, and is a different claim from
+the one above it: that one says nothing below may reach up, this one
+says the four groups keep their order. Checked by planting
+platform/logging importing records/chat, which fails with "platform
+may only import [platform]".
+
+
 ## 12. Maintaining this file
 
 When the owner states a preference, makes a decision, or corrects something,

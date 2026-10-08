@@ -11,14 +11,14 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
-	"personal-assistant/internal/base/store"
+	"personal-assistant/internal/base/records/store"
 	"strconv"
 	"strings"
 	"time"
 
 	"personal-assistant/internal/app/tool"
-	"personal-assistant/internal/base/chat"
-	"personal-assistant/internal/base/heard"
+	"personal-assistant/internal/base/records/chat"
+	"personal-assistant/internal/base/world/heard"
 )
 
 // idPattern : The shape of a conversation identifier, so one the model

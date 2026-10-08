@@ -12,7 +12,7 @@ import (
 
 	"golang.org/x/oauth2"
 
-	"personal-assistant/internal/base/logging"
+	"personal-assistant/internal/base/platform/logging"
 	"personal-assistant/internal/domain/google"
 	"personal-assistant/internal/domain/google/inmemory"
 )

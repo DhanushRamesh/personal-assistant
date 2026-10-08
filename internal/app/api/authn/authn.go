@@ -12,17 +12,17 @@ import (
 	"errors"
 	"log/slog"
 	"net/http"
-	"personal-assistant/internal/base/client"
-	"personal-assistant/internal/base/store"
-	"personal-assistant/internal/base/user"
+	"personal-assistant/internal/base/records/client"
+	"personal-assistant/internal/base/records/store"
+	"personal-assistant/internal/base/records/user"
 
 	"github.com/go-chi/chi/v5"
 
 	"personal-assistant/internal/app/api/httpx"
 	"personal-assistant/internal/app/api/views"
-	"personal-assistant/internal/base/auth"
-	"personal-assistant/internal/base/chat"
-	"personal-assistant/internal/base/logging"
+	"personal-assistant/internal/base/platform/auth"
+	"personal-assistant/internal/base/platform/logging"
+	"personal-assistant/internal/base/records/chat"
 )
 
 // header : The header carrying a device's token.

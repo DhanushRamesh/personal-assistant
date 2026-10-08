@@ -11,7 +11,7 @@ import (
 	"errors"
 	"log/slog"
 	"net/http"
-	"personal-assistant/internal/base/store"
+	"personal-assistant/internal/base/records/store"
 	"sort"
 	"strconv"
 
@@ -20,8 +20,8 @@ import (
 	"personal-assistant/internal/app/api/authn"
 	"personal-assistant/internal/app/api/httpx"
 	"personal-assistant/internal/app/api/views"
-	"personal-assistant/internal/base/chat"
-	"personal-assistant/internal/base/conversation"
+	"personal-assistant/internal/base/records/chat"
+	"personal-assistant/internal/base/records/conversation"
 )
 
 // CreateRequest : The body of a request to start a conversation.

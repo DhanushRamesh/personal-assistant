@@ -10,9 +10,9 @@ import (
 	"time"
 
 	"personal-assistant/internal/app/tool"
-	"personal-assistant/internal/base/chat"
-	"personal-assistant/internal/base/environment"
-	"personal-assistant/internal/base/logging"
+	"personal-assistant/internal/base/platform/logging"
+	"personal-assistant/internal/base/records/chat"
+	"personal-assistant/internal/base/thinking/environment"
 )
 
 // AsideFor : How long saying one sentence beside a turn may take.

@@ -7,7 +7,7 @@ import (
 	"sync/atomic"
 	"time"
 
-	"personal-assistant/internal/base/logging"
+	"personal-assistant/internal/base/platform/logging"
 )
 
 // Tick : How often the runner looks for work.

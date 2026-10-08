@@ -31,7 +31,7 @@ import (
 
 	"personal-assistant/internal/app/api/authn"
 	"personal-assistant/internal/app/api/httpx"
-	"personal-assistant/internal/base/routine"
+	"personal-assistant/internal/base/world/routine"
 	"personal-assistant/internal/domain/job"
 )
 

@@ -14,7 +14,7 @@ import (
 
 	"personal-assistant/internal/app/api/apitest"
 	"personal-assistant/internal/app/api/middleware"
-	"personal-assistant/internal/base/logging"
+	"personal-assistant/internal/base/platform/logging"
 )
 
 // newRouter : Builds a router carrying the whole middleware stack in the

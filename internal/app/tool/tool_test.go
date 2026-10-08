@@ -7,8 +7,8 @@ import (
 	"testing"
 
 	"personal-assistant/internal/app/tool"
-	"personal-assistant/internal/base/chat"
-	"personal-assistant/internal/base/conversation"
+	"personal-assistant/internal/base/records/chat"
+	"personal-assistant/internal/base/records/conversation"
 )
 
 // usable : A tool that passes registration, for a test changing one thing

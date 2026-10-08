@@ -1,0 +1,794 @@
+package platformai
+
+import (
+	"bufio"
+	"bytes"
+	"context"
+	"encoding/json"
+	"errors"
+	"fmt"
+	"io"
+	"log/slog"
+	"net"
+	"net/http"
+	"net/url"
+	"strings"
+	"sync"
+	"syscall"
+	"time"
+
+	"personal-assistant/internal/base/thinking/environment"
+)
+
+// tokenRefreshMargin : How long before expiry a cached token is replaced,
+// so a request does not begin with a token that expires mid-flight.
+const tokenRefreshMargin = 60 * time.Second
+
+// oauthResponse : The token endpoint's reply.
+type oauthResponse struct {
+	AccessToken string `json:"access_token"`
+	ExpiresIn   int    `json:"expires_in"`
+}
+
+// chatMessage : One message in a conversation.
+type chatMessage struct {
+	Role    string `json:"role"`
+	Content string `json:"content,omitempty"`
+	// ToolCalls : On an assistant message that asked for tools instead of
+	// answering. Carries no content when set.
+	ToolCalls []wireToolCall `json:"tool_calls,omitempty"`
+	// ToolResults : On a tool message, the answers it carries.
+	//
+	// An array on one message rather than OpenAI's one message per answer
+	// with a tool_call_id. This endpoint wants them together, and sending
+	// them apart makes the vendor behind it reject the whole conversation:
+	// "tool_use ids were found without tool_result blocks immediately
+	// after".
+	ToolResults []wireToolResult `json:"tool_results,omitempty"`
+}
+
+// wireToolResult : One answer, in the shape this endpoint expects.
+type wireToolResult struct {
+	ID      string `json:"id"`
+	Type    string `json:"type"`
+	Content string `json:"content"`
+}
+
+// wireToolCall : A tool call in the shape this endpoint uses, which is
+// OpenAI's.
+type wireToolCall struct {
+	ID       string `json:"id"`
+	Type     string `json:"type"`
+	Function struct {
+		Name string `json:"name"`
+		// Arguments : JSON, as a string. The service sends it that way and
+		// expects it back that way.
+		Arguments string `json:"arguments"`
+	} `json:"function"`
+}
+
+// wireTool : A tool offered to the model.
+type wireTool struct {
+	Type     string `json:"type"`
+	Function struct {
+		Name        string          `json:"name"`
+		Description string          `json:"description"`
+		Parameters  json.RawMessage `json:"parameters"`
+	} `json:"function"`
+}
+
+// chatRequest : The body of a chat call.
+//
+// The system prompt is carried in a field named context rather than content,
+// which the API requires.
+type chatRequest struct {
+	Vendor   string        `json:"ai_vendor"`
+	Model    string        `json:"model"`
+	Context  string        `json:"context"`
+	Messages []chatMessage `json:"messages"`
+	Tools    []wireTool    `json:"tools,omitempty"`
+	// Stream : Ask for the reply as server-sent events rather than one
+	// body when it is finished. See Streaming.
+	Stream bool `json:"stream,omitempty"`
+	// Thinking : How much the model may reason before it answers, as
+	// the gateway's reasoning_effort. Empty leaves it to the vendor.
+	//
+	// Measured rather than assumed: the first word of a turn costs two
+	// to seven seconds, and reasoning nobody reads would be the whole
+	// of it.
+	Thinking string `json:"reasoning_effort,omitempty"`
+}
+
+// chatResponse : The reply to a chat call. Content is either a plain string or
+// an array of blocks carrying text.
+type chatResponse struct {
+	Data struct {
+		Messages []struct {
+			Content   json.RawMessage `json:"content"`
+			ToolCalls []wireToolCall  `json:"tool_calls"`
+		} `json:"messages"`
+		Usage struct {
+			Stats wireUsage `json:"ai_stats"`
+		} `json:"usage"`
+	} `json:"data"`
+}
+
+// wireUsage : What the endpoint says the call cost.
+//
+// Read because the size of a request is otherwise a guess. The fixed
+// part of every request -- the manner, and the description of every
+// tool -- is sent again on each call and cannot be cached, so it is
+// the thing to watch when latency moves. Estimating it from the
+// source put it near fifteen thousand tokens; this says what it
+// actually was.
+type wireUsage struct {
+	Input  int `json:"input_tokens"`
+	Output int `json:"output_tokens"`
+	Total  int `json:"total_tokens"`
+}
+
+// toolBytes : How much of a request the tool list takes up.
+//
+// Marshalled rather than measured from the prose, because the schema
+// -- property names, types, enums, every description inside it -- is
+// most of it, and counting only the descriptions understated the
+// whole request by nearly half.
+func toolBytes(tools []wireTool) int {
+	if len(tools) == 0 {
+		return 0
+	}
+	out, err := json.Marshal(tools)
+	if err != nil {
+		return 0
+	}
+	return len(out)
+}
+
+// reply : What one call came back with: words, or a request to run tools.
+type reply struct {
+	Text      string
+	ToolCalls []environment.ToolCall
+	// Usage : What the endpoint says it cost. Zero when it did not say.
+	Usage wireUsage
+}
+
+// APIError : A message the service itself returned, in its own error envelope.
+//
+// It is distinguished from transport and decoding failures because the service
+// wrote it to be read, so it can be passed on to the user. Anything else is
+// reported in general terms and the detail kept in the log.
+type APIError struct {
+	// Message : What the service said went wrong.
+	Message string
+	// Status : The HTTP status it came with.
+	Status int
+}
+
+// Error : Describes the failure.
+func (e *APIError) Error() string {
+	return fmt.Sprintf("platformai: %s (HTTP %d)", e.Message, e.Status)
+}
+
+// accessToken : Returns a valid token, refreshing it when it is missing or
+// close to expiry.
+//
+// The whole refresh is serialised, so concurrent chats share one token rather
+// than each fetching their own.
+func (p *Environment) accessToken(ctx context.Context) (string, error) {
+	p.tokenMu.Lock()
+	defer p.tokenMu.Unlock()
+
+	if p.token != "" && time.Now().Before(p.tokenExpiry.Add(-tokenRefreshMargin)) {
+		return p.token, nil
+	}
+	return p.mintToken(ctx)
+}
+
+// forgetToken : Drops the cached token, so the next call mints a new one.
+//
+// Called when the service refuses one that had not expired as far as we
+// knew. That happens: Zoho invalidates an access token when another is
+// issued for the same client, so authorising from anywhere else — or a
+// second copy of the server running — silently revokes ours long before the
+// expiry we calculated.
+func (p *Environment) forgetToken() {
+	p.tokenMu.Lock()
+	defer p.tokenMu.Unlock()
+	p.token = ""
+	p.tokenExpiry = time.Time{}
+}
+
+// mintToken : Exchanges the refresh token for a new access token. The
+// caller holds tokenMu.
+func (p *Environment) mintToken(ctx context.Context) (string, error) {
+
+	params := url.Values{}
+	params.Set("grant_type", "refresh_token")
+	params.Set("refresh_token", p.cfg.RefreshToken.Reveal())
+	params.Set("client_id", p.cfg.ClientID)
+	params.Set("client_secret", p.cfg.ClientSecret.Reveal())
+	params.Set("redirect_uri", p.cfg.RedirectURI)
+	params.Set("scope", p.cfg.Scope)
+
+	req, err := http.NewRequestWithContext(ctx, http.MethodPost, p.cfg.TokenURL+"?"+params.Encode(), nil)
+	if err != nil {
+		return "", fmt.Errorf("platformai: building token request: %w", err)
+	}
+
+	resp, err := p.http.Do(req)
+	if err != nil {
+		return "", fmt.Errorf("platformai: requesting token: %w", scrubURL(err))
+	}
+	defer resp.Body.Close()
+
+	body, err := io.ReadAll(io.LimitReader(resp.Body, maxResponseBytes))
+	if err != nil {
+		return "", fmt.Errorf("platformai: reading token response: %w", err)
+	}
+
+	var parsed oauthResponse
+	if err := json.Unmarshal(body, &parsed); err != nil || parsed.AccessToken == "" {
+		if msg := errorMessage(body); msg != "" {
+			return "", &APIError{Message: msg, Status: resp.StatusCode}
+		}
+		return "", fmt.Errorf("platformai: token response was not usable (HTTP %d)", resp.StatusCode)
+	}
+
+	expiresIn := parsed.ExpiresIn
+	if expiresIn <= 0 {
+		expiresIn = 3600
+	}
+	p.token = parsed.AccessToken
+	p.tokenExpiry = time.Now().Add(time.Duration(expiresIn) * time.Second)
+
+	return p.token, nil
+}
+
+// chat : Sends a prompt, preceded by what was said earlier, and returns the
+// assistant's reply.
+// onText, when the reply is streamed, is handed each fragment of the
+// answer as it arrives. A retry passes nil: whatever the first attempt
+// put through has already been said, and saying the second attempt's
+// version as well would say it twice.
+func (p *Environment) chat(ctx context.Context, ask environment.Request, onText func(string)) (reply, error) {
+	got, status, err := p.attemptChat(ctx, ask, onText)
+	if err == nil {
+		return got, nil
+	}
+
+	// A token can be refused before we believe it has expired, so a
+	// refusal is not final on the first try: drop the cached one, mint a
+	// fresh one and go again. Once only — a refresh token that has itself
+	// been revoked would otherwise loop.
+	if status == http.StatusUnauthorized {
+		p.forgetToken()
+		got, _, err = p.attemptChat(ctx, ask, nil)
+		return got, err
+	}
+
+	// A connection kept open between calls can be closed at the far end
+	// while nothing is using it, and the next request down it ends before
+	// anything answers. Nothing was asked, so asking again is not asking
+	// twice: no tool has run and the model has not been reached.
+	//
+	// Once only, and only for a connection that died. A service that is
+	// down would otherwise be asked twice for every turn, which is twice
+	// the wait before somebody is told.
+	if status == 0 && dropped(err) && ctx.Err() == nil {
+		p.logger.WarnContext(ctx, "the connection to platform ai was dead, asking again",
+			slog.Any("error", err))
+		got, _, err = p.attemptChat(ctx, ask, nil)
+		return got, err
+	}
+
+	// Being told to slow down is not being told no. Nothing was read,
+	// no tool ran and the model was never reached, so waiting and
+	// asking again is asking once -- the same reasoning that makes a
+	// dead connection safe to retry.
+	//
+	// Worth doing because the alternative is what the person actually
+	// hears: "I am having some difficulty reaching the server, sir",
+	// for a service that was working and merely busy.
+	for _, wait := range Slowed {
+		if !limited(status, err) || ctx.Err() != nil {
+			break
+		}
+		p.logger.WarnContext(ctx, "platform ai asked us to slow down, waiting",
+			slog.Duration("waiting", wait), slog.Any("error", err))
+		if !sleep(ctx, wait) {
+			break
+		}
+		got, status, err = p.attemptChat(ctx, ask, nil)
+		if err == nil {
+			return got, nil
+		}
+	}
+	return reply{}, err
+}
+
+// Slowed : How long to wait before each attempt after being told to
+// slow down.
+//
+// Two, and short. A turn has thirty seconds before the caller cuts
+// it, and most of that is already spoken for; a third wait would
+// spend the budget to arrive after nobody is listening. Growing,
+// because a limiter that refused once at no delay usually wants more
+// than the same again.
+var Slowed = []time.Duration{time.Second, 3 * time.Second}
+
+// limited : Whether the service refused because it is being asked too
+// often, rather than because anything is wrong with the asking.
+//
+// By status where there is one, and otherwise by what it said. This
+// gateway reports it as a plain 400 with the reason in words, so the
+// status alone cannot tell it from a malformed request -- and
+// retrying a malformed request forever is exactly what must not
+// happen.
+func limited(status int, err error) bool {
+	if status == http.StatusTooManyRequests {
+		return true
+	}
+	var api *APIError
+	if !errors.As(err, &api) {
+		return false
+	}
+	said := strings.ToLower(api.Message)
+	return strings.Contains(said, "too many requests") ||
+		strings.Contains(said, "rate limit")
+}
+
+// sleep : Waits, unless the turn ends first. False when it did.
+func sleep(ctx context.Context, d time.Duration) bool {
+	t := time.NewTimer(d)
+	defer t.Stop()
+	select {
+	case <-ctx.Done():
+		return false
+	case <-t.C:
+		return true
+	}
+}
+
+// dropped : Whether the request failed because the connection went away
+// rather than because anything answered.
+//
+// The distinction is what makes asking again safe. An answer, even a
+// refusal, means the far end received the request; these mean it did not.
+func dropped(err error) bool {
+	switch {
+	case errors.Is(err, io.EOF),
+		errors.Is(err, io.ErrUnexpectedEOF),
+		errors.Is(err, syscall.ECONNRESET),
+		errors.Is(err, syscall.EPIPE),
+		errors.Is(err, net.ErrClosed):
+		return true
+	}
+	return false
+}
+
+// attemptChat : One try, returning the HTTP status alongside the failure
+// so the caller can tell a refused token from anything else.
+// withSummary : The system prompt with the condensed earlier conversation
+// appended, or unchanged when there is none.
+//
+// It goes here rather than among the messages because this endpoint keeps the
+// system prompt in a field of its own, and because a condensation is not
+// something either side said.
+func withSummary(prompt, summary string) string {
+	if strings.TrimSpace(summary) == "" {
+		return prompt
+	}
+	return prompt + "\n\nEarlier in this conversation, summarised:\n" + summary
+}
+
+func (p *Environment) attemptChat(ctx context.Context, ask environment.Request, onText func(string)) (reply, int, error) {
+	token, err := p.accessToken(ctx)
+	if err != nil {
+		// A refusal minting the token is the same problem as a refusal
+		// using one, and is reported the same way.
+		return reply{}, statusOf(err), err
+	}
+
+	messages := make([]chatMessage, 0, len(ask.History)+1)
+	for _, turn := range ask.History {
+		messages = append(messages, asWire(turn)...)
+	}
+	// Only when there is one. A continuation after tools ran has no new
+	// question, and appending an empty user message would have the model
+	// answer a thing nobody said.
+	if strings.TrimSpace(ask.Prompt) != "" {
+		messages = append(messages, chatMessage{
+			Role:    string(environment.RoleUser),
+			Content: ask.Prompt,
+		})
+	}
+
+	vendor, model := p.cfg.Vendor, p.cfg.Model
+	if ask.Model != "" {
+		vendor, model = ask.Vendor, ask.Model
+	}
+
+	prompt := p.cfg.SystemPrompt
+	if ask.SystemPrompt != "" {
+		prompt = ask.SystemPrompt
+	}
+
+	context := withSummary(prompt, ask.Summary)
+	tools := asWireTools(ask.Tools)
+
+	body, err := json.Marshal(chatRequest{
+		Vendor:   vendor,
+		Model:    model,
+		Context:  context,
+		Messages: messages,
+		Tools:    tools,
+		Stream:   Streaming,
+		Thinking: thinking(p.cfg.Thinking, ask.Purpose),
+	})
+	if err != nil {
+		return reply{}, 0, fmt.Errorf("platformai: building chat request: %w", err)
+	}
+
+	req, err := http.NewRequestWithContext(ctx, http.MethodPost, p.cfg.ChatURL, bytes.NewReader(body))
+	if err != nil {
+		return reply{}, 0, fmt.Errorf("platformai: building chat request: %w", err)
+	}
+	req.Header.Set("Content-Type", "application/json")
+	req.Header.Set("Authorization", "Zoho-oauthtoken "+token)
+	req.Header.Set("portal_id", p.cfg.PortalID)
+	req.Header.Set("chat-response-format", "msg-format")
+
+	resp, err := p.http.Do(req)
+	if err != nil {
+		return reply{}, 0, fmt.Errorf("platformai: sending chat request: %w", scrubURL(err))
+	}
+	defer resp.Body.Close()
+
+	// What the request was made of, in bytes on the wire.
+	//
+	// The endpoint reports how many tokens it charged for but not what
+	// they were spent on, and there is no caching here -- the manner
+	// and every tool's description are sent again on every call. This
+	// says which of the three is growing, which is the question when a
+	// turn gets slower.
+	p.logger.DebugContext(ctx, "platform ai request",
+		slog.Int("context_bytes", len(context)),
+		slog.Int("tools_bytes", toolBytes(tools)),
+		slog.Int("tool_count", len(tools)),
+		slog.Int("messages_bytes", len(body)-len(context)-toolBytes(tools)),
+		slog.Int("whole_bytes", len(body)))
+
+	// A streamed reply is read as it arrives; that is the whole point
+	// of asking for one. The endpoint labels it application/json all
+	// the same, so what it is is decided by what it starts with.
+	if Streaming && resp.StatusCode == http.StatusOK {
+		peek := bufio.NewReader(resp.Body)
+		if head, _ := peek.Peek(6); bytes.HasPrefix(head, []byte("event:")) ||
+			bytes.HasPrefix(head, []byte("data:")) {
+			return p.fromStream(ctx, peek, resp.StatusCode, onText)
+		}
+		resp.Body = io.NopCloser(peek)
+	}
+
+	raw, err := io.ReadAll(io.LimitReader(resp.Body, maxResponseBytes))
+	if err != nil {
+		return reply{}, resp.StatusCode, fmt.Errorf("platformai: reading chat response: %w", err)
+	}
+
+	var parsed chatResponse
+	if err := json.Unmarshal(raw, &parsed); err != nil || len(parsed.Data.Messages) == 0 {
+		if msg := errorMessage(raw); msg != "" {
+			return reply{}, resp.StatusCode, &APIError{Message: msg, Status: resp.StatusCode}
+		}
+
+		// The body is logged because without it this is unanswerable. A
+		// success code carrying something unreadable says nothing about
+		// what shape arrived, and it happens rarely enough that nobody
+		// will catch it live. Truncated: a reply can be long, and the
+		// first part is where the shape is.
+		p.logger.WarnContext(ctx, "platform ai answered 200 with nothing usable",
+			slog.Int("bytes", len(raw)),
+			slog.Any("parse_error", err),
+			slog.String("body", excerpt(raw, 700)))
+
+		return reply{}, resp.StatusCode,
+			fmt.Errorf("platformai: chat response was not usable (HTTP %d, %d bytes)",
+				resp.StatusCode, len(raw))
+	}
+
+	// Every message, not just the first. One reply may carry the sentence
+	// and the calls in a single message or in separate ones, and reading
+	// only the first turns the second shape into an answer that describes
+	// work nothing ran.
+	var said []string
+	var calls []environment.ToolCall
+	for _, m := range parsed.Data.Messages {
+		if text := strings.TrimSpace(contentText(m.Content)); text != "" {
+			said = append(said, text)
+		}
+		calls = append(calls, fromWireCalls(m.ToolCalls)...)
+	}
+	text := strings.Join(said, " ")
+
+	// A model that asks for a tool sometimes sends a sentence alongside it,
+	// describing what it is about to do rather than what happened. It is
+	// carried back with the calls as progress, never as the answer: on its
+	// own it would tell the person about work that has not run yet.
+	if len(calls) > 0 {
+		return reply{Text: text, ToolCalls: calls, Usage: parsed.Data.Usage.Stats},
+			resp.StatusCode, nil
+	}
+
+	if text == "" {
+		return reply{}, resp.StatusCode, fmt.Errorf("platformai: the reply was empty")
+	}
+	return reply{Text: text, Usage: parsed.Data.Usage.Stats}, resp.StatusCode, nil
+}
+
+// statusOf : The HTTP status a failure carries, or zero if it carries
+// none.
+func statusOf(err error) int {
+	var apiErr *APIError
+	if errors.As(err, &apiErr) {
+		return apiErr.Status
+	}
+	return 0
+}
+
+// contentText : Reads a message's content, which arrives either as a plain
+// string or as an array of blocks each carrying text.
+func contentText(raw json.RawMessage) string {
+	if len(raw) == 0 || string(raw) == "null" {
+		return ""
+	}
+
+	var plain string
+	if json.Unmarshal(raw, &plain) == nil {
+		return plain
+	}
+
+	var blocks []struct {
+		Text string `json:"text"`
+	}
+	if json.Unmarshal(raw, &blocks) == nil {
+		var sb strings.Builder
+		for _, b := range blocks {
+			sb.WriteString(b.Text)
+		}
+		return sb.String()
+	}
+
+	return string(raw)
+}
+
+// errorMessage : Reads the message out of the service's error envelope, or
+// returns empty if the body is not one.
+func errorMessage(body []byte) string {
+	// The chat endpoint nests it: {"error": {"message": "..."}}, and nests it
+	// again when the failure came from the model's own vendor rather than
+	// from this service. The inner one says what is actually wrong with the
+	// request; the outer one says only that something was.
+	var nested struct {
+		Error struct {
+			Message  string `json:"message"`
+			APIError struct {
+				Type    string `json:"type"`
+				Message string `json:"message"`
+			} `json:"api_error"`
+		} `json:"error"`
+	}
+	if json.Unmarshal(body, &nested) == nil {
+		if msg := strings.TrimSpace(nested.Error.APIError.Message); msg != "" {
+			return msg
+		}
+		if msg := strings.TrimSpace(nested.Error.Message); msg != "" {
+			return msg
+		}
+	}
+
+	// The token endpoint does not, and puts a string where the other puts an
+	// object: {"error": "Access Denied", "error_description": "..."}. Reading
+	// only the first shape threw away the one sentence worth having, leaving
+	// "token response was not usable" in its place -- which says nothing to
+	// the person reading it and nothing to a model asked what went wrong.
+	var flat struct {
+		Error       string `json:"error"`
+		Description string `json:"error_description"`
+	}
+	if json.Unmarshal(body, &flat) == nil {
+		if msg := strings.TrimSpace(flat.Description); msg != "" {
+			return msg
+		}
+		if msg := strings.TrimSpace(flat.Error); msg != "" {
+			return msg
+		}
+	}
+
+	return ""
+}
+
+// scrubURL : Removes the query string from a transport error.
+//
+// The token endpoint takes the client secret and refresh token as query
+// parameters, and a *url.Error carries the whole URL. Wrapped and logged as it
+// comes, that writes the credentials into the log in plain text. Redaction in
+// internal/logging cannot help: it matches attribute keys, and this is a
+// secret buried inside an error's text.
+//
+// The operation, host and underlying cause are kept, since those are what make
+// the failure diagnosable.
+func scrubURL(err error) error {
+	var urlErr *url.Error
+	if !errors.As(err, &urlErr) {
+		return err
+	}
+
+	scrubbed := urlErr.URL
+	if parsed, parseErr := url.Parse(urlErr.URL); parseErr == nil {
+		parsed.RawQuery = ""
+		parsed.Fragment = ""
+		scrubbed = parsed.String()
+	} else {
+		// Unparseable, so keep nothing after the query marker.
+		if i := strings.IndexByte(scrubbed, '?'); i >= 0 {
+			scrubbed = scrubbed[:i]
+		}
+	}
+
+	return fmt.Errorf("%s %s: %w", urlErr.Op, scrubbed, urlErr.Err)
+}
+
+// tokenState : Guards the cached access token.
+type tokenState struct {
+	tokenMu     sync.Mutex
+	token       string
+	tokenExpiry time.Time
+}
+
+// asWire : One remembered turn as the messages this endpoint expects.
+//
+// A turn carrying tool results becomes a single message holding all of them,
+// which is what this endpoint wants. Splitting them across a message each, as
+// OpenAI's shape does, leaves the vendor behind it complaining that a
+// tool_use had no tool_result after it.
+func asWire(turn environment.Turn) []chatMessage {
+	if len(turn.ToolResults) > 0 {
+		msg := chatMessage{Role: "tool"}
+		for _, r := range turn.ToolResults {
+			msg.ToolResults = append(msg.ToolResults, wireToolResult{
+				ID:      r.ID,
+				Type:    "function",
+				Content: r.Content,
+			})
+		}
+		return []chatMessage{msg}
+	}
+
+	msg := chatMessage{Role: string(turn.Role), Content: turn.Text}
+	for _, c := range turn.ToolCalls {
+		wire := wireToolCall{ID: c.ID, Type: "function"}
+		wire.Function.Name = c.Name
+		wire.Function.Arguments = c.Arguments
+		msg.ToolCalls = append(msg.ToolCalls, wire)
+	}
+	return []chatMessage{msg}
+}
+
+// asWireTools : The offered tools in the shape the endpoint expects.
+func asWireTools(tools []environment.ToolSpec) []wireTool {
+	if len(tools) == 0 {
+		return nil
+	}
+	out := make([]wireTool, 0, len(tools))
+	for _, t := range tools {
+		w := wireTool{Type: "function"}
+		w.Function.Name = t.Name
+		w.Function.Description = t.Description
+		w.Function.Parameters = t.Parameters
+		out = append(out, w)
+	}
+	return out
+}
+
+// fromWireCalls : The model's tool calls, in our own shape.
+func fromWireCalls(calls []wireToolCall) []environment.ToolCall {
+	if len(calls) == 0 {
+		return nil
+	}
+	out := make([]environment.ToolCall, 0, len(calls))
+	for _, c := range calls {
+		out = append(out, environment.ToolCall{
+			ID:        c.ID,
+			Name:      c.Function.Name,
+			Arguments: c.Function.Arguments,
+		})
+	}
+	return out
+}
+
+// excerpt : The first part of a body, for a log line that has to stay one
+// line long.
+func excerpt(raw []byte, most int) string {
+	text := strings.TrimSpace(string(raw))
+	if len(text) <= most {
+		return text
+	}
+	return text[:most] + "…"
+}
+
+// Hard : The purposes worth letting the model reason over.
+//
+// Not the ones that take longest; the ones where the answer is a
+// judgement rather than a retrieval, and where nothing is waiting.
+// A description of somebody has to find what keeps being true out
+// of a week of talk and a month of events. It runs hourly in the
+// background and nobody is standing anywhere.
+//
+// **The greeting is not here, and it is the one that wanted it
+// most.** Measured on the same three evenings, it is visibly
+// better with reasoning -- it asks about the film by name, it says
+// "near Urapakkam" rather than naming a restaurant it was only
+// near, and asked about a dentist appointment miles from where
+// they were it correctly says nothing at all, which no amount of
+// prompt wording achieved. It also takes 29 to 46 seconds, against
+// a budget of five before the fixed text is said instead. Turning
+// it on would mean the considered greeting is written every time
+// and heard none of the time.
+//
+// What it needs is not permission but a head start: begun when
+// their geofence says they are home rather than when the room
+// sensor sees them, which is a minute of walking from the gate.
+// Until then it stays off, because a greeting nobody hears is
+// worse than a plain one they do.
+//
+// Everything else is left alone. Answering "what is the time" with
+// reasoning first is seconds spent on a question that had one
+// answer, and the turn has thirty.
+//
+// # Why this is low
+//
+// Reasoning and the answer come out of one budget. The gateway
+// caps a reply at three thousand tokens and there is no field in
+// the request to raise it. Asked to reason over a week of talk
+// the model spent the whole three thousand thinking and wrote
+// nothing: finish_reason maxtokens, not one character of text.
+// Every rebuild from 6 October onwards failed that way, for
+// thirty-six hours, and the log said only that the reply was
+// empty.
+//
+// High and medium were measured and are the same failure -- 3000
+// of 3000 either way, which says the effort is not what decides
+// how long it thinks for; an open question and room to think is.
+// So the room is what is taken away.
+var Hard = map[environment.Purpose]string{
+	environment.PurposeProfile: "low",
+}
+
+// thinking : How much reasoning this call may do.
+//
+// Whatever is configured, unless the purpose asks for more. Never
+// less: somebody who set it globally meant it.
+func thinking(configured string, purpose environment.Purpose) string {
+	want, ok := Hard[purpose]
+	if !ok {
+		return configured
+	}
+	if rank(want) > rank(configured) {
+		return want
+	}
+	return configured
+}
+
+// rank : How much reasoning a setting asks for, for comparing two.
+func rank(effort string) int {
+	switch effort {
+	case "low":
+		return 1
+	case "medium":
+		return 2
+	case "high":
+		return 3
+	default:
+		return 0
+	}
+}

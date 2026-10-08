@@ -6,7 +6,7 @@ import (
 	"log/slog"
 	"strings"
 
-	"personal-assistant/internal/base/embed"
+	"personal-assistant/internal/base/thinking/embed"
 )
 
 // DefaultCandidates : How many memories are put in front of the model.

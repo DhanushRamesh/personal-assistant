@@ -12,7 +12,7 @@ import (
 	"personal-assistant/internal/app/api/apitest"
 	"personal-assistant/internal/app/api/assist"
 	"personal-assistant/internal/app/api/chats"
-	"personal-assistant/internal/base/chat"
+	"personal-assistant/internal/base/records/chat"
 )
 
 // Home Assistant will not finish setting an integration up if the server

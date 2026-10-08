@@ -10,9 +10,9 @@ import (
 
 	"personal-assistant/internal/app/tool"
 	eventstool "personal-assistant/internal/app/tool/events"
-	"personal-assistant/internal/base/conversation"
-	"personal-assistant/internal/base/event"
-	"personal-assistant/internal/base/event/inmemory"
+	"personal-assistant/internal/base/records/conversation"
+	"personal-assistant/internal/base/world/event"
+	"personal-assistant/internal/base/world/event/inmemory"
 )
 
 // kolkata : The person's zone, which is what a written hour means.

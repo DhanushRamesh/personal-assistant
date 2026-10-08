@@ -4,8 +4,8 @@ import (
 	"fmt"
 	"time"
 
-	"personal-assistant/internal/base/event"
-	"personal-assistant/internal/base/prompt"
+	"personal-assistant/internal/base/thinking/prompt"
+	"personal-assistant/internal/base/world/event"
 )
 
 // Still : The shortest silence worth counting.

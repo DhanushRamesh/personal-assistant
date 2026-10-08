@@ -6,7 +6,7 @@ import (
 	"strings"
 	"time"
 
-	"personal-assistant/internal/base/prompt"
+	"personal-assistant/internal/base/thinking/prompt"
 	"personal-assistant/internal/domain/calendar"
 )
 

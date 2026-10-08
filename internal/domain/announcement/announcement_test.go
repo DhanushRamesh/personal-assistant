@@ -2,15 +2,15 @@ package announcement_test
 
 import (
 	"context"
-	"personal-assistant/internal/base/client"
-	"personal-assistant/internal/base/user"
+	"personal-assistant/internal/base/records/client"
+	"personal-assistant/internal/base/records/user"
 	"strings"
 	"testing"
 	"time"
 
-	"personal-assistant/internal/base/chat"
-	"personal-assistant/internal/base/chat/memory"
-	"personal-assistant/internal/base/conversation"
+	"personal-assistant/internal/base/records/chat"
+	"personal-assistant/internal/base/records/chat/memory"
+	"personal-assistant/internal/base/records/conversation"
 	"personal-assistant/internal/domain/announcement"
 )
 

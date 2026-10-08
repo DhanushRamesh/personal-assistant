@@ -39,7 +39,7 @@ import (
 
 	gmail "google.golang.org/api/gmail/v1"
 	"google.golang.org/api/option"
-	"personal-assistant/internal/base/logging"
+	"personal-assistant/internal/base/platform/logging"
 )
 
 // Scope : What this needs granted.

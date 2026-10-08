@@ -27,8 +27,8 @@ import (
 	"strings"
 	"time"
 
-	"personal-assistant/internal/base/event"
-	"personal-assistant/internal/base/prompt"
+	"personal-assistant/internal/base/thinking/prompt"
+	"personal-assistant/internal/base/world/event"
 )
 
 // Within : How long the greeting may take before the fixed one is used

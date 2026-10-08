@@ -2,15 +2,15 @@ package views_test
 
 import (
 	"encoding/json"
-	"personal-assistant/internal/base/client"
-	"personal-assistant/internal/base/user"
+	"personal-assistant/internal/base/records/client"
+	"personal-assistant/internal/base/records/user"
 	"strings"
 	"testing"
 	"time"
 
 	"personal-assistant/internal/app/api/views"
-	"personal-assistant/internal/base/chat"
-	"personal-assistant/internal/base/conversation"
+	"personal-assistant/internal/base/records/chat"
+	"personal-assistant/internal/base/records/conversation"
 )
 
 // The JSON names here are the API's published contract: a client reads them,

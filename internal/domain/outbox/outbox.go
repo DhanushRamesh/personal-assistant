@@ -27,7 +27,7 @@ import (
 	"errors"
 	"time"
 
-	"personal-assistant/internal/base/conversation"
+	"personal-assistant/internal/base/records/conversation"
 )
 
 // State : What one client has done about one announcement.

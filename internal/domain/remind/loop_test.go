@@ -8,7 +8,7 @@ import (
 	"testing"
 	"time"
 
-	"personal-assistant/internal/base/alarm"
+	"personal-assistant/internal/base/world/alarm"
 	"personal-assistant/internal/domain/remind"
 	"personal-assistant/internal/domain/remind/inmemory"
 )

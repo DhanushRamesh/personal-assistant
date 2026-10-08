@@ -12,8 +12,8 @@ import (
 
 	"personal-assistant/internal/app/api/apitest"
 	"personal-assistant/internal/app/api/events"
-	"personal-assistant/internal/base/event"
-	"personal-assistant/internal/base/event/inmemory"
+	"personal-assistant/internal/base/world/event"
+	"personal-assistant/internal/base/world/event/inmemory"
 )
 
 func post(t *testing.T, e *apitest.Env, body string) (int, events.BatchResponse) {

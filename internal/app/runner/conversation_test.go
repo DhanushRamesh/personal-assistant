@@ -8,9 +8,9 @@ import (
 
 	"personal-assistant/internal/app/runner"
 	"personal-assistant/internal/app/tool"
-	"personal-assistant/internal/base/chat"
-	"personal-assistant/internal/base/conversation"
-	"personal-assistant/internal/base/environment"
+	"personal-assistant/internal/base/records/chat"
+	"personal-assistant/internal/base/records/conversation"
+	"personal-assistant/internal/base/thinking/environment"
 )
 
 // contents : What was said in a conversation, as plain strings.

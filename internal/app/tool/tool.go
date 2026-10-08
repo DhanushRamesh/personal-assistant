@@ -14,8 +14,8 @@ import (
 	"strings"
 	"time"
 
-	"personal-assistant/internal/base/chat"
-	"personal-assistant/internal/base/conversation"
+	"personal-assistant/internal/base/records/chat"
+	"personal-assistant/internal/base/records/conversation"
 )
 
 // Tool : One thing the assistant can do.

@@ -13,7 +13,7 @@ import (
 
 	"personal-assistant/internal/app/api/apitest"
 	"personal-assistant/internal/app/api/health"
-	"personal-assistant/internal/base/logging"
+	"personal-assistant/internal/base/platform/logging"
 )
 
 // body : Decodes a liveness or readiness response.

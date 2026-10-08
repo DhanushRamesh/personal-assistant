@@ -14,7 +14,7 @@ import (
 	"strings"
 	"time"
 
-	"personal-assistant/internal/base/logging"
+	"personal-assistant/internal/base/platform/logging"
 )
 
 // Account : A Google account this assistant may act for.

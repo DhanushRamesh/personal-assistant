@@ -7,9 +7,9 @@ import (
 	"slices"
 	"strings"
 
-	"personal-assistant/internal/base/chat"
-	"personal-assistant/internal/base/conversation"
-	"personal-assistant/internal/base/prompt"
+	"personal-assistant/internal/base/records/chat"
+	"personal-assistant/internal/base/records/conversation"
+	"personal-assistant/internal/base/thinking/prompt"
 )
 
 // readFirst : Whether a write may go ahead, given what has run this turn,

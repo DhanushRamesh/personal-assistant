@@ -28,6 +28,29 @@ var above = map[string][]string{
 	"app":    {"base", "domain", "app"},
 }
 
+// within : The order inside base, which is not flat either.
+//
+// Twenty-seven packages in one directory hid a three-deep ordering.
+// Go would have refused a cycle whatever the layout -- it rejects
+// them at compile time -- but the ordering was there to be read and
+// nothing read it.
+//
+//   - platform -- logging, config, storage, auth, failure. The floor
+//     of the floor, and it may import nothing.
+//   - world    -- what happened out there: events, places, what was
+//     heard, what somebody usually does. Stands on platform.
+//   - thinking -- reaching a model and feeding it: environment, llm,
+//     prompt, embed, search. Stands on platform.
+//   - records  -- what is kept: the chat, the person, their devices,
+//     the conversation. Stands on platform and thinking, because a
+//     conversation is made of prompts.
+var within = map[string][]string{
+	"platform": {"platform"},
+	"world":    {"platform", "world"},
+	"thinking": {"platform", "thinking"},
+	"records":  {"platform", "thinking", "records"},
+}
+
 // TestNoLayerReachesUpward : The tree says what the import graph is,
 // and this is what keeps the two the same.
 //
@@ -60,6 +83,61 @@ func TestNoLayerReachesUpward(t *testing.T) {
 				short(fields[0]), from, short(imported), to, from, above[from])
 		}
 	}
+}
+
+// TestBaseIsOrderedWithin : The floor has its own floor.
+//
+// Checked separately because it is a different claim: the one above
+// says nothing below may reach up, and this one says the four groups
+// inside base have an order and keep to it.
+func TestBaseIsOrderedWithin(t *testing.T) {
+	out, err := exec.Command("go", "list", "-deps=false",
+		"-f", "{{.ImportPath}}{{range .Imports}} {{.}}{{end}}", "./...").Output()
+	if err != nil {
+		t.Fatalf("listing the packages: %v", err)
+	}
+
+	for _, line := range strings.Split(strings.TrimSpace(string(out)), "\n") {
+		fields := strings.Fields(line)
+		if len(fields) == 0 {
+			continue
+		}
+		from, ok := groupOf(fields[0])
+		if !ok {
+			continue
+		}
+		for _, imported := range fields[1:] {
+			to, ok := groupOf(imported)
+			if !ok || permitted(from, to) {
+				continue
+			}
+			t.Errorf("%s (%s) imports %s (%s): %s may only import %v",
+				short(fields[0]), from, short(imported), to, from, within[from])
+		}
+	}
+}
+
+// groupOf : Which group inside base a package sits in.
+func groupOf(importPath string) (string, bool) {
+	rest, found := strings.CutPrefix(importPath, prefix+"base/")
+	if !found {
+		return "", false
+	}
+	group, _, _ := strings.Cut(rest, "/")
+	if _, ok := within[group]; !ok {
+		return "", false
+	}
+	return group, true
+}
+
+// permitted : Whether a package in from may import one in to.
+func permitted(from, to string) bool {
+	for _, ok := range within[from] {
+		if ok == to {
+			return true
+		}
+	}
+	return false
 }
 
 // TestEveryPackageIsInALayer : A package put straight into internal/

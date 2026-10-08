@@ -8,8 +8,8 @@ import (
 	"time"
 
 	"personal-assistant/internal/app/tool"
-	"personal-assistant/internal/base/chat"
-	"personal-assistant/internal/base/conversation"
+	"personal-assistant/internal/base/records/chat"
+	"personal-assistant/internal/base/records/conversation"
 )
 
 // prefetch : Runs the tools that ask to go first, and returns them as

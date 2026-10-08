@@ -33,8 +33,8 @@ import (
 
 	"google.golang.org/api/googleapi"
 	"google.golang.org/api/option"
-	"personal-assistant/internal/base/heard"
-	"personal-assistant/internal/base/logging"
+	"personal-assistant/internal/base/platform/logging"
+	"personal-assistant/internal/base/world/heard"
 
 	gtasks "google.golang.org/api/tasks/v1"
 )

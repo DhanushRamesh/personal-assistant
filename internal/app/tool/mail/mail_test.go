@@ -8,8 +8,8 @@ import (
 
 	"personal-assistant/internal/app/tool"
 	mailtool "personal-assistant/internal/app/tool/mail"
-	"personal-assistant/internal/base/chat"
-	"personal-assistant/internal/base/conversation"
+	"personal-assistant/internal/base/records/chat"
+	"personal-assistant/internal/base/records/conversation"
 	"personal-assistant/internal/domain/mail"
 )
 

@@ -3,8 +3,8 @@ package remind
 import (
 	"context"
 	"log/slog"
-	"personal-assistant/internal/base/alarm"
-	"personal-assistant/internal/base/logging"
+	"personal-assistant/internal/base/platform/logging"
+	"personal-assistant/internal/base/world/alarm"
 	"time"
 )
 

@@ -6,7 +6,7 @@ import (
 	"testing"
 	"time"
 
-	"personal-assistant/internal/base/embed"
+	"personal-assistant/internal/base/thinking/embed"
 	"personal-assistant/internal/domain/memory"
 )
 

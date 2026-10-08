@@ -6,8 +6,8 @@ import (
 
 	"personal-assistant/internal/app/runner"
 	"personal-assistant/internal/app/tool"
-	"personal-assistant/internal/base/chat"
-	"personal-assistant/internal/base/environment"
+	"personal-assistant/internal/base/records/chat"
+	"personal-assistant/internal/base/thinking/environment"
 )
 
 // deferring : A registry that holds calendar_free back until it is

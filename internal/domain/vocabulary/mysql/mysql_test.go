@@ -5,14 +5,14 @@ import (
 	"io"
 	"log/slog"
 	"os"
-	"personal-assistant/internal/base/user"
+	"personal-assistant/internal/base/records/user"
 	"strings"
 	"testing"
 	"time"
 
-	chatmysql "personal-assistant/internal/base/chat/mysql"
-	"personal-assistant/internal/base/config"
-	"personal-assistant/internal/base/storage"
+	"personal-assistant/internal/base/platform/config"
+	"personal-assistant/internal/base/platform/storage"
+	chatmysql "personal-assistant/internal/base/records/chat/mysql"
 	vocabularymysql "personal-assistant/internal/domain/vocabulary/mysql"
 )
 

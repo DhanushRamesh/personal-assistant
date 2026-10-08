@@ -6,7 +6,7 @@ import (
 	"testing"
 	"time"
 
-	"personal-assistant/internal/base/event"
+	"personal-assistant/internal/base/world/event"
 	"personal-assistant/internal/domain/situation"
 )
 

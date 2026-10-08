@@ -9,8 +9,8 @@ import (
 
 	"personal-assistant/internal/app/tool"
 	places "personal-assistant/internal/app/tool/places"
-	"personal-assistant/internal/base/chat"
-	"personal-assistant/internal/base/event"
+	"personal-assistant/internal/base/records/chat"
+	"personal-assistant/internal/base/world/event"
 )
 
 // india : Where their days are counted.

@@ -7,8 +7,8 @@ import (
 	"strings"
 	"time"
 
-	"personal-assistant/internal/base/announce"
-	"personal-assistant/internal/base/conversation"
+	"personal-assistant/internal/base/records/conversation"
+	"personal-assistant/internal/base/world/announce"
 	"personal-assistant/internal/domain/announcement"
 )
 

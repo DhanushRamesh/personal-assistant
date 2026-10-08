@@ -8,14 +8,14 @@ import (
 	"net/http"
 	"net/url"
 	"os"
-	"personal-assistant/internal/base/store"
+	"personal-assistant/internal/base/records/store"
 	"strings"
 	"time"
 
-	chatmysql "personal-assistant/internal/base/chat/mysql"
-	"personal-assistant/internal/base/config"
-	"personal-assistant/internal/base/logging"
-	"personal-assistant/internal/base/storage"
+	"personal-assistant/internal/base/platform/config"
+	"personal-assistant/internal/base/platform/logging"
+	"personal-assistant/internal/base/platform/storage"
+	chatmysql "personal-assistant/internal/base/records/chat/mysql"
 	"personal-assistant/internal/domain/google"
 )
 

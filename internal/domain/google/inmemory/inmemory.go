@@ -7,7 +7,7 @@ import (
 	"sync"
 	"time"
 
-	"personal-assistant/internal/base/logging"
+	"personal-assistant/internal/base/platform/logging"
 	"personal-assistant/internal/domain/google"
 )
 

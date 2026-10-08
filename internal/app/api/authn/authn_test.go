@@ -3,15 +3,15 @@ package authn_test
 import (
 	"net/http"
 	"os"
-	"personal-assistant/internal/base/client"
+	"personal-assistant/internal/base/records/client"
 	"strings"
 	"testing"
 
 	"golang.org/x/crypto/bcrypt"
 
 	"personal-assistant/internal/app/api/apitest"
-	"personal-assistant/internal/base/auth"
-	"personal-assistant/internal/base/chat"
+	"personal-assistant/internal/base/platform/auth"
+	"personal-assistant/internal/base/records/chat"
 )
 
 // TestMain : Lowers the password work factor for this package's tests.

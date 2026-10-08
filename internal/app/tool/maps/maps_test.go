@@ -10,9 +10,9 @@ import (
 
 	"personal-assistant/internal/app/tool"
 	mapstool "personal-assistant/internal/app/tool/maps"
-	"personal-assistant/internal/base/conversation"
-	"personal-assistant/internal/base/event"
-	"personal-assistant/internal/base/place"
+	"personal-assistant/internal/base/records/conversation"
+	"personal-assistant/internal/base/world/event"
+	"personal-assistant/internal/base/world/place"
 )
 
 var now = time.Date(2026, 10, 5, 9, 0, 0, 0, time.UTC)

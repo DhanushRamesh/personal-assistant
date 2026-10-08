@@ -7,7 +7,7 @@ import (
 	"time"
 
 	"personal-assistant/internal/app/profile"
-	"personal-assistant/internal/base/event"
+	"personal-assistant/internal/base/world/event"
 )
 
 var asOf = time.Date(2026, 10, 4, 12, 0, 0, 0, time.UTC)

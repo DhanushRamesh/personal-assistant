@@ -8,8 +8,8 @@ import (
 	"time"
 
 	"personal-assistant/internal/app/profile"
-	"personal-assistant/internal/base/conversation"
-	"personal-assistant/internal/base/event"
+	"personal-assistant/internal/base/records/conversation"
+	"personal-assistant/internal/base/world/event"
 )
 
 // india : The timezone their days are counted in. A week of evenings

@@ -17,7 +17,7 @@ import (
 	"golang.org/x/oauth2"
 	googleoauth "golang.org/x/oauth2/google"
 
-	"personal-assistant/internal/base/logging"
+	"personal-assistant/internal/base/platform/logging"
 )
 
 // Identity : The scopes asked for on every connection, whatever else is

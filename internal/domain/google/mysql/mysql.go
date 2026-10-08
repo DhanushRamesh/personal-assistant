@@ -11,8 +11,8 @@ import (
 	"gorm.io/gorm"
 	"gorm.io/gorm/clause"
 
-	"personal-assistant/internal/base/logging"
-	"personal-assistant/internal/base/storage"
+	"personal-assistant/internal/base/platform/logging"
+	"personal-assistant/internal/base/platform/storage"
 	"personal-assistant/internal/domain/google"
 )
 

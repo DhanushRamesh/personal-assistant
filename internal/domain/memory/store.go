@@ -3,7 +3,7 @@ package memory
 import (
 	"context"
 
-	"personal-assistant/internal/base/embed"
+	"personal-assistant/internal/base/thinking/embed"
 )
 
 // Store : Where memories are kept.

@@ -4,7 +4,7 @@ import (
 	"strings"
 	"testing"
 
-	"personal-assistant/internal/base/chat"
+	"personal-assistant/internal/base/records/chat"
 )
 
 // What goes alongside the history is measured from the prompt that will

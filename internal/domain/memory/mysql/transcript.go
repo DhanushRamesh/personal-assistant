@@ -9,8 +9,8 @@ import (
 	"gorm.io/gorm"
 	"gorm.io/gorm/clause"
 
-	"personal-assistant/internal/base/embed"
-	"personal-assistant/internal/base/storage"
+	"personal-assistant/internal/base/platform/storage"
+	"personal-assistant/internal/base/thinking/embed"
 	"personal-assistant/internal/domain/memory"
 )
 

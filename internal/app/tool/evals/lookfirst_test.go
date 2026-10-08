@@ -8,9 +8,9 @@ import (
 	"testing"
 	"time"
 
-	"personal-assistant/internal/base/environment"
-	"personal-assistant/internal/base/environment/platformai"
-	"personal-assistant/internal/base/prompt"
+	"personal-assistant/internal/base/thinking/environment"
+	"personal-assistant/internal/base/thinking/environment/platformai"
+	"personal-assistant/internal/base/thinking/prompt"
 )
 
 // lookFirstDraft : A copy of the runner's lookBefore, so the suite

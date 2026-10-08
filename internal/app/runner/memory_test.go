@@ -2,16 +2,16 @@ package runner_test
 
 import (
 	"context"
-	"personal-assistant/internal/base/user"
+	"personal-assistant/internal/base/records/user"
 	"strings"
 	"testing"
 	"time"
 
 	"personal-assistant/internal/app/runner"
-	"personal-assistant/internal/base/chat"
-	chatmemory "personal-assistant/internal/base/chat/memory"
-	"personal-assistant/internal/base/embed"
-	"personal-assistant/internal/base/events"
+	"personal-assistant/internal/base/records/chat"
+	chatmemory "personal-assistant/internal/base/records/chat/memory"
+	"personal-assistant/internal/base/thinking/embed"
+	"personal-assistant/internal/base/world/events"
 	"personal-assistant/internal/domain/memory"
 	"personal-assistant/internal/domain/memory/inmemory"
 	"personal-assistant/internal/domain/remind"

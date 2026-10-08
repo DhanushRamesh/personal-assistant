@@ -5,8 +5,8 @@ import (
 	"sort"
 	"time"
 
-	"personal-assistant/internal/base/event"
-	"personal-assistant/internal/base/prompt"
+	"personal-assistant/internal/base/thinking/prompt"
+	"personal-assistant/internal/base/world/event"
 )
 
 // Lately : How much of the four weeks counts as now.
