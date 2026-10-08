@@ -1,0 +1,11 @@
+[Unit]
+Description=Rotate the assistant's local log daily
+
+[Timer]
+OnCalendar=daily
+# A laptop is asleep at four in the morning more often than not, so a
+# missed run happens on the next boot rather than being skipped.
+Persistent=true
+
+[Install]
+WantedBy=timers.target

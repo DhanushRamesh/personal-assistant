@@ -1,0 +1,28 @@
+# The local server's log, kept from growing without end.
+#
+# Run by personal-assistant-local-logrotate.timer, as the person
+# rather than as root: this is a user service writing into their own
+# working copy, and everything else on this machine is user-space too.
+#
+#   logrotate --state ~/.cache/logrotate.status -d <this file>   # dry run
+#
+# It reached 57MB before this existed, holding 285 recorded starts.
+# Nothing was wrong with that except that nothing ever stopped it.
+
+/home/dhanush-12514/workspace/personal-assistant/personal-assistant.log {
+    size 50M
+    rotate 5
+    compress
+    delaycompress
+    missingok
+    notifempty
+
+    # Truncated in place rather than renamed-and-recreated. systemd
+    # opened this file with append: and holds the descriptor for the
+    # life of the process; moving the file would leave the server
+    # writing to something with no name, and the log would appear to
+    # stop while the disk kept filling.
+    copytruncate
+
+    create 0644
+}

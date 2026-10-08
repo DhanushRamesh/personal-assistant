@@ -34,6 +34,7 @@ import (
 	"github.com/DhanushRamesh/personal-assistant/internal/conversation"
 	"github.com/DhanushRamesh/personal-assistant/internal/event"
 	"github.com/DhanushRamesh/personal-assistant/internal/greet"
+	"github.com/DhanushRamesh/personal-assistant/internal/logging"
 	"github.com/DhanushRamesh/personal-assistant/internal/outbox"
 	"github.com/DhanushRamesh/personal-assistant/internal/remind"
 	"github.com/DhanushRamesh/personal-assistant/internal/tasks"
@@ -469,34 +470,38 @@ func (h *Handler) coming(ctx context.Context, user string, now, since time.Time)
 		wg.Add(1)
 		go func() {
 			defer wg.Done()
-			found, _, err := h.diary.Everywhere(ask, user, day, day.AddDate(0, 0, Ahead))
-			if err != nil {
-				h.Logger.WarnContext(ctx, "cannot read the diary for a greeting",
-					slog.Any("error", err))
-				return
-			}
-			for _, e := range found {
-				a := greet.Appointment{
-					What: e.Title, When: e.Starts, AllDay: e.AllDay, Where: e.Where,
+			// One source failing is one source. It used to be the
+			// server, while somebody stood at the door.
+			logging.Surviving(ask, h.Logger, "reading the diary", func() {
+				found, _, err := h.diary.Everywhere(ask, user, day, day.AddDate(0, 0, Ahead))
+				if err != nil {
+					h.Logger.WarnContext(ctx, "cannot read the diary for a greeting",
+						slog.Any("error", err))
+					return
 				}
-				// What has already started is not what is coming --
-				// but it is what they have just been doing, which is
-				// the only thing the greeting can check where they
-				// were against. It used to be dropped, and with it
-				// went any chance of asking how the film was.
-				if !e.AllDay && e.Starts.Before(now) {
-					if since.IsZero() || !e.Starts.Before(since) {
-						were = append(were, a)
+				for _, e := range found {
+					a := greet.Appointment{
+						What: e.Title, When: e.Starts, AllDay: e.AllDay, Where: e.Where,
 					}
-					continue
+					// What has already started is not what is coming --
+					// but it is what they have just been doing, which is
+					// the only thing the greeting can check where they
+					// were against. It used to be dropped, and with it
+					// went any chance of asking how the film was.
+					if !e.AllDay && e.Starts.Before(now) {
+						if since.IsZero() || !e.Starts.Before(since) {
+							were = append(were, a)
+						}
+						continue
+					}
+					diary = append(diary, a)
 				}
-				diary = append(diary, a)
-			}
-			sort.SliceStable(diary, func(i, j int) bool {
-				return diary[i].When.Before(diary[j].When)
-			})
-			sort.SliceStable(were, func(i, j int) bool {
-				return were[i].When.Before(were[j].When)
+				sort.SliceStable(diary, func(i, j int) bool {
+					return diary[i].When.Before(diary[j].When)
+				})
+				sort.SliceStable(were, func(i, j int) bool {
+					return were[i].When.Before(were[j].When)
+				})
 			})
 		}()
 	}
@@ -505,33 +510,37 @@ func (h *Handler) coming(ctx context.Context, user string, now, since time.Time)
 		wg.Add(1)
 		go func() {
 			defer wg.Done()
-			found, _, err := h.chores.Everywhere(ask, user)
-			if err != nil {
-				h.Logger.WarnContext(ctx, "cannot read the task lists for a greeting",
-					slog.Any("error", err))
-				return
-			}
-			// The end of tomorrow. A task carries a day and never an
-			// hour -- the API drops the time -- so the cut is a date.
-			by := day.AddDate(0, 0, Ahead)
-			for _, t := range found {
-				if t.Done {
-					continue
+			// One source failing is one source. It used to be the
+			// server, while somebody stood at the door.
+			logging.Surviving(ask, h.Logger, "reading the lists", func() {
+				found, _, err := h.chores.Everywhere(ask, user)
+				if err != nil {
+					h.Logger.WarnContext(ctx, "cannot read the task lists for a greeting",
+						slog.Any("error", err))
+					return
 				}
-				switch {
-				case t.Due.IsZero():
-					// No day set, so it is not due; it is just open.
-					list.Others++
-				case t.Due.Before(by):
-					list.Due = append(list.Due, greet.Chore{
-						What: t.Title, By: t.Due, Overdue: t.Due.Before(day),
-					})
-				default:
-					list.Others++
+				// The end of tomorrow. A task carries a day and never an
+				// hour -- the API drops the time -- so the cut is a date.
+				by := day.AddDate(0, 0, Ahead)
+				for _, t := range found {
+					if t.Done {
+						continue
+					}
+					switch {
+					case t.Due.IsZero():
+						// No day set, so it is not due; it is just open.
+						list.Others++
+					case t.Due.Before(by):
+						list.Due = append(list.Due, greet.Chore{
+							What: t.Title, By: t.Due, Overdue: t.Due.Before(day),
+						})
+					default:
+						list.Others++
+					}
 				}
-			}
-			sort.SliceStable(list.Due, func(i, j int) bool {
-				return list.Due[i].By.Before(list.Due[j].By)
+				sort.SliceStable(list.Due, func(i, j int) bool {
+					return list.Due[i].By.Before(list.Due[j].By)
+				})
 			})
 		}()
 	}

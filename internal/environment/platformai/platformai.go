@@ -258,85 +258,90 @@ func (p *Environment) Run(ctx context.Context, req environment.Request) (<-chan 
 	ch := make(chan environment.Message)
 	go func() {
 		defer close(ch)
+		// A panic here used to end the server. close(ch) is
+		// above this and still runs, so whoever is reading the
+		// answer sees it end rather than waiting for ever.
+		logging.Surviving(ctx, p.logger, "streaming an answer", func() {
 
-		started := time.Now()
-		// Each fragment of the answer, as the model writes it. The
-		// runner puts these straight through to whoever is listening,
-		// so speech can start on the first clause.
-		// Counted, because whether the reply streamed at all is not
-		// visible anywhere else: a stream that is read and put back
-		// together looks exactly like a reply that arrived whole.
-		var pieces int
-		// When the first fragment arrived, which splits a call into
-		// the part spent thinking and the part spent writing. The
-		// two behave nothing alike -- one grows with how hard the
-		// question is, the other with how long the answer is -- and
-		// one duration for the whole call hides which of them is
-		// costing the wait.
-		var firstPiece time.Duration
-		got, err := p.chat(ctx, req, func(text string) {
-			if pieces == 0 {
-				firstPiece = time.Since(started)
-			}
-			pieces++
-			// Always sent on. Whether a piece reaches the person is
-			// the runner's to decide, and it needs to see them
-			// either way: the first fragment of prose is how it
-			// learns this round is prose rather than a tool call,
-			// which is several seconds before the round says so.
-			send(ctx, ch, environment.Partial(text))
-		})
-		if err != nil {
-			// A cancelled chat is the user's doing, not a failure worth
-			// reporting to them.
-			if ctx.Err() != nil {
+			started := time.Now()
+			// Each fragment of the answer, as the model writes it. The
+			// runner puts these straight through to whoever is listening,
+			// so speech can start on the first clause.
+			// Counted, because whether the reply streamed at all is not
+			// visible anywhere else: a stream that is read and put back
+			// together looks exactly like a reply that arrived whole.
+			var pieces int
+			// When the first fragment arrived, which splits a call into
+			// the part spent thinking and the part spent writing. The
+			// two behave nothing alike -- one grows with how hard the
+			// question is, the other with how long the answer is -- and
+			// one duration for the whole call hides which of them is
+			// costing the wait.
+			var firstPiece time.Duration
+			got, err := p.chat(ctx, req, func(text string) {
+				if pieces == 0 {
+					firstPiece = time.Since(started)
+				}
+				pieces++
+				// Always sent on. Whether a piece reaches the person is
+				// the runner's to decide, and it needs to see them
+				// either way: the first fragment of prose is how it
+				// learns this round is prose rather than a tool call,
+				// which is several seconds before the round says so.
+				send(ctx, ch, environment.Partial(text))
+			})
+			if err != nil {
+				// A cancelled chat is the user's doing, not a failure worth
+				// reporting to them.
+				if ctx.Err() != nil {
+					return
+				}
+				p.logger.ErrorContext(ctx, "platform ai call failed",
+					slog.Duration("after", time.Since(started)),
+					slog.Any("error", err))
+				f := classify(err)
+				send(ctx, ch, environment.Failure(f.Sentence(), string(f.Code), f.Full()))
 				return
 			}
-			p.logger.ErrorContext(ctx, "platform ai call failed",
-				slog.Duration("after", time.Since(started)),
-				slog.Any("error", err))
-			f := classify(err)
-			send(ctx, ch, environment.Failure(f.Sentence(), string(f.Code), f.Full()))
-			return
-		}
 
-		if len(got.ToolCalls) > 0 {
-			names := make([]string, 0, len(got.ToolCalls))
-			for _, c := range got.ToolCalls {
-				names = append(names, c.Name)
+			if len(got.ToolCalls) > 0 {
+				names := make([]string, 0, len(got.ToolCalls))
+				for _, c := range got.ToolCalls {
+					names = append(names, c.Name)
+				}
+				p.logger.InfoContext(ctx, "platform ai asked for tools",
+					slog.Int("streamed_pieces", pieces),
+					slog.Int("in_tokens", got.Usage.Input),
+					slog.Int("out_tokens", got.Usage.Output),
+					slog.Duration("after", time.Since(started)),
+					slog.Duration("first_piece_after", firstPiece),
+					slog.Any("tools", names),
+					slog.String("saying", got.Text))
+
+				// Prose beside a tool call is not sent on. What the
+				// model says it is about to do belongs in the saying
+				// argument, which is described, exampled and under a
+				// length; this is whatever it felt like writing, and
+				// on a voice turn it is spoken.
+				//
+				// Measured on 4 October 2026, it was a restatement of
+				// the question every time -- "I need to look at what
+				// you have planned for tomorrow before I can answer
+				// that, sir" in front of an answer about tomorrow. It
+				// is kept in the log, where it costs nothing.
+				send(ctx, ch, environment.ToolCalls(got.ToolCalls))
+				return
 			}
-			p.logger.InfoContext(ctx, "platform ai asked for tools",
+
+			p.logger.InfoContext(ctx, "platform ai answered",
 				slog.Int("streamed_pieces", pieces),
 				slog.Int("in_tokens", got.Usage.Input),
 				slog.Int("out_tokens", got.Usage.Output),
 				slog.Duration("after", time.Since(started)),
 				slog.Duration("first_piece_after", firstPiece),
-				slog.Any("tools", names),
-				slog.String("saying", got.Text))
-
-			// Prose beside a tool call is not sent on. What the
-			// model says it is about to do belongs in the saying
-			// argument, which is described, exampled and under a
-			// length; this is whatever it felt like writing, and
-			// on a voice turn it is spoken.
-			//
-			// Measured on 4 October 2026, it was a restatement of
-			// the question every time -- "I need to look at what
-			// you have planned for tomorrow before I can answer
-			// that, sir" in front of an answer about tomorrow. It
-			// is kept in the log, where it costs nothing.
-			send(ctx, ch, environment.ToolCalls(got.ToolCalls))
-			return
-		}
-
-		p.logger.InfoContext(ctx, "platform ai answered",
-			slog.Int("streamed_pieces", pieces),
-			slog.Int("in_tokens", got.Usage.Input),
-			slog.Int("out_tokens", got.Usage.Output),
-			slog.Duration("after", time.Since(started)),
-			slog.Duration("first_piece_after", firstPiece),
-			slog.Int("reply_bytes", len(got.Text)))
-		send(ctx, ch, environment.Final(got.Text))
+				slog.Int("reply_bytes", len(got.Text)))
+			send(ctx, ch, environment.Final(got.Text))
+		})
 	}()
 
 	return ch, nil

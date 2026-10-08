@@ -3,6 +3,7 @@ package remind
 import (
 	"context"
 	"github.com/DhanushRamesh/personal-assistant/internal/alarm"
+	"github.com/DhanushRamesh/personal-assistant/internal/logging"
 	"log/slog"
 	"time"
 )
@@ -122,7 +123,10 @@ func (l *Loop) Run(ctx context.Context) {
 		case <-ctx.Done():
 			return
 		case <-ticker.C:
-			l.Once(ctx)
+			// A tick that panics costs this tick. Without it the
+			// loop ends and nothing is ever said again, which is a
+			// worse way to lose reminders than losing one.
+			logging.Surviving(ctx, l.Logger, "a reminder pass", func() { l.Once(ctx) })
 		}
 	}
 }

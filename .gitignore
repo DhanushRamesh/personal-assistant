@@ -7,6 +7,8 @@
 .env
 /personal-assistant
 /personal-assistant.log
+# ...and what rotation leaves beside it.
+/personal-assistant.log.*
 /.personal-assistant.pid
 /.client.pid
 

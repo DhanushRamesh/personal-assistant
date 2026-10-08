@@ -6,6 +6,8 @@ import (
 	"sync"
 	"sync/atomic"
 	"time"
+
+	"github.com/DhanushRamesh/personal-assistant/internal/logging"
 )
 
 // Tick : How often the runner looks for work.
@@ -312,9 +314,14 @@ func (r *Runner) Run(ctx context.Context) {
 		case <-ctx.Done():
 			return
 		case <-tick.C:
-			r.Once(ctx)
+			// One rule that panics costs one pass. Ending the loop
+			// would stop every rule there is, including the ones
+			// that work.
+			logging.Surviving(ctx, r.Logger, "a rule pass", func() { r.Once(ctx) })
 		case l := <-in:
-			r.Landed(ctx, l.userID, l.kinds)
+			logging.Surviving(ctx, r.Logger, "a reading arriving", func() {
+				r.Landed(ctx, l.userID, l.kinds)
+			})
 		}
 	}
 }

@@ -32,6 +32,7 @@ import (
 	"time"
 
 	"github.com/DhanushRamesh/personal-assistant/internal/heard"
+	"github.com/DhanushRamesh/personal-assistant/internal/logging"
 	"google.golang.org/api/googleapi"
 	"google.golang.org/api/option"
 
@@ -329,18 +330,21 @@ func (l *Lists) Everywhere(ctx context.Context, userID string) ([]Task, []string
 		wg.Add(1)
 		go func(which List) {
 			defer wg.Done()
-			got, err := l.On(ctx, userID, which)
+			// One source failing is one source, not the server.
+			logging.Surviving(ctx, nil, "reading a list", func() {
+				got, err := l.On(ctx, userID, which)
 
-			mu.Lock()
-			defer mu.Unlock()
-			if err != nil {
-				// Named rather than swallowed. A search that
-				// silently skipped a list would answer "it is
-				// nowhere" about a list it never read.
-				missed = append(missed, which.Title)
-				return
-			}
-			all = append(all, got...)
+				mu.Lock()
+				defer mu.Unlock()
+				if err != nil {
+					// Named rather than swallowed. A search that
+					// silently skipped a list would answer "it is
+					// nowhere" about a list it never read.
+					missed = append(missed, which.Title)
+					return
+				}
+				all = append(all, got...)
+			})
 		}(which)
 	}
 	wg.Wait()

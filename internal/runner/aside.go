@@ -11,6 +11,7 @@ import (
 
 	"github.com/DhanushRamesh/personal-assistant/internal/chat"
 	"github.com/DhanushRamesh/personal-assistant/internal/environment"
+	"github.com/DhanushRamesh/personal-assistant/internal/logging"
 	"github.com/DhanushRamesh/personal-assistant/internal/tool"
 )
 
@@ -128,59 +129,64 @@ func (r *Runner) sayAside(ctx context.Context, t *chat.Chat, s *speech, text str
 	go func() {
 		said, done := context.WithTimeout(context.WithoutCancel(ctx), AsideFor)
 		defer done()
+		// Saying what is being done is a courtesy, and a panic
+		// in a courtesy should not end the turn it is covering,
+		// let alone the server.
+		logging.Surviving(said, r.logger, "saying what is being done", func() {
 
-		// Nothing at all until the turn has been slow enough to need
-		// covering. A turn that finishes inside this says nothing
-		// beside itself, because there was no silence to fill.
-		select {
-		case <-time.After(AsideAfter):
-		case <-said.Done():
-			return
-		}
-
-		// One at a time, in the order the rounds happened. Held for
-		// as long as the sentence takes to play, so the next round
-		// queues behind it rather than over it.
-		if s.abandoned.Load() {
-			return
-		}
-
-		s.mu.Lock()
-		defer s.mu.Unlock()
-
-		if wait := s.after(AsideGap); wait > 0 {
+			// Nothing at all until the turn has been slow enough to need
+			// covering. A turn that finishes inside this says nothing
+			// beside itself, because there was no silence to fill.
 			select {
-			case <-time.After(wait):
+			case <-time.After(AsideAfter):
 			case <-said.Done():
 				return
 			}
-		}
 
-		// Checked again, after the queue and after the gap. Most of an
-		// aside's life is spent waiting for the one in front of it, and
-		// the turn usually fails during that wait rather than before it.
-		if s.abandoned.Load() {
-			r.logger.InfoContext(said, "did not say what was being done, the turn had failed",
+			// One at a time, in the order the rounds happened. Held for
+			// as long as the sentence takes to play, so the next round
+			// queues behind it rather than over it.
+			if s.abandoned.Load() {
+				return
+			}
+
+			s.mu.Lock()
+			defer s.mu.Unlock()
+
+			if wait := s.after(AsideGap); wait > 0 {
+				select {
+				case <-time.After(wait):
+				case <-said.Done():
+					return
+				}
+			}
+
+			// Checked again, after the queue and after the gap. Most of an
+			// aside's life is spent waiting for the one in front of it, and
+			// the turn usually fails during that wait rather than before it.
+			if s.abandoned.Load() {
+				r.logger.InfoContext(said, "did not say what was being done, the turn had failed",
+					slog.String("text", text))
+				return
+			}
+
+			if err := r.aside.Say(said, text); err != nil {
+				r.logger.WarnContext(said, "cannot say what is being done",
+					slog.Any("error", err))
+				return
+			}
+			// Waited out here rather than left running, so that the next
+			// aside's gap is measured from when this one stopped being
+			// audible and not from when it was handed over.
+			if err := r.aside.Settled(said); err != nil {
+				r.logger.WarnContext(said, "cannot tell when what was said finished",
+					slog.Any("error", err))
+			}
+			s.done = time.Now()
+
+			r.logger.InfoContext(said, "said what is being done",
 				slog.String("text", text))
-			return
-		}
-
-		if err := r.aside.Say(said, text); err != nil {
-			r.logger.WarnContext(said, "cannot say what is being done",
-				slog.Any("error", err))
-			return
-		}
-		// Waited out here rather than left running, so that the next
-		// aside's gap is measured from when this one stopped being
-		// audible and not from when it was handed over.
-		if err := r.aside.Settled(said); err != nil {
-			r.logger.WarnContext(said, "cannot tell when what was said finished",
-				slog.Any("error", err))
-		}
-		s.done = time.Now()
-
-		r.logger.InfoContext(said, "said what is being done",
-			slog.String("text", text))
+		})
 	}()
 	return true
 }

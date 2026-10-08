@@ -484,7 +484,9 @@ func run() error {
 	watching.Add(1)
 	go func() {
 		defer watching.Done()
-		reminding.Run(remindCtx)
+		logging.Surviving(remindCtx, logger.Logger, "reminders", func() {
+			reminding.Run(remindCtx)
+		})
 	}()
 	// Registered in this order so they run in the other: stop first, then
 	// wait for the pass in flight to finish.
@@ -498,7 +500,9 @@ func run() error {
 		watching.Add(1)
 		go func() {
 			defer watching.Done()
-			sending.Run(remindCtx)
+			logging.Surviving(remindCtx, logger.Logger, "errands to the phone", func() {
+				sending.Run(remindCtx)
+			})
 		}()
 		logger.Info("errands go to the phone",
 			slog.Bool("alarms for reminders", cfg.Assistant.Alarms),
@@ -553,7 +557,9 @@ func run() error {
 	watching.Add(1)
 	go func() {
 		defer watching.Done()
-		describeDaily(remindCtx, chats, describing, cfg.Assistant.Now, logger.Logger)
+		logging.Surviving(remindCtx, logger.Logger, "the daily description", func() {
+			describeDaily(remindCtx, chats, describing, cfg.Assistant.Now, logger.Logger)
+		})
 	}()
 	logger.Info("describing the person", slog.Duration("every", profileEvery))
 
@@ -579,7 +585,9 @@ func run() error {
 	watching.Add(1)
 	go func() {
 		defer watching.Done()
-		listenDaily(remindCtx, chats, listening, cfg.Assistant.Now, logger.Logger)
+		logging.Surviving(remindCtx, logger.Logger, "the daily listening", func() {
+			listenDaily(remindCtx, chats, listening, cfg.Assistant.Now, logger.Logger)
+		})
 	}()
 	logger.Info("collecting the names they say daily",
 		slog.Duration("every", vocabularyEvery))
@@ -589,7 +597,9 @@ func run() error {
 	watching.Add(1)
 	go func() {
 		defer watching.Done()
-		forgetDaily(remindCtx, deviceEvents, cfg.Assistant.Now, logger.Logger)
+		logging.Surviving(remindCtx, logger.Logger, "forgetting what is old", func() {
+			forgetDaily(remindCtx, deviceEvents, cfg.Assistant.Now, logger.Logger)
+		})
 	}()
 	logger.Info("forgetting old position readings daily",
 		slog.Duration("every", forgetEvery), slog.Duration("keeping", event.Keep))
@@ -647,7 +657,9 @@ func run() error {
 	watching.Add(1)
 	go func() {
 		defer watching.Done()
-		sweeping.Run(remindCtx)
+		logging.Surviving(remindCtx, logger.Logger, "the announcement sweeper", func() {
+			sweeping.Run(remindCtx)
+		})
 	}()
 	logger.Info("publishing announcements to clients",
 		slog.Duration("sweeping stale ones every", outbox.Every))
@@ -703,7 +715,9 @@ func run() error {
 	watching.Add(1)
 	go func() {
 		defer watching.Done()
-		running.Run(remindCtx)
+		logging.Surviving(remindCtx, logger.Logger, "the rule engine", func() {
+			running.Run(remindCtx)
+		})
 	}()
 	logger.Info("running what is scheduled",
 		slog.Duration("every", job.Tick),

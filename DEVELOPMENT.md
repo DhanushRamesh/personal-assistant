@@ -13800,6 +13800,59 @@ nothing else did would be the odd one out. make enable is there for
 whenever that is wanted.
 
 
+### One loop failing should cost one loop
+
+An HTTP handler has had a recover() since the beginning. The loops
+that run unattended never did, and there are twenty-odd of them: the
+rule engine, reminders, the outbox sweeper, the collectors that fetch
+a calendar and a mailbox, the goroutine that streams an answer, the
+one that says what is being done while a turn is slow.
+
+A panic in any one took the whole server, and with it voice, every
+rule and every reminder -- because one tasklist came back shaped
+differently than the day before.
+
+logging.Surviving turns a panic into a logged fault with its stack and
+the name of what died. Wrapped in two places and for two reasons: the
+body of each ticking loop, so a bad pass costs that pass and the next
+tick still happens, and the goroutine itself where there is no loop.
+
+The supervisor is the other half and not a substitute. Coming back
+costs every loop its place and whatever turn was in flight; a recover
+costs one loop one turn.
+
+Two were left open deliberately. wg.Wait() then close(done) at
+shutdown, and the listener goroutine: a panic in either is a bug in
+this code rather than bad data from outside, and surviving it would
+hide it.
+
+A nil logger falls back to the default handler rather than
+re-panicking. Some of the places this is needed -- mail, tasks,
+calendar -- take a service client and nothing else, and threading a
+logger through them to reach a path that should never run would be the
+tail wagging the dog.
+
+### A log that stops growing
+
+57MB and 285 recorded starts, appended since the beginning and never
+trimmed. The appending is deliberate and stays: restarting used to
+destroy the record of whatever had just gone wrong, which is exactly
+when a restart happens.
+
+A user timer rather than /etc/logrotate.d, because everything else on
+this machine is user-space and installing it needed root. 50MB, five
+kept, compressed.
+
+copytruncate rather than rename-and-recreate. systemd opened the file
+with append: and holds the descriptor for the life of the process, so
+moving it would leave the server writing to something with no name --
+the log appearing to stop while the disk kept filling.
+
+Checked rather than assumed: rotated at 57MB, and a request after it
+landed at the start of the new file rather than at offset 57MB. 340
+bytes apparent, 4K on disk, so not a sparse file.
+
+
 ## 12. Maintaining this file
 
 When the owner states a preference, makes a decision, or corrects something,

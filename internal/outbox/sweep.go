@@ -4,6 +4,8 @@ import (
 	"context"
 	"log/slog"
 	"time"
+
+	"github.com/DhanushRamesh/personal-assistant/internal/logging"
 )
 
 // Every : How often what is still pending is looked over.
@@ -54,7 +56,7 @@ func (s *Sweeper) Run(ctx context.Context) {
 		case <-ctx.Done():
 			return
 		case <-tick.C:
-			s.Once(ctx)
+			logging.Surviving(ctx, s.Logger, "an outbox sweep", func() { s.Once(ctx) })
 		}
 	}
 }

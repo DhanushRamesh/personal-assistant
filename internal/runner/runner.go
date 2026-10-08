@@ -310,7 +310,11 @@ func (r *Runner) Submit(t *chat.Chat) error {
 			delete(r.active, t.ID)
 			r.mu.Unlock()
 		}()
-		r.execute(ctx, lifeCtx, &own)
+		// A turn that panics is one turn. Without this it was the
+		// server, mid-sentence, for everybody.
+		logging.Surviving(ctx, r.logger, "a turn", func() {
+			r.execute(ctx, lifeCtx, &own)
+		})
 	}()
 	return nil
 }

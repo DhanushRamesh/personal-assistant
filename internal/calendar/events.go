@@ -10,6 +10,7 @@ import (
 	"time"
 
 	"github.com/DhanushRamesh/personal-assistant/internal/heard"
+	"github.com/DhanushRamesh/personal-assistant/internal/logging"
 
 	gcal "google.golang.org/api/calendar/v3"
 )
@@ -499,15 +500,18 @@ func (d *Diary) Everywhere(ctx context.Context, userID string, from, to time.Tim
 		wg.Add(1)
 		go func(c Owned) {
 			defer wg.Done()
-			got, err := d.on(ctx, svc, c, from, to)
+			// One source failing is one source, not the server.
+			logging.Surviving(ctx, nil, "reading a calendar", func() {
+				got, err := d.on(ctx, svc, c, from, to)
 
-			mu.Lock()
-			defer mu.Unlock()
-			if err != nil {
-				missed = append(missed, c.Name)
-				return
-			}
-			all = append(all, got...)
+				mu.Lock()
+				defer mu.Unlock()
+				if err != nil {
+					missed = append(missed, c.Name)
+					return
+				}
+				all = append(all, got...)
+			})
 		}(c)
 	}
 	wg.Wait()

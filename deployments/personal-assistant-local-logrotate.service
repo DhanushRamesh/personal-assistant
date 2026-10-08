@@ -1,0 +1,15 @@
+# Keeps the local server's log from growing without end.
+#
+#   cp personal-assistant-local-logrotate.* ~/.config/systemd/user/
+#   systemctl --user daemon-reload
+#   systemctl --user enable --now personal-assistant-local-logrotate.timer
+
+[Unit]
+Description=Rotate the assistant's local log
+Documentation=https://github.com/DhanushRamesh/personal-assistant
+
+[Service]
+Type=oneshot
+# Its own state file, in the person's cache: the system one belongs to
+# root and this runs as them.
+ExecStart=/usr/sbin/logrotate --state %h/.cache/logrotate.status %h/workspace/personal-assistant/deployments/personal-assistant-local.logrotate

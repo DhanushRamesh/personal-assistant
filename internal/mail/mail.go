@@ -37,6 +37,7 @@ import (
 	"sync"
 	"time"
 
+	"github.com/DhanushRamesh/personal-assistant/internal/logging"
 	gmail "google.golang.org/api/gmail/v1"
 	"google.golang.org/api/option"
 )
@@ -177,24 +178,27 @@ func (m *Mailbox) Search(ctx context.Context, userID, query string, most int) ([
 		wg.Add(1)
 		go func(i int, id string) {
 			defer wg.Done()
-			got, err := svc.Users.Messages.Get(Me, id).
-				Format("metadata").
-				MetadataHeaders("From", "Subject", "Date").
-				Context(ctx).Do()
+			// One message failing is one message.
+			logging.Surviving(ctx, nil, "reading a message", func() {
+				got, err := svc.Users.Messages.Get(Me, id).
+					Format("metadata").
+					MetadataHeaders("From", "Subject", "Date").
+					Context(ctx).Do()
 
-			mu.Lock()
-			defer mu.Unlock()
-			if err != nil {
-				// The first failure is the one reported. A search
-				// that half worked is not an answer -- "you have
-				// seven messages" when there were ten is worse than
-				// saying it could not be read.
-				if failed == nil {
-					failed = fmt.Errorf("mail: reading a result: %w", err)
+				mu.Lock()
+				defer mu.Unlock()
+				if err != nil {
+					// The first failure is the one reported. A search
+					// that half worked is not an answer -- "you have
+					// seven messages" when there were ten is worse than
+					// saying it could not be read.
+					if failed == nil {
+						failed = fmt.Errorf("mail: reading a result: %w", err)
+					}
+					return
 				}
-				return
-			}
-			out[i] = summarise(got)
+				out[i] = summarise(got)
+			})
 		}(i, ref.Id)
 	}
 	wg.Wait()
@@ -249,24 +253,27 @@ func (m *Mailbox) Threads(ctx context.Context, userID, query string, most int) (
 		wg.Add(1)
 		go func(i int, id string) {
 			defer wg.Done()
-			// Metadata, not full. A thread of twelve replies fetched
-			// whole is the entire correspondence, and what is wanted
-			// here is who said something and when. mail_read still
-			// gets the whole of any one of them.
-			got, err := svc.Users.Threads.Get(Me, id).
-				Format("metadata").
-				MetadataHeaders("From", "Subject", "Date").
-				Context(ctx).Do()
+			// One message failing is one message.
+			logging.Surviving(ctx, nil, "reading a message", func() {
+				// Metadata, not full. A thread of twelve replies fetched
+				// whole is the entire correspondence, and what is wanted
+				// here is who said something and when. mail_read still
+				// gets the whole of any one of them.
+				got, err := svc.Users.Threads.Get(Me, id).
+					Format("metadata").
+					MetadataHeaders("From", "Subject", "Date").
+					Context(ctx).Do()
 
-			mu.Lock()
-			defer mu.Unlock()
-			if err != nil {
-				if failed == nil {
-					failed = fmt.Errorf("mail: reading an exchange: %w", err)
+				mu.Lock()
+				defer mu.Unlock()
+				if err != nil {
+					if failed == nil {
+						failed = fmt.Errorf("mail: reading an exchange: %w", err)
+					}
+					return
 				}
-				return
-			}
-			out[i] = asThread(got)
+				out[i] = asThread(got)
+			})
 		}(i, ref.Id)
 	}
 	wg.Wait()
