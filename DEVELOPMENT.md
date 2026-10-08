@@ -14165,6 +14165,31 @@ window that sizes what is sent to it.
 	tool/conversations  3.8 -> 22.3      api/clients  43.2 -> 56.8
 
 
+### A sleeping phone and a dead cable look alike
+
+Owner, told at ten at night that the battery had sat at five per cent
+for a quarter of an hour and the cable might be at fault: *"what if
+the phone is stale, I did not intend to put the charge."*
+
+He was right. "battery.level <= 15m ago" finds the newest reading at
+least that old and compares the latest against it. If nothing has
+arrived inside the window, the newest reading is itself older than
+the one it is being compared against -- so it is compared with itself,
+and a value equals itself. Every phone asleep in a pocket read as a
+cable that had stopped charging.
+
+The same shape as the presence sensor that froze and went on reading
+as somebody being here. What is knowable is not whether the level
+moved but whether anything was reported, and nothing was looking.
+
+So the comparison is refused when nothing has arrived inside the
+window, which is the answer the gate already gives about a kind
+nobody has reported. A level that is genuinely stuck still says so,
+because a phone that is reporting sends the same number again.
+
+It reaches every rule written with "ago", not only this one.
+
+
 ## 12. Maintaining this file
 
 When the owner states a preference, makes a decision, or corrects something,

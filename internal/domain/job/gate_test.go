@@ -611,3 +611,51 @@ func TestOneBadConditionRefusesTheWhole(t *testing.T) {
 		}
 	}
 }
+
+// TestAPhoneThatStoppedReportingIsNotAPhoneThatStoppedCharging :
+// Owner, told the battery had sat at five percent for a quarter of an
+// hour: *"what if the phone is stale, I did not intend to put the
+// charge."*
+//
+// The two look identical from here -- a level that has not changed --
+// and the difference is whether anything was reported at all. A phone
+// asleep in a pocket sends nothing, so the newest reading is older
+// than the one it would be compared against, and a value equals
+// itself. Left alone, every sleeping phone reads as a dead cable.
+func TestAPhoneThatStoppedReportingIsNotAPhoneThatStoppedCharging(t *testing.T) {
+	now := time.Date(2026, 10, 8, 22, 0, 0, 0, time.UTC)
+
+	not, err := job.ParseConditions("battery.level <= 15m ago")
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	// Nothing has arrived for twenty minutes. The level may be
+	// climbing happily; nobody here can tell.
+	asleep := map[string][]job.Reading{"battery.level": {
+		{Value: "5", At: now.Add(-20 * time.Minute), Known: true},
+		{Value: "5", At: now.Add(-40 * time.Minute), Known: true},
+	}}
+	if not.Passes(asleep, false, now) {
+		t.Error("a phone that stopped reporting read as a phone that stopped charging")
+	}
+
+	// One reading and nothing to compare it with is the same case.
+	alone := map[string][]job.Reading{"battery.level": {
+		{Value: "5", At: now.Add(-20 * time.Minute), Known: true},
+	}}
+	if not.Passes(alone, false, now) {
+		t.Error("a single stale reading was compared with itself")
+	}
+
+	// And a phone that is reporting, with a level that genuinely is
+	// not moving, still says so -- which is the thing the rule is for.
+	reporting := map[string][]job.Reading{"battery.level": {
+		{Value: "5", At: now, Known: true},
+		{Value: "5", At: now.Add(-7 * time.Minute), Known: true},
+		{Value: "5", At: now.Add(-16 * time.Minute), Known: true},
+	}}
+	if !not.Passes(reporting, false, now) {
+		t.Error("a level reported three times and never moving did not read as stuck")
+	}
+}

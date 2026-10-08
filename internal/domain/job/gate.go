@@ -530,6 +530,24 @@ func (g Gate) Holds(got []Reading, away bool, now time.Time) bool {
 	// and nothing interpolated: what the value actually was then,
 	// as near as anything was reported.
 	want := now.Add(-back)
+
+	// Nothing has arrived inside the window, so the newest reading
+	// is older than the one it would be compared against -- which
+	// means comparing it with itself, and a value equals itself.
+	//
+	// A phone asleep in a pocket and a cable that has stopped
+	// charging look exactly alike from here: both are a level that
+	// has not changed. The difference is whether anything was
+	// reported, and that is knowable. Owner, on being told the
+	// battery had sat at five percent for fifteen minutes: *"what if
+	// the phone is stale, I did not intend to put the charge."*
+	//
+	// So the comparison is refused rather than guessed, which is the
+	// same answer this gives about a kind nobody has reported.
+	if len(got) == 0 || !got[0].At.After(want) {
+		return false
+	}
+
 	var before Reading
 	for _, r := range got {
 		if r.Known && !r.At.After(want) {
