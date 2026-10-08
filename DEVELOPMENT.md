@@ -14314,6 +14314,41 @@ Both rules speak in the room only. The cable is an arm's length away
 or the sentence is no use.
 
 
+### A lookup that failed is not the same as finding nothing
+
+From a second reading of the engine's specification, by something
+with no stake in it: *"missing information should never silently
+become permission to speak."*
+
+A failed check already stopped a sequence, and that was learned the
+hard way -- a rule with three conditions, the third unreadable, said
+its words aloud in the room, because the step meant to withhold
+failed and failing was taken for permission. The same mistake was
+still sitting one move further on, and the comment in the code names
+it without acting on it: *"a lookup that fails leaves the steps after
+it less to go on."*
+
+It does worse than that. A check that fails leaves the steps after it
+*unguarded*, which is at least visible. A lookup that fails leaves
+them *uninformed*, which looks like nothing at all: the write step
+still has its instruction, still has a model, and still produces a
+sentence -- composed from a picture with a hole in it that nothing in
+the sentence will mention. A rule that cannot read the battery does
+not say "I could not read the battery". It says something about the
+battery.
+
+So a failed read now stops the sequence, and a failed write does not.
+The older rule stands and is still right: a reminder whose phone
+alarm could not be set must still say its words aloud, because
+nothing after it was relying on what it returned. The two are the
+same step kind and want opposite things, and what separates them is
+`Tool.Writes` -- which has been on every tool all along for a
+different reason.
+
+A tool name the registry does not know counts as a read. Nothing is
+known about it, so nothing is risked by the quieter answer.
+
+
 ## 12. Maintaining this file
 
 When the owner states a preference, makes a decision, or corrects something,

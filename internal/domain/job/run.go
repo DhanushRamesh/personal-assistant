@@ -2,6 +2,7 @@ package job
 
 import (
 	"context"
+	"errors"
 	"log/slog"
 	"sync"
 	"sync/atomic"
@@ -201,6 +202,28 @@ type Journal interface {
 // task is a case in the server's own switch and not a change here.
 // The runner's business is order, lateness and failure; what a step
 // actually does is somebody else's.
+// ErrBlind : A step that was meant to find something failed, so
+// everything after it would be deciding without what it was given
+// to decide on.
+//
+// The other half of the rule that a failed check stops a sequence.
+// That one was learned from a rule whose third condition could not
+// be read and which said its words aloud anyway: the step meant to
+// withhold failed, and failing was taken for permission. This is
+// the same mistake one move further on. A lookup that fails does
+// not withhold anything -- it simply is not there -- and the write
+// step after it still has an instruction, still has a model, and
+// still produces a sentence, composed from a picture with a hole
+// in it that nothing in the sentence will mention.
+//
+// Only a read. A tool that was meant to *do* something and failed
+// must not stop the sequence, which is the older rule and still
+// right: a reminder whose phone alarm could not be set must still
+// say its words aloud. The two are the same step kind and want
+// opposite things, and what separates them is whether anything
+// after them was relying on what they returned.
+var ErrBlind = errors.New("job: a step that was meant to find something failed")
+
 type Doer interface {
 	// Do : Carries out one step for one person. Returns a stop when
 	// the rest of the sequence should not run.
@@ -604,6 +627,17 @@ func (r *Runner) one(ctx context.Context, j Job, now time.Time, pass *Pass) {
 				pass.Stopped++
 				stopped = true
 				r.note("a rule's condition could not be read, so it said nothing", j, why)
+				break
+			}
+
+			// A lookup that failed. Everything after it would be
+			// working from what it did not return, and a write
+			// step cannot tell the difference between a thing
+			// that is not there and a thing it was never handed.
+			if errors.Is(err, ErrBlind) {
+				pass.Stopped++
+				stopped = true
+				r.note("a rule could not find what it needed, so it said nothing", j, why)
 				break
 			}
 			r.note("a step failed and the sequence went on", j, why)

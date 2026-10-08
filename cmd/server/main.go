@@ -2078,7 +2078,20 @@ func (d doing) Do(ctx context.Context, run job.Turn, s job.Step) (job.Outcome, e
 			Ran: job.Tools(run.Already),
 		})
 		if out.Outcome == conversation.OutcomeFailed {
-			return job.Outcome{}, fmt.Errorf("%s: %s", s.Tool, out.Content)
+			err := fmt.Errorf("%s: %s", s.Tool, out.Content)
+			// Whether the steps after this one were relying on it.
+			// A tool that writes was asked to do something and the
+			// sequence goes on without it; a tool that reads was
+			// asked to find something, and going on without it is
+			// a sentence composed from a hole.
+			//
+			// A name the registry does not know counts as a read.
+			// Nothing is known about it, so nothing is risked by
+			// the quieter answer.
+			if t, found := d.tools.Get(s.Tool); !found || !t.Writes {
+				err = fmt.Errorf("%w: %w", job.ErrBlind, err)
+			}
+			return job.Outcome{}, err
 		}
 		d.logger.InfoContext(ctx, "a job ran a tool",
 			slog.String("tool", s.Tool), slog.String("outcome", string(out.Outcome)))

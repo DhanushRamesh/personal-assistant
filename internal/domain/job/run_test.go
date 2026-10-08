@@ -3,6 +3,7 @@ package job_test
 import (
 	"context"
 	"errors"
+	"fmt"
 	"strings"
 	"testing"
 	"time"
@@ -511,5 +512,65 @@ func TestACheckThatCannotBeReadStopsTheRule(t *testing.T) {
 	after, _ := s.Get("job_1")
 	if after.Said != "" {
 		t.Errorf("it remembered saying %q", after.Said)
+	}
+}
+
+// TestALookupThatFailedStopsTheSequence : The other half of the
+// rule that a broken condition withholds.
+//
+// A check that fails leaves the steps after it unguarded, and that
+// was fixed. A lookup that fails leaves them *uninformed*, which
+// looks like nothing at all: the write step still has its
+// instruction, still has a model, and still produces a sentence --
+// composed from a picture with a hole in it that the sentence will
+// not mention.
+func TestALookupThatFailedStopsTheSequence(t *testing.T) {
+	s, h := inmemory.New(), &hands{
+		failAt:  "event_recent",
+		failure: fmt.Errorf("%w: event_recent: the database is away", job.ErrBlind),
+		says:    "The battery is at four per cent, sir.",
+	}
+	put(t, s, "every 10m",
+		job.Step{Do: job.Call, Tool: "event_recent"},
+		job.Step{Do: job.Write, Ask: "say how the battery is"})
+
+	pass := runner(s, h, noon).Once(context.Background())
+
+	if got := h.did; len(got) != 1 {
+		t.Errorf("went on after a lookup it needed failed: ran %v", got)
+	}
+	if pass.Stopped != 1 {
+		t.Errorf("did not count the run as stopped: %+v", pass)
+	}
+	if pass.Failed != 1 {
+		t.Errorf("did not count the failure: %+v", pass)
+	}
+}
+
+// TestAnActionThatFailedDoesNotStopTheSequence : The older rule,
+// and still right. A reminder whose phone alarm could not be set
+// must still say its words aloud: nothing after it was relying on
+// what it returned, and swallowing the sentence over it would lose
+// the half that mattered.
+func TestAnActionThatFailedDoesNotStopTheSequence(t *testing.T) {
+	s, h := inmemory.New(), &hands{
+		failAt:  "reminder_set",
+		failure: errors.New("reminder_set: the phone did not answer"),
+		says:    "You asked to be reminded, sir.",
+	}
+	put(t, s, "every 10m",
+		job.Step{Do: job.Call, Tool: "reminder_set"},
+		job.Step{Do: job.Write, Ask: "say the words"})
+
+	pass := runner(s, h, noon).Once(context.Background())
+
+	if got := h.did; len(got) != 2 {
+		t.Errorf("an alarm that could not be set swallowed the words: ran %v", got)
+	}
+	if pass.Stopped != 0 {
+		t.Errorf("stopped over something nothing was relying on: %+v", pass)
+	}
+	if pass.Failed != 1 {
+		t.Errorf("did not count the failure: %+v", pass)
 	}
 }
