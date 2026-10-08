@@ -14829,6 +14829,66 @@ they are, touches nothing it does -- and a rule rewritten in order
 to be renamed is a rule that could come back different.
 
 
+### The wake word survives what the recogniser cannot
+
+Owner: *"waking happens at a distance but my command is not. Why?"*
+
+The satellite's log says it plainly. Three wake words at 0.995,
+0.987 and 0.855, every one of them followed by VAD_START and
+VAD_END -- so the microphone heard it and the voice detector heard
+it -- and then: *"What is the time?"* correctly, *"We'll be waiting
+later tomorrow morning"* for something that was not that at all,
+and once `stt-no-text-recognized`.
+
+A fluent, confident sentence built out of mangled phonemes is not a
+recogniser mishearing a word. It is a recogniser reconstructing from
+mush.
+
+Measured, on the satellite's own processor, with a quiet
+far-speech signal at RMS 254:
+
+	                 NS=Max   NS=Off
+	AGC 0 (as set)       91      250
+	AGC 9               206      563
+	AGC 15 / 22 / 31    206      563
+
+Set as it was -- gain off, suppression at maximum -- the thing
+threw away nine decibels of the signal before Deepgram saw it. The
+microphone heard the command; the processing in front of the
+recogniser removed it.
+
+The wake word survives that because `microWakeWord` is a small
+binary classifier trained on far-field augmented audio, deciding one
+question: was that the phrase. ASR has to resolve every phoneme.
+That gap is physics and cannot be closed -- but it was being widened
+by three or four times, in the two settings in front of it.
+
+Two things the measurement settled that guessing would not have.
+Gain above 9 does nothing at all: 9, 15, 22 and 31 are identical,
+because on a signal this quiet the gain is already pinned at its
+maximum, so the dial is on or off and nothing between. And
+suppression at maximum costs a factor of 2.7 *even with gain on*,
+which makes it the larger of the two faults.
+
+Gain 15, suppression off. Both are Home Assistant entities and the
+satellite picks them up on the next block -- `Updating WebRTC
+settings: Gain=15, NS=0` -- so neither needs it restarted, which
+matters because it must not be.
+
+What to watch, because it is the real trade. The wake word reads
+the same audio, and suppression at maximum was holding false wakes
+down; the owner had already noticed *"sometimes the wake word is
+called without calling it."* If they return, the answer is to raise
+the wake word's sensitivity from 0.7 and not to put suppression
+back: suppression trades false wakes against transcription, which is
+the thing that was failing, and sensitivity trades them against
+range, which is not.
+
+And the heartbeat will not show any of this. It counts the level
+before processing on purpose, so that it reports what the microphone
+gave rather than what suppression left of it.
+
+
 ## 12. Maintaining this file
 
 When the owner states a preference, makes a decision, or corrects something,
