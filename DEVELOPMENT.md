@@ -14582,6 +14582,50 @@ and is no use as a before-and-after marker. The run journal's own
 timestamps are the answer, which is what it is for.
 
 
+### A rule in two halves
+
+Owner: *"I want the current rule list to be in this when/perform
+format, and the rule create tool should be updated."*
+
+The conversion, written as one function that can be run over every
+live rule and its answer read before a single row is touched. All
+sixteen go through it.
+
+What the shape settles, and why each is not a preference:
+
+The schedule becomes hooks, and several hooks mean *any one of them
+fires it* -- which is how two triggers on one rule get written at
+all. The old shape parsed one gate and had no room for a second, so
+"when the door opens or the window opens" was two rules.
+
+Every check becomes a condition, and `perform` has no check in it.
+Not tidiness: a check could only ever read a *source*, never what
+the step before it returned, so every check gave the same answer
+wherever it sat. One measured 1255ms -> 4ms from being moved ahead
+of the fetch it was written after. In this shape it cannot be
+written in the wrong place, because there is no wrong place to
+write it.
+
+The two invented notations become structure. A count is keys; "15m
+ago" is a key of its own. That one was the worse of the two,
+because in a value field it looked like an ordinary value and
+writing "15m" by mistake gave a rule that parsed, ran, and compared
+the battery against the number fifteen.
+
+`is` and `is not` are stored as `==` and `!=`. The words are what
+somebody says and what a rule is read back as; the symbols are what
+is kept, so a dictated rule and a generated one converge on the
+same row.
+
+One bug the conversion found in itself, worth keeping: twenty
+minutes came out as `"20"`. Go writes it `20m0s`, and trimming the
+tail off that takes the unit with it -- the string ends in `0m` and
+so does the number. Each unit is taken on its own now. It would
+have made every rule comparing against its own past compare against
+a bare number instead, and it was found by reading the output
+rather than by a test, which is why the output was read.
+
+
 ## 12. Maintaining this file
 
 When the owner states a preference, makes a decision, or corrects something,
