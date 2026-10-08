@@ -14278,6 +14278,42 @@ the engine already has with tools, and it is why the two checks in
 written before there was anywhere to put them.
 
 
+### The charger moves to where it always belonged
+
+Owner, on the charger check living in `situation`: *"this should not
+be in situation, it should be in the rule engine."*
+
+He was right, and the duplication was worse than he knew: it was in
+both already. `situation.NotCharging` ran every two minutes over a
+three-hour window; the rule `plugged in and not charging` ran fifteen
+minutes after a `power.plugged`. Two clocks, two windows, one
+question, and an afternoon spent improving one of them without
+noticing the other.
+
+It is two rules now, and both are better than the Go was:
+
+	when power.not_charging arrives then 2m
+	  check ha.sensor.pixel_7_battery_state is not_charging
+
+	when power.charging arrives then 20m
+	  check ha.sensor.pixel_7_battery_state is charging
+	  check ha.sensor.pixel_7_battery_level < 95
+	  check battery.level <= 20m ago
+
+The two minutes are the settling that was a constant in Go, and the
+condition after it is a live reading rather than a timestamp
+comparison -- a cable being seated flickers not_charging for a few
+seconds, and the rule now waits and asks the phone again instead of
+inferring from how old the event was.
+
+What is left in `situation` is the two checks that count and group.
+The charger was never that. It was one number against another, which
+is the one thing the engine does for nothing.
+
+Both rules speak in the room only. The cable is an arm's length away
+or the sentence is no use.
+
+
 ## 12. Maintaining this file
 
 When the owner states a preference, makes a decision, or corrects something,

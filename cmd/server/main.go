@@ -322,12 +322,17 @@ func run() error {
 	tools, err := tool.NewRegistry(slices.Concat(
 		conversations.All(chats),
 		situationstool.Tools(deviceEvents, []situation.Check{
-			// The three shapes, in the order they are looked for.
+			// The two shapes, in the order they are looked for.
 			// Somebody trying and not getting through comes first:
-			// it is about a person, and the other two are about a
+			// it is about a person, and the other is about a
 			// device.
+			//
+			// The charger was the third and is now two rules. It
+			// was arithmetic on one number against another, which
+			// is the one thing the engine already does for nothing
+			// -- what is left here are the two that count and
+			// group, which it cannot.
 			situation.Trying,
-			situation.NotCharging,
 			situation.Quiet,
 		}, cfg.Assistant.Now),
 		rules.All(jobmysql.New(db.DB), rules.Clock{
