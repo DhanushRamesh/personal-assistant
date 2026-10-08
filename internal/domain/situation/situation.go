@@ -86,6 +86,16 @@ const (
 	// somebody who knows.
 	Stuck = 20 * time.Minute
 
+	// Settling : How long the phone's own word that nothing is going
+	// in has to stand before it is worth saying.
+	//
+	// Two minutes. Android reports not_charging for a few seconds
+	// while a cable is being seated and again while a hot phone
+	// pauses to cool, and neither of those is a fault. Waiting the
+	// twenty below would throw away the whole advantage of having
+	// been told outright.
+	Settling = 2 * time.Minute
+
 	// Full : The level past which standing still is the battery being
 	// full rather than the charger being broken.
 	Full = 95
@@ -96,22 +106,48 @@ const (
 // The failure nobody notices until morning. Worth saying while they
 // are in the room and the cable is an arm's length away, and worth
 // saying nowhere else.
+//
+// Two devices answer this and they do not answer it equally well.
+// Home Assistant reads the phone's own charging state and reports
+// not_charging outright. Tasker knows only that a socket is
+// connected, so from it the same fact has to be inferred from a
+// level that will not rise -- which cannot tell a dead charger from
+// a phone asleep in a pocket. The newest word wins whichever device
+// it came from, so being told is used when it is there and the slow
+// arithmetic still covers a phone whose companion app is gone.
 func NotCharging(evs []event.Event, now time.Time) (Found, bool) {
-	var plugged time.Time
+	var newest event.Event
 	levels := make([]event.Event, 0, 16)
 	for _, e := range evs {
 		switch {
 		case strings.HasPrefix(e.Kind, "power."):
 			// The newest word on the charger wins, whichever it was.
-			if e.OccurredAt.After(plugged) {
-				plugged = time.Time{}
-				if strings.HasSuffix(e.Kind, ".plugged") {
-					plugged = e.OccurredAt
-				}
+			if e.OccurredAt.After(newest.OccurredAt) {
+				newest = e
 			}
 		case strings.HasSuffix(e.Kind, ".level"):
 			levels = append(levels, e)
 		}
+	}
+
+	// Told outright, so there is nothing to work out and no twenty
+	// minutes to wait for: the phone has said the cable is in and
+	// nothing is coming through it.
+	if strings.HasSuffix(newest.Kind, ".not_charging") {
+		if now.Sub(newest.OccurredAt) < Settling {
+			return Found{}, false
+		}
+		return Found{
+			Key:  "notcharging:" + newest.OccurredAt.UTC().Format(time.RFC3339),
+			Says: "Your phone is on charge" + standing(newest) + ", sir, but nothing is going in. The cable may not be in properly.",
+		}, true
+	}
+
+	// Nothing but a connected socket to go on. A level that has not
+	// moved in all that time is the only evidence there is.
+	var plugged time.Time
+	if strings.HasSuffix(newest.Kind, ".plugged") {
+		plugged = newest.OccurredAt
 	}
 	if plugged.IsZero() || now.Sub(plugged) < Stuck {
 		return Found{}, false
@@ -133,6 +169,22 @@ func NotCharging(evs []event.Event, now time.Time) (Found, bool) {
 		Says: "Your phone has been on charge a while and is still at " +
 			strconv.Itoa(last) + " per cent, sir. The cable may not be in properly.",
 	}, true
+}
+
+// standing : Where the battery had got to, said as a clause, or
+// nothing at all when the sender left the level out.
+func standing(e event.Event) string {
+	var into struct {
+		Level string `json:"level"`
+	}
+	if unmarshal(e, &into) != nil {
+		return ""
+	}
+	n, err := strconv.Atoi(strings.TrimSpace(into.Level))
+	if err != nil {
+		return ""
+	}
+	return " and still at " + strconv.Itoa(n) + " per cent"
 }
 
 // reading : The level at the moment the charger went on, or the

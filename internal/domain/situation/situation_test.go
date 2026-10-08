@@ -150,3 +150,99 @@ func TestACableThatIsNotIn(t *testing.T) {
 		t.Errorf("spoke from readings two hours old: %q", said.Says)
 	}
 }
+
+// told : What Home Assistant sends when the phone's own charging
+// state changes -- the state in the kind, the socket and the level
+// in the payload.
+func told(state string, lvl int, at time.Time) event.Event {
+	p := `{"value":"ac"}`
+	if lvl >= 0 {
+		p = fmt.Sprintf(`{"value":"ac","level":"%d"}`, lvl)
+	}
+	return event.Event{Kind: "power." + state, Payload: []byte(p), OccurredAt: at}
+}
+
+// TestBeingToldBeatsWorkingItOut : The phone knows whether current
+// is going in and says so. Where it has said, the twenty minutes of
+// arithmetic underneath are not consulted at all -- which is the
+// whole reason the sender was added, since a level that has not
+// moved cannot tell a dead charger from a phone asleep in a pocket.
+func TestBeingToldBeatsWorkingItOut(t *testing.T) {
+	// Said outright five minutes ago. No waiting for a level to sit
+	// still, and the level it came with is the one quoted.
+	flat := []event.Event{
+		power(true, ago(6*time.Minute)),
+		told("not_charging", 41, ago(5*time.Minute)),
+	}
+	found, ok := situation.NotCharging(flat, now)
+	if !ok {
+		t.Fatal("said nothing when the phone said nothing was going in")
+	}
+	if !strings.Contains(found.Says, "41 per cent") {
+		t.Errorf("did not say where it had got to: %q", found.Says)
+	}
+
+	// A cable being seated, and a hot phone pausing to cool, both
+	// read as not_charging for a few seconds. Neither is a fault.
+	seating := []event.Event{
+		power(true, ago(1*time.Minute)),
+		told("not_charging", 41, ago(30*time.Second)),
+	}
+	if said, ok := situation.NotCharging(seating, now); ok {
+		t.Errorf("complained before the cable had settled: %q", said.Says)
+	}
+
+	// Current is going in, so a level standing still for forty
+	// minutes is a full battery or a slow sensor, not a bad cable.
+	// The old arithmetic would have complained about this.
+	working := []event.Event{
+		power(true, ago(41*time.Minute)),
+		told("charging", 31, ago(40*time.Minute)),
+		level(31, ago(38*time.Minute)),
+		level(31, ago(3*time.Minute)),
+	}
+	if said, ok := situation.NotCharging(working, now); ok {
+		t.Errorf("complained about a charger the phone says is working: %q", said.Says)
+	}
+
+	// Off the cable entirely.
+	for _, state := range []string{"discharging", "full"} {
+		off := []event.Event{
+			power(true, ago(41*time.Minute)),
+			told(state, 31, ago(40*time.Minute)),
+			level(31, ago(38*time.Minute)),
+			level(31, ago(3*time.Minute)),
+		}
+		if said, ok := situation.NotCharging(off, now); ok {
+			t.Errorf("complained about a phone that is %s: %q", state, said.Says)
+		}
+	}
+
+	// A sender that left the level out still gets the sentence,
+	// just without a number in it.
+	bare := []event.Event{told("not_charging", -1, ago(5*time.Minute))}
+	found, ok = situation.NotCharging(bare, now)
+	if !ok {
+		t.Fatal("said nothing because the level was missing")
+	}
+	if strings.Contains(found.Says, "per cent") {
+		t.Errorf("invented a level it was never sent: %q", found.Says)
+	}
+
+	// The newest word wins. Told it was charging, then told it had
+	// stopped.
+	stopped := []event.Event{
+		power(true, ago(2*time.Hour)),
+		told("charging", 31, ago(2*time.Hour)),
+		told("not_charging", 52, ago(10*time.Minute)),
+	}
+	if _, ok := situation.NotCharging(stopped, now); !ok {
+		t.Error("kept quiet after the phone said charging had stopped")
+	}
+
+	// Said once, said under one name, however often it is asked.
+	again, _ := situation.NotCharging(flat, now.Add(time.Minute))
+	if again.Key != found.Key && again.Key == "" {
+		t.Error("gave the same cable two different keys")
+	}
+}

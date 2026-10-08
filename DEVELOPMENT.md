@@ -14190,6 +14190,48 @@ because a phone that is reporting sends the same number again.
 It reaches every rule written with "ago", not only this one.
 
 
+### The phone knows, so stop guessing
+
+Owner, after the stale-reading fix: *"is there any tasker event to
+check if a usb cable is connected to the socket, not necessarily
+meant to be plugged."*
+
+There is not. Tasker's Power state knows only that a source is
+connected; whether current is flowing lives in a kernel file named
+differently on every handset, and the feature request for a charging
+variable is still open. Every phone event in this server comes from
+Tasker, 3792 of them, and every `power.plugged` ever sent carries
+`{"level":"95","value":"unknown"}` -- the value slot has never once
+been filled, because Tasker had nothing to put in it.
+
+The Home Assistant companion app has had the answer the whole time
+and nobody looked: `sensor.pixel_7_battery_state` reads charging,
+discharging, full or not_charging, with `sensor.pixel_7_charger_type`
+beside it. So this is the one phone fact that comes from Home
+Assistant rather than Tasker. `rest_command.assistant_charging` posts
+`power.<state>` with the socket as the value and the level alongside,
+fired by an automation that refuses unknown, unavailable, and any
+trigger that is not a change between two known states -- a server
+told charging had stopped because the phone lost signal would be told
+a lie in the direction that wakes somebody up.
+
+A new sender is half the work. `situation.NotCharging` matched on
+`power.` and treated anything that was not `.plugged` as unplugged,
+so the truthful events would have silenced the very check they were
+sent to improve. It now takes the newest word whichever device sent
+it: told `not_charging`, it says so after two minutes and quotes the
+level it was given; told `charging`, it stays quiet even when the
+level has not moved in forty, because a flat level under current is a
+full battery or a slow sensor. Only `plugged` -- Tasker alone, the
+companion app gone -- still falls through to the twenty-minute
+arithmetic.
+
+Settling is two minutes, not twenty. Android reports `not_charging`
+for a few seconds while a cable is seated and again while a hot phone
+pauses to cool; waiting the twenty would throw away the whole point
+of being told outright.
+
+
 ## 12. Maintaining this file
 
 When the owner states a preference, makes a decision, or corrects something,
