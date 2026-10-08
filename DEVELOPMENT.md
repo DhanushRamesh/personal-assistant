@@ -14242,6 +14242,42 @@ pauses to cool; waiting the twenty would throw away the whole point
 of being told outright.
 
 
+### The engine is the backbone, so it does not get to have limits
+
+Owner, on being told that counting was worth adding but the join was
+a language feature with one customer: *"remember the rule engine is
+the backbone and I should have wide capabilities (like writing a code
+using predefined templates) cuz in future I'll make the AI to create
+rules based on the patterns, so it should not have limitations."*
+
+The argument that killed the join was "who else would use it" --
+only `Trying` does, so a grammar word for it is a feature with one
+customer. That argument is wrong here, and it is worth writing down
+why, because it is the kind of reasoning that looks careful.
+
+It counts the customers who exist. The customer that matters does
+not exist yet: an AI that watches what this person actually does and
+writes rules for the patterns it finds. That writer cannot ask for a
+word the grammar does not have. Every capability left out is not one
+rule unwritten, it is a whole shape of noticing that can never be
+expressed, by anything, ever -- and nobody will see it missing,
+because an unwritable rule leaves no trace.
+
+So the engine is sized for what will write rules, not for what has
+written them. Breadth first, and "only one thing needs it" stops
+being a reason to leave something out.
+
+What it is not is a licence to invent a programming language in a
+database column. The owner said how: *predefined templates*. A
+template is a named pattern, written and tested in Go, with blanks a
+rule fills in -- counted, grouped, cancelled-by, gone-quiet. The
+determinism stays in Go where it can be tested; what moves to the
+engine is choosing a pattern and filling it. That is the same split
+the engine already has with tools, and it is why the two checks in
+`situation` are not a separate engine but the first two templates,
+written before there was anywhere to put them.
+
+
 ## 12. Maintaining this file
 
 When the owner states a preference, makes a decision, or corrects something,
