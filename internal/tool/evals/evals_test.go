@@ -79,6 +79,15 @@ type eval struct {
 	// before the harness could carry a turn of history: the model was
 	// right and the test was not.
 	After string
+	// NotArgs : Fragments that must not appear in the arguments.
+	//
+	// The other half of Args, and the one that catches a description
+	// having been widened too far. A setting the person did not ask
+	// for is as wrong as one they asked for and did not get, and it
+	// is the failure a longer description buys: told that a rule can
+	// follow somebody out of the room, a model starts deciding that
+	// most of them should.
+	NotArgs []string
 	// Never : Fragments the reply must not contain, whatever it does.
 	//
 	// The rest of this measures which tool is chosen, which is almost
@@ -508,6 +517,11 @@ func TestTheModelReachesForTheRightTool(t *testing.T) {
 			for _, want := range c.Args {
 				if !strings.Contains(strings.ToLower(args), strings.ToLower(want)) {
 					missing = append(missing, want)
+				}
+			}
+			for _, never := range c.NotArgs {
+				if strings.Contains(strings.ToLower(args), strings.ToLower(never)) {
+					missing = append(missing, "not "+never)
 				}
 			}
 			if len(missing) > 0 {

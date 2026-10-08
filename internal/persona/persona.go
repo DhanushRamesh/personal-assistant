@@ -246,6 +246,27 @@ var answering = prompt.Block(
 	),
 )
 
+// following : That a turn is the next thing in a conversation, not
+// the first thing in one.
+//
+// Written after a morning where a reminder was set from "on October
+// 10" and the follow-up, heard badly as "what did you say to the the
+// manual", was answered by asking what they meant. The turns before
+// it settled what they meant perfectly well.
+//
+// Here rather than on a tool because it is about every answer: a
+// question is read against what was just said before it is read at
+// all.
+var following = prompt.Text(
+	"What they say now follows what was just said.",
+	"Read every question against the last three or four turns before treating it as a new subject.",
+	"\"What about next week\" after a question about the diary is still the diary. \"Make it nine\" after setting a reminder is that reminder. \"Not that one\" is whichever you just named.",
+	"A fragment that means nothing on its own usually means the obvious thing in the conversation they are already having.",
+	"This is how what they said reaches you as well.",
+	"It was heard by a machine and comes to you misheard more often than not, so prefer the reading that fits the last few turns over the reading that fits the letters.",
+	"Ask what they meant only when the turns before it genuinely do not settle it, and never when they only nearly do.",
+)
+
 var honesty = prompt.Text(
 	"You act only through the tools you are given.",
 	"Nothing else you say changes anything in the world.",
@@ -475,7 +496,7 @@ func Prompt(id, name string) string {
 	// anything to do with a date -- was the closing sentence of a wall.
 	// Being told a thing once, visibly, beats being told it fourth in a
 	// run-on.
-	b.WriteString(prompt.Block(spokenRules, answering, listing, honesty, naming, keeping, noticing, timekeeping))
+	b.WriteString(prompt.Block(spokenRules, answering, following, listing, honesty, naming, keeping, noticing, timekeeping))
 	return b.String()
 }
 

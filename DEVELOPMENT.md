@@ -13717,6 +13717,44 @@ audience table, all of them right to. That table is worth the tests it
 has.
 
 
+### A turn is the next thing in a conversation
+
+Owner, 8 October 2026: *"whenever i say something, it should relate
+to the last three to four conversation turns."*
+
+From a morning where a reminder was set for the Jailer booking and the
+follow-up came back as "What did you say to the the manual?" -- the
+recogniser's best effort at something else entirely. It was answered
+by asking what they meant. The turns before it settled what they
+meant.
+
+So `following` in the persona, wired into the block that is actually
+sent. Two halves, and the second is the one that matters: what reaches
+the model has been through a speech recogniser and is misheard more
+often than not, so the reading that fits the last few turns beats the
+reading that fits the letters. Asking what they meant is for when the
+turns genuinely do not settle it, never when they only nearly do.
+
+Prompt wording, which is the last resort here by rule. Reading a turn
+against the ones before it cannot be enforced in the server: there is
+no check that distinguishes a question that ignored the context from
+one that did not need it.
+
+### A reminder with a date and no hour gets the hour it was asked at
+
+Asked directly what a date-only reminder should default to -- "on
+October 10" with no time -- the owner said the current time, which is
+what it already does.
+
+Written down because it looks like a bug and is not. "Reminder set for
+Saturday the 10th at 2:14 pm" from a turn at 2:14 pm reads as the
+model reaching for the nearest number to hand, and the next thing
+anybody will want to do is pick a sensible hour instead. The owner has
+been asked and does not want one.
+
+The correction in that exchange was about the day, not the hour.
+
+
 ## 12. Maintaining this file
 
 When the owner states a preference, makes a decision, or corrects something,

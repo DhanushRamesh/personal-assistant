@@ -72,6 +72,38 @@ var ruleCases = []eval{
 	{Say: "when I plug the phone in, check a quarter of an hour later that it is actually charging",
 		Tool: []string{"rule_add", "rule_list"}},
 
+	// Reaching them when they are not in the room.
+	//
+	// Almost every rule belongs where somebody is standing, and a few
+	// -- the phone about to die before they go out -- are worth most
+	// exactly when they are not. The rule says which, so the model has
+	// to set it when asked, and the listing is given here because
+	// changing a rule means reading one first.
+	//
+	// Measured because the words for it are not the word for it:
+	// nobody says "anywhere". They say wherever I am, even when I am
+	// out, on my phone.
+	{Say: "make the low battery rule reach me wherever I am",
+		After: "Your standing rules: \"low battery with something on\" (job_01M4BSFQ6EM7HYC9YR7WM4J3WR) every 10m; \"a call nobody returned\" (job_01M4BFQJE1JBW2G3S5XAHJ7H47) every 30m, kept 6h.",
+		Tool:  []string{"rule_update"},
+		Args:  []string{"anywhere", "true"}},
+	{Say: "I want to hear that one even when I am not in the room",
+		After: "Your standing rules: \"low battery with something on\" (job_01M4BSFQ6EM7HYC9YR7WM4J3WR) every 10m; \"a call nobody returned\" (job_01M4BFQJE1JBW2G3S5XAHJ7H47) every 30m, kept 6h.",
+		Tool:  []string{"rule_update"},
+		Args:  []string{"anywhere", "true"}},
+	{Say: "tell me when the battery is nearly flat, and I want it on my phone when I am out",
+		After: "Your standing rules: \"low battery with something on\" (job_01M4BSFQ6EM7HYC9YR7WM4J3WR) every 10m; \"a call nobody returned\" (job_01M4BFQJE1JBW2G3S5XAHJ7H47) every 30m, kept 6h.",
+		Tool:  []string{"rule_add"},
+		Args:  []string{"anywhere"}},
+
+	// And the other way, so it is not simply always set. Most rules
+	// are asked for without a word about where, and those belong in
+	// the room.
+	{Say: "remind me every half hour to stand up",
+		After:   "Your standing rules: \"low battery with something on\" (job_01M4BSFQ6EM7HYC9YR7WM4J3WR) every 10m; \"a call nobody returned\" (job_01M4BFQJE1JBW2G3S5XAHJ7H47) every 30m, kept 6h.",
+		Tool:    []string{"rule_add"},
+		NotArgs: []string{"anywhere"}},
+
 	// Conditions.
 	{Say: "warn me about the battery, but only after ten in the morning",
 		Tool: []string{"rule_add", "rule_list"}},
@@ -185,6 +217,11 @@ func TestTheModelWritesARuleProperly(t *testing.T) {
 			for _, want := range c.Args {
 				if !strings.Contains(strings.ToLower(args), strings.ToLower(want)) {
 					missing = append(missing, want)
+				}
+			}
+			for _, never := range c.NotArgs {
+				if strings.Contains(strings.ToLower(args), strings.ToLower(never)) {
+					missing = append(missing, "not "+never)
 				}
 			}
 			if len(missing) > 0 {
