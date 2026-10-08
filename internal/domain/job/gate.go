@@ -71,6 +71,152 @@ const Links = "link."
 // for the same reason it refuses a connection.
 const Hass = "ha."
 
+// Counting : The gate source that counts what arrived instead of
+// reading the newest of it.
+//
+//	counted call.missed within 2h >= 2
+//	counted call.missed is amma within 2h >= 2
+//	counted call.missed by value within 2h >= 2
+//
+// The engine could read one value and compare it with a number,
+// and that is all it could ever do. Everything about *how often*
+// was out of reach: the same person ringing twice, three reports
+// in an hour, a door opened more times tonight than usually. Each
+// of those had to be fetched as rows and handed to a model, which
+// answers them at the price of a model call and a different answer
+// each time.
+//
+// Searching, counting and grouping are one form here and not
+// three, because the loop is the part nobody should have to
+// write. "is" narrows to the readings whose value is that, "by
+// value" counts each distinct value separately and takes the
+// largest, and "within" is how far back to look. The question
+// "has anybody tried twice" is the group form; "has amma tried
+// twice" is the narrowed one; and neither needs a word the other
+// does not have.
+//
+// Never a trigger, for the same reason as the other asked
+// sources: a count is worked out when somebody wants it. A rule
+// that wants one on arrival says "when call.missed arrives" and
+// checks the count, which also leaves what counts as *crossing* a
+// count a question nobody has to answer.
+//
+// A count of none is a count. Every other source here treats
+// nothing known as a condition that does not hold; this one knows
+// the answer is nought, and "counted x within 2h is 0" is a rule
+// about a thing not happening, which nothing else could say.
+const Counting = "counted"
+
+// By, Value : How a count is grouped. Only the value can be
+// grouped by, because the value is the only part of a payload the
+// engine reads at all.
+const (
+	By    = "by"
+	Value = "value"
+)
+
+// Count : What a counted source asks for.
+type Count struct {
+	// Kind : The event kind to count.
+	Kind string
+	// Match : Only the readings whose value is this. Empty counts
+	// every reading of the kind.
+	Match string
+	// Group : Count each distinct value separately and answer with
+	// the largest. "Somebody has tried twice", without having to
+	// say who.
+	Group bool
+	// Window : How far back to look.
+	Window time.Duration
+}
+
+// Counts : Whether a gate source counts rather than reads.
+func Counts(source string) bool {
+	f := strings.Fields(strings.ToLower(strings.TrimSpace(source)))
+	return len(f) > 0 && f[0] == Counting
+}
+
+// ReadCount : What a counted source is asking for.
+//
+//	counted <kind> [is <value>] [by value] within <length>
+//
+// Read back to front, because the length is always last and the
+// optional parts sit between. The kind is the only thing that has
+// to be there.
+func ReadCount(source string) (Count, error) {
+	f := strings.Fields(strings.ToLower(strings.TrimSpace(source)))
+	if len(f) < 4 || f[0] != Counting {
+		return Count{}, fmt.Errorf("%w: %q is not something to count", ErrUnreadableGate, source)
+	}
+	c := Count{Kind: f[1]}
+	rest := f[2:]
+
+	if len(rest) < 2 || rest[len(rest)-2] != Within {
+		return Count{}, fmt.Errorf(
+			"%w: a count needs %q and a length of time, such as %q",
+			ErrUnreadableGate, Within, "within 2h")
+	}
+	window, err := time.ParseDuration(rest[len(rest)-1])
+	if err != nil || window <= 0 {
+		return Count{}, fmt.Errorf("%w: %q is not a length of time",
+			ErrUnreadableGate, rest[len(rest)-1])
+	}
+	c.Window = window
+	rest = rest[:len(rest)-2]
+
+	if len(rest) >= 2 && rest[len(rest)-2] == By {
+		if rest[len(rest)-1] != Value {
+			return Count{}, fmt.Errorf(
+				"%w: a count is grouped %q and nothing else, not by %q",
+				ErrUnreadableGate, By+" "+Value, rest[len(rest)-1])
+		}
+		c.Group, rest = true, rest[:len(rest)-2]
+	}
+
+	if len(rest) > 0 {
+		if rest[0] != Is || len(rest) < 2 {
+			return Count{}, fmt.Errorf("%w: %q is not part of something to count",
+				ErrUnreadableGate, strings.Join(rest, " "))
+		}
+		c.Match = strings.Join(rest[1:], " ")
+	}
+	return c, nil
+}
+
+// counted : A gate over a count.
+//
+// The operator and the number are taken from the right-hand end
+// rather than the left, because the source is several words and
+// one of them may be "is" -- "counted call.missed is amma within
+// 2h >= 2" has two, and only the last one is the comparison.
+func counted(fields []string) (Gate, error) {
+	if len(fields) < 6 {
+		return Gate{}, fmt.Errorf("%w: %q is not a count to compare",
+			ErrUnreadableGate, strings.Join(fields, " "))
+	}
+	op := strings.ToLower(fields[len(fields)-2])
+	switch op {
+	case Is, Less, More, AtMost, AtLeast:
+	default:
+		return Gate{}, fmt.Errorf("%w: a count is compared with a number, so %q cannot be asked of it",
+			ErrUnreadableGate, op)
+	}
+	value := fields[len(fields)-1]
+	if n, err := strconv.Atoi(value); err != nil || n < 0 {
+		return Gate{}, fmt.Errorf("%w: %q is not a number of things",
+			ErrUnreadableGate, value)
+	}
+	g := Gate{
+		Source: strings.ToLower(strings.Join(fields[:len(fields)-2], " ")),
+		Op:     op,
+		Value:  value,
+	}
+	if _, err := ReadCount(g.Source); err != nil {
+		return Gate{}, err
+	}
+	return g, nil
+}
+
 // Working, Broken : What a connection gate may be compared
 // against.
 const (
@@ -370,6 +516,10 @@ func (c Conditions) Deep() time.Duration {
 // comparison, and the rest is the value, which may contain spaces.
 func ParseGate(s string) (Gate, error) {
 	fields := strings.Fields(strings.TrimSpace(s))
+	// Several words on the left, so it is read from the other end.
+	if len(fields) > 0 && strings.EqualFold(fields[0], Counting) {
+		return counted(fields)
+	}
 	// The kind and nothing else to compare: a reading of it
 	// arrived, whatever it said.
 	if len(fields) == 2 && strings.EqualFold(fields[1], Any) {
@@ -649,7 +799,7 @@ func (g Gate) Measures() bool {
 // delivered.
 func (g Gate) Arrives() bool {
 	return g.Needs() != "" && !routine.Mine(g.Source) &&
-		!Linked(g.Source) && !Hassed(g.Source)
+		!Linked(g.Source) && !Hassed(g.Source) && !Counts(g.Source)
 }
 
 // Linked : Whether a gate source asks about a connection to

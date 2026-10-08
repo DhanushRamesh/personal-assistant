@@ -741,3 +741,108 @@ func TestWhatHomeAssistantSaysIsComparedLikeAnythingElse(t *testing.T) {
 		t.Error("a condition held against an entity nothing is known about")
 	}
 }
+
+// TestACountIsReadBackToFront : The source is several words and one
+// of them may be "is", so the comparison has to be taken from the
+// right-hand end. "counted call.missed is amma within 2h >= 2" has
+// two, and only the last is the operator.
+func TestACountIsReadBackToFront(t *testing.T) {
+	for _, c := range []struct {
+		cond string
+		want job.Count
+		op   string
+		val  string
+	}{
+		{"counted call.missed within 2h >= 2",
+			job.Count{Kind: "call.missed", Window: 2 * time.Hour}, ">=", "2"},
+		{"counted call.missed is amma within 2h >= 2",
+			job.Count{Kind: "call.missed", Match: "amma", Window: 2 * time.Hour}, ">=", "2"},
+		{"counted call.missed by value within 2h >= 2",
+			job.Count{Kind: "call.missed", Group: true, Window: 2 * time.Hour}, ">=", "2"},
+		{"counted call.missed is amma by value within 30m is 0",
+			job.Count{Kind: "call.missed", Match: "amma", Group: true, Window: 30 * time.Minute}, "is", "0"},
+		{"counted door.opened within 12h > 3",
+			job.Count{Kind: "door.opened", Window: 12 * time.Hour}, ">", "3"},
+	} {
+		g, err := job.ParseGate(c.cond)
+		if err != nil {
+			t.Errorf("%q: %v", c.cond, err)
+			continue
+		}
+		if g.Op != c.op || g.Value != c.val {
+			t.Errorf("%q compared %q %q, want %q %q", c.cond, g.Op, g.Value, c.op, c.val)
+		}
+		got, err := job.ReadCount(g.Source)
+		if err != nil {
+			t.Errorf("%q: source %q: %v", c.cond, g.Source, err)
+			continue
+		}
+		if got != c.want {
+			t.Errorf("%q read as %+v, want %+v", c.cond, got, c.want)
+		}
+		if !job.Counts(g.Source) {
+			t.Errorf("%q was not recognised as a count", c.cond)
+		}
+		// Asked, never delivered -- so it can qualify a rule and
+		// never set one off, which is also why nobody has to say
+		// what crossing a count would mean.
+		if g.Arrives() {
+			t.Errorf("%q was allowed to be a trigger", c.cond)
+		}
+	}
+}
+
+// TestACountThatCannotWorkIsRefusedWhenItIsWritten : The codebase's
+// least-tolerated failure is a rule that cannot fire and never says
+// why, so every one of these has to be caught in front of whoever
+// wrote it.
+func TestACountThatCannotWorkIsRefusedWhenItIsWritten(t *testing.T) {
+	for _, bad := range []string{
+		"counted call.missed >= 2",                   // no window
+		"counted call.missed within 2h",              // nothing to compare
+		"counted call.missed within fish >= 2",       // not a length
+		"counted call.missed within 2h >= many",      // not a number
+		"counted call.missed within 2h older than 2", // not a comparison for a count
+		"counted call.missed by caller within 2h >= 2",
+		"counted call.missed nonsense within 2h >= 2",
+		"counted within 2h >= 2",
+		"counted call.missed within -2h >= 2",
+		"counted call.missed within 2h >= -1",
+	} {
+		if g, err := job.ParseGate(bad); err == nil {
+			t.Errorf("%q was accepted as %+v", bad, g)
+		}
+	}
+}
+
+// TestACountComparesLikeAnythingElse : A number where every other
+// source gives a value, so every operator already there works on it
+// and counting needed no new one.
+func TestACountComparesLikeAnythingElse(t *testing.T) {
+	at := time.Date(2026, 10, 8, 18, 0, 0, 0, time.UTC)
+	six := job.Reading{Value: "6", At: at, Known: true}
+	none := job.Reading{Value: "0", At: at, Known: true}
+
+	for _, c := range []struct {
+		cond string
+		r    job.Reading
+		want bool
+	}{
+		{"counted call.missed within 2h >= 2", six, true},
+		{"counted call.missed within 2h < 2", six, false},
+		{"counted call.missed within 2h is 6", six, true},
+		{"counted call.missed within 2h >= 2", none, false},
+		// A rule about a thing NOT happening, which nothing else
+		// in this grammar can say: everywhere else nothing known
+		// is a condition that does not hold.
+		{"counted call.missed within 2h is 0", none, true},
+	} {
+		g, err := job.ParseGate(c.cond)
+		if err != nil {
+			t.Fatalf("%q: %v", c.cond, err)
+		}
+		if got := g.Passes(c.r, false, at); got != c.want {
+			t.Errorf("%q against %q gave %v, want %v", c.cond, c.r.Value, got, c.want)
+		}
+	}
+}

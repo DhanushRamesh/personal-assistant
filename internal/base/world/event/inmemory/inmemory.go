@@ -4,6 +4,7 @@ package inmemory
 
 import (
 	"context"
+	"encoding/json"
 	"slices"
 	"sort"
 	"strings"
@@ -167,4 +168,53 @@ func (s *Store) Kinds(_ context.Context, userID string) ([]event.Kind, error) {
 	}
 	sort.Slice(out, func(i, j int) bool { return out[i].Count > out[j].Count })
 	return out, nil
+}
+
+// Tally : How many of a kind arrived in the window.
+//
+// The same answer the database gives, worked out the obvious way,
+// so that what a count means is settled here where it can be
+// tested rather than in a query nothing exercises.
+func (s *Store) Tally(_ context.Context, userID string, t event.Tally) (int, error) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+
+	per := map[string]int{}
+	n := 0
+	for _, e := range s.byUser[userID] {
+		if e.Kind != t.Kind || e.OccurredAt.Before(t.Since) {
+			continue
+		}
+		had, value := valued(e.Payload)
+		if t.Match != "" && (!had || !strings.EqualFold(value, t.Match)) {
+			continue
+		}
+		if !t.Group {
+			n++
+			continue
+		}
+		// Nothing to group it by, so it is in no group.
+		if !had {
+			continue
+		}
+		per[strings.ToLower(value)]++
+	}
+	if !t.Group {
+		return n, nil
+	}
+	for _, c := range per {
+		n = max(n, c)
+	}
+	return n, nil
+}
+
+// valued : A payload's value field, and whether it had one.
+func valued(payload []byte) (bool, string) {
+	var into struct {
+		Value *string `json:"value"`
+	}
+	if err := json.Unmarshal(payload, &into); err != nil || into.Value == nil {
+		return false, ""
+	}
+	return true, *into.Value
 }

@@ -7,6 +7,7 @@ import (
 	"time"
 
 	"personal-assistant/internal/base/world/announce/hass"
+	"personal-assistant/internal/base/world/event"
 )
 
 // TestWhatHomeAssistantSaysBecomesAReading : The one place a rule's
@@ -74,5 +75,58 @@ func TestWhatHomeAssistantSaysBecomesAReading(t *testing.T) {
 	none := readings{}
 	if got, err := none.Latest(context.Background(), "u", "ha.sensor.x", 2); err != nil || len(got) != 0 {
 		t.Errorf("a server with no Home Assistant gave %+v, %v", got, err)
+	}
+}
+
+// TestACountBecomesAReading : A number where every other source
+// gives a value, which is what lets every comparison already there
+// work on it unchanged.
+func TestACountBecomesAReading(t *testing.T) {
+	at := time.Date(2026, 10, 8, 18, 0, 0, 0, time.UTC)
+	var asked event.Tally
+	r := readings{
+		now: func() time.Time { return at },
+		counts: func(_ context.Context, _ string, t event.Tally) (int, error) {
+			asked = t
+			return 6, nil
+		},
+	}
+
+	got, err := r.Latest(context.Background(), "u",
+		"counted call.missed by value within 2h", 2)
+	if err != nil {
+		t.Fatalf("counting failed: %v", err)
+	}
+	if len(got) != 1 || got[0].Value != "6" || !got[0].Known {
+		t.Fatalf("got %+v, want one known reading of 6", got)
+	}
+	if asked.Kind != "call.missed" || !asked.Group || asked.Match != "" {
+		t.Errorf("asked the store for %+v", asked)
+	}
+	if want := at.Add(-2 * time.Hour); !asked.Since.Equal(want) {
+		t.Errorf("looked back to %v, want %v", asked.Since, want)
+	}
+
+	// Nought is known. Everywhere else nothing known is a condition
+	// that does not hold; here the answer was looked for and found
+	// to be none, which is the only way to write a rule about a
+	// thing NOT happening.
+	none := readings{now: func() time.Time { return at },
+		counts: func(context.Context, string, event.Tally) (int, error) { return 0, nil }}
+	got, err = none.Latest(context.Background(), "u", "counted call.missed within 2h", 2)
+	if err != nil || len(got) != 1 || got[0].Value != "0" || !got[0].Known {
+		t.Errorf("a count of none came back as %+v, %v -- it should be known", got, err)
+	}
+
+	// A source that cannot be read is a fault, not a quiet nothing:
+	// it was written wrongly and somebody has to be told.
+	if _, err := r.Latest(context.Background(), "u", "counted nonsense", 2); err == nil {
+		t.Error("accepted a count that could not be read")
+	}
+
+	// No counter at all leaves it unknown, like every other source.
+	if got, err := (readings{}).Latest(context.Background(), "u",
+		"counted call.missed within 2h", 2); err != nil || len(got) != 0 {
+		t.Errorf("a server with no counter gave %+v, %v", got, err)
 	}
 }

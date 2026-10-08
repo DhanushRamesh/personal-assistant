@@ -253,6 +253,35 @@ type Kind struct {
 // "what did I do today", "when was I last on that network", "what
 // happened on Tuesday" are all this with different fields set. A tool
 // for each would be several tools that read one table.
+// Tally : What to count, for a rule that asks how often rather
+// than what the latest one said.
+//
+// Deliberately narrower than [Query]. A count is compared with a
+// number by a rule written by voice, and every way of narrowing it
+// that nobody asked for is a way for the number to mean something
+// other than what was meant.
+//
+// Counted on when a thing happened rather than when the server was
+// told, because "twice in the last two hours" is a sentence about
+// the person's afternoon and not about delivery. A phone that
+// spooled a backlog reports three calls that really were three
+// calls.
+type Tally struct {
+	// Kind : The kind to count. Required: counting everything is
+	// not a question anybody asks.
+	Kind string
+	// Since : How far back. Required, for the same reason.
+	Since time.Time
+	// Match : Only those whose payload value is this, ignoring
+	// case. Empty counts them all.
+	Match string
+	// Group : Count each distinct value separately and answer with
+	// the largest, so that "somebody has tried twice" can be asked
+	// without naming anybody. Readings with no value at all are
+	// left out: there is nothing to group them by.
+	Group bool
+}
+
 type Query struct {
 	// Since, Until : The window. Zero means unbounded at that end.
 	Since time.Time

@@ -14349,6 +14349,64 @@ A tool name the registry does not know counts as a read. Nothing is
 known about it, so nothing is risked by the quieter answer.
 
 
+### Counting, searching and grouping are one word
+
+Owner, asked which to build next: *"now do the counted one. I would
+expect a mini if-else conditionals, searching, looping like that kind
+of thing but easy to build."*
+
+The loop is the part nobody should have to write. Searching through
+events, counting them and grouping them are three things to do by
+hand and one thing to ask for:
+
+	counted call.missed within 2h >= 2
+	counted call.missed is amma within 2h >= 2
+	counted call.missed by value within 2h >= 2
+
+`is` narrows, `by value` counts each distinct value and answers with
+the largest, `within` is how far back. No `for`, no `if`, no
+variables -- and between them they cover nearly everything anybody
+would have written a loop for. *Else* is not here on purpose: a rule
+that does one thing in one case and another in the other is two
+rules with opposite conditions, which can be read off the screen
+where an else buried in a row cannot.
+
+The operator is taken from the right-hand end, because the source is
+several words and one of them may be `is`. "counted call.missed is
+amma within 2h >= 2" has two, and only the last is the comparison.
+
+A count is a number where every other source gives a value, so every
+operator already there works on it and counting needed none of its
+own. It is asked rather than delivered, like `ha.`, so it cannot be
+a trigger -- which also means nobody has to decide what *crossing* a
+count would mean.
+
+Nought is known. Everywhere else in this engine nothing known is a
+condition that does not hold, and that is right, because nothing was
+proved. Here the answer was looked for and found to be none, so
+`counted door.opened within 12h is 0` is a rule about a thing not
+happening -- the only way this grammar can say that at all.
+
+### What the in-memory store is for
+
+The count is written twice: once in the in-memory store the obvious
+way, once as a query. The first is tested and settles what a count
+means; the second says the same thing to the database.
+
+Which is how this was caught. `JSON_UNQUOTE` does not inherit the
+table's collation: every text column here is utf8mb4_0900_ai_ci and
+ignores case, and a value pulled out of JSON comes back utf8mb4_bin
+and does not. Live, `is unknown` found six missed calls and `is
+UNKNOWN` found none, while the tested implementation found one
+either way. A rule would have been right in its test and wrong in
+the house, and nothing in the test suite could have seen it --
+there is no database behind those tests.
+
+Both sides fold the case now. The lesson is the one the second
+implementation exists for: run the query against the real rows
+before believing the unit test.
+
+
 ## 12. Maintaining this file
 
 When the owner states a preference, makes a decision, or corrects something,

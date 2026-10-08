@@ -683,8 +683,9 @@ func run() error {
 		linked: map[string]func(context.Context, string) (string, time.Time, error){
 			"link.google": googleHealth(googleLink),
 		},
-		hass:  entityState(speaker),
-		where: cfg.Assistant.Location, now: cfg.Assistant.Now}
+		hass:   entityState(speaker),
+		counts: deviceEvents.Tally,
+		where:  cfg.Assistant.Location, now: cfg.Assistant.Now}
 
 	running = &job.Runner{
 		Store: scheduled,
@@ -2175,6 +2176,9 @@ type readings struct {
 	// no Home Assistant behaves: rules standing on an entity do
 	// nothing rather than fire on a guess.
 	hass func(ctx context.Context, entity string) (string, time.Time, error)
+	// counts : How many of a kind arrived in a window. Nil leaves
+	// those conditions unknown.
+	counts func(ctx context.Context, userID string, t event.Tally) (int, error)
 	// where : Their zone, which is what an hour means.
 	where *time.Location
 	// now : The clock, so the hour a routine describes is placed on
@@ -2192,6 +2196,9 @@ func (r readings) Latest(ctx context.Context, userID, kind string, n int) ([]job
 	}
 	if job.Hassed(kind) {
 		return r.entity(ctx, kind)
+	}
+	if job.Counts(kind) {
+		return r.tally(ctx, userID, kind)
 	}
 	found, err := r.events.Recent(ctx, userID, event.Query{Kind: kind, Limit: n})
 	if err != nil {
@@ -2228,6 +2235,39 @@ func entityState(a announce.Announcer) func(context.Context, string) (string, ti
 		return nil
 	}
 	return asker.State
+}
+
+// tally : How often a thing happened, as a reading.
+//
+// A number where every other source gives a value, which is what
+// lets every comparison already there work on it: ">= 2" is the
+// same machinery that reads a battery level, and counting needed
+// no new operator.
+//
+// Nought is known. Everywhere else in this engine nothing known
+// means the condition does not hold, and that is right, because
+// nothing was proved. Here the answer was looked for and found to
+// be none, which is a different thing and the only way a rule can
+// be written about something *not* happening.
+func (r readings) tally(ctx context.Context, userID, source string) ([]job.Reading, error) {
+	if r.counts == nil {
+		return nil, nil
+	}
+	c, err := job.ReadCount(source)
+	if err != nil {
+		return nil, err
+	}
+	now := r.clock()
+	n, err := r.counts(ctx, userID, event.Tally{
+		Kind:  c.Kind,
+		Since: now.Add(-c.Window),
+		Match: c.Match,
+		Group: c.Group,
+	})
+	if err != nil {
+		return nil, err
+	}
+	return []job.Reading{{Value: strconv.Itoa(n), At: now, Known: true}}, nil
 }
 
 // entity : What Home Assistant says an entity is, as a reading.

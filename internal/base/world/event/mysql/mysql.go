@@ -290,3 +290,60 @@ func (s *Store) Kinds(ctx context.Context, userID string) ([]event.Kind, error) 
 	}
 	return out, nil
 }
+
+// valued : The payload's value field, as SQL reads it, folded to
+// one case.
+//
+// One place, because a count that narrowed on a different
+// expression from the one it grouped by would be quietly answering
+// two questions.
+//
+// Folded because JSON_UNQUOTE does not inherit the table's
+// collation. Every text column here is utf8mb4_0900_ai_ci, which
+// ignores case, and a value pulled out of JSON comes back as
+// utf8mb4_bin, which does not -- so "unknown" found six missed
+// calls and "UNKNOWN" found none, while the in-memory store that
+// settles what a count means found one either way. A rule tested
+// against one and run against the other would have been right in
+// the test and wrong in the house.
+const valued = "LOWER(JSON_UNQUOTE(JSON_EXTRACT(payload, '$.value')))"
+
+// Tally : How many of a kind arrived in the window.
+//
+// The in-memory store settles what this means and is tested on it;
+// this says the same thing to the database. A count is one row back
+// however many events it looked at, which is the whole reason a
+// rule should ask for one rather than fetch the events and count
+// them itself.
+func (s *Store) Tally(ctx context.Context, userID string, t event.Tally) (int, error) {
+	if t.Kind == "" || t.Since.IsZero() {
+		return 0, fmt.Errorf("counting events: a kind and a window are both needed")
+	}
+	db := s.db.WithContext(ctx).Model(&row{}).
+		Where("user_id = ?", userID).
+		Where("kind = ?", t.Kind).
+		Where("occurred_at >= ?", t.Since.UTC())
+	if t.Match != "" {
+		db = db.Where(valued+" = ?", strings.ToLower(t.Match))
+	}
+
+	if !t.Group {
+		var n int64
+		if err := db.Count(&n).Error; err != nil {
+			return 0, fmt.Errorf("counting events: %w", err)
+		}
+		return int(n), nil
+	}
+
+	// The largest group, which is "somebody has done this n times"
+	// without having to say who. Readings with no value are left
+	// out: there is nothing to group them by.
+	var most struct{ N int64 }
+	err := db.Where(valued + " IS NOT NULL").
+		Select("COUNT(*) AS n").Group(valued).
+		Order("n DESC").Limit(1).Scan(&most).Error
+	if err != nil {
+		return 0, fmt.Errorf("counting events by value: %w", err)
+	}
+	return int(most.N), nil
+}
