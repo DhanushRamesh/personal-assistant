@@ -107,14 +107,13 @@ const (
 // are in the room and the cable is an arm's length away, and worth
 // saying nowhere else.
 //
-// Two devices answer this and they do not answer it equally well.
-// Home Assistant reads the phone's own charging state and reports
-// not_charging outright. Tasker knows only that a socket is
-// connected, so from it the same fact has to be inferred from a
-// level that will not rise -- which cannot tell a dead charger from
-// a phone asleep in a pocket. The newest word wins whichever device
-// it came from, so being told is used when it is there and the slow
-// arithmetic still covers a phone whose companion app is gone.
+// It happens two ways and both are worth the same sentence. The
+// phone can say not_charging, which is the cable not seated or a
+// dead socket, and that needs no working out. Or it can say
+// charging while the level sits where it was, which is a charger
+// or a cable too weak to show -- or the phone spending it as fast
+// as it arrives. Neither device can see how many amps are going
+// in, so both start the same twenty minutes.
 func NotCharging(evs []event.Event, now time.Time) (Found, bool) {
 	var newest event.Event
 	levels := make([]event.Event, 0, 16)
@@ -143,10 +142,12 @@ func NotCharging(evs []event.Event, now time.Time) (Found, bool) {
 		}, true
 	}
 
-	// Nothing but a connected socket to go on. A level that has not
-	// moved in all that time is the only evidence there is.
+	// On the cable, however it was put that way. Current that is
+	// going in but never shows is as much a fault as none at all,
+	// so charging earns the same scrutiny a bare socket does.
 	var plugged time.Time
-	if strings.HasSuffix(newest.Kind, ".plugged") {
+	flowing := strings.HasSuffix(newest.Kind, ".charging")
+	if flowing || strings.HasSuffix(newest.Kind, ".plugged") {
 		plugged = newest.OccurredAt
 	}
 	if plugged.IsZero() || now.Sub(plugged) < Stuck {
@@ -164,10 +165,17 @@ func NotCharging(evs []event.Event, now time.Time) (Found, bool) {
 		// Nothing reported lately, so nothing is known lately.
 		return Found{}, false
 	}
+	// Which fault to name. Told it is charging, the cable is in and
+	// seated and saying so would send them to check a thing that is
+	// not wrong; what is wrong is how little is arriving.
+	blame := " per cent, sir. The cable may not be in properly."
+	if flowing {
+		blame = " per cent, sir. It says it is charging, so the charger or the cable is giving very little."
+	}
 	return Found{
 		Key: "notcharging:" + plugged.UTC().Format(time.RFC3339),
 		Says: "Your phone has been on charge a while and is still at " +
-			strconv.Itoa(last) + " per cent, sir. The cable may not be in properly.",
+			strconv.Itoa(last) + blame,
 	}, true
 }
 

@@ -192,20 +192,51 @@ func TestBeingToldBeatsWorkingItOut(t *testing.T) {
 		t.Errorf("complained before the cable had settled: %q", said.Says)
 	}
 
-	// Current is going in, so a level standing still for forty
-	// minutes is a full battery or a slow sensor, not a bad cable.
-	// The old arithmetic would have complained about this.
-	working := []event.Event{
+	// Saying charging is not the same as getting anywhere. Forty
+	// minutes of current that never shows is a charger or a cable
+	// too weak to matter, and the cable being seated is exactly why
+	// it must not be blamed.
+	weak := []event.Event{
 		power(true, ago(41*time.Minute)),
 		told("charging", 31, ago(40*time.Minute)),
 		level(31, ago(38*time.Minute)),
 		level(31, ago(3*time.Minute)),
 	}
-	if said, ok := situation.NotCharging(working, now); ok {
-		t.Errorf("complained about a charger the phone says is working: %q", said.Says)
+	found, ok = situation.NotCharging(weak, now)
+	if !ok {
+		t.Fatal("said nothing about forty minutes of charging that gained nothing")
+	}
+	if !strings.Contains(found.Says, "31 per cent") {
+		t.Errorf("did not say where it is stuck: %q", found.Says)
+	}
+	if strings.Contains(found.Says, "may not be in properly") {
+		t.Errorf("blamed a cable the phone says current is going through: %q", found.Says)
 	}
 
-	// Off the cable entirely.
+	// Rising is a charger working, whatever it is called.
+	rising := []event.Event{
+		power(true, ago(41*time.Minute)),
+		told("charging", 31, ago(40*time.Minute)),
+		level(31, ago(38*time.Minute)),
+		level(44, ago(3*time.Minute)),
+	}
+	if said, ok := situation.NotCharging(rising, now); ok {
+		t.Errorf("complained about a charger that is charging: %q", said.Says)
+	}
+
+	// Near the top it stands still because there is nowhere left to
+	// go, and that is the one time charging and flat is innocent.
+	topped := []event.Event{
+		power(true, ago(41*time.Minute)),
+		told("charging", 99, ago(40*time.Minute)),
+		level(99, ago(38*time.Minute)),
+		level(99, ago(3*time.Minute)),
+	}
+	if said, ok := situation.NotCharging(topped, now); ok {
+		t.Errorf("called a nearly full battery a weak charger: %q", said.Says)
+	}
+
+	// Off the cable entirely, or done with it.
 	for _, state := range []string{"discharging", "full"} {
 		off := []event.Event{
 			power(true, ago(41*time.Minute)),
@@ -227,6 +258,19 @@ func TestBeingToldBeatsWorkingItOut(t *testing.T) {
 	}
 	if strings.Contains(found.Says, "per cent") {
 		t.Errorf("invented a level it was never sent: %q", found.Says)
+	}
+
+	// A phone that said charging and is getting on with it says
+	// nothing at all, which is the ordinary case and has to stay
+	// quiet or the other half is noise.
+	fine := []event.Event{
+		power(true, ago(41*time.Minute)),
+		told("charging", 31, ago(40*time.Minute)),
+		level(31, ago(38*time.Minute)),
+		level(52, ago(3*time.Minute)),
+	}
+	if said, ok := situation.NotCharging(fine, now); ok {
+		t.Errorf("interrupted a charge that is going fine: %q", said.Says)
 	}
 
 	// The newest word wins. Told it was charging, then told it had

@@ -14220,11 +14220,21 @@ A new sender is half the work. `situation.NotCharging` matched on
 so the truthful events would have silenced the very check they were
 sent to improve. It now takes the newest word whichever device sent
 it: told `not_charging`, it says so after two minutes and quotes the
-level it was given; told `charging`, it stays quiet even when the
-level has not moved in forty, because a flat level under current is a
-full battery or a slow sensor. Only `plugged` -- Tasker alone, the
-companion app gone -- still falls through to the twenty-minute
-arithmetic.
+level it was given; told `charging` or `plugged`, it runs the
+twenty-minute arithmetic underneath.
+
+The first cut of this had `charging` silence the check, on the
+grounds that current going in means the cable is fine. Owner: *"if
+state is charging and level has not moved up it should say something
+wrong with the charger."* He is right, and it was the wrong way
+round. Charging with a level that will not rise is worse evidence
+than a bare socket, not better -- the phone is saying current is
+arriving and nothing is coming of it, which is a weak charger, a
+frayed cable, or the phone spending it as fast as it gets it. Neither
+device can see how many amps are going in, so neither earns an
+exemption. The only thing the word changes is which fault gets named:
+told it is charging, the cable is seated, and sending somebody to
+reseat it would send them to the one thing that is not wrong.
 
 Settling is two minutes, not twenty. Android reports `not_charging`
 for a few seconds while a cable is seated and again while a hot phone
