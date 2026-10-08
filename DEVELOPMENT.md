@@ -14700,6 +14700,15 @@ rule asking for a shape that does not exist would otherwise never
 fire and never say why, which is the failure this codebase has least
 patience with.
 
+Both rules were written and both sat still, because they were
+inserted by hand with `NOW(3)` for their next moment. Every datetime
+column here is UTC -- the stores all write `.UTC()` -- and `NOW(3)`
+is the server's own clock, which is five and a half hours ahead. The
+rules were perfectly correct and due that evening. Anything written
+by hand into this database wants `UTC_TIMESTAMP(3)`, and a rule that
+does not run at all is worth checking `next_at` on before anything
+cleverer.
+
 
 ## 12. Maintaining this file
 
