@@ -1,0 +1,300 @@
+package tool_test
+
+import (
+	"context"
+	"encoding/json"
+	"strings"
+	"testing"
+
+	"github.com/DhanushRamesh/personal-assistant/internal/app/tool"
+	"github.com/DhanushRamesh/personal-assistant/internal/base/chat"
+	"github.com/DhanushRamesh/personal-assistant/internal/base/conversation"
+)
+
+// usable : A tool that passes registration, for a test changing one thing
+// about it.
+func usable() tool.Tool {
+	return tool.Tool{
+		Name:     "conversation_list",
+		Purpose:  "List the conversations, newest first.",
+		UseWhen:  "You need a conversation's identifier.",
+		Channels: []chat.Channel{chat.ChannelVoice, chat.ChannelDirect},
+		Params: tool.Schema{
+			Properties: map[string]tool.Property{
+				"limit": {Type: "integer", Description: "How many to return.", Minimum: tool.Bound(1)},
+			},
+		},
+		Run: func(context.Context, tool.Invocation) tool.Result { return tool.OK("none") },
+	}
+}
+
+// A tool that cannot be described is refused when it is registered, not when
+// somebody speaks. Finding out from a wrong answer costs far more.
+func TestAToolMustBeDescribable(t *testing.T) {
+	cases := map[string]func(*tool.Tool){
+		"no name":        func(x *tool.Tool) { x.Name = "" },
+		"no purpose":     func(x *tool.Tool) { x.Purpose = "" },
+		"no use-when":    func(x *tool.Tool) { x.UseWhen = " " },
+		"no channel":     func(x *tool.Tool) { x.Channels = nil },
+		"does nothing":   func(x *tool.Tool) { x.Run = nil },
+		"vague argument": func(x *tool.Tool) { x.Params.Properties["limit"] = tool.Property{Type: "integer"} },
+		"untyped":        func(x *tool.Tool) { x.Params.Properties["limit"] = tool.Property{Description: "How many."} },
+	}
+
+	for name, break_ := range cases {
+		broken := usable()
+		break_(&broken)
+		if _, err := tool.NewRegistry(broken); err == nil {
+			t.Errorf("a tool with %s was accepted", name)
+		}
+	}
+}
+
+// Requiring an argument the tool does not take is a typo that would make
+// every call fail, and it is findable without running anything.
+func TestRequiringAnUnknownArgumentIsRefused(t *testing.T) {
+	broken := usable()
+	broken.Params.Required = []string{"conversation_id"}
+
+	if _, err := tool.NewRegistry(broken); err == nil {
+		t.Error("a tool requiring an argument it does not take was accepted")
+	}
+}
+
+// Two tools by one name is a registration that silently loses one of them.
+func TestAToolCannotBeRegisteredTwice(t *testing.T) {
+	if _, err := tool.NewRegistry(usable(), usable()); err == nil {
+		t.Error("the same tool was registered twice")
+	}
+}
+
+// The gate: a channel is only offered what it may reach.
+func TestAChannelIsOnlyOfferedWhatItMayReach(t *testing.T) {
+	destroy := usable()
+	destroy.Name = "conversation_delete"
+	destroy.Purpose = "Destroy a conversation and everything in it."
+	destroy.Channels = []chat.Channel{chat.ChannelDirect}
+
+	r, err := tool.NewRegistry(usable(), destroy)
+	if err != nil {
+		t.Fatalf("NewRegistry: %v", err)
+	}
+
+	if got := len(r.For(chat.ChannelVoice)); got != 1 {
+		t.Errorf("voice is offered %d tools, want only the one it may reach", got)
+	}
+	if got := len(r.For(chat.ChannelDirect)); got != 2 {
+		t.Errorf("typed is offered %d tools, want both", got)
+	}
+}
+
+// The gate again, at the other end. What the model is told is a prompt, and a
+// prompt is not a boundary: a model that has been told wrongly, or that is
+// repeating a call from earlier in a conversation, is stopped here.
+func TestAGatedToolIsRefusedEvenIfCalled(t *testing.T) {
+	var ran bool
+	destroy := usable()
+	destroy.Name = "conversation_delete"
+	destroy.Channels = []chat.Channel{chat.ChannelDirect}
+	destroy.Run = func(context.Context, tool.Invocation) tool.Result {
+		ran = true
+		return tool.OK("destroyed")
+	}
+
+	r, _ := tool.NewRegistry(destroy)
+	got := r.Call(context.Background(), "conversation_delete", tool.Invocation{
+		Caller: tool.Caller{Channel: chat.ChannelVoice},
+	})
+
+	if ran {
+		t.Error("a tool voice may not reach was run anyway")
+	}
+	if got.Outcome != conversation.OutcomeFailed {
+		t.Errorf("outcome = %q, want a failure", got.Outcome)
+	}
+	// Refused out loud. A tool that silently does nothing leaves the model to
+	// invent a reason, and it will invent a plausible one.
+	if !strings.Contains(got.Content, "channel") {
+		t.Errorf("refusal = %q, want it to say why", got.Content)
+	}
+}
+
+// A name nobody has is answered with the names somebody does have, so the
+// model can correct itself rather than guess again.
+func TestAnUnknownToolListsTheRealOnes(t *testing.T) {
+	r, _ := tool.NewRegistry(usable())
+
+	got := r.Call(context.Background(), "conversation_destroy", tool.Invocation{
+		Caller: tool.Caller{Channel: chat.ChannelDirect},
+	})
+
+	if got.Outcome != conversation.OutcomeFailed {
+		t.Errorf("outcome = %q, want a failure", got.Outcome)
+	}
+	if !strings.Contains(got.Content, "conversation_list") {
+		t.Errorf("refusal = %q, want it to name the tools that exist", got.Content)
+	}
+}
+
+// The schema has to be the JSON Schema a service expects, with every argument
+// described in it.
+func TestTheSchemaRendersAsJSONSchema(t *testing.T) {
+	raw, err := json.Marshal(usable().Params)
+	if err != nil {
+		t.Fatalf("Marshal: %v", err)
+	}
+
+	var got map[string]any
+	if err := json.Unmarshal(raw, &got); err != nil {
+		t.Fatalf("the schema is not valid JSON: %v", err)
+	}
+
+	if got["type"] != "object" {
+		t.Errorf("type = %v, want object", got["type"])
+	}
+	if _, ok := got["required"]; !ok {
+		t.Error("required is absent, which reads as unknown rather than as none")
+	}
+
+	props, _ := got["properties"].(map[string]any)
+	limit, _ := props["limit"].(map[string]any)
+	if limit["description"] == "" || limit["description"] == nil {
+		t.Error("the argument reached the model with no description")
+	}
+	if limit["minimum"] != float64(1) {
+		t.Errorf("minimum = %v, want the bound carried through", limit["minimum"])
+	}
+}
+
+// The description the model reads says what the tool is for and when to reach
+// for it, in a fixed order, so no tool has to shout to be noticed.
+func TestTheDescriptionSaysWhenToUseIt(t *testing.T) {
+	x := usable()
+	x.Avoid = "Do not use it to read a conversation."
+	x.Examples = []tool.Example{{Ask: "what have we talked about", Args: `{"limit":5}`}}
+
+	got := x.Description()
+	for _, want := range []string{"List the conversations", "Use when:", "Do not use:", `{"limit":5}`} {
+		if !strings.Contains(got, want) {
+			t.Errorf("description is missing %q: %s", want, got)
+		}
+	}
+}
+
+// A wrong argument is answered with what was wrong and what was allowed, so
+// the model can correct itself rather than guess again.
+func TestAWrongArgumentIsExplained(t *testing.T) {
+	x := usable()
+	x.Params = tool.Schema{
+		Properties: map[string]tool.Property{
+			"conversation_id": {Type: "string", Description: "An identifier.", Pattern: "^conv_"},
+			"limit":           {Type: "integer", Description: "How many.", Minimum: tool.Bound(1), Maximum: tool.Bound(50)},
+			"archived":        {Type: "boolean", Description: "Put-away ones."},
+			"order":           {Type: "string", Description: "Which way.", Enum: []string{"newest", "oldest"}},
+		},
+		Required: []string{"conversation_id"},
+	}
+	r, err := tool.NewRegistry(x)
+	if err != nil {
+		t.Fatalf("NewRegistry: %v", err)
+	}
+
+	cases := map[string]string{
+		`{}`:                                              "required",
+		`{"conversation_id":"roof"}`:                      "not the right shape",
+		`{"conversation_id":"conv_1","limit":0}`:          "least allowed",
+		`{"conversation_id":"conv_1","limit":99}`:         "most allowed",
+		`{"conversation_id":"conv_1","limit":"five"}`:     "must be a number",
+		`{"conversation_id":"conv_1","archived":"yes"}`:   "true or false",
+		`{"conversation_id":"conv_1","order":"sideways"}`: "must be one of",
+		`{"conversation_id":"conv_1","colour":"red"}`:     "not an argument",
+		`not json at all`:                                 "not a JSON object",
+	}
+
+	for args, want := range cases {
+		got := r.Call(context.Background(), x.Name, tool.Invocation{
+			Caller: tool.Caller{Channel: chat.ChannelDirect},
+			Args:   []byte(args),
+			Ran:    alreadyListed,
+		})
+		if got.Outcome != conversation.OutcomeFailed {
+			t.Errorf("%s was accepted", args)
+			continue
+		}
+		if !strings.Contains(got.Content, want) {
+			t.Errorf("%s gave %q, want it to mention %q", args, got.Content, want)
+		}
+	}
+}
+
+// Arguments that are right are passed through untouched, since what the model
+// wrote is what a tool has to act on.
+func TestGoodArgumentsReachTheTool(t *testing.T) {
+	var seen string
+	x := usable()
+	x.Params = tool.Schema{
+		Properties: map[string]tool.Property{
+			"limit": {Type: "integer", Description: "How many.", Minimum: tool.Bound(1)},
+		},
+	}
+	x.Run = func(_ context.Context, in tool.Invocation) tool.Result {
+		seen = string(in.Args)
+		return tool.OK("listed")
+	}
+
+	r, _ := tool.NewRegistry(x)
+	got := r.Call(context.Background(), x.Name, tool.Invocation{
+		Caller: tool.Caller{Channel: chat.ChannelDirect},
+		Args:   []byte(`{"limit":5}`),
+		Ran:    alreadyListed,
+	})
+
+	if got.Outcome != conversation.OutcomeOK {
+		t.Fatalf("outcome = %q: %s", got.Outcome, got.Content)
+	}
+	if seen != `{"limit":5}` {
+		t.Errorf("the tool saw %q, want the arguments as the model wrote them", seen)
+	}
+}
+
+// alreadyListed : Every domain's listings, so a write under test is not
+// refused for want of a read it is not testing.
+var alreadyListed = []string{"memory_list", "memory_search", "conversation_list",
+	"conversation_find", "calendar_events", "calendar_calendars", "reminder_list",
+	"reminder_recent"}
+
+// A tool that only reads is told to guess at a mangled name rather
+// than stop and ask.
+//
+// Asked "when did I move between Das and Dasabhift", with Dhanush and
+// Dhanush_EXT on record and plainly what was meant, the assistant
+// asked which networks they meant. It was a question about the past:
+// nothing was at stake and nothing could be broken by guessing.
+func TestAReadingToolIsToldToTakeTheNearestName(t *testing.T) {
+	reading := tool.Tool{
+		Name: "place_visits", Purpose: "Read where they have been.",
+		UseWhen: "They ask where they went.", Lists: true,
+	}
+
+	got := reading.Description()
+	for _, want := range []string{"arrive mangled", "take the nearest one", "Do not stop to ask",
+		"which one you took it to mean"} {
+		if !strings.Contains(got, want) {
+			t.Errorf("a reading tool is not told to guess: %q missing from\n%s", want, got)
+		}
+	}
+}
+
+// A tool that changes something keeps asking, which is what it does
+// now. A wrong guess on a question costs one correction; a wrong guess
+// on a change costs them their data.
+func TestAWritingToolIsNotToldToGuess(t *testing.T) {
+	writing := tool.Tool{
+		Name: "calendar_update", Purpose: "Change an event.",
+		UseWhen: "They want one altered.", Writes: true,
+	}
+
+	if strings.Contains(writing.Description(), "take the nearest one") {
+		t.Errorf("a writing tool was told to guess at a name:\n%s", writing.Description())
+	}
+}

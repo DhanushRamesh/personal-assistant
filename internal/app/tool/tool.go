@@ -1,0 +1,383 @@
+// Package tool holds the things the assistant can do, as against say.
+//
+// A tool is described in a fixed shape rather than in a paragraph, because
+// prose quality cannot be enforced and structure can. The descriptions that
+// go wrong are the ones that say what a tool is without saying when to reach
+// for it, and the repair is always the same: the description grows louder
+// until it is shouting IMPORTANT at the model. A shape with a place for "use
+// when" and a place for "do not" is what makes that unnecessary.
+package tool
+
+import (
+	"context"
+	"encoding/json"
+	"strings"
+	"time"
+
+	"github.com/DhanushRamesh/personal-assistant/internal/base/chat"
+	"github.com/DhanushRamesh/personal-assistant/internal/base/conversation"
+)
+
+// Tool : One thing the assistant can do.
+type Tool struct {
+	// Name : What the model calls it. Lowercase with underscores, and named
+	// for the action rather than the subject, so that a listing of names
+	// reads as a list of verbs.
+	Name string
+	// Purpose : One line saying what it does.
+	Purpose string
+	// UseWhen : When to reach for it. The part a model gets wrong when it is
+	// missing, since a description of what something is does not say when it
+	// applies.
+	UseWhen string
+	// Avoid : When not to, and what to use instead. Optional, but the way to
+	// separate two tools a model would otherwise confuse.
+	Avoid string
+	// Domain : What this tool is about -- calendar, conversation,
+	// reminder, memory. Tools sharing a domain act on the same things, and
+	// that is what lets a write insist on a read of its own domain first.
+	Domain string
+	// Lists : Whether this is the domain's way of seeing what is there.
+	// Set on the fetch-all and on the search, since either puts real
+	// identifiers in front of the model.
+	Lists bool
+	// Writes : Whether this creates, changes or removes something.
+	//
+	// A write is refused until its domain has been read in the same turn.
+	// Not a hint: the model has been seen to delete from a list it never
+	// fetched, with identifiers it invented, and then report the failures
+	// as proof the things did not exist.
+	Writes bool
+
+	// Params : What it takes.
+	Params Schema
+
+	// Prefetch : Run before the model is asked anything, and given to
+	// it as though it had called this itself.
+	//
+	// The generic form of a thing that was written by hand, per domain,
+	// three times over: put the current state in front of the model
+	// rather than hope it asks. Measured, a read tool the model must
+	// decide to call is called once or twice in four; one the server
+	// runs is called every turn.
+	//
+	// Only tools that need no arguments may do this, since there is
+	// nobody to supply them. In practice that means the listings.
+	Prefetch bool
+
+	// WhenUnasked : What the model is told about this tool's answer
+	// when it was fetched rather than asked for, written next to it.
+	//
+	// A listing nobody asked for reads as a list of things to raise.
+	// Measured: with a bare listing and a general warning at the top
+	// of the prompt, "I am tired" was answered with somebody's
+	// tablets, two conversations out of three; with the warning
+	// against the listing, none out of three.
+	//
+	// It belongs to the tool because only the tool knows what its
+	// answer is for. That keeps the runner free of any domain: a
+	// twentieth domain writes its own sentence here and nothing else
+	// changes.
+	WhenUnasked string
+
+	// Fresh : How long a prefetched answer may be reused before it is
+	// fetched again. Zero refetches every turn, which is the default
+	// and the right one: accuracy comes before latency here.
+	//
+	// Present for a tool whose read is expensive enough that somebody
+	// decides otherwise, deliberately and in one place.
+	Fresh time.Duration
+	// Channels : Which channels may reach it.
+	//
+	// The gate. A prompt that arrived as sound had no confirmation step: a
+	// misheard sentence is the whole authorisation, so anything that cannot
+	// be undone is left off the voice list.
+	Channels []chat.Channel
+	// Examples : What a call looks like. Written for the model, and checked
+	// against the schema by a test, so an example that lies about its own
+	// arguments is caught.
+	Examples []Example
+	// Run : What it does. Required.
+	Run Run
+}
+
+// Example : A call worth showing the model.
+type Example struct {
+	// Ask : What the person said.
+	Ask string
+	// Args : What the tool should be called with, as JSON.
+	Args string
+}
+
+// Run : What a tool does when called.
+//
+// It returns a Result rather than an error, because how a tool failed is
+// something the model has to read: an error swallowed here becomes an
+// invented explanation later.
+type Run func(ctx context.Context, in Invocation) Result
+
+// Invocation : One call to a tool.
+type Invocation struct {
+	// Caller : Who is asking, and from where.
+	Caller Caller
+	// Args : The arguments the model produced, as it wrote them.
+	Args json.RawMessage
+	// Ran : Which tools have already run in this turn, by name. What lets
+	// a write know whether its domain was read first.
+	Ran []string
+}
+
+// Caller : Who a tool is acting for.
+//
+// A tool never takes a user or a conversation as an argument. The model would
+// have to supply them, which means it could supply the wrong one, and no
+// description prevents that. They come from the request instead.
+type Caller struct {
+	// UserID : Whose assistant this is.
+	UserID string
+	// ClientID : Which client asked.
+	ClientID string
+	// ConversationID : The conversation the prompt landed in.
+	ConversationID string
+	// Channel : How the prompt arrived.
+	Channel chat.Channel
+}
+
+// Result : What a tool gives back.
+type Result struct {
+	// Outcome : Whether it worked, did not, or did part of it.
+	Outcome conversation.Outcome
+
+	// Detail : What actually went wrong, kept exactly.
+	//
+	// Never put in front of the model: it reads Content and says it,
+	// so a driver's error in here would be spoken aloud. This is for
+	// the log, and for answering somebody who asks what exactly
+	// failed. Empty unless the result came from [Broke].
+	Detail string
+
+	// MustSay : Facts the person has to be told, checked against the
+	// answer once the turn is finished.
+	//
+	// A tool that verified a write knows something the person cannot
+	// check by ear -- what a value was before, how many things are left
+	// -- and telling them is the whole point of having looked. Asking
+	// the model nicely does not work: measured, it was handed "the time
+	// was 9:00 pm, is now 10:00 pm" and said "Moved to 10:00 pm, sir."
+	//
+	// So the obligation is carried out of the tool and enforced after.
+	MustSay []string
+	// Tally : How many there were and how many there are, when the thing
+	// owed is a count. Lets several counts of the same thing in one turn
+	// be collapsed into the net change rather than read out in a row.
+	Tally *Tally
+
+	// Else : The sentence appended when any of MustSay is missing from
+	// the answer. Written to read as a continuation of it.
+	Else string
+	// Regardless : A sentence the answer gets whether or not it already
+	// says it.
+	//
+	// For what a tool knows and no fact can check: that a write moved
+	// nothing is not a value to look for in a sentence. Deciding it by
+	// reading the answer would mean matching English words, which is
+	// not something this server does anywhere.
+	Regardless string
+	// Content : What it produced, or exactly what went wrong.
+	//
+	// A failure says why, in the words of whatever actually refused. A tool
+	// reporting "could not do that" leaves the model to invent a reason, and
+	// it will.
+	Content string
+
+	// Read : Listings the server ran on the write's behalf while
+	// refusing it, which count as having been read this turn.
+	//
+	// Without this the folded-in listing would be worth nothing: the
+	// model would be handed what is actually there and then refused
+	// again for not having fetched it itself.
+	Read []string
+
+	// Reveal : Tools to describe in full from the next round on.
+	//
+	// Set by tool_describe, and by the runner when the model called a
+	// tool it had not been given. Either way the point is the same: a
+	// model told how to call something has to find it in the next
+	// request, or it is being asked to remember arguments it cannot
+	// use.
+	//
+	// Not a gate. The endpoint forwards a call for a tool it was never
+	// given -- measured, with thirteen offered and a fourteenth called
+	// from the catalogue -- so leaving one out of the request only
+	// means the model has to guess the arguments, never that it cannot
+	// try.
+	Reveal []string
+}
+
+// OK : A result that worked.
+func OK(content string) Result {
+	return Result{Outcome: conversation.OutcomeOK, Content: content}
+}
+
+// Failed : A result that did nothing, saying exactly why.
+//
+// The sentence is written for a person to hear, because that is where
+// it ends up: the model reads it and says it. Anything that came out
+// of a library, a driver or a service goes to [Broke] instead.
+func Failed(why string) Result {
+	return Result{Outcome: conversation.OutcomeFailed, Content: why}
+}
+
+// Broke : A result that did nothing because something went wrong,
+// with the sentence to say and the fault kept behind it.
+//
+// Two audiences and only one of them wants the fault. Handing the
+// model err.Error() means the person is read a database driver's
+// timeout in the assistant's own voice, which happened: a wrapped
+// repository error reached the model as the whole of what to say.
+//
+// So the sentence is what the model is given, and the detail is
+// logged and kept for somebody who asks what exactly went wrong. A
+// nil error is still a failure -- the sentence stands on its own --
+// so this is safe to call wherever the error might be nil.
+func Broke(saying string, err error) Result {
+	r := Result{Outcome: conversation.OutcomeFailed, Content: saying}
+	if err != nil {
+		r.Detail = err.Error()
+	}
+	return r
+}
+
+// Plainly : A validation error with its package prefix taken off.
+//
+// Go's convention is that an error says where it came from --
+// "memory: a memory needs a subject" -- and the rest of that sentence
+// is exactly what somebody should be told. Only the prefix is
+// machinery, so only the prefix goes.
+//
+// For errors written to be read. Anything from a driver or a service
+// is not made speakable by trimming it, and belongs in [Broke].
+func Plainly(err error) string {
+	if err == nil {
+		return ""
+	}
+	said := err.Error()
+	if at := strings.Index(said, ": "); at > 0 && !strings.ContainsAny(said[:at], " \t") {
+		return said[at+2:]
+	}
+	return said
+}
+
+// Partial : A result that did some of what was asked. The content says which
+// parts, since "partly done" on its own tells a model nothing it can report.
+func Partial(what string) Result {
+	return Result{Outcome: conversation.OutcomePartial, Content: what}
+}
+
+// Because : The same result with the fault behind it kept.
+//
+// For an outcome that is not a plain failure and still had something
+// go wrong -- a write that happened and a follow-on that did not --
+// where what to say and what went wrong are still two different
+// things. A nil error changes nothing.
+func (r Result) Because(err error) Result {
+	if err != nil {
+		r.Detail = err.Error()
+	}
+	return r
+}
+
+// Reaches : Whether this tool may be called from the given channel.
+func (t Tool) Reaches(c chat.Channel) bool {
+	for _, allowed := range t.Channels {
+		if allowed == c {
+			return true
+		}
+	}
+	return false
+}
+
+// Description : What the model is told about the tool.
+//
+// The parts are joined into the single string a service's schema allows, in a
+// fixed order, so that every tool reads the same way and none of them has to
+// shout to be noticed.
+func (t Tool) Description() string {
+	parts := []string{strings.TrimSpace(t.Purpose)}
+	if use := strings.TrimSpace(t.UseWhen); use != "" {
+		parts = append(parts, "Use when: "+use)
+	}
+	if avoid := strings.TrimSpace(t.Avoid); avoid != "" {
+		parts = append(parts, "Do not use: "+avoid)
+	}
+	if heard := t.misheard(); heard != "" {
+		parts = append(parts, heard)
+	}
+	for _, e := range t.Examples {
+		parts = append(parts, `Example — "`+e.Ask+`": `+e.Args)
+	}
+	return strings.Join(parts, " ")
+}
+
+// misheard : What to do about a name that arrived mangled, which
+// depends entirely on whether this tool changes anything.
+//
+// Added from the Writes flag rather than written into each
+// description, so it cannot be left off the next tool somebody adds
+// and cannot drift between two that need the same rule.
+//
+// The owner's rule, 2 October 2026. Asked "do you know when I moved
+// between Das and Dasabhift", with "Dhanush" and "Dhanush_EXT" on
+// record and plainly what was meant, the assistant stopped and asked
+// which networks they meant. Nothing was at stake: it was a question
+// about the past. Their words: "its definitely not accurate by voice,
+// so i want jarvis to take relevant context without asking me a
+// question... in that case it can assume the default context.
+// remember this is only for reading info; while creating, updating,
+// deleting, it should ask like how its asking currently."
+//
+// So a read guesses and says what it guessed, and a write keeps
+// asking. A wrong guess on a question costs one correction; a wrong
+// guess on a change costs them their data.
+func (t Tool) misheard() string {
+	if t.Writes {
+		return ""
+	}
+	return "Names arrive mangled, because most of what reaches you was spoken. " +
+		"If what they said is close to something you can see -- a place, a network, a person, " +
+		"a list -- take the nearest one and answer. Do not stop to ask which they meant: " +
+		"nothing here changes anything, and being wrong costs one correction. " +
+		"Say which one you took it to mean, in passing, so they can put you right."
+}
+
+// ForReference : What to append to a result that carries a list.
+//
+// The instruction goes next to the data, not in the system prompt,
+// and that is a measured difference rather than a preference. The
+// memories tool found it first: a general warning at the top of the
+// prompt let a bare listing be read out in two conversations of
+// three, and the same warning written against the listing let it
+// happen in none.
+//
+// The same shape of mistake, in the tasks domain: asked whether one
+// task existed on a list, the assistant read out all five and then
+// answered; asked about a list that did not exist, it recited the
+// five that did. Both answers were complete and both were the wrong
+// shape for something spoken, because the person has to hold a list
+// in their head to find the one fact they wanted.
+//
+// A tool cannot know whether the list itself was what they asked
+// for, so this does not forbid naming them -- it says which part is
+// the answer and which part is working material.
+const ForReference = "The items above are for you to read, not to read out. " +
+	"Answer what was asked and say how many there are; name only the one the question was about, " +
+	"or the nearest to it. Name them all only if the list itself is what they asked for."
+
+// Reference : A result whose content carries a list the model should
+// read rather than recite.
+func Reference(content string) Result {
+	return Result{
+		Outcome: conversation.OutcomeOK,
+		Content: content + "\n\n" + ForReference,
+	}
+}

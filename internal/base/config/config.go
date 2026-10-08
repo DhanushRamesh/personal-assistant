@@ -1,0 +1,990 @@
+// Package config : loads and validates the server's runtime configuration.
+//
+// Values resolve from three layers, each overriding the one before it:
+//
+//	built-in defaults  <  config.ini  <  environment variables
+//
+// Every setting has an environment equivalent named ASSISTANT_<SECTION>_<KEY>,
+// uppercased; a setting outside any section uses ASSISTANT_<KEY>.
+//
+// Loading reports every problem it finds rather than stopping at the first,
+// and treats a setting present in the file that nothing reads as an error.
+package config
+
+import (
+	"errors"
+	"fmt"
+	"io/fs"
+	"log/slog"
+	"net"
+	"os"
+	"path/filepath"
+	"strconv"
+	"strings"
+	"time"
+
+	"github.com/go-sql-driver/mysql"
+	"gopkg.in/ini.v1"
+
+	"github.com/DhanushRamesh/personal-assistant/internal/base/logging"
+)
+
+// DefaultPath : The configuration file read when none is named. It is
+// optional; without it, defaults and environment variables apply.
+const DefaultPath = "config.ini"
+
+// PathEnvVar : Names the environment variable holding an explicit
+// configuration file path. When it is set, the file must exist.
+const PathEnvVar = "ASSISTANT_CONFIG"
+
+// Environment : Names a deployment context. Validation is stricter outside
+// EnvDev.
+type Environment string
+
+// Recognised environments.
+const (
+	// EnvDev : A developer machine, where defaults such as a blank database
+	// password are permitted.
+	EnvDev Environment = "dev"
+	// EnvProduction : A deployed environment.
+	EnvProduction Environment = "production"
+)
+
+// IsProduction : Reports whether e is EnvProduction.
+func (e Environment) IsProduction() bool { return e == EnvProduction }
+
+// Config : The fully resolved configuration for one process.
+type Config struct {
+	Env           Environment
+	Server        Server
+	Log           Log
+	Database      Database
+	Assistant     Assistant
+	HomeAssistant HomeAssistant
+	Google        Google
+	Embedding     Embedding
+	Geoapify      Geoapify
+	Provider      Provider
+	PlatformAI    PlatformAI
+	Search        Search
+
+	// Source : The path of the file the configuration was read from, or
+	// empty if no file was read.
+	Source string
+}
+
+// Server : Configures the HTTP listener.
+type Server struct {
+	Addr              string
+	ReadHeaderTimeout time.Duration
+	IdleTimeout       time.Duration
+	ShutdownTimeout   time.Duration
+	RequestTimeout    time.Duration
+
+	// AllowPublicBind : Permits listening on a public interface in
+	// production. Off by default, because the server speaks plain HTTP and its
+	// tokens are bearer credentials: anything in front of it must terminate
+	// TLS, and the way to guarantee that is to be unreachable except through
+	// it.
+	AllowPublicBind bool
+}
+
+// Log : Configures the structured logger.
+type Log struct {
+	Level     string
+	Format    logging.Format
+	AddSource bool
+}
+
+// ProviderName : Which engine answers a chat.
+type ProviderName string
+
+const (
+	// ProviderStub : Answers from a script, needing no credentials and no
+	// network. Useful for working on everything around the answer.
+	ProviderStub ProviderName = "stub"
+	// ProviderPlatformAI : Answers using Zoho Platform AI.
+	ProviderPlatformAI ProviderName = "platformai"
+)
+
+// Assistant : What the assistant is called and how it answers.
+//
+// The name lives here rather than in the code because it is the owner's
+// choice, not the server's: the same binary should serve whatever the
+// assistant is called today without being rebuilt. Nothing else in the
+// server states a name.
+type Assistant struct {
+
+	// Name : What the assistant calls itself when it answers. Empty leaves
+	// it nameless, which is a working assistant that simply never says what
+	// it is called.
+	Name string
+	// Greeting : How the greeting at the door is made.
+	//
+	//	plain    one of the fixed salutations for the time of day,
+	//	         with anything held back read out behind it
+	//	written  a model writes it from what happened while they
+	//	         were out
+	//
+	// Plain by default, by the owner's decision on 6 October 2026:
+	// *"currently the greeting is fully dependent on AI, let's make
+	// it simple as hardcoded string. We will move it to an
+	// algorithmic structure rather than full reliance on the
+	// model."* The written one is kept rather than deleted, because
+	// it is measured and the algorithmic one has to beat something.
+	Greeting string
+
+	// Alarms : Whether a reminder also puts an alarm on the phone.
+	//
+	// On by default, and separable on purpose. Owner, 6 October
+	// 2026: *"it should not be bundled with it, it should be
+	// configurable, but by default it's true."* The two were one
+	// thing in the code and are two things in life -- a reminder
+	// is the assistant saying something, and an alarm is a noise
+	// the phone makes when the assistant is not running.
+	Alarms bool
+
+	// Persona : The manner it starts in, as a persona identifier. The
+	// setting can be changed while the server runs and returns here when it
+	// restarts, so this is what a lasting choice is written into.
+	Persona string
+
+	// Timezone : Where the person is, as an IANA name such as Asia/Kolkata.
+	// Empty means UTC.
+	//
+	// Everything stored is UTC, including the database connection, so this
+	// is not about storage. It is what "seven in the morning" means, and
+	// what the assistant is told the time is.
+	Timezone string
+
+	// Location : Timezone, loaded. Never nil; UTC when nothing is set.
+	Location *time.Location
+}
+
+// Now : The time where the person is.
+func (a Assistant) Now() time.Time {
+	if a.Location == nil {
+		return time.Now().UTC()
+	}
+	return time.Now().In(a.Location)
+}
+
+// Geoapify : How to reach the service that turns a position into the
+// name of a place.
+//
+// Only reached for a stay that has ended and that no geofence of
+// theirs already names, which is a handful of calls a day. The key is
+// the owner's and the free allowance is thousands, so nothing here
+// needs a budget.
+// Search : Configures looking things up on the web.
+//
+// Two services, because the two things this is for want opposite
+// trades. Owner: *"Firecrawl if I ask a question in conversation.
+// TinyFish for announcements and research where speed is not
+// important. In conversation, if Firecrawl doesn't work or credit
+// is over, use TinyFish as fallback."*
+//
+// Either key may be empty. With neither, there is no web search and
+// the tool says so; with one, it is used for everything.
+type Search struct {
+	// Firecrawl : The quick one, asked while somebody is waiting.
+	// Measured at 510ms, and five hundred searches a month.
+	Firecrawl logging.Secret
+	// TinyFish : The one that never runs out, asked when nothing is
+	// waiting and when the quick one cannot answer. 2.62s, and no
+	// monthly count at all.
+	TinyFish logging.Secret
+	// Quick : How long the quick one gets before the other is asked
+	// instead. Short: a turn is cut at thirty seconds and a service
+	// that hangs must cost its slice and no more.
+	Quick time.Duration
+	// Patient : How long a search may take when nothing is waiting.
+	Patient time.Duration
+	// Rested : How long a service that has spent its allowance is
+	// left alone before being tried again.
+	Rested time.Duration
+}
+
+type Geoapify struct {
+	// Key : The API key. Empty leaves a stay called by its
+	// coordinates, which is what it was called before this existed.
+	Key logging.Secret
+	// URL : Where reverse geocoding answers, which gives a street.
+	// Here rather than hardcoded so a test can point it somewhere that
+	// is not the internet.
+	URL string
+	// Places : Where the point-of-interest search answers, which gives
+	// the name of a business. Asked first.
+	Places string
+	// Timeout : How long one lookup may take. Short, because nothing
+	// is improved by a name that arrives late and a stay is perfectly
+	// usable without one.
+	Timeout time.Duration
+}
+
+// Configured : Whether there is a naming service to reach.
+func (g Geoapify) Configured() bool { return strings.TrimSpace(g.Key.Reveal()) != "" }
+
+// Embedding : How to reach the server that turns text into vectors, which
+// is what lets a memory be found by meaning rather than by wording.
+type Embedding struct {
+	// URL : Where it answers. Empty leaves memory matching words instead.
+	URL string
+	// Model : The model it serves. Stored beside every vector, because
+	// vectors from two models cannot be compared.
+	Model string
+	// Timeout : How long one call may take.
+	Timeout time.Duration
+}
+
+// Configured : Whether there is an embedding server to reach.
+func (e Embedding) Configured() bool { return strings.TrimSpace(e.URL) != "" }
+
+// HomeAssistant : How to reach Home Assistant, for the things the assistant
+// says without having been asked.
+//
+// Entirely optional. Without it the server behaves as it did before there was
+// anything to announce with: it answers when spoken to and says nothing
+// otherwise.
+type HomeAssistant struct {
+	// URL : Where Home Assistant answers, such as http://192.168.0.102:8123.
+	URL string
+	// Token : A long-lived access token. It can control the whole house, so
+	// it is a Secret and never reaches a log.
+	//
+	// Written as "token", or as "token_file" pointing at a file holding
+	// nothing else. The file is how this and the presence publisher,
+	// which is a different program in a different repository, share one
+	// token instead of each keeping a copy to be rotated separately.
+	Token logging.Secret
+	// Satellite : The entity to speak through, such as
+	// assist_satellite.laptop_lva_assist_satellite.
+	Satellite string
+	// ThisMachine : The source name the machine the assistant runs on
+	// reports its own events under, such as "laptop".
+	//
+	// Those events describe the assistant's own machine and not the
+	// person. It publishes its network so the person's phone can be
+	// compared against it, and asked at a door what they have been up
+	// to, a laptop reconnecting to its own wifi is the loudest thing in
+	// the window and the least true -- measured: it read as "you have
+	// been moving around quite a bit" to somebody who had not moved
+	// fifty-eight metres in two days.
+	//
+	// Empty leaves everything in, which is what this did before.
+	ThisMachine string
+
+	// PresenceEntity : What Home Assistant calls the thing that says
+	// whether the owner is in the room, such as
+	// input_boolean.in_the_room. Empty means never hold a reminder back,
+	// which is what this did before presence existed.
+	PresenceEntity string
+
+	// Notify : Home Assistant notify services that should also hear an
+	// announcement, such as notify.mobile_app_pixel_7. Comma separated,
+	// and empty means the satellite alone.
+	//
+	// For being told something while out of the room. The satellite is a
+	// speaker in one place; a phone is wherever the person is. These do
+	// not reach the phone over the local network or the VPN at all --
+	// Home Assistant hands them to its push service, which reaches the
+	// phone through Google, so they arrive on mobile data and on
+	// somebody else's wifi. The cost of that is the words leaving the
+	// house, which nothing else here does.
+	Notify []string
+
+	// AlarmURL : Where the phone listens for an alarm, including the
+	// secret path, such as http://100.76.164.70:1821/a/<secret>.
+	// Empty means a reminder sets no alarm, and says so.
+	//
+	// Straight to the phone over the tailnet rather than out through
+	// the push service and back, because a reminder's title is the
+	// person's own business. The path is the only thing between this
+	// and anybody else who can reach the port, so it belongs with
+	// the secrets.
+	AlarmURL logging.Secret
+
+	// AlarmOffURL : Where the phone listens for an alarm to be
+	// taken back, with its own secret path. Empty means an alarm
+	// once set stays set.
+	//
+	// A second path rather than a flag on the first, because Tasker
+	// matches the path exactly and that is what tells the two
+	// apart without an extra action on the phone.
+	AlarmOffURL logging.Secret
+
+	// MediaPlayer : The satellite's media player, such as
+	// media_player.laptop_lva_media_player. Used for what is said while a
+	// turn is still running, because that player is not the one the voice
+	// pipeline speaks answers through and playing on it leaves the turn
+	// alone. Empty says nothing during a turn.
+	MediaPlayer string
+	// TTSEngine : Which text-to-speech entity turns those words into
+	// sound, such as tts.piper.
+	TTSEngine string
+	// TTSVoice : Which voice it uses, such as jarvis-medium. Must match
+	// the voice the assist pipeline uses, or a turn is spoken in two
+	// different voices.
+	TTSVoice string
+	// TTSLanguage : The language that voice speaks, such as en_GB.
+	TTSLanguage string
+	// AsideSettleWait : The longest to hold an answer back while what was
+	// said before it is still being spoken. Zero selects the default;
+	// negative cuts the aside off rather than waiting.
+	AsideSettleWait time.Duration
+	// SayAside : Whether to speak a sentence beside a turn saying what
+	// is being done. Off by default.
+	//
+	// It was built to cover a wait, and the wait it covered is mostly
+	// gone: the answer is now spoken as it is written, so the silence
+	// it filled ends a second or two after it begins. What is left is
+	// a sentence in front of every slow turn and, because the two go
+	// through different players, one that can still be playing when
+	// the answer starts.
+	//
+	// Nothing else changes when this is off. The same sentence is
+	// still published to the chat, so a screen shows what the turn is
+	// doing; it is only not spoken.
+	SayAside bool
+}
+
+// Google : The client credentials this assistant asks Google with.
+//
+// One OAuth client serves every Google API. What may be done with it is
+// decided by the scopes asked for, which grow as tools are added, not
+// by having a client each.
+type Google struct {
+	// ClientID and ClientSecret : From the Google Cloud console, for an
+	// OAuth client of type Web application.
+	ClientID     string
+	ClientSecret logging.Secret
+
+	// Redirect : Where Google sends the person back. Must match a
+	// redirect URI registered on that client exactly. Loopback is the
+	// one address Google allows without HTTPS.
+	Redirect string
+
+	// SettingsURL : Where a browser is sent once Google has handed it
+	// back, such as http://localhost:8000/settings/google. Empty
+	// answers the callback in place, which is readable but ugly.
+	SettingsURL string
+
+	// Scopes : What to ask for beyond identity, space separated. Empty
+	// asks for nothing more, which connects successfully and can do
+	// nothing -- which is what proving the plumbing wants.
+	Scopes []string
+}
+
+// Configured : Whether there is enough here to connect an account.
+func (g Google) Configured() bool {
+	return g.ClientID != "" && g.ClientSecret.Reveal() != "" && g.Redirect != ""
+}
+
+// Configured : Whether there is enough here to say anything.
+func (h HomeAssistant) Configured() bool {
+	return h.URL != "" && h.Token.Reveal() != "" && h.Satellite != ""
+}
+
+// Provider : Chooses which engine answers chats.
+type Provider struct {
+	// Name : Which provider to use.
+	Name ProviderName
+}
+
+// PlatformAI : Credentials and endpoints for Zoho Platform AI. Read only when
+// it is the selected environment.
+type PlatformAI struct {
+	ClientID     string
+	ClientSecret logging.Secret
+	RefreshToken logging.Secret
+	PortalID     string
+
+	TokenURL    string
+	ChatURL     string
+	Scope       string
+	RedirectURI string
+
+	Vendor string
+	Model  string
+	// FastModel : A smaller, quicker model for the work that happens
+	// while somebody is waiting in a doorway rather than reading.
+	//
+	// Empty means Model, which is what this did before there was a
+	// choice. The greeting is the whole reason it exists: it has about
+	// two seconds before the fixed sentence is said instead, and a
+	// model that writes better greetings slowly writes none at all.
+	FastModel string
+	// Thinking : How much the model may reason before it answers, as
+	// the gateway's reasoning_effort: none, low, medium or high. Empty
+	// leaves it to the vendor, which is what it did before this
+	// existed.
+	//
+	// Here because the first word of a voice turn costs two to seven
+	// seconds and reasoning nobody reads would be the whole of it. A
+	// setting rather than a constant until that is measured: the
+	// gateway accepts the key, and whether it changes anything is a
+	// different question.
+	Thinking string
+
+	Timeout time.Duration
+	// InsecureSkipVerify : Skips certificate verification. Needed only for the
+	// internal endpoints, whose certificates come from an internal authority.
+	InsecureSkipVerify bool
+}
+
+// Database : Configures the MySQL connection. The password is held separately
+// as a logging.Secret so that a Database can be logged without exposing it.
+type Database struct {
+	Host     string
+	Port     int
+	User     string
+	Password logging.Secret
+	Name     string
+
+	MaxOpenConns    int
+	MaxIdleConns    int
+	ConnMaxLifetime time.Duration
+	ConnectTimeout  time.Duration
+
+	// AutoMigrate : Whether to apply outstanding migrations at startup.
+	// Turning it off leaves the schema to be migrated by a separate step.
+	AutoMigrate bool
+}
+
+// DSN : Returns the connection string for go-sql-driver/mysql.
+//
+// The result contains the password. Use SafeAddr for anything that is logged
+// or shown to a user.
+func (d Database) DSN() string {
+	c := mysql.NewConfig()
+	c.Net = "tcp"
+	c.Addr = fmt.Sprintf("%s:%d", d.Host, d.Port)
+	c.User = d.User
+	c.Passwd = d.Password.Reveal()
+	c.DBName = d.Name
+	// Without ParseTime, DATETIME columns scan as []byte rather than time.Time.
+	c.ParseTime = true
+	// UTC, so that the server's timezone cannot reinterpret stored rows.
+	c.Loc = time.UTC
+	c.Timeout = d.ConnectTimeout
+	c.Params = map[string]string{"time_zone": "'+00:00'"}
+	return c.FormatDSN()
+}
+
+// SafeAddr : Returns the connection target in the form user@host:port/name,
+// without the password.
+func (d Database) SafeAddr() string {
+	return fmt.Sprintf("%s@%s:%d/%s", d.User, d.Host, d.Port, d.Name)
+}
+
+// LogValue : Implements slog.LogValuer, rendering the configuration without the
+// database password.
+func (c Config) LogValue() slog.Value {
+	source := c.Source
+	if source == "" {
+		source = "(defaults and environment only)"
+	}
+	return slog.GroupValue(
+		slog.String("source", source),
+		slog.String("env", string(c.Env)),
+		slog.String("server.addr", c.Server.Addr),
+		slog.String("log.level", c.Log.Level),
+		slog.String("log.format", string(c.Log.Format)),
+		slog.String("database.addr", c.Database.SafeAddr()),
+		slog.Int("database.max_open_conns", c.Database.MaxOpenConns),
+		slog.Bool("database.auto_migrate", c.Database.AutoMigrate),
+		slog.String("environment.name", string(c.Provider.Name)),
+		slog.String("platformai.model", c.PlatformAI.Model),
+		slog.String("assistant.persona", c.Assistant.Persona),
+		// Whether, not where: the URL is harmless but the token beside it is
+		// not, and one line saying "configured" answers the only question
+		// anyone reads a log for.
+		slog.Bool("homeassistant.configured", c.HomeAssistant.Configured()),
+		slog.Bool("embedding.configured", c.Embedding.Configured()),
+		slog.String("assistant.timezone", c.Assistant.Location.String()),
+	)
+}
+
+// Lookup : Reports the value of an environment variable and whether it was set.
+// It has the signature of os.LookupEnv.
+type Lookup func(key string) (string, bool)
+
+// LoadFromEnv : Resolves configuration from the process environment and the
+// file named by PathEnvVar, or DefaultPath when that variable is unset.
+//
+// A missing DefaultPath is not an error; a missing PathEnvVar target is.
+func LoadFromEnv() (Config, error) {
+	path, explicit := os.LookupEnv(PathEnvVar)
+	path = strings.TrimSpace(path)
+	if path == "" {
+		explicit = false
+		path = DefaultPath
+	}
+
+	if !explicit {
+		if _, err := os.Stat(path); errors.Is(err, fs.ErrNotExist) {
+			// No file on disk: defaults and environment are enough to start.
+			path = ""
+		}
+	}
+	return Load(path, os.LookupEnv)
+}
+
+// Load : Resolves configuration from the file at path, with values from lookup
+// taking precedence. An empty path skips the file.
+//
+// The returned error, if any, describes every problem found.
+func Load(path string, lookup Lookup) (Config, error) {
+	l := &loader{lookup: lookup, known: map[fieldKey]bool{}}
+
+	if path != "" {
+		file, err := ini.LoadSources(ini.LoadOptions{SkipUnrecognizableLines: false}, path)
+		if err != nil {
+			return Config{}, fmt.Errorf("config: reading %s: %w", path, err)
+		}
+		l.file = file
+	}
+
+	env := Environment(l.str("", "env", string(EnvDev)))
+	if env != EnvDev && env != EnvProduction {
+		l.errorf("%s: %q is not a known environment (want %q or %q)",
+			l.where("", "env"), env, EnvDev, EnvProduction)
+	}
+
+	// Developer machines get readable logs with source locations; anything
+	// else gets JSON for aggregation.
+	defaultFormat, defaultSource := string(logging.FormatJSON), false
+	if env == EnvDev {
+		defaultFormat, defaultSource = string(logging.FormatText), true
+	}
+
+	cfg := Config{
+		Env:    env,
+		Source: path,
+		Server: Server{
+			// Loopback by default. ":8080" looks like localhost and is
+			// not: it binds every interface, which would put a plain-HTTP
+			// service carrying bearer tokens on the network by accident.
+			Addr:              l.str("server", "addr", "127.0.0.1:8080"),
+			ReadHeaderTimeout: l.duration("server", "read_header_timeout", 5*time.Second),
+			IdleTimeout:       l.duration("server", "idle_timeout", 60*time.Second),
+			ShutdownTimeout:   l.duration("server", "shutdown_timeout", 15*time.Second),
+			RequestTimeout:    l.duration("server", "request_timeout", 30*time.Second),
+			AllowPublicBind:   l.boolean("server", "allow_public_bind", false),
+		},
+		Log: Log{
+			Level:     l.str("log", "level", "info"),
+			Format:    logging.Format(l.str("log", "format", defaultFormat)),
+			AddSource: l.boolean("log", "source", defaultSource),
+		},
+		Database: Database{
+			Host:            l.str("database", "host", "127.0.0.1"),
+			Port:            l.integer("database", "port", 3306),
+			User:            l.str("database", "user", "assistant"),
+			Password:        logging.Secret(l.str("database", "password", "")),
+			Name:            l.str("database", "name", "assistant"),
+			MaxOpenConns:    l.integer("database", "max_open_conns", 25),
+			MaxIdleConns:    l.integer("database", "max_idle_conns", 5),
+			ConnMaxLifetime: l.duration("database", "conn_max_lifetime", 5*time.Minute),
+			ConnectTimeout:  l.duration("database", "connect_timeout", 5*time.Second),
+			AutoMigrate:     l.boolean("database", "auto_migrate", true),
+		},
+		Assistant: Assistant{
+			Name:     l.str("assistant", "name", ""),
+			Greeting: l.str("assistant", "greeting", "plain"),
+			Alarms:   l.boolean("assistant", "alarms", true),
+			Persona:  l.str("assistant", "persona", ""),
+			Timezone: l.str("assistant", "timezone", ""),
+			Location: l.location("assistant", "timezone"),
+		},
+		HomeAssistant: HomeAssistant{
+			URL:             l.str("homeassistant", "url", ""),
+			Token:           l.secret("homeassistant", "token"),
+			Satellite:       l.str("homeassistant", "satellite", ""),
+			PresenceEntity:  l.str("homeassistant", "presence_entity", ""),
+			ThisMachine:     l.str("homeassistant", "this_machine", ""),
+			Notify:          l.list("homeassistant", "notify"),
+			AlarmURL:        l.secret("homeassistant", "alarm_url"),
+			AlarmOffURL:     l.secret("homeassistant", "alarm_off_url"),
+			MediaPlayer:     l.str("homeassistant", "media_player", ""),
+			TTSEngine:       l.str("homeassistant", "tts_engine", "tts.piper"),
+			TTSVoice:        l.str("homeassistant", "tts_voice", ""),
+			TTSLanguage:     l.str("homeassistant", "tts_language", ""),
+			AsideSettleWait: l.duration("homeassistant", "aside_settle_wait", 0),
+			SayAside:        l.boolean("homeassistant", "say_aside", false),
+		},
+		Google: Google{
+			ClientID:     l.str("google", "client_id", ""),
+			ClientSecret: logging.Secret(l.str("google", "client_secret", "")),
+			Redirect:     l.str("google", "redirect", ""),
+			SettingsURL:  l.str("google", "settings_url", ""),
+			Scopes:       strings.Fields(l.str("google", "scopes", "")),
+		},
+		Embedding: Embedding{
+			URL:     l.str("embedding", "url", ""),
+			Model:   l.str("embedding", "model", ""),
+			Timeout: l.duration("embedding", "timeout", 30*time.Second),
+		},
+		Geoapify: Geoapify{
+			Key:     logging.Secret(l.str("geoapify", "key", "")),
+			URL:     l.str("geoapify", "url", "https://api.geoapify.com/v1/geocode/reverse"),
+			Places:  l.str("geoapify", "places_url", "https://api.geoapify.com/v2/places"),
+			Timeout: l.duration("geoapify", "timeout", 8*time.Second),
+		},
+		Provider: Provider{
+			Name: ProviderName(l.str("provider", "name", string(ProviderStub))),
+		},
+		Search: Search{
+			Firecrawl: logging.Secret(l.str("search", "firecrawl_key", "")),
+			TinyFish:  logging.Secret(l.str("search", "tinyfish_key", "")),
+			Quick:     l.duration("search", "quick_timeout", 6*time.Second),
+			Patient:   l.duration("search", "patient_timeout", 30*time.Second),
+			Rested:    l.duration("search", "rested", time.Hour),
+		},
+		PlatformAI: PlatformAI{
+			ClientID:           l.str("platformai", "client_id", ""),
+			ClientSecret:       logging.Secret(l.str("platformai", "client_secret", "")),
+			RefreshToken:       logging.Secret(l.str("platformai", "refresh_token", "")),
+			PortalID:           l.str("platformai", "portal_id", ""),
+			TokenURL:           l.str("platformai", "token_url", ""),
+			ChatURL:            l.str("platformai", "chat_url", ""),
+			Scope:              l.str("platformai", "scope", ""),
+			RedirectURI:        l.str("platformai", "redirect_uri", ""),
+			Vendor:             l.str("platformai", "vendor", ""),
+			Model:              l.str("platformai", "model", ""),
+			FastModel:          l.str("platformai", "fast_model", ""),
+			Thinking:           l.str("platformai", "reasoning_effort", ""),
+			Timeout:            l.duration("platformai", "timeout", 120*time.Second),
+			InsecureSkipVerify: l.boolean("platformai", "insecure_skip_verify", false),
+		},
+	}
+
+	l.rejectUnknownKeys(path)
+	l.validate(cfg)
+
+	if err := l.err(); err != nil {
+		return Config{}, err
+	}
+	return cfg, nil
+}
+
+// validate : Records an error for each setting in cfg that is out of range or
+// missing.
+// location : The timezone named by a setting, or UTC.
+//
+// A name the machine cannot load is an error rather than a silent fall back
+// to UTC: a reminder at the wrong hour every day is worse than a server
+// that refuses to start and says why.
+func (l *loader) location(section, key string) *time.Location {
+	name := strings.TrimSpace(l.str(section, key, ""))
+	if name == "" {
+		return time.UTC
+	}
+
+	loc, err := time.LoadLocation(name)
+	if err != nil {
+		l.errorf("%s: %q is not a timezone this machine knows (want an IANA name such as Asia/Kolkata): %v",
+			l.where(section, key), name, err)
+		return time.UTC
+	}
+	return loc
+}
+
+func (l *loader) validate(cfg Config) {
+	if _, err := logging.ParseLevel(cfg.Log.Level); err != nil {
+		l.errorf("%s: %v", l.where("log", "level"), err)
+	}
+	if f := cfg.Log.Format; f != logging.FormatJSON && f != logging.FormatText {
+		l.errorf("%s: %q is not a known format (want %q or %q)",
+			l.where("log", "format"), f, logging.FormatJSON, logging.FormatText)
+	}
+	if cfg.Server.Addr == "" {
+		l.errorf("%s: must not be empty", l.where("server", "addr"))
+	}
+
+	// Plain HTTP on a public interface exposes every bearer token to anyone
+	// on the network. A misconfiguration that does this is silent, so it is
+	// refused rather than warned about.
+	if cfg.Env.IsProduction() && !cfg.Server.AllowPublicBind && bindsPublicly(cfg.Server.Addr) {
+		l.errorf("%s: %q listens on a public interface, and this server speaks plain HTTP. "+
+			"Bind 127.0.0.1 and put TLS in front of it, or set %s if something else already does",
+			l.where("server", "addr"), cfg.Server.Addr, l.where("server", "allow_public_bind"))
+	}
+	if cfg.Database.Host == "" {
+		l.errorf("%s: must not be empty", l.where("database", "host"))
+	}
+	if cfg.Database.Port < 1 || cfg.Database.Port > 65535 {
+		l.errorf("%s: %d is not a valid port", l.where("database", "port"), cfg.Database.Port)
+	}
+	if cfg.Database.User == "" {
+		l.errorf("%s: must not be empty", l.where("database", "user"))
+	}
+	if cfg.Database.Name == "" {
+		l.errorf("%s: must not be empty", l.where("database", "name"))
+	}
+	if cfg.Database.MaxOpenConns < 1 {
+		l.errorf("%s: must be at least 1", l.where("database", "max_open_conns"))
+	}
+	if cfg.Database.MaxIdleConns > cfg.Database.MaxOpenConns {
+		l.errorf("%s: %d exceeds max_open_conns (%d)",
+			l.where("database", "max_idle_conns"), cfg.Database.MaxIdleConns, cfg.Database.MaxOpenConns)
+	}
+
+	if cfg.Env.IsProduction() && cfg.Database.Password == "" {
+		l.errorf("%s: must be set when env = production", l.where("database", "password"))
+	}
+}
+
+// fieldKey : Identifies a setting by the section and key naming it in the file.
+type fieldKey struct{ section, key string }
+
+// loader : Reads typed settings from a file and an environment lookup,
+// accumulating errors rather than returning at the first.
+type loader struct {
+	lookup Lookup
+	file   *ini.File
+	known  map[fieldKey]bool
+	errs   []error
+}
+
+// envName : Returns the environment variable that overrides the given setting,
+// such as ASSISTANT_SERVER_ADDR for [server] addr.
+func envName(section, key string) string {
+	if section == "" {
+		return "ASSISTANT_" + strings.ToUpper(key)
+	}
+	return "ASSISTANT_" + strings.ToUpper(section) + "_" + strings.ToUpper(key)
+}
+
+// where : Renders a setting in both spellings, for use in error messages.
+func (l *loader) where(section, key string) string {
+	if section == "" {
+		return fmt.Sprintf("%s (env %s)", key, envName(section, key))
+	}
+	return fmt.Sprintf("[%s] %s (env %s)", section, key, envName(section, key))
+}
+
+// value : Returns the raw text of a setting and whether it was found, taking
+// the environment in preference to the file. It records the setting as known.
+func (l *loader) value(section, key string) (string, bool) {
+	l.known[fieldKey{section, key}] = true
+
+	if v, ok := l.lookup(envName(section, key)); ok {
+		// An empty variable counts as unset, so that ASSISTANT_SERVER_ADDR= in a
+		// shell script falls through to the next layer.
+		if v = strings.TrimSpace(v); v != "" {
+			return v, true
+		}
+	}
+
+	if l.file != nil {
+		s := l.file.Section(section)
+		if s.HasKey(key) {
+			if v := strings.TrimSpace(s.Key(key).String()); v != "" {
+				return v, true
+			}
+		}
+	}
+	return "", false
+}
+
+// rejectUnknownKeys : Records an error for each setting in the file that no
+// call to value claimed, which indicates a misspelled key.
+func (l *loader) rejectUnknownKeys(path string) {
+	if l.file == nil {
+		return
+	}
+	for _, section := range l.file.Sections() {
+		name := section.Name()
+		if name == ini.DefaultSection {
+			name = ""
+		}
+		for _, key := range section.Keys() {
+			if !l.known[fieldKey{name, key.Name()}] {
+				l.errorf("%s: unknown setting %s", path, l.where(name, key.Name()))
+			}
+		}
+	}
+}
+
+// errorf : Records a validation problem.
+func (l *loader) errorf(format string, args ...any) {
+	l.errs = append(l.errs, fmt.Errorf(format, args...))
+}
+
+// err : Returns every recorded problem as a single error, or nil if there were
+// none.
+func (l *loader) err() error {
+	if len(l.errs) == 0 {
+		return nil
+	}
+	parts := make([]string, len(l.errs))
+	for i, err := range l.errs {
+		parts[i] = err.Error()
+	}
+	return fmt.Errorf("invalid configuration:\n  - %s", strings.Join(parts, "\n  - "))
+}
+
+// str : Returns the setting's value, or fallback if it is not set.
+// secret : A credential, given inline or kept in a file of its own.
+//
+// Every secret here accepts "<key>_file" as well as "<key>". Inline is
+// fine for something only this server has. A file is for a credential
+// something else also needs: the Home Assistant token is held by this
+// server and by the presence publisher in another repository, and two
+// copies of one secret is two things to rotate, where rotating one and
+// not the other leaves the stale copy working and the breakage lands
+// later and somewhere else.
+//
+// Read once at startup, so a file costs nothing per request.
+//
+// Setting both is refused rather than resolved by precedence. A
+// credential in two places with a rule about which wins is the problem
+// this exists to remove.
+func (l *loader) secret(section, key string) logging.Secret {
+	inline := l.str(section, key, "")
+	path := l.str(section, key+"_file", "")
+	switch {
+	case path == "":
+		return logging.Secret(inline)
+	case inline != "":
+		l.errorf("%s and %s are both set: a credential has one home",
+			l.where(section, key), l.where(section, key+"_file"))
+		return ""
+	}
+
+	raw, err := os.ReadFile(expand(path))
+	if err != nil {
+		l.errorf("%s: %w", l.where(section, key+"_file"), err)
+		return ""
+	}
+	// Trailing newline trimmed, because the obvious way to write one of
+	// these files is an editor or a shell redirect and both add one.
+	// A token with a newline on the end fails authentication somewhere
+	// far from here, saying only that it was rejected.
+	value := strings.TrimSpace(string(raw))
+	if value == "" {
+		l.errorf("%s: %s is empty", l.where(section, key+"_file"), path)
+		return ""
+	}
+	return logging.Secret(value)
+}
+
+// expand : A path with a leading ~ made absolute.
+//
+// Because the whole point of these files is to be shared with something
+// else, and what two programs in two languages can both be told is a
+// path under the home directory.
+func expand(path string) string {
+	if path != "~" && !strings.HasPrefix(path, "~/") {
+		return path
+	}
+	home, err := os.UserHomeDir()
+	if err != nil {
+		return path
+	}
+	return filepath.Join(home, strings.TrimPrefix(path, "~"))
+}
+
+func (l *loader) str(section, key, fallback string) string {
+	if v, ok := l.value(section, key); ok {
+		return v
+	}
+	return fallback
+}
+
+// list : Returns the setting split on commas, with the blanks dropped.
+//
+// Nothing set is no entries rather than one empty one, so a caller can
+// range over it without checking.
+func (l *loader) list(section, key string) []string {
+	v, ok := l.value(section, key)
+	if !ok {
+		return nil
+	}
+	var out []string
+	for _, part := range strings.Split(v, ",") {
+		if part = strings.TrimSpace(part); part != "" {
+			out = append(out, part)
+		}
+	}
+	return out
+}
+
+// integer : Returns the setting parsed as an int, or fallback if it is not set.
+// A value that does not parse is recorded as an error.
+func (l *loader) integer(section, key string, fallback int) int {
+	v, ok := l.value(section, key)
+	if !ok {
+		return fallback
+	}
+	n, err := strconv.Atoi(v)
+	if err != nil {
+		l.errorf("%s: %q is not a whole number", l.where(section, key), v)
+		return fallback
+	}
+	return n
+}
+
+// duration : Returns the setting parsed as a time.Duration, or fallback if it
+// is not set. A value that does not parse, or is negative, is recorded as an
+// error.
+func (l *loader) duration(section, key string, fallback time.Duration) time.Duration {
+	v, ok := l.value(section, key)
+	if !ok {
+		return fallback
+	}
+	d, err := time.ParseDuration(v)
+	if err != nil {
+		l.errorf("%s: %q is not a duration (want a form like 30s or 5m)", l.where(section, key), v)
+		return fallback
+	}
+	if d < 0 {
+		l.errorf("%s: %q must not be negative", l.where(section, key), v)
+		return fallback
+	}
+	return d
+}
+
+// boolean : Returns the setting parsed as a bool, or fallback if it is not set.
+// A value that does not parse is recorded as an error.
+func (l *loader) boolean(section, key string, fallback bool) bool {
+	v, ok := l.value(section, key)
+	if !ok {
+		return fallback
+	}
+	b, err := strconv.ParseBool(v)
+	if err != nil {
+		l.errorf("%s: %q is not a boolean (want true or false)", l.where(section, key), v)
+		return fallback
+	}
+	return b
+}
+
+// bindsPublicly : Reports whether an address accepts connections from beyond
+// this machine.
+//
+// An empty host, as in ":8080", is the one that catches people out: it binds
+// every interface, not the loopback it resembles.
+func bindsPublicly(addr string) bool {
+	host, _, err := net.SplitHostPort(addr)
+	if err != nil {
+		// Unparseable, so nothing can be concluded. Other validation reports
+		// the malformed address; this check stays silent rather than guessing.
+		return false
+	}
+
+	switch host {
+	case "", "0.0.0.0", "::":
+		return true
+	case "localhost":
+		return false
+	}
+
+	if ip := net.ParseIP(host); ip != nil {
+		return !ip.IsLoopback()
+	}
+	// A hostname that is not "localhost" resolves somewhere, and where is not
+	// knowable here. Treated as public, which errs towards refusing.
+	return true
+}

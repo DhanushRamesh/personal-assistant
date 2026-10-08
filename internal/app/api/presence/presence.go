@@ -1,0 +1,859 @@
+// Package presence serves the endpoint that says somebody has walked in.
+//
+// The deciding is done outside: Home Assistant watches how strong a watch's
+// signal is and works out when it has crossed into the room. What arrives
+// here is the conclusion, and what this does is choose the words and say
+// them.
+//
+// The words are put together here rather than by the model on purpose. A
+// greeting that arrives after the person has sat down is not a greeting,
+// and a model call costs two to five seconds against the two the detection
+// takes. So this says only what it can look up, which also means it cannot
+// claim anything that is not so.
+package presence
+
+import (
+	"context"
+	"fmt"
+	"log/slog"
+	"math/rand/v2"
+	"net/http"
+	"slices"
+	"sort"
+	"strings"
+	"sync"
+	"time"
+
+	"github.com/go-chi/chi/v5"
+
+	"github.com/DhanushRamesh/personal-assistant/internal/app/api/authn"
+	"github.com/DhanushRamesh/personal-assistant/internal/app/api/httpx"
+	"github.com/DhanushRamesh/personal-assistant/internal/base/announce"
+	"github.com/DhanushRamesh/personal-assistant/internal/base/conversation"
+	"github.com/DhanushRamesh/personal-assistant/internal/base/event"
+	"github.com/DhanushRamesh/personal-assistant/internal/base/logging"
+	"github.com/DhanushRamesh/personal-assistant/internal/domain/announcement"
+	"github.com/DhanushRamesh/personal-assistant/internal/domain/calendar"
+	"github.com/DhanushRamesh/personal-assistant/internal/domain/greet"
+	"github.com/DhanushRamesh/personal-assistant/internal/domain/outbox"
+	"github.com/DhanushRamesh/personal-assistant/internal/domain/remind"
+	"github.com/DhanushRamesh/personal-assistant/internal/domain/tasks"
+)
+
+// SpeakingFor : How long a greeting and everything behind it may take to
+// say, once the request that asked for it has gone.
+//
+// Long enough for a greeting and a handful of held reminders read at
+// speaking pace, and short enough that a satellite which never finishes
+// does not hold a database row open all afternoon.
+const SpeakingFor = 3 * time.Minute
+
+// ArrivedResponse : What the caller is told was done.
+type ArrivedResponse struct {
+	// Said : The words spoken, or empty if nothing was.
+	Said string `json:"said"`
+	// Spoke : Whether anything was said out loud.
+	Spoke bool `json:"spoke"`
+	// Written : Whether a model wrote the greeting, or it is one of the
+	// fixed ones because there was no time or nothing answered.
+	Written bool `json:"written"`
+	// Why : Why nothing was said, when nothing was.
+	Why string `json:"why,omitempty"`
+	// Delivered : How many held-back reminders were said along with the
+	// greeting.
+	Delivered int `json:"delivered,omitempty"`
+	// Missed : How many never-said reminders were reported, and thereby
+	// marked as told.
+	Missed int `json:"missed,omitempty"`
+}
+
+// Announcements : Somewhere to note what was said at the door, so the next
+// thing the person says has it behind them.
+type Announcements interface {
+	// Arrived : Notes that these words were announced as somebody came in.
+	Arrived(ctx context.Context, userID, text string)
+}
+
+// Ahead : How far into the diary a greeting looks.
+//
+// To the end of tomorrow. Anything further off is not worth hearing
+// at a door: they will be told about it tomorrow, by this or by the
+// thing they wrote it in.
+const Ahead = 2
+
+// Fetching : How long the diary and the task lists have to answer.
+//
+// Measured against Google on 3 October 2026: the diary took 1.6 to
+// 1.9 seconds and the lists 1.0 to 1.2, so both together in sequence
+// would put three seconds in front of a model call that already takes
+// two to four. They are read at the same time as each other and given
+// this between them, and a greeting goes ahead without whichever did
+// not arrive -- somebody is standing in a doorway, and what is in the
+// diary is the least of what a greeting is for.
+const Fetching = 2500 * time.Millisecond
+
+// Ordinary : How far back to look to tell what is ordinary for
+// somebody.
+//
+// The same four weeks the description is counted over, for the same
+// reason: one Tuesday is an anecdote.
+const Ordinary = 28 * 24 * time.Hour
+
+// OrdinaryMost : The most events read to work that out.
+//
+// A bound, because this runs at a door. Four weeks of a phone that has
+// learned to report a great deal is not something to read while
+// somebody waits, and a count taken from the most recent few thousand
+// is as good a guide to what is ordinary as one taken from all of them.
+const OrdinaryMost = 3000
+
+// Spoke : When the assistant last said anything to somebody, which is
+// the window a greeting catches up on.
+type Spoke interface {
+	LastSpoke(ctx context.Context, userID string) (time.Time, error)
+}
+
+// Reported : What their devices said while nobody was talking.
+type Reported interface {
+	Recent(ctx context.Context, userID string, q event.Query) ([]event.Event, error)
+}
+
+// Known : The standing description of them, for judging what is
+// ordinary and what is not.
+type Known interface {
+	Profile(ctx context.Context, userID string) (string, error)
+}
+
+// Diary : What is written down for the days ahead.
+type Diary interface {
+	Everywhere(ctx context.Context, userID string, from, to time.Time) ([]calendar.Event, []string, error)
+}
+
+// Chores : What is still to be done.
+type Chores interface {
+	Everywhere(ctx context.Context, userID string) ([]tasks.Task, []string, error)
+}
+
+// Handler : Serves the presence endpoints.
+type Handler struct {
+	httpx.Responder
+	announcer     announce.Announcer
+	reminders     remind.Store
+	announcements Announcements
+	location      *time.Location
+	now           func() time.Time
+
+	// greeting, spoke, reported, known : What turns the fixed greeting
+	// into one written for the moment. All optional: without them the
+	// door says one of the fixed sentences, which is what it did
+	// before.
+	writer   *greet.Writer
+	spoke    Spoke
+	reported Reported
+	known    Known
+	diary    Diary
+	chores   Chores
+	// notFrom : Sources whose events describe a machine rather than
+	// the person. The one the assistant runs on, where it is named.
+	notFrom []string
+
+	// owed : What the voice client has been published and has not
+	// said. Optional: without it a greeting carries the reminders
+	// it always did and nothing else.
+	owed Owed
+
+	mu sync.Mutex
+	// lastGreeting : So the same words are not used twice running.
+	lastGreeting string
+}
+
+// Owed : What a client still owes somebody.
+//
+// The voice half of collecting. A screen collects on a timer
+// because it is always in front of somebody; a room is not, so
+// this one is asked at the door -- by Home Assistant, which is
+// the only thing that knows when somebody has walked in, and
+// which already calls here to be greeted.
+//
+// That is the design as it was asked for: *"when next time
+// presence is true, the call is made to server and get the
+// pending announcements."* The call is the client's, and it is
+// already being made.
+type Owed interface {
+	Pending(ctx context.Context, clientID string, limit int) ([]outbox.Delivery, error)
+	Mark(ctx context.Context, clientID, owedID string, state outbox.State,
+		tries int, why string, at time.Time) error
+}
+
+// Collects : Sets where what this client owes is read from.
+func (h *Handler) Collects(o Owed) *Handler { h.owed = o; return h }
+
+// New : Builds the handler. A nil announcer says nothing, which is what a
+// server with no satellite has.
+func New(logger *slog.Logger, announcer announce.Announcer, reminders remind.Store,
+	announcements Announcements, location *time.Location, now func() time.Time) *Handler {
+
+	return &Handler{
+		Responder:     httpx.Responder{Logger: logger},
+		announcer:     announcer,
+		reminders:     reminders,
+		announcements: announcements,
+		location:      location,
+		now:           now,
+	}
+}
+
+// Writes : Gives the handler what it needs to write the greeting rather
+// than pick one.
+//
+// Separate from New because every one of them is optional and New
+// already takes six arguments. Nothing here changes whether somebody is
+// greeted, only what is said.
+func (h *Handler) Writes(w *greet.Writer, spoke Spoke, reported Reported, known Known,
+	thisMachine string) *Handler {
+
+	h.writer = w
+	h.spoke, h.reported, h.known = spoke, reported, known
+	if thisMachine = strings.TrimSpace(thisMachine); thisMachine != "" {
+		h.notFrom = []string{thisMachine}
+	}
+	return h
+}
+
+// Expects : Gives the handler the diary and the task lists, for saying
+// what is coming. Optional, both: without them a greeting is about
+// what has happened and nothing else.
+func (h *Handler) Expects(diary Diary, chores Chores) *Handler {
+	h.diary, h.chores = diary, chores
+	return h
+}
+
+// Mount : Registers the endpoints on r, which must already require
+// authentication.
+func (h *Handler) Mount(r chi.Router) {
+	r.Route("/v1/presence", func(r chi.Router) {
+		r.Post("/arrived", h.Arrived)
+	})
+}
+
+// Arrived : Somebody has come into the room. Greets them.
+//
+// Every call greets. Deciding whether somebody has really been away is
+// the caller's job, and the caller has far better evidence for it: the
+// rule upstream will not ask again until the watch has been faint for
+// thirty unbroken seconds.
+//
+// This did once refuse to greet the same person twice within ten
+// minutes, on the reasoning that nothing upstream promises to ask once.
+// It was guarding against the wrong thing. Of three real arrivals in a
+// quarter of an hour it refused two, which is the same silence as the
+// fault it was there to prevent, and harder to explain.
+func (h *Handler) Arrived(w http.ResponseWriter, r *http.Request) {
+	ctx := r.Context()
+	httpx.WriteJSON(ctx, w, http.StatusOK, h.Welcome(ctx, authn.Of(ctx).User.ID))
+}
+
+// Greet : Says hello to somebody who has just come in, for a caller
+// that is not an HTTP request.
+//
+// Blocks until the words have finished playing, which is up to
+// SpeakingFor. Anything serving a request should run it in a
+// goroutine: the phone flushing its spool must not wait for a
+// greeting and three held reminders to be read out.
+func (h *Handler) Greet(ctx context.Context, user string) {
+	said := h.Welcome(ctx, user)
+	h.Logger.InfoContext(ctx, "greeted somebody at the door",
+		slog.Bool("spoke", said.Spoke), slog.String("why", said.Why),
+		slog.Bool("written", said.Written),
+		slog.Int("delivered", said.Delivered), slog.Int("missed", said.Missed))
+}
+
+// collect : What this client owes, oldest first.
+//
+// This client, which is whichever one is asking: the request
+// comes in with its own token, and the copy it owes is its own.
+// Nothing is collected when the caller is not a client -- the
+// internal greeter has no token and nothing owed to it.
+//
+// A failure here costs the greeting its held announcements and
+// not the greeting. The rows stay pending and come back at the
+// next arrival, which is the right way for this to fail.
+func (h *Handler) collect(ctx context.Context) []outbox.Delivery {
+	if h.owed == nil {
+		return nil
+	}
+	client := authn.Of(ctx).Client
+	if client == nil {
+		return nil
+	}
+	waiting, err := h.owed.Pending(ctx, client.ID, outbox.Limit)
+	if err != nil {
+		h.Logger.WarnContext(ctx, "greeting somebody without what is owed to them",
+			slog.Any("error", err))
+		return nil
+	}
+	return waiting
+}
+
+// compose : The greeting itself, written for the moment if it can be.
+//
+// Falls back to one of the fixed sentences with the reminders behind
+// it, which is exactly what this said before there was a model in it.
+// Everything here is best effort: somebody is standing in the doorway,
+// and a plain hello beats a silence while something is fetched.
+func (h *Handler) compose(ctx context.Context, user string, owed []string) (string, bool) {
+	fixed := h.greeting()
+	if h.writer == nil {
+		return plain(fixed, owed), false
+	}
+
+	now := h.clock().In(h.where())
+	told := greet.Told{
+		Now:       now,
+		Opening:   fixed,
+		Reminders: owed,
+		Since:     h.lastSpoke(ctx, user),
+		Profile:   h.profile(ctx, user),
+	}
+
+	// From when they were last spoken to, or a window of its own the
+	// first time, when there is no such moment and everything ever
+	// reported would be read as though it had just happened.
+	from := told.Since
+	if from.IsZero() {
+		from = now.Add(-greet.Recent)
+	}
+	told.Events, told.Usual = h.happened(ctx, user, from)
+
+	fetched := time.Now()
+	told.Diary, told.Were, told.Chores = h.coming(ctx, user, now, told.Since)
+	reading := time.Since(fetched)
+
+	thinking := time.Now()
+	said, written := h.writer.Write(ctx, told)
+
+	// Where the time at the door goes. Three things can be slow and
+	// only one of them is visible from outside: a greeting that takes
+	// twelve seconds is useless and the fix depends entirely on which
+	// of these took them.
+	h.Logger.InfoContext(ctx, "wrote a greeting",
+		slog.Bool("by_model", written),
+		slog.Duration("reading_google", reading.Round(time.Millisecond)),
+		slog.Duration("thinking", time.Since(thinking).Round(time.Millisecond)),
+		slog.Int("events", len(told.Events)),
+		slog.Int("diary", len(told.Diary)),
+		slog.Int("were", len(told.Were)),
+		slog.Int("due", len(told.Chores.Due)))
+	return said, written
+}
+
+// plain : The fixed greeting with anything owed read out behind it.
+func plain(greeting string, owed []string) string {
+	return strings.TrimSpace(greeting + " " + strings.Join(owed, " "))
+}
+
+// lastSpoke : When the assistant last said anything to them.
+//
+// Zero on a failure, which reads as never having spoken to them and
+// gives a greeting with a short window rather than no greeting.
+func (h *Handler) lastSpoke(ctx context.Context, user string) time.Time {
+	if h.spoke == nil {
+		return time.Time{}
+	}
+	at, err := h.spoke.LastSpoke(ctx, user)
+	if err != nil {
+		h.Logger.WarnContext(ctx, "cannot tell when they were last spoken to",
+			slog.Any("error", err))
+		return time.Time{}
+	}
+	return at
+}
+
+// happened : What their devices reported in between.
+//
+// Without the raw position readings -- one arrives every five minutes,
+// so an afternoon out is fifty of them and nothing else would fit --
+// and without the stays already written, which are replaced by stays
+// worked out here and now.
+//
+// Worked out rather than read because of a race this cannot afford.
+// A stay is written when the reading that ended it arrives, which is
+// up to five minutes after somebody has walked out of a place. They
+// walk in here within a minute or two of that, so the stay most worth
+// asking about is usually the one not yet in the table. Reading the
+// fixes costs one more query and removes the timing entirely.
+func (h *Handler) happened(ctx context.Context, user string, from time.Time) ([]event.Event, map[string]int) {
+	if h.reported == nil {
+		return nil, nil
+	}
+
+	// Four weeks in one read, not the window. The window says what
+	// happened; the four weeks say which of it is ordinary, and a
+	// greeting needs both. One query rather than two because this runs
+	// with somebody standing in a doorway.
+	since := h.clock().Add(-Ordinary)
+	if from.Before(since) {
+		since = from
+	}
+	all, err := h.reported.Recent(ctx, user, event.Query{
+		Since: since, Limit: OrdinaryMost,
+		// The coordinates only. Every value is distinct, there are
+		// more of them than of everything else together, and none of
+		// them is a thing to say a sentence about.
+		//
+		// The stays and the music used to go with them, because a
+		// stay re-reports itself every five minutes and a track is a
+		// hundred rows an evening. That is true of the rows and not
+		// of the facts, and it cost the greeting the two things that
+		// say what somebody was actually doing -- owner: "stay should
+		// reach and also the music, only then it can know whether I
+		// went to movie or not." They are folded into one span each
+		// where the window is read.
+		Omit: []string{event.Fixed},
+		// Not what this machine reported about itself. It publishes
+		// its own network so the person's phone can be compared
+		// against it, and a laptop reconnecting to its own wifi is not
+		// something that happened to anybody.
+		NotFrom: h.notFrom,
+	})
+	if err != nil {
+		h.Logger.WarnContext(ctx, "cannot read what happened while they were out",
+			slog.Any("error", err))
+		return nil, nil
+	}
+
+	usual := make(map[string]int, len(all))
+	evs := make([]event.Event, 0, len(all))
+	for _, e := range all {
+		usual[greet.Label(e)]++
+		if !e.OccurredAt.Before(from) {
+			evs = append(evs, e)
+		}
+	}
+	// Newest first from the store, oldest first for reading.
+	slices.Reverse(evs)
+	if len(evs) > greet.Most {
+		evs = evs[len(evs)-greet.Most:]
+	}
+
+	return h.merge(evs, h.stayed(ctx, user, from)), usual
+}
+
+// coming : What is in the diary and what is still to be done.
+//
+// Both at once and both bounded. Read in sequence they are three
+// seconds in front of a model call that already takes two to four,
+// and the person is standing in a doorway. Whichever does not answer
+// in time is left out: a greeting without tomorrow's meeting in it is
+// still a greeting.
+func (h *Handler) coming(ctx context.Context, user string, now, since time.Time) ([]greet.Appointment, []greet.Appointment, greet.Chores) {
+	if h.diary == nil && h.chores == nil {
+		return nil, nil, greet.Chores{}
+	}
+
+	ask, done := context.WithTimeout(ctx, Fetching)
+	defer done()
+
+	var (
+		wg    sync.WaitGroup
+		diary []greet.Appointment
+		were  []greet.Appointment
+		list  greet.Chores
+	)
+	// To the end of tomorrow, from midnight today: an event earlier
+	// today has already happened, and the renderer drops it, but
+	// asking from midnight is what makes "today" mean the whole day
+	// rather than from now.
+	day := time.Date(now.Year(), now.Month(), now.Day(), 0, 0, 0, 0, now.Location())
+
+	if h.diary != nil {
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+			// One source failing is one source. It used to be the
+			// server, while somebody stood at the door.
+			logging.Surviving(ask, h.Logger, "reading the diary", func() {
+				found, _, err := h.diary.Everywhere(ask, user, day, day.AddDate(0, 0, Ahead))
+				if err != nil {
+					h.Logger.WarnContext(ctx, "cannot read the diary for a greeting",
+						slog.Any("error", err))
+					return
+				}
+				for _, e := range found {
+					a := greet.Appointment{
+						What: e.Title, When: e.Starts, AllDay: e.AllDay, Where: e.Where,
+					}
+					// What has already started is not what is coming --
+					// but it is what they have just been doing, which is
+					// the only thing the greeting can check where they
+					// were against. It used to be dropped, and with it
+					// went any chance of asking how the film was.
+					if !e.AllDay && e.Starts.Before(now) {
+						if since.IsZero() || !e.Starts.Before(since) {
+							were = append(were, a)
+						}
+						continue
+					}
+					diary = append(diary, a)
+				}
+				sort.SliceStable(diary, func(i, j int) bool {
+					return diary[i].When.Before(diary[j].When)
+				})
+				sort.SliceStable(were, func(i, j int) bool {
+					return were[i].When.Before(were[j].When)
+				})
+			})
+		}()
+	}
+
+	if h.chores != nil {
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+			// One source failing is one source. It used to be the
+			// server, while somebody stood at the door.
+			logging.Surviving(ask, h.Logger, "reading the lists", func() {
+				found, _, err := h.chores.Everywhere(ask, user)
+				if err != nil {
+					h.Logger.WarnContext(ctx, "cannot read the task lists for a greeting",
+						slog.Any("error", err))
+					return
+				}
+				// The end of tomorrow. A task carries a day and never an
+				// hour -- the API drops the time -- so the cut is a date.
+				by := day.AddDate(0, 0, Ahead)
+				for _, t := range found {
+					if t.Done {
+						continue
+					}
+					switch {
+					case t.Due.IsZero():
+						// No day set, so it is not due; it is just open.
+						list.Others++
+					case t.Due.Before(by):
+						list.Due = append(list.Due, greet.Chore{
+							What: t.Title, By: t.Due, Overdue: t.Due.Before(day),
+						})
+					default:
+						list.Others++
+					}
+				}
+				sort.SliceStable(list.Due, func(i, j int) bool {
+					return list.Due[i].By.Before(list.Due[j].By)
+				})
+			})
+		}()
+	}
+
+	wg.Wait()
+	return diary, were, list
+}
+
+// stayed : Where they have been, worked out from the readings now.
+//
+// Named from what is already known and never from the mapping service.
+// Two of the three ways a place gets a name are local reads -- a
+// geofence the owner drew, and a place a previous stay was named --
+// and only the third is a network call, which there is no room for
+// while somebody is standing in a doorway. So the name is free when it
+// is knowable and coordinates when it is not.
+//
+// Skipping naming altogether was the first attempt and it was worse
+// than the fixed greeting it replaced: the model was handed
+// "place.stayed 12.91100,80.06241" and could not say "home".
+func (h *Handler) stayed(ctx context.Context, user string, from time.Time) []event.Event {
+	// From further back than the greeting's window. A stay that began
+	// before the two of them last spoke still ended during it, and that
+	// ending is the thing worth asking about -- somebody who went to
+	// work before breakfast and came home at six did not start their
+	// day inside the window.
+	since := from.Add(-event.Looking)
+	seen, err := h.reported.Recent(ctx, user, event.Query{Kind: event.Fixed, Since: since})
+	if err != nil {
+		h.Logger.WarnContext(ctx, "cannot read where they have been",
+			slog.Any("error", err))
+		return nil
+	}
+
+	fixes := make([]event.Fix, 0, len(seen))
+	for _, e := range seen {
+		if f, ok := event.ReadFix(e); ok {
+			fixes = append(fixes, f)
+		}
+	}
+
+	fences, known := h.named(ctx, user)
+
+	out := make([]event.Event, 0, 4)
+	for _, stay := range event.SoFar(fixes) {
+		// Only the ones that touch the window. Everything before it has
+		// already been talked about.
+		if stay.To.Before(from) {
+			continue
+		}
+		e, err := event.New(user, "server", "", event.Stayed,
+			stay.From, h.clock(), stay.Payload(h.call(stay, fences, known)), stay.Key())
+		if err != nil {
+			continue
+		}
+		out = append(out, *e)
+	}
+	return out
+}
+
+// named : The places they drew, and the places they have been before.
+//
+// The same two sources settling uses, and in the same order of
+// precedence. Both are reads of this database.
+func (h *Handler) named(ctx context.Context, user string) ([]event.Fence, []event.Event) {
+	crossings, err := h.reported.Recent(ctx, user, event.Query{
+		Prefix: "place.", Since: h.clock().Add(-2 * event.Looking)})
+	if err != nil {
+		h.Logger.WarnContext(ctx, "cannot read the places they drew", slog.Any("error", err))
+	}
+	known, err := h.reported.Recent(ctx, user, event.Query{Kind: event.Stayed, Limit: event.Places})
+	if err != nil {
+		h.Logger.WarnContext(ctx, "cannot read the places they know", slog.Any("error", err))
+	}
+	return event.Fences(crossings, h.clock()), known
+}
+
+// call : What to call a place, without asking anybody.
+func (h *Handler) call(s event.Stay, fences []event.Fence, known []event.Event) string {
+	if name := event.Names(s, fences, known); name != "" {
+		return name
+	}
+	return s.Where()
+}
+
+// merge : Two lists of events as one, in the order they happened.
+func (h *Handler) merge(a, b []event.Event) []event.Event {
+	out := append(append(make([]event.Event, 0, len(a)+len(b)), a...), b...)
+	sort.SliceStable(out, func(i, j int) bool {
+		return out[i].OccurredAt.Before(out[j].OccurredAt)
+	})
+	return out
+}
+
+// profile : The standing description, for judging what is unusual.
+func (h *Handler) profile(ctx context.Context, user string) string {
+	if h.known == nil {
+		return ""
+	}
+	body, err := h.known.Profile(ctx, user)
+	if err != nil {
+		h.Logger.WarnContext(ctx, "cannot read what is known about them",
+			slog.Any("error", err))
+		return ""
+	}
+	return body
+}
+
+// Welcome : The greeting, everything held back behind it, and what
+// became of saying it.
+//
+// Separate from the endpoint because the arrival no longer comes from
+// Home Assistant. It comes from the person's own phone crossing the
+// geofence they drew, which reaches the server as an event; the
+// endpoint stays for anything that still calls it and for saying
+// hello by hand.
+func (h *Handler) Welcome(ctx context.Context, user string) ArrivedResponse {
+	// Anything kept back while they were out, and anything that was
+	// never said at all. Read before the greeting is written because
+	// they go into it: a person would not say hello and then read a
+	// list, they would say what the person had missed as part of saying
+	// hello. Recorded as said only once they have been -- a delivery
+	// nobody heard must stay held -- which is why they are read here
+	// and marked below.
+	held := h.waiting(ctx, user)
+	unsaid := h.neverSaid(ctx, user)
+
+	owed := make([]string, 0, 3)
+	if len(held) > 0 {
+		owed = append(owed, remind.Delivered(held, h.clock(), h.where()))
+	}
+	if len(unsaid) > 0 {
+		owed = append(owed, missedText(unsaid, h.where()))
+	}
+
+	// And whatever was published to this client while nobody was
+	// here to hear it. Collected rather than pushed, by the client
+	// that is about to speak, at the one moment it knows somebody
+	// has walked in.
+	waiting := h.collect(ctx)
+	for _, one := range waiting {
+		owed = append(owed, one.Owing.Text)
+	}
+
+	said, written := h.compose(ctx, user, owed)
+
+	if h.announcer == nil || !h.announcer.Available() {
+		return ArrivedResponse{Said: said, Written: written, Why: "nothing is configured to speak"}
+	}
+
+	// Saying it outlives the request that asked for it. Speaking blocks
+	// until the words have finished playing, and the caller does not wait
+	// that long: Home Assistant's rest_command gives up after ten seconds,
+	// which closes the connection and cancels this request. A greeting
+	// with three held reminders behind it takes longer than that.
+	//
+	// Cancelled halfway through, nothing was spoken and nothing was
+	// recorded, so the held ones stayed held and the next arrival did the
+	// same thing again. Three reminders sat unheard through two arrivals
+	// that way.
+	//
+	// Values are kept -- the user, the request id, the logger -- so a
+	// failure is still traceable to the arrival that caused it. Only the
+	// cancellation is dropped, and a deadline of its own replaces it so
+	// nothing here can wait for ever.
+	speak, done := context.WithTimeout(context.WithoutCancel(ctx), SpeakingFor)
+	defer done()
+
+	if err := announcement.Speak(speak, h.announcer, conversation.PresenceAnnouncement, said); err != nil {
+		// Not the caller's fault and not worth a failure: it asked for a
+		// greeting and the speaker was busy or unreachable. Said so
+		// plainly rather than reported as success.
+		h.Logger.WarnContext(speak, "could not speak a greeting", slog.Any("error", err))
+		return ArrivedResponse{Said: said, Written: written, Why: "could not be spoken: " + err.Error()}
+	}
+
+	// The greeting and everything behind it, noted in the conversation
+	// the reply will arrive in. Somebody who has just been told they
+	// should have done something at ten to four asks how late they were,
+	// and the question needs the sentence it is about.
+	if h.announcements != nil {
+		h.announcements.Arrived(speak, user, said)
+	}
+
+	// Only now, and for the same reason. An announcement this
+	// client has said is this client's to mark: another client of
+	// the same person still owes it.
+	for _, one := range waiting {
+		if err := h.owed.Mark(speak, one.ClientID, one.Owing.ID,
+			outbox.Said, 1, "", h.clock()); err != nil {
+			h.Logger.WarnContext(speak, "said an announcement but could not record it",
+				slog.String("announcement_id", one.Owing.ID), slog.Any("error", err))
+		}
+	}
+
+	// Only now. Said and not recorded is better than recorded and not
+	// said: the first is heard twice, the second is lost.
+	for i := range held {
+		if err := h.reminders.Fired(speak, held[i].ID, h.clock(), time.Time{}); err != nil {
+			h.Logger.WarnContext(speak, "said a held reminder but could not record it",
+				slog.String("reminder_id", held[i].ID), slog.Any("error", err))
+		}
+	}
+
+	// Saying it at the door is the telling. Without this the person
+	// hears about the same miss here and again in their next sentence.
+	if len(unsaid) > 0 {
+		if err := h.reminders.Mentioned(speak, remind.IDs(unsaid), h.clock()); err != nil {
+			h.Logger.WarnContext(speak, "told somebody about a miss but could not record it",
+				slog.Any("error", err))
+		}
+	}
+
+	return ArrivedResponse{Said: said, Written: written, Spoke: true, Delivered: len(held), Missed: len(unsaid)}
+}
+
+// waiting : What was kept back while they were out.
+func (h *Handler) waiting(ctx context.Context, user string) []remind.Reminder {
+	if h.reminders == nil || user == "" {
+		return nil
+	}
+	held, err := h.reminders.Waiting(ctx, user)
+	if err != nil {
+		h.Logger.WarnContext(ctx, "cannot read what was held back", slog.Any("error", err))
+		return nil
+	}
+	return held
+}
+
+// greeting : What to say to somebody who has just walked in.
+//
+// The hour and nothing else. What is still to come is left out on
+// purpose: a reminder waiting for four o'clock is not news at half past
+// one, and counting them at the door turns a greeting into a status
+// report.
+func (h *Handler) greeting() string { return h.Greeting() }
+
+// Greeting : The greeting alone, without anything waiting. Exported so a
+// test can ask for it at an hour it chooses.
+func (h *Handler) Greeting() string {
+	return h.hour()
+}
+
+// missedText : What to say about reminders that were never said.
+//
+// The words themselves, not a count. A count tells somebody they have
+// lost something without telling them what, which is the worst of both.
+func missedText(unsaid []remind.Reminder, loc *time.Location) string {
+	var b strings.Builder
+	if len(unsaid) == 1 {
+		b.WriteString("One reminder was missed while you were out.")
+	} else {
+		fmt.Fprintf(&b, "%d reminders were missed while you were out.", len(unsaid))
+	}
+	for i := range unsaid {
+		b.WriteString(" At ")
+		b.WriteString(unsaid[i].DueAt.In(loc).Format("3:04"))
+		b.WriteString(": ")
+		b.WriteString(strings.TrimSpace(unsaid[i].Body))
+	}
+	return b.String()
+}
+
+// neverSaid : Misses the person has not been told about yet.
+func (h *Handler) neverSaid(ctx context.Context, user string) []remind.Reminder {
+	if h.reminders == nil || user == "" {
+		return nil
+	}
+	unsaid, err := h.reminders.Unmentioned(ctx, user)
+	if err != nil {
+		h.Logger.WarnContext(ctx, "could not read what was never said", slog.Any("error", err))
+		return nil
+	}
+	return unsaid
+}
+
+// hour : The opening for the time of day: a salutation that is not
+// the one used last, and the welcome behind it.
+//
+// The salutations live in internal/greet, because the same list is
+// what takes a salutation back off the front of a greeting the model
+// wrote one into. Two copies would agree until one was edited.
+func (h *Handler) hour() string {
+	choices := greet.Salutations[greet.Band(h.clock().In(h.where()))]
+	if len(choices) == 0 {
+		return greet.Opening("Hello, sir.")
+	}
+
+	h.mu.Lock()
+	defer h.mu.Unlock()
+
+	// Anything but the one before. Variety that can repeat itself twice
+	// running is not much variety when there are only two of them.
+	pick := choices[rand.IntN(len(choices))]
+	for len(choices) > 1 && pick == h.lastGreeting {
+		pick = choices[rand.IntN(len(choices))]
+	}
+	h.lastGreeting = pick
+	return greet.Opening(pick)
+}
+
+// clock : Now, in UTC.
+func (h *Handler) clock() time.Time {
+	if h.now == nil {
+		return time.Now().UTC()
+	}
+	return h.now().UTC()
+}
+
+// where : The person's zone.
+func (h *Handler) where() *time.Location {
+	if h.location == nil {
+		return time.UTC
+	}
+	return h.location
+}

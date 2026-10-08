@@ -1,0 +1,457 @@
+package memories_test
+
+import (
+	"context"
+	"encoding/json"
+	"strings"
+	"testing"
+
+	"github.com/DhanushRamesh/personal-assistant/internal/app/tool"
+	"github.com/DhanushRamesh/personal-assistant/internal/app/tool/memories"
+	"github.com/DhanushRamesh/personal-assistant/internal/base/chat"
+	"github.com/DhanushRamesh/personal-assistant/internal/base/conversation"
+	"github.com/DhanushRamesh/personal-assistant/internal/base/embed"
+	"github.com/DhanushRamesh/personal-assistant/internal/domain/memory"
+	"github.com/DhanushRamesh/personal-assistant/internal/domain/memory/inmemory"
+	"github.com/DhanushRamesh/personal-assistant/internal/app/profile"
+)
+
+const user = "usr_01M3D477HXQ4YNQX7BNXJZZCV0"
+
+// harness : A registry over an empty store.
+func harness(t *testing.T) (*tool.Registry, *inmemory.Store, *memory.Recall) {
+	t.Helper()
+
+	store := inmemory.New()
+	recall := &memory.Recall{Store: store, Embedder: embed.Fake{}}
+
+	r, err := tool.NewRegistry(memories.All(recall)...)
+	if err != nil {
+		t.Fatalf("NewRegistry: %v", err)
+	}
+	return r, store, recall
+}
+
+// call : Calls a tool as the given channel and returns its result.
+func call(t *testing.T, r *tool.Registry, channel chat.Channel, name, args string) tool.Result {
+	t.Helper()
+
+	return r.Call(context.Background(), name, tool.Invocation{
+		Caller: tool.Caller{
+			UserID: user, Channel: channel, ConversationID: "conv_01M3D477HXQ4YNQX7BNXJZZCV0",
+		},
+		Args: json.RawMessage(args),
+		// As though the domain had just been listed: these tests are
+		// about each tool, and the read-before-write rule has its own.
+		Ran: alreadyListed,
+	})
+}
+
+// Every memory tool has to survive registration, which is where a missing
+// description or an untyped argument is caught.
+func TestEveryMemoryToolRegisters(t *testing.T) {
+	if _, err := tool.NewRegistry(memories.All(nil)...); err != nil {
+		t.Fatalf("a memory tool is not usable: %v", err)
+	}
+}
+
+// Forgetting cannot be undone, and on voice a misheard sentence is the whole
+// authorisation.
+func TestVoiceCannotForget(t *testing.T) {
+	r, _, _ := harness(t)
+
+	for _, x := range r.For(chat.ChannelVoice) {
+		if x.Name == "memory_forget" {
+			t.Error("voice is offered memory_forget")
+		}
+	}
+
+	var typedHasIt bool
+	for _, x := range r.For(chat.ChannelDirect) {
+		if x.Name == "memory_forget" {
+			typedHasIt = true
+		}
+	}
+	if !typedHasIt {
+		t.Error("typing is not offered memory_forget either")
+	}
+}
+
+// Remembering stores it and says the identifier, which is what every other
+// tool needs.
+func TestRememberingStoresIt(t *testing.T) {
+	r, store, _ := harness(t)
+
+	got := call(t, r, chat.ChannelVoice, "memory_remember",
+		`{"subject":"Roof quote","body":"The roofer quoted forty thousand rupees."}`)
+	if got.Outcome != conversation.OutcomeOK {
+		t.Fatalf("outcome = %s: %s", got.Outcome, got.Content)
+	}
+	if !strings.Contains(got.Content, "mem_") {
+		t.Errorf("content does not carry the identifier: %s", got.Content)
+	}
+
+	all, err := store.All(context.Background(), user, memory.TierRecall)
+	if err != nil {
+		t.Fatalf("All: %v", err)
+	}
+	if len(all) != 1 || all[0].Subject != "Roof quote" {
+		t.Errorf("stored %v, want one roof memory", all)
+	}
+}
+
+// A memory marked always goes in the tier that reaches every prompt.
+func TestAlwaysGoesInTheAlwaysTier(t *testing.T) {
+	r, store, _ := harness(t)
+
+	call(t, r, chat.ChannelDirect, "memory_remember",
+		`{"subject":"How to answer","body":"Wants answers kept short.","always":true}`)
+
+	all, err := store.All(context.Background(), user, memory.TierAlways)
+	if err != nil {
+		t.Fatalf("All: %v", err)
+	}
+	if len(all) != 1 {
+		t.Errorf("got %d always memories, want 1", len(all))
+	}
+}
+
+// A new memory is embedded at once, so it can be found by meaning before the
+// next restart.
+func TestANewMemoryIsEmbeddedAtOnce(t *testing.T) {
+	r, store, _ := harness(t)
+
+	call(t, r, chat.ChannelDirect, "memory_remember",
+		`{"subject":"Roof quote","body":"forty thousand rupees"}`)
+
+	all, _ := store.All(context.Background(), user, memory.TierRecall)
+	if len(all) != 1 || !all[0].Embedded("fake") {
+		t.Error("a new memory was left without a vector")
+	}
+}
+
+// Searching finds it and returns the identifier.
+func TestSearchingFindsWhatWasStored(t *testing.T) {
+	r, _, _ := harness(t)
+
+	call(t, r, chat.ChannelDirect, "memory_remember",
+		`{"subject":"Roof quote","body":"the roofer quoted forty thousand rupees"}`)
+
+	got := call(t, r, chat.ChannelDirect, "memory_search", `{"about":"the roofer quoted"}`)
+	if got.Outcome != conversation.OutcomeOK {
+		t.Fatalf("outcome = %s: %s", got.Outcome, got.Content)
+	}
+	if !strings.Contains(got.Content, "forty thousand") || !strings.Contains(got.Content, "mem_") {
+		t.Errorf("search result is not usable: %s", got.Content)
+	}
+}
+
+// An empty store says so rather than returning nothing at all.
+func TestSearchingAnEmptyStoreSaysSo(t *testing.T) {
+	r, _, _ := harness(t)
+
+	got := call(t, r, chat.ChannelDirect, "memory_search", `{"about":"anything"}`)
+	if got.Outcome != conversation.OutcomeOK || !strings.Contains(got.Content, "Nothing is remembered") {
+		t.Errorf("got %s: %s", got.Outcome, got.Content)
+	}
+}
+
+// Changing a memory replaces its text and keeps its identifier.
+func TestUpdatingReplacesTheText(t *testing.T) {
+	r, store, _ := harness(t)
+
+	call(t, r, chat.ChannelDirect, "memory_remember",
+		`{"subject":"Roof quote","body":"forty thousand rupees"}`)
+	all, _ := store.All(context.Background(), user, memory.TierRecall)
+	id := all[0].ID
+
+	got := call(t, r, chat.ChannelDirect, "memory_update",
+		`{"id":"`+id+`","subject":"Roof quote","body":"fifty thousand rupees"}`)
+	if got.Outcome != conversation.OutcomeOK {
+		t.Fatalf("outcome = %s: %s", got.Outcome, got.Content)
+	}
+
+	after, err := store.Get(context.Background(), user, id)
+	if err != nil {
+		t.Fatalf("Get: %v", err)
+	}
+	if after.Body != "fifty thousand rupees" {
+		t.Errorf("body = %q, want the new text", after.Body)
+	}
+}
+
+// An identifier that does not exist is refused with advice, not a guess.
+func TestUpdatingSomethingThatIsNotThere(t *testing.T) {
+	r, _, _ := harness(t)
+
+	got := call(t, r, chat.ChannelDirect, "memory_update",
+		`{"id":"mem_01M3D477HXQ4YNQX7BNXJZZCV0","subject":"x","body":"y"}`)
+	if got.Outcome != conversation.OutcomeFailed {
+		t.Fatalf("outcome = %s, want a failure", got.Outcome)
+	}
+	if !strings.Contains(got.Content, "Search for it") {
+		t.Errorf("content does not say what to do instead: %s", got.Content)
+	}
+}
+
+// Forgetting removes it.
+func TestForgettingRemovesIt(t *testing.T) {
+	r, store, _ := harness(t)
+
+	call(t, r, chat.ChannelDirect, "memory_remember",
+		`{"subject":"Roof quote","body":"forty thousand rupees"}`)
+	all, _ := store.All(context.Background(), user, memory.TierRecall)
+	id := all[0].ID
+
+	got := call(t, r, chat.ChannelDirect, "memory_forget",
+		`{"memories":[{"id":"`+id+`","confirm_subject":"Roof quote"}]}`)
+	if got.Outcome != conversation.OutcomeOK {
+		t.Fatalf("outcome = %s: %s", got.Outcome, got.Content)
+	}
+
+	if left, _ := store.All(context.Background(), user, memory.TierRecall); len(left) != 0 {
+		t.Errorf("%d memories left, want none", len(left))
+	}
+}
+
+// The subject has to match the memory being forgotten, so a wrong
+// identifier forgets nothing.
+func TestForgettingChecksTheSubject(t *testing.T) {
+	r, store, _ := harness(t)
+
+	call(t, r, chat.ChannelDirect, "memory_remember",
+		`{"subject":"Roof quote","body":"forty thousand rupees"}`)
+	all, _ := store.All(context.Background(), user, memory.TierRecall)
+	id := all[0].ID
+
+	got := call(t, r, chat.ChannelDirect, "memory_forget",
+		`{"id":"`+id+`","confirm_subject":"Cricket scores"}`)
+	if got.Outcome != conversation.OutcomeFailed {
+		t.Fatalf("outcome = %s, want a refusal", got.Outcome)
+	}
+	if left, _ := store.All(context.Background(), user, memory.TierRecall); len(left) != 1 {
+		t.Error("it was forgotten despite the wrong subject")
+	}
+}
+
+// A request from nobody stores nothing, and says so rather than reporting a
+// success that kept nothing.
+func TestARequestFromNobodyStoresNothing(t *testing.T) {
+	r, store, _ := harness(t)
+
+	got := r.Call(context.Background(), "memory_remember", tool.Invocation{
+		Caller: tool.Caller{Channel: chat.ChannelDirect},
+		Args:   json.RawMessage(`{"subject":"Roof quote","body":"forty thousand"}`),
+		Ran:    alreadyListed,
+	})
+	if got.Outcome != conversation.OutcomeFailed {
+		t.Errorf("outcome = %s, want a failure", got.Outcome)
+	}
+	if all, _ := store.All(context.Background(), user, memory.TierRecall); len(all) != 0 {
+		t.Error("something was stored for nobody")
+	}
+}
+
+// A server with nowhere to keep memories says so.
+func TestNoStoreSaysSo(t *testing.T) {
+	r, err := tool.NewRegistry(memories.All(nil)...)
+	if err != nil {
+		t.Fatalf("NewRegistry: %v", err)
+	}
+
+	got := call(t, r, chat.ChannelDirect, "memory_remember",
+		`{"subject":"Roof quote","body":"forty thousand"}`)
+	if got.Outcome != conversation.OutcomeFailed {
+		t.Errorf("outcome = %s, want a failure", got.Outcome)
+	}
+}
+
+// One person's memory is not reachable by another.
+func TestAnotherPersonCannotReachIt(t *testing.T) {
+	r, store, _ := harness(t)
+
+	call(t, r, chat.ChannelDirect, "memory_remember",
+		`{"subject":"Roof quote","body":"forty thousand rupees"}`)
+	all, _ := store.All(context.Background(), user, memory.TierRecall)
+
+	got := r.Call(context.Background(), "memory_update", tool.Invocation{
+		Caller: tool.Caller{UserID: "usr_01M3D477HXQ4YNQX7BNXJZZCV1", Channel: chat.ChannelDirect},
+		Args:   json.RawMessage(`{"id":"` + all[0].ID + `","subject":"x","body":"y"}`),
+		Ran:    alreadyListed,
+	})
+	if got.Outcome != conversation.OutcomeFailed {
+		t.Errorf("outcome = %s, want a failure", got.Outcome)
+	}
+}
+
+// The same thing said twice is refused, since writing unasked makes that
+// happen often.
+func TestTheSameMemoryTwiceIsRefused(t *testing.T) {
+	r, store, _ := harness(t)
+
+	first := call(t, r, chat.ChannelDirect, "memory_remember",
+		`{"subject":"Roof quote","body":"the roofer quoted forty thousand rupees"}`)
+	if first.Outcome != conversation.OutcomeOK {
+		t.Fatalf("the first one failed: %s", first.Content)
+	}
+
+	again := call(t, r, chat.ChannelDirect, "memory_remember",
+		`{"subject":"Roof quote","body":"the roofer quoted forty thousand rupees"}`)
+	if again.Outcome != conversation.OutcomeFailed {
+		t.Errorf("outcome = %s, want it refused as a duplicate", again.Outcome)
+	}
+	if !strings.Contains(again.Content, "memory_update") {
+		t.Errorf("the refusal does not say what to do instead: %s", again.Content)
+	}
+
+	all, _ := store.All(context.Background(), user, memory.TierRecall)
+	if len(all) != 1 {
+		t.Errorf("%d memories stored, want 1", len(all))
+	}
+}
+
+// Two different facts about one subject are both kept. The check is for the
+// same memory twice, not for one subject twice.
+func TestTwoFactsAboutOneSubjectAreBothKept(t *testing.T) {
+	r, store, _ := harness(t)
+
+	call(t, r, chat.ChannelDirect, "memory_remember",
+		`{"subject":"Roof","body":"the roofer quoted forty thousand rupees for the terrace"}`)
+	got := call(t, r, chat.ChannelDirect, "memory_remember",
+		`{"subject":"Roof","body":"the work is due to start on the first of November"}`)
+
+	if got.Outcome != conversation.OutcomeOK {
+		t.Errorf("outcome = %s, want a second fact kept: %s", got.Outcome, got.Content)
+	}
+	if all, _ := store.All(context.Background(), user, memory.TierRecall); len(all) != 2 {
+		t.Errorf("%d memories stored, want 2", len(all))
+	}
+}
+
+// Storing it tells the model to say so. A memory written silently is one
+// nobody can correct.
+func TestRememberingTellsTheModelToSaySo(t *testing.T) {
+	r, _, _ := harness(t)
+
+	got := call(t, r, chat.ChannelVoice, "memory_remember",
+		`{"subject":"Dairy","body":"Cannot take dairy; it gives them a headache."}`)
+
+	if got.Outcome != conversation.OutcomeOK {
+		t.Fatalf("outcome = %s: %s", got.Outcome, got.Content)
+	}
+	if !strings.Contains(got.Content, "Tell the person") {
+		t.Errorf("the result does not require it to be announced: %s", got.Content)
+	}
+}
+
+// alreadyListed : Every domain's listings, so a write under test is not
+// refused for want of a read it is not testing.
+var alreadyListed = []string{"memory_list", "memory_search", "conversation_list", "conversation_find", "calendar_events", "calendar_calendars", "reminder_list", "reminder_recent"}
+
+// TestForgettingManyIsOneCall : clearing out old notes was one call
+// per memory -- fifteen of them in a row, each answering with how many
+// were left, which is fifteen sentences nobody wants read out.
+func TestForgettingManyIsOneCall(t *testing.T) {
+	r, store, _ := harness(t)
+
+	subjects := []string{"Milk cost", "Radish cost", "Urban cost"}
+	for _, s := range subjects {
+		call(t, r, chat.ChannelDirect, "memory_remember",
+			`{"subject":"`+s+`","body":"a figure"}`)
+	}
+	all, _ := store.All(context.Background(), user, memory.TierRecall)
+	if len(all) != len(subjects) {
+		t.Fatalf("stored %d, want %d", len(all), len(subjects))
+	}
+
+	var want strings.Builder
+	want.WriteString(`{"memories":[`)
+	for i, m := range all {
+		if i > 0 {
+			want.WriteString(",")
+		}
+		want.WriteString(`{"id":"` + m.ID + `","confirm_subject":"` + m.Subject + `"}`)
+	}
+	want.WriteString(`]}`)
+
+	got := call(t, r, chat.ChannelDirect, "memory_forget", want.String())
+	if got.Outcome != conversation.OutcomeOK {
+		t.Fatalf("outcome = %s: %s", got.Outcome, got.Content)
+	}
+	if left, _ := store.All(context.Background(), user, memory.TierRecall); len(left) != 0 {
+		t.Errorf("%d memories left, want none", len(left))
+	}
+	// Counted, not recited. Reading three subjects back is the thing
+	// taking a list was meant to stop.
+	if strings.Count(got.Content, "cost") > 1 {
+		t.Errorf("every subject was read back: %q", got.Content)
+	}
+}
+
+// TestOneWrongSubjectForgetsNothing : the guard is per memory, and a
+// batch that is half right would leave the person told it failed with
+// no way to know which half went.
+func TestOneWrongSubjectForgetsNothing(t *testing.T) {
+	r, store, _ := harness(t)
+
+	for _, s := range []string{"Milk cost", "Radish cost"} {
+		call(t, r, chat.ChannelDirect, "memory_remember",
+			`{"subject":"`+s+`","body":"a figure"}`)
+	}
+	all, _ := store.All(context.Background(), user, memory.TierRecall)
+
+	got := call(t, r, chat.ChannelDirect, "memory_forget",
+		`{"memories":[{"id":"`+all[0].ID+`","confirm_subject":"`+all[0].Subject+`"},`+
+			`{"id":"`+all[1].ID+`","confirm_subject":"Something else"}]}`)
+	if got.Outcome == conversation.OutcomeOK {
+		t.Fatalf("a wrong subject was accepted: %s", got.Content)
+	}
+	if left, _ := store.All(context.Background(), user, memory.TierRecall); len(left) != 2 {
+		t.Errorf("%d memories left, want both: a refused batch must forget nothing", len(left))
+	}
+}
+
+// TestTheStandingDescriptionIsNotJustAnotherNote : It was listed flat
+// among the single facts somebody mentioned once, and weighed like
+// one -- set aside in favour of a guess about the person it
+// describes.
+//
+// It is a different kind of thing: counted, from a month of what
+// their devices reported and a week of what they said. The listing
+// says so.
+func TestTheStandingDescriptionIsNotJustAnotherNote(t *testing.T) {
+	r, store, _ := harness(t)
+
+	if err := store.Create(context.Background(), &memory.Memory{
+		ID:     "mem_01M3D477HXQ4YNQX7BNXJZZCV1",
+		UserID: user, Subject: profile.Subject, Tier: memory.TierAlways,
+		Body: "WHAT IS SO\n- goes to the office, 11 times over 14 days",
+	}); err != nil {
+		t.Fatalf("storing the description: %v", err)
+	}
+	if err := store.Create(context.Background(), &memory.Memory{
+		ID:     "mem_01M3D477HXQ4YNQX7BNXJZZCV2",
+		UserID: user, Subject: "Coffee", Tier: memory.TierAlways,
+		Body: "They take filter coffee.",
+	}); err != nil {
+		t.Fatalf("storing a memory: %v", err)
+	}
+
+	listed := call(t, r, chat.ChannelDirect, "memory_list", `{}`).Content
+
+	if !strings.Contains(listed, "counted evidence") {
+		t.Errorf("the standing description is listed as an ordinary note:\n%s", listed)
+	}
+	// Still an ordinary memory underneath: without the identifier
+	// they cannot have a line of it changed or the whole thing
+	// dropped.
+	if !strings.Contains(listed, "mem_") {
+		t.Errorf("the standing description lost its identifier:\n%s", listed)
+	}
+	if !strings.Contains(listed, "filter coffee") {
+		t.Errorf("pulling the description out dropped the other memories:\n%s", listed)
+	}
+	if !strings.Contains(listed, "goes to the office") {
+		t.Errorf("the description itself is missing:\n%s", listed)
+	}
+}

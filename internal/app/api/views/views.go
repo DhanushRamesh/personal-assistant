@@ -1,0 +1,287 @@
+// Package views : Renders domain values as the API publishes them.
+//
+// Every type here is a wire format, deliberately separate from the domain so
+// that the two can change independently and so that a field added for
+// The server's own use is never published by accident. The rendering lives in one
+// package rather than beside each handler because a conversation detail carries
+// chats, a login carries a user and a client, and those shapes must agree
+// wherever they appear.
+package views
+
+import (
+	"time"
+
+	"github.com/DhanushRamesh/personal-assistant/internal/base/chat"
+	"github.com/DhanushRamesh/personal-assistant/internal/base/conversation"
+	"github.com/DhanushRamesh/personal-assistant/internal/base/llm"
+	"github.com/DhanushRamesh/personal-assistant/internal/domain/persona"
+	"github.com/DhanushRamesh/personal-assistant/internal/domain/remind"
+)
+
+// Chat : A chat as the API returns it.
+type Chat struct {
+	ID             string `json:"id"`
+	ConversationID string `json:"conversation_id,omitempty"`
+	Prompt         string `json:"prompt"`
+	// Channel : How the prompt arrived, "voice" or "direct".
+	Channel  string `json:"channel,omitempty"`
+	Status   string `json:"status"`
+	Response string `json:"response,omitempty"`
+	Error    string `json:"error,omitempty"`
+	// ErrorCode : Which kind of failure it was. A client keys off this rather
+	// than matching on the sentence, which is prose and will change.
+	ErrorCode string `json:"error_code,omitempty"`
+	// ErrorDetail : Exactly what the service said. Shown behind "more info",
+	// never in place of Error.
+	ErrorDetail string     `json:"error_detail,omitempty"`
+	CreatedAt   time.Time  `json:"created_at"`
+	UpdatedAt   time.Time  `json:"updated_at"`
+	StartedAt   *time.Time `json:"started_at,omitempty"`
+	FinishedAt  *time.Time `json:"finished_at,omitempty"`
+}
+
+// OfChat : Renders a chat for the API.
+func OfChat(t *chat.Chat) Chat {
+	return Chat{
+		ID:             t.ID,
+		ConversationID: t.ConversationID,
+		Prompt:         t.Prompt,
+		Channel:        string(t.Channel),
+		Status:         string(t.Status),
+		Response:       t.Response,
+		Error:          t.Error,
+		ErrorCode:      t.ErrorCode,
+		ErrorDetail:    t.ErrorDetail,
+		CreatedAt:      t.CreatedAt,
+		UpdatedAt:      t.UpdatedAt,
+		StartedAt:      t.StartedAt,
+		FinishedAt:     t.FinishedAt,
+	}
+}
+
+// Summary : A chat in a listing, which carries no response body.
+type Summary struct {
+	ID             string     `json:"id"`
+	ConversationID string     `json:"conversation_id,omitempty"`
+	Prompt         string     `json:"prompt"`
+	Channel        string     `json:"channel,omitempty"`
+	Status         string     `json:"status"`
+	Error          string     `json:"error,omitempty"`
+	ErrorCode      string     `json:"error_code,omitempty"`
+	CreatedAt      time.Time  `json:"created_at"`
+	UpdatedAt      time.Time  `json:"updated_at"`
+	StartedAt      *time.Time `json:"started_at,omitempty"`
+	FinishedAt     *time.Time `json:"finished_at,omitempty"`
+}
+
+// Announcement : Something the assistant said without being asked, as it
+// is shown in a conversation.
+//
+// Separate from Summary because it is not a chat: there is no question, no
+// status and nothing to cancel. It carries only what was said, what
+// prompted it, and when.
+type Announcement struct {
+	ID string `json:"id"`
+	// Kind : What prompted it -- "reminder" or "presence".
+	Kind string `json:"kind"`
+	// Text : The words as they were spoken.
+	Text string `json:"text"`
+	// At : When they were said.
+	At time.Time `json:"at"`
+}
+
+// OfAnnouncements : Renders the announcements among a conversation's
+// messages, oldest first, leaving everything else out.
+func OfAnnouncements(messages []conversation.Message) []Announcement {
+	out := make([]Announcement, 0, len(messages))
+	for _, m := range messages {
+		if !m.Kind.Announcement() {
+			continue
+		}
+		out = append(out, Announcement{
+			ID:   m.ID,
+			Kind: string(m.Kind),
+			Text: m.Content,
+			At:   m.At,
+		})
+	}
+	return out
+}
+
+// OfSummary : Renders a chat summary for the API.
+func OfSummary(s chat.Summary) Summary {
+	return Summary{
+		ID:             s.ID,
+		ConversationID: s.ConversationID,
+		Prompt:         s.Prompt,
+		Channel:        string(s.Channel),
+		Status:         string(s.Status),
+		Error:          s.Error,
+		ErrorCode:      s.ErrorCode,
+		CreatedAt:      s.CreatedAt,
+		UpdatedAt:      s.UpdatedAt,
+		StartedAt:      s.StartedAt,
+		FinishedAt:     s.FinishedAt,
+	}
+}
+
+// OfSummaries : Renders a listing of chat summaries.
+func OfSummaries(summaries []chat.Summary) []Summary {
+	out := make([]Summary, len(summaries))
+	for i, s := range summaries {
+		out[i] = OfSummary(s)
+	}
+	return out
+}
+
+// User : A user as the API returns it. The password hash is never included.
+type User struct {
+	ID        string    `json:"id"`
+	Username  string    `json:"username"`
+	CreatedAt time.Time `json:"created_at"`
+}
+
+// OfUser : Renders a user for the API.
+func OfUser(u *chat.User) User {
+	return User{ID: u.ID, Username: u.Username, CreatedAt: u.CreatedAt}
+}
+
+// Client : A client as the API returns it.
+type Client struct {
+	ID   string `json:"id"`
+	Name string `json:"name,omitempty"`
+	// Channel : How this client's prompts arrive, "voice" or "direct".
+	Channel string `json:"channel,omitempty"`
+	// Vendor, Model : Which model answers this client. Absent when it has
+	// chosen none and the server's configured one answers.
+	Vendor               string     `json:"vendor,omitempty"`
+	Model                string     `json:"model,omitempty"`
+	Current              bool       `json:"current"`
+	Revoked              bool       `json:"revoked"`
+	RevokedAt            *time.Time `json:"revoked_at,omitempty"`
+	ActiveConversationID string     `json:"active_conversation_id,omitempty"`
+	CreatedAt            time.Time  `json:"created_at"`
+}
+
+// OfClient : Renders a client for the API. Current marks the one the request
+// was made from.
+func OfClient(d chat.Client, current bool) Client {
+	return Client{
+		ID:                   d.ID,
+		Name:                 d.Name,
+		Channel:              string(d.Channel),
+		Vendor:               d.Model.Vendor,
+		Model:                d.Model.ID,
+		Current:              current,
+		Revoked:              d.Revoked(),
+		RevokedAt:            d.RevokedAt,
+		ActiveConversationID: d.ActiveConversationID,
+		CreatedAt:            d.CreatedAt,
+	}
+}
+
+// Conversation : A conversation as the API returns it.
+type Conversation struct {
+	ID       string `json:"id"`
+	Title    string `json:"title,omitempty"`
+	Active   bool   `json:"active"`
+	Archived bool   `json:"archived,omitempty"`
+	// ArchivedAt : When it was put away. Absent while it is in use.
+	ArchivedAt *time.Time `json:"archived_at,omitempty"`
+	CreatedAt  time.Time  `json:"created_at"`
+	UpdatedAt  time.Time  `json:"updated_at"`
+}
+
+// OfConversation : Renders a conversation for the API.
+func OfConversation(c chat.Conversation, active bool) Conversation {
+	return Conversation{
+		ID:         c.ID,
+		Title:      c.Title,
+		Active:     active,
+		Archived:   c.Archived(),
+		ArchivedAt: c.ArchivedAt,
+		CreatedAt:  c.CreatedAt,
+		UpdatedAt:  c.UpdatedAt,
+	}
+}
+
+// Model : A model a client may be set to answer with.
+type Model struct {
+	ID     string `json:"id"`
+	Name   string `json:"name"`
+	Vendor string `json:"vendor"`
+	// ContextTokens : How much the model can be given at once. Shown so the
+	// choice between a large model and a fast one is an informed one.
+	ContextTokens int `json:"context_tokens"`
+	// SupportsTools : Whether it can be asked to call tools.
+	SupportsTools bool `json:"supports_tools"`
+}
+
+// OfModel : Renders a catalogued model for the API.
+func OfModel(m llm.Model) Model {
+	return Model{
+		ID:            m.ID,
+		Name:          m.Name,
+		Vendor:        m.Vendor,
+		ContextTokens: m.ContextTokens,
+		SupportsTools: m.SupportsTools,
+	}
+}
+
+// Persona : A manner the assistant can answer in.
+type Persona struct {
+	ID      string `json:"id"`
+	Name    string `json:"name"`
+	Summary string `json:"summary"`
+}
+
+// OfPersona : Renders a persona for the API.
+func OfPersona(p persona.Persona) Persona {
+	return Persona{ID: p.ID, Name: p.Name, Summary: p.Summary}
+}
+
+// Reminder : Something waiting to be said, as a client sees it.
+type Reminder struct {
+	ID    string `json:"id"`
+	Title string `json:"title"`
+	// Say : What will actually be spoken.
+	Say string `json:"say"`
+	// DueAt : When, in UTC. A client shows it in whatever zone it likes.
+	DueAt time.Time `json:"due_at"`
+	// Repeats : daily, weekdays, weekly, monthly, or empty for once only.
+	Repeats string `json:"repeats,omitempty"`
+	// Scope : user or client.
+	Scope string `json:"scope"`
+	// Status : pending, done, missed or cancelled.
+	Status string `json:"status"`
+	// Fires : How many times it has been said.
+	Fires int `json:"fires,omitempty"`
+	// LastFiredAt : When it was last said, or null if never.
+	LastFiredAt *time.Time `json:"last_fired_at,omitempty"`
+	CreatedAt   time.Time  `json:"created_at"`
+}
+
+// OfReminder : One reminder as a client sees it.
+func OfReminder(r remind.Reminder) Reminder {
+	return Reminder{
+		ID:          r.ID,
+		Title:       r.Title,
+		Say:         r.Body,
+		DueAt:       r.DueAt,
+		Repeats:     string(r.Repeats),
+		Scope:       string(r.Scope),
+		Status:      string(r.Status),
+		Fires:       r.Fires,
+		LastFiredAt: r.LastFiredAt,
+		CreatedAt:   r.CreatedAt,
+	}
+}
+
+// OfReminders : Several, in the order they were given.
+func OfReminders(all []remind.Reminder) []Reminder {
+	out := make([]Reminder, 0, len(all))
+	for i := range all {
+		out = append(out, OfReminder(all[i]))
+	}
+	return out
+}

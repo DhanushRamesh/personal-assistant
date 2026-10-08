@@ -1,0 +1,452 @@
+package profile_test
+
+import (
+	"encoding/json"
+	"strconv"
+	"strings"
+	"testing"
+	"time"
+
+	"github.com/DhanushRamesh/personal-assistant/internal/base/conversation"
+	"github.com/DhanushRamesh/personal-assistant/internal/base/event"
+	"github.com/DhanushRamesh/personal-assistant/internal/app/profile"
+)
+
+// india : The timezone their days are counted in. A week of evenings
+// lands on the wrong date in UTC.
+func india() *time.Location {
+	loc, err := time.LoadLocation("Asia/Kolkata")
+	if err != nil {
+		panic(err)
+	}
+	return loc
+}
+
+// happened : One reported thing.
+func happened(kind, value string, at time.Time) event.Event {
+	payload, _ := json.Marshal(map[string]string{"value": value})
+	return event.Event{Kind: kind, Payload: payload, OccurredAt: at}
+}
+
+// day : A moment, in their own time.
+func day(d, h, m int) time.Time {
+	return time.Date(2026, 10, d, h, m, 0, 0, india())
+}
+
+// A run of the same thing in quick succession is one occurrence of it.
+// A laptop that rejoined the same network twenty-five times in a day
+// otherwise reads as the most significant thing in the week.
+func TestARunOfTheSameThingIsCountedOnce(t *testing.T) {
+	var events []event.Event
+	for i := 0; i < 25; i++ {
+		events = append(events, happened("network.joined", "Dhanush", day(1, 9, i)))
+	}
+
+	got := profile.Rhythm(events, india())
+
+	if !strings.Contains(got, "1 time") {
+		t.Errorf("twenty-five joins in an hour were not collapsed:\n%s", got)
+	}
+}
+
+// What they do most comes first, because that is what a description
+// should be built around.
+func TestWhatTheyDoMostComesFirst(t *testing.T) {
+	events := []event.Event{
+		happened("place.entered", "office", day(1, 10, 0)),
+		happened("place.entered", "office", day(2, 10, 5)),
+		happened("place.entered", "office", day(3, 9, 50)),
+		happened("place.entered", "gym", day(3, 19, 0)),
+	}
+
+	got := profile.Rhythm(events, india())
+
+	office := strings.Index(got, `place.entered "office"`)
+	gym := strings.Index(got, `place.entered "gym"`)
+	if office < 0 || gym < 0 {
+		t.Fatalf("a place is missing:\n%s", got)
+	}
+	if office > gym {
+		t.Errorf("the thing done three times is listed below the thing done once:\n%s", got)
+	}
+	for _, want := range []string{"3 times", "on 3 of 3 days", "usually around 10am"} {
+		if !strings.Contains(got, want) {
+			t.Errorf("want %q in it:\n%s", want, got)
+		}
+	}
+}
+
+// An hour is only given when there is one. "Usually around 2pm" for
+// something that happens at any hour is the kind of detail that gets
+// written into a description and then believed.
+func TestAnHourIsNotInventedForSomethingSpreadAcrossTheDay(t *testing.T) {
+	events := []event.Event{
+		happened("screen.on", "", day(1, 7, 0)),
+		happened("screen.on", "", day(2, 14, 0)),
+		happened("screen.on", "", day(3, 23, 0)),
+	}
+
+	got := profile.Rhythm(events, india())
+
+	if strings.Contains(got, "usually around") {
+		t.Errorf("an hour was invented for something spread across the day:\n%s", got)
+	}
+	if !strings.Contains(got, "at no particular hour") {
+		t.Errorf("the spread was not reported:\n%s", got)
+	}
+}
+
+// What follows what is the sequence the person means by "I always do
+// this then that".
+func TestWhatFollowsWhatIsReported(t *testing.T) {
+	var events []event.Event
+	for d := 1; d <= 3; d++ {
+		events = append(events,
+			happened("place.exited", "home", day(d, 8, 30)),
+			happened("place.entered", "office", day(d, 9, 10)))
+	}
+
+	got := profile.Rhythm(events, india())
+
+	if !strings.Contains(got, `place.exited "home", then place.entered "office"`) {
+		t.Errorf("the sequence was not found:\n%s", got)
+	}
+	if !strings.Contains(got, "40 minutes") {
+		t.Errorf("the usual gap was not reported:\n%s", got)
+	}
+}
+
+// Two things that happened next to each other once are not a routine.
+func TestACoincidenceIsNotARoutine(t *testing.T) {
+	events := []event.Event{
+		happened("place.exited", "home", day(1, 8, 30)),
+		happened("call.missed", "mum", day(1, 8, 40)),
+	}
+
+	got := profile.Rhythm(events, india())
+
+	if strings.Contains(got, "following another") {
+		t.Errorf("one coincidence was reported as a sequence:\n%s", got)
+	}
+}
+
+// Things far apart did not follow one another, whatever the order they
+// are stored in.
+func TestThingsFarApartAreNotASequence(t *testing.T) {
+	var events []event.Event
+	for d := 1; d <= 3; d++ {
+		events = append(events,
+			happened("place.exited", "home", day(d, 8, 0)),
+			happened("place.entered", "gym", day(d, 20, 0)))
+	}
+
+	got := profile.Rhythm(events, india())
+
+	if strings.Contains(got, "then") {
+		t.Errorf("twelve hours apart was called a sequence:\n%s", got)
+	}
+}
+
+// Nothing reported is nothing said, rather than a heading with nothing
+// under it.
+func TestNothingReportedSaysNothing(t *testing.T) {
+	if got := profile.Rhythm(nil, india()); got != "" {
+		t.Errorf("an empty week produced %q", got)
+	}
+}
+
+// arrived, left : The two ends of a visit.
+func arrived(place string, at time.Time) event.Event { return happened("place.entered", place, at) }
+func left(place string, at time.Time) event.Event    { return happened("place.exited", place, at) }
+
+// An arrival paired with the departure after it is how long they
+// stayed, which is the half that lets anything be ready before it is
+// asked for.
+func TestWhereTheyGoSaysWhenAndForHowLong(t *testing.T) {
+	var events []event.Event
+	for d := 1; d <= 4; d++ {
+		events = append(events, arrived("office", day(d, 9, 30)), left("office", day(d, 18, 0)))
+	}
+
+	got := profile.Rhythm(events, india())
+
+	for _, want := range []string{
+		"Where they went:", "office", "arriving or leaving recorded on 4 days",
+		"arriving usually around 9am", "leaving usually around 6pm", "usually staying 8 hours",
+	} {
+		if !strings.Contains(got, want) {
+			t.Errorf("want %q in it:\n%s", want, got)
+		}
+	}
+}
+
+// A departure nobody reported is not a night spent at the office.
+func TestAVisitThatNeverEndedIsNotCountedAsALength(t *testing.T) {
+	events := []event.Event{
+		arrived("office", day(1, 9, 0)), left("office", day(1, 17, 0)),
+		arrived("office", day(2, 9, 0)), // the phone went flat
+		arrived("office", day(3, 9, 0)), left("office", day(4, 20, 0)),
+	}
+
+	got := profile.Rhythm(events, india())
+
+	if strings.Contains(got, "staying") {
+		t.Errorf("a stay was reported from one pairing and a two-day gap:\n%s", got)
+	}
+}
+
+// Passing the door is not going somewhere.
+func TestPassingThroughIsNotAStay(t *testing.T) {
+	var events []event.Event
+	for d := 1; d <= 3; d++ {
+		events = append(events, arrived("petrol station", day(d, 8, 0)), left("petrol station", day(d, 8, 1)))
+	}
+
+	got := profile.Rhythm(events, india())
+
+	if !strings.Contains(got, "petrol station") {
+		t.Errorf("the place was dropped entirely:\n%s", got)
+	}
+	if strings.Contains(got, "staying") {
+		t.Errorf("a minute at the door was reported as a stay:\n%s", got)
+	}
+}
+
+// What was run for them says what they keep wanting, in a fixed
+// vocabulary however each question was phrased.
+func TestWhatWasRunForThemIsCounted(t *testing.T) {
+	ran := func(at time.Time, names ...string) conversation.Message {
+		m := conversation.Message{At: at}
+		for _, n := range names {
+			m.ToolCalls = append(m.ToolCalls, conversation.ToolCall{Name: n})
+		}
+		return m
+	}
+	called := []conversation.Message{
+		ran(day(1, 9, 0), "calendar_events", "calendar_events"),
+		ran(day(2, 9, 0), "calendar_events", "reminder_set"),
+		ran(day(3, 9, 0), "tool_describe"),
+	}
+
+	domain := func(name string) string {
+		return map[string]string{
+			"calendar_events": "their diary",
+			"reminder_set":    "their reminders",
+		}[name]
+	}
+	got := profile.Asking(called, india(), domain)
+
+	// What they keep coming back to, in order and in their terms.
+	if !strings.Contains(got, "their diary, their reminders") {
+		t.Errorf("what they keep wanting is not given, most first:\n%s", got)
+	}
+	// Describing a tool is the deferring mechanism costing a round, not
+	// something the person wanted.
+	if strings.Contains(got, "tool_describe") {
+		t.Errorf("the describing mechanism was counted as something they asked for:\n%s", got)
+	}
+	// No counts at all. With them, the description copied "calendar_events:
+	// 104 times on 7 days" into its list of facts about the person.
+	for _, n := range []string{"3 times", "1 time", "2 days"} {
+		if strings.Contains(got, n) {
+			t.Errorf("a count survived, and it will be copied as a fact about him: %q\n%s", n, got)
+		}
+	}
+	if !strings.Contains(got, "not a fact about them") {
+		t.Errorf("nothing says these are not facts about the person:\n%s", got)
+	}
+}
+
+// Nothing run is nothing said.
+func TestNothingRunSaysNothing(t *testing.T) {
+	if got := profile.Asking(nil, india(), nil); got != "" {
+		t.Errorf("an empty month produced %q", got)
+	}
+}
+
+// TestThingsThatHappenTogetherSurviveSomethingInBetween : The pairing
+// that matters is two devices reporting one departure, and before this
+// anything landing between them hid it entirely.
+func TestThingsThatHappenTogetherSurviveSomethingInBetween(t *testing.T) {
+	utc := time.UTC
+	var evs []event.Event
+	day := time.Date(2026, 9, 10, 8, 0, 0, 0, utc)
+	for d := range 6 {
+		at := day.AddDate(0, 0, d)
+		// Leaving home: the geofence, something unrelated, then the
+		// network dropping two minutes later.
+		evs = append(evs,
+			happened("place.exited", "home", at),
+			happened("battery.low", "17", at.Add(30*time.Second)),
+			happened("network.left", "Dhanush", at.Add(2*time.Minute)),
+			// And arriving at the office forty minutes later.
+			happened("place.entered", "office", at.Add(42*time.Minute)),
+			happened("network.joined", "Zoho-Guest", at.Add(44*time.Minute)),
+		)
+	}
+
+	got := profile.Rhythm(evs, utc)
+	for _, want := range []string{
+		`place.exited "home", then network.left "Dhanush"`,
+		`place.entered "office", then network.joined "Zoho-Guest"`,
+		`place.exited "home", then place.entered "office"`,
+	} {
+		if !strings.Contains(got, want) {
+			t.Errorf("the pairing %q was not found in:\n%s", want, got)
+		}
+	}
+	// And the commute is given as a length the model can use.
+	if !strings.Contains(got, "42 minutes") {
+		t.Errorf("the gap between leaving and arriving is missing:\n%s", got)
+	}
+}
+
+// TestAPairingNeedsMoreThanOnce : Two coincidences are not a routine,
+// and one written into a description is acted on like a real one.
+func TestAPairingNeedsMoreThanOnce(t *testing.T) {
+	utc := time.UTC
+	at := time.Date(2026, 9, 10, 8, 0, 0, 0, utc)
+	got := profile.Rhythm([]event.Event{
+		happened("place.exited", "somewhere", at),
+		happened("network.left", "once-only", at.Add(time.Minute)),
+	}, utc)
+	if strings.Contains(got, `place.exited "somewhere", then network.left "once-only"`) {
+		t.Errorf("a single coincidence was reported as a pattern:\n%s", got)
+	}
+}
+
+// TestAPayloadWithMoreThanAValueStillCountsAsOneThing : The label is
+// the value alone, or a kind that carries anything else is a different
+// thing every time -- counted once, paired with nothing, and reported
+// as something that happened rather than something they do.
+func TestAPayloadWithMoreThanAValueStillCountsAsOneThing(t *testing.T) {
+	utc := time.UTC
+	var evs []event.Event
+	for i := range 6 {
+		at := time.Date(2026, 9, 10+i, 9, 15, 0, 0, utc)
+		// The same person, a different length every time.
+		evs = append(evs, withPayload("call.received",
+			`{"value":"Amit","seconds":`+itoa(120+i*37)+`}`, at))
+	}
+	got := profile.Rhythm(evs, utc)
+
+	if !strings.Contains(got, `call.received "Amit": 6 times`) {
+		t.Errorf("six calls from one person should be one line:\n%s", got)
+	}
+	if strings.Contains(got, "seconds=") {
+		t.Errorf("the whole payload leaked into the label:\n%s", got)
+	}
+}
+
+// TestAStayCountsDespiteItsMinutesChanging : An open stay is rewritten
+// as it grows, so its minutes differ on every reading.
+func TestAStayCountsDespiteItsMinutesChanging(t *testing.T) {
+	utc := time.UTC
+	var evs []event.Event
+	for i := range 4 {
+		at := time.Date(2026, 9, 10+i, 9, 0, 0, 0, utc)
+		evs = append(evs, withPayload("place.stayed",
+			`{"value":"the office","minutes":`+itoa(400+i*61)+`,"still":true}`, at))
+	}
+	if got := profile.Rhythm(evs, utc); !strings.Contains(got, `the office`) {
+		t.Errorf("the office should be one place:\n%s", got)
+	}
+}
+
+func withPayload(kind, payload string, at time.Time) event.Event {
+	return event.Event{Kind: kind, Payload: []byte(payload), OccurredAt: at}
+}
+
+func itoa(n int) string { return strconv.Itoa(n) }
+
+// The hours somebody actually came home over a week: 2, 10, 11,
+// 21, 21, 21, 21. Four of the seven at nine in the evening, which
+// is a plain daily habit.
+//
+// It was invisible until 7 October 2026. The test asked whether
+// the furthest two hours were within four hours of each other;
+// these are nineteen apart, so the answer was "at no particular
+// hour" and one late night had hidden four ordinary ones.
+func TestOneLateNightDoesNotHideAnHour(t *testing.T) {
+	events := []event.Event{
+		happened("door.shut", "", day(1, 2, 0)),
+		happened("door.shut", "", day(2, 10, 0)),
+		happened("door.shut", "", day(3, 11, 0)),
+		happened("door.shut", "", day(4, 21, 0)),
+		happened("door.shut", "", day(5, 21, 0)),
+		happened("door.shut", "", day(6, 21, 0)),
+		happened("door.shut", "", day(7, 21, 0)),
+	}
+
+	got := profile.Rhythm(events, india())
+	if !strings.Contains(got, "9pm") {
+		t.Errorf("the hour four of seven days agree on was not found:\n%s", got)
+	}
+}
+
+// Hours are round, so a band may run from before midnight to
+// after it. A bedtime lives exactly there and would otherwise
+// read as two habits twenty two hours apart.
+func TestAnHourMayStraddleMidnight(t *testing.T) {
+	events := []event.Event{
+		happened("screen.locked", "", day(1, 23, 30)),
+		happened("screen.locked", "", day(2, 0, 20)),
+		happened("screen.locked", "", day(3, 1, 10)),
+		happened("screen.locked", "", day(4, 0, 40)),
+	}
+
+	got := profile.Rhythm(events, india())
+	if strings.Contains(got, "at no particular hour") {
+		t.Errorf("a bedtime across midnight was not seen as one hour:\n%s", got)
+	}
+}
+
+// Half agreeing is a leaning and two thirds is a habit, and they
+// are not said in the same word. "Usually" of a coin toss is the
+// overstating this is meant to avoid.
+func TestHowSureItIsShowsInTheWord(t *testing.T) {
+	// Three agreeing out of six: half, which is a leaning. Fewer
+	// than three agreeing is no hour at all, whatever the half
+	// says -- see TestTwoAgreeingIsNotAnHour.
+	leaning := []event.Event{
+		happened("door.shut", "", day(1, 9, 0)),
+		happened("door.shut", "", day(2, 9, 0)),
+		happened("door.shut", "", day(3, 9, 0)),
+		happened("door.shut", "", day(4, 15, 0)),
+		happened("door.shut", "", day(5, 20, 0)),
+		happened("door.shut", "", day(6, 22, 0)),
+	}
+	if got := profile.Rhythm(leaning, india()); !strings.Contains(got, "often around") {
+		t.Errorf("half agreeing was not reported as a leaning:\n%s", got)
+	}
+
+	habit := []event.Event{
+		happened("door.shut", "", day(1, 9, 0)),
+		happened("door.shut", "", day(2, 9, 0)),
+		happened("door.shut", "", day(3, 10, 0)),
+		happened("door.shut", "", day(4, 20, 0)),
+	}
+	if got := profile.Rhythm(habit, india()); !strings.Contains(got, "usually around") {
+		t.Errorf("three of four agreeing was not reported as a habit:\n%s", got)
+	}
+}
+
+// Office arrivals were 19, 11 and 13. Two of the three fall in
+// one band, which is half of them, and the middle of that band
+// is one in the afternoon -- a confident hour read off two
+// observations two and a quarter hours apart.
+//
+// Two of anything is a coincidence, however large a share of a
+// small number it is.
+func TestTwoAgreeingIsNotAnHour(t *testing.T) {
+	events := []event.Event{
+		happened("door.shut", "", day(1, 19, 0)),
+		happened("door.shut", "", day(2, 11, 23)),
+		happened("door.shut", "", day(3, 13, 37)),
+	}
+
+	got := profile.Rhythm(events, india())
+	if !strings.Contains(got, "at no particular hour") {
+		t.Errorf("an hour was read off two observations:\n%s", got)
+	}
+}

@@ -11,12 +11,12 @@ import (
 	"strings"
 	"time"
 
-	"github.com/DhanushRamesh/personal-assistant/internal/chat"
-	chatmysql "github.com/DhanushRamesh/personal-assistant/internal/chat/mysql"
-	"github.com/DhanushRamesh/personal-assistant/internal/config"
-	"github.com/DhanushRamesh/personal-assistant/internal/google"
-	"github.com/DhanushRamesh/personal-assistant/internal/logging"
-	"github.com/DhanushRamesh/personal-assistant/internal/storage"
+	"github.com/DhanushRamesh/personal-assistant/internal/base/chat"
+	chatmysql "github.com/DhanushRamesh/personal-assistant/internal/base/chat/mysql"
+	"github.com/DhanushRamesh/personal-assistant/internal/base/config"
+	"github.com/DhanushRamesh/personal-assistant/internal/base/logging"
+	"github.com/DhanushRamesh/personal-assistant/internal/base/storage"
+	"github.com/DhanushRamesh/personal-assistant/internal/domain/google"
 )
 
 // aliases : Short names Google returns alongside the full scope URLs.

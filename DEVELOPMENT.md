@@ -13853,6 +13853,43 @@ landed at the start of the new file rather than at offset 57MB. 340
 bytes apparent, 4K on disk, so not a sparse file.
 
 
+### The tree says what the import graph is
+
+Forty-one packages sat flat under internal/, which said nothing about
+which of them everything else stands on. The graph was measured first:
+chat imported by twenty-nine packages and importing none, prompt by
+twenty, event by fourteen, logging by twelve, and at the other end api
+importing thirty-three.
+
+So three layers, and they are the graph rather than a filing habit.
+base is the floor and may import only base. domain is what the
+assistant knows about -- reminders, rules, the diary, the person's
+mail -- and stands on base. app is the wiring, and nothing reaches
+back into it.
+
+A strict depth-first split does not fit: the real graph is more than
+three deep, and mechanically classifying by depth left forty-seven
+packages unplaced. The layers are by role, with one rule that is
+mechanical and therefore enforceable.
+
+layers_test.go is the enforcement, and it found a violation the moment
+it existed: profile imported app/tool to compare against one string
+constant. profile imports from base, domain and app and is called by
+the api, the memories tool and main -- it is a composer, not a thing
+the assistant knows, so it moved to app rather than having a constant
+invented to let it stay where it was.
+
+Checked by planting one. base/llm importing domain/remind fails with
+"base may only import [base]". The first attempt to plant it did
+nothing, because llm.go has a single-line import and the edit looked
+for a parenthesised block -- a test that cannot be made to fail has
+not been tested.
+
+The second test is for what the first cannot see: a package put
+straight into internal/ belongs to no layer and would be checked by
+nothing.
+
+
 ## 12. Maintaining this file
 
 When the owner states a preference, makes a decision, or corrects something,
