@@ -111,7 +111,7 @@ test: ## Run the tests
 
 .PHONY: evals-greeting
 evals-greeting: ## Greet real arrivals sampled from the last four weeks (costs API calls)
-	@go test ./internal/greet/evals/ -tags evals -count=1 -v -timeout 20m $(ARGS)
+	@go test ./internal/domain/greet/evals/ -tags evals -count=1 -v -timeout 20m $(ARGS)
 
 .PHONY: evals
 evals: ## Ask a real model whether the tool descriptions work (costs API calls)
@@ -120,7 +120,7 @@ evals: ## Ask a real model whether the tool descriptions work (costs API calls)
 	@# today, was always close to it and crossed it on 5 October: the
 	@# suite panicked at 600s having reported nothing at all, which
 	@# reads like a verdict and is not one.
-	@go test ./internal/tool/evals/... ./internal/embed/evals/... ./internal/memory/evals/... ./internal/persona/evals/... ./internal/conversation/evals/... ./internal/remind/evals/... -tags evals -count=1 -v -timeout 45m
+	@go test ./internal/app/tool/evals/... ./internal/base/thinking/embed/evals/... ./internal/domain/memory/evals/... ./internal/domain/persona/evals/... ./internal/base/records/conversation/evals/... ./internal/domain/remind/evals/... -tags evals -count=1 -v -timeout 45m
 
 .PHONY: check
 check: ## Everything that must pass before committing
