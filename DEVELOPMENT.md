@@ -14052,6 +14052,46 @@ anything: ten assertions failed. A test that cannot be made to fail
 has not been tested.
 
 
+### What decides whether anything is said at all
+
+Auditing world and thinking. Most of both was already covered --
+speech at 100, events at 97.7, heard at 95.7, alarm at 93.5, llm at
+90.9, embed at 90.2 -- so the audit was about which gaps mattered
+rather than how many there were.
+
+prompt was 53.8 per cent and is imported by twenty packages, and the
+untested half was Nothing(): what decides whether the assistant
+speaks. Read too strictly, "NOTHING." is spoken aloud as an answer.
+Read too loosely, a real sentence beginning with the word is
+swallowed and the person is never told. Both directions are now
+written down, including a model that says the word and then explains
+itself, which is still declining.
+
+event was 60.9 per cent across two and a half thousand lines, and
+reaching.go -- who tried to get hold of them and whether it worked --
+had no tests at all. It is deliberately two comparisons rather than a
+judgement about language, because a model asked to make it raised a
+call that had been returned eight minutes later, on four arrivals out
+of four. Now covered, including seconds arriving as a string, which is
+how Tasker sends them, and something settled coming back.
+
+Working() decides what is hidden from the model as churn, and a day of
+music events is longer than a day of everything else put together. It
+matches a family by prefix, which means a single letter matches too.
+Nothing sends a kind like that and the behaviour is written down
+rather than changed, with the test saying so.
+
+routine's Said() was untested and reaches a person's ears -- "you
+usually leave around 10am". Midnight and midday are the two that go
+wrong, being 0 and 12.
+
+	prompt   53.8 -> 100      routine  45.5 -> 100
+	event    60.9 -> 76.2
+
+notice is an interface with no statements. store was the same and both
+are right as they are.
+
+
 ## 12. Maintaining this file
 
 When the owner states a preference, makes a decision, or corrects something,

@@ -186,3 +186,51 @@ func TestEverythingElseIsSaidAsItIs(t *testing.T) {
 		}
 	}
 }
+
+// TestWhatIsWorkingMaterialAndWhatIsHistory : Churn is kept and
+// hidden; history is read. Getting it wrong goes badly in both
+// directions -- a day of music events is longer than a day of
+// everything else put together, and anything wrongly called churn is
+// a thing that happened and cannot be asked about.
+func TestWhatIsWorkingMaterialAndWhatIsHistory(t *testing.T) {
+	for _, churn := range []string{Fixed, State, Playing, Paused} {
+		if !Working(churn) {
+			t.Errorf("%q is not treated as working material", churn)
+		}
+	}
+
+	// A family counts: asking for it is asking for what is in it.
+	for _, family := range []string{"music.", "location."} {
+		if !Working(family) {
+			t.Errorf("the family %q is not treated as working material", family)
+		}
+	}
+
+	for _, history := range []string{
+		"", "   ",
+		"call.missed", "battery.level", "power.plugged",
+		"place.entered", "place.exited",
+		Started, Stopped,
+	} {
+		if Working(history) {
+			t.Errorf("%q was treated as churn, so it can never be asked about", history)
+		}
+	}
+}
+
+// TestAPrefixThatIsNotAFamilyIsStillAPrefix : Written down because it
+// is a real edge and the behaviour is deliberate rather than
+// accidental.
+//
+// The family rule is a prefix match, so a single letter matches too.
+// Nothing sends a kind like that -- kinds are written in the sender
+// and the event tool never enumerates them -- but if one ever did, it
+// would vanish from the record rather than be reported.
+func TestAPrefixThatIsNotAFamilyIsStillAPrefix(t *testing.T) {
+	if !Working("m") {
+		t.Skip("the prefix rule has been narrowed; this test is describing what it was")
+	}
+	if Working("x") {
+		t.Error("a prefix matching nothing was treated as churn")
+	}
+}
