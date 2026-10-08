@@ -38,16 +38,68 @@ func nothing() situation.Check {
 	}
 }
 
-// ask : Runs the tool as the person.
+// named : Checks with names, in the order given, called one, two,
+// three.
+func named(checks ...situation.Check) []situations.Named {
+	out := make([]situations.Named, 0, len(checks))
+	for i, c := range checks {
+		out = append(out, situations.Named{
+			Name: []string{"one", "two", "three"}[i], Look: c})
+	}
+	return out
+}
+
+// ask : Runs the tool as the person, looking for everything.
 func ask(t *testing.T, checks ...situation.Check) tool.Result {
+	t.Helper()
+	return asking(t, "", named(checks...))
+}
+
+// asking : Runs the tool as the person, for one named shape or for
+// all of them.
+func asking(t *testing.T, look string, checks []situations.Named) tool.Result {
 	t.Helper()
 	all := situations.Tools(held{}, checks, func() time.Time { return noon })
 	if len(all) != 1 {
 		t.Fatalf("%d tools, want one", len(all))
 	}
-	return all[0].Run(context.Background(), tool.Invocation{
-		Caller: tool.Caller{UserID: "usr_1", Channel: chat.ChannelDirect},
-	})
+	in := tool.Invocation{Caller: tool.Caller{UserID: "usr_1", Channel: chat.ChannelDirect}}
+	if look != "" {
+		in.Args = []byte(`{"look":"` + look + `"}`)
+	}
+	return all[0].Run(context.Background(), in)
+}
+
+// TestARuleMayAskForOne : The first check listed answered for all
+// of them, so a phone could be dead for an hour and go unmentioned
+// because somebody had rung twice. A rule about one shape says
+// which, and is not spoken for by the one above it.
+func TestARuleMayAskForOne(t *testing.T) {
+	checks := named(found("Somebody has been trying, sir."),
+		found("Your phone has gone quiet, sir."))
+
+	// Nothing named is everything, and the first still wins --
+	// which is what somebody asking "is anything wrong" means.
+	if out := asking(t, "", checks); out.Content != "Somebody has been trying, sir." {
+		t.Errorf("asking for everything said %q", out.Content)
+	}
+	// Named, and the one above it does not speak for it.
+	if out := asking(t, "two", checks); out.Content != "Your phone has gone quiet, sir." {
+		t.Errorf("asking for the second said %q", out.Content)
+	}
+	if out := asking(t, "one", checks); out.Content != "Somebody has been trying, sir." {
+		t.Errorf("asking for the first said %q", out.Content)
+	}
+	// A name nobody has is a mistake worth saying out loud, not a
+	// quiet nothing: a rule asking for a shape that does not exist
+	// would otherwise never fire and never say why.
+	out := asking(t, "nonexistent", checks)
+	if out.Outcome != conversation.OutcomeFailed {
+		t.Errorf("an unknown name answered %q", out.Content)
+	}
+	if !strings.Contains(out.Content, "one") || !strings.Contains(out.Content, "two") {
+		t.Errorf("did not say what there is: %q", out.Content)
+	}
 }
 
 // These are interruptions, and two at once is one too many. The

@@ -14670,6 +14670,37 @@ triggers on a single rule exist. The old shape held a schedule, and
 a schedule is one sentence with one trigger in it.
 
 
+### The first check spoke for all of them
+
+`situation_find` ran every check it had and answered with the first
+that found something. One rule called it, so for as long as the
+first had anything to say, the second could not be reached.
+
+Live, that was not hypothetical. `anything amiss` had said
+*"Someone the phone could not name has tried to reach you more than
+once"* and was still saying it, which meant the check that notices a
+device has stopped reporting had no way to be heard at all. The
+phone could have been dead for an hour.
+
+First-wins is right for a person asking whether anything is wrong:
+these are interruptions and two at once is one too many. It is wrong
+for a rule, because a rule is about one thing. So the checks have
+names now, and a rule says which it wants. Nothing named is still
+everything, in order, first wins -- which is what the model gets
+when somebody asks.
+
+`anything amiss` is two rules: *somebody has been trying* every two
+minutes, and *a device has gone quiet* every five. Five because the
+silence it looks for is forty-five minutes long and nothing is
+gained by asking more often; two for the other because a call that
+nobody answered is worth knowing about quickly.
+
+A name nobody has is refused rather than quietly finding nothing. A
+rule asking for a shape that does not exist would otherwise never
+fire and never say why, which is the failure this codebase has least
+patience with.
+
+
 ## 12. Maintaining this file
 
 When the owner states a preference, makes a decision, or corrects something,

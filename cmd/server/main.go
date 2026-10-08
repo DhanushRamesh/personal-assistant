@@ -325,19 +325,19 @@ func run() error {
 
 	tools, err := tool.NewRegistry(slices.Concat(
 		conversations.All(chats),
-		situationstool.Tools(deviceEvents, []situation.Check{
-			// The two shapes, in the order they are looked for.
-			// Somebody trying and not getting through comes first:
-			// it is about a person, and the other is about a
-			// device.
+		situationstool.Tools(deviceEvents, []situationstool.Named{
+			// The two shapes, named so that a rule can ask for one.
+			// Somebody asking whether anything is wrong gets them
+			// in this order, and the first that finds something
+			// answers; a rule about one of them says which.
 			//
 			// The charger was the third and is now two rules. It
 			// was arithmetic on one number against another, which
 			// is the one thing the engine already does for nothing
 			// -- what is left here are the two that count and
 			// group, which it cannot.
-			situation.Trying,
-			situation.Quiet,
+			{Name: "trying", Look: situation.Trying},
+			{Name: "quiet", Look: situation.Quiet},
 		}, cfg.Assistant.Now),
 		rules.All(jobmysql.New(db.DB), rules.Clock{
 			Now: cfg.Assistant.Now, Location: cfg.Assistant.Location,
