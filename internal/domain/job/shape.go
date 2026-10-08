@@ -150,6 +150,12 @@ const (
 	OlderThan = "older_than"
 )
 
+// known : Every operator, by the word the parser reads it as.
+var known = map[string]bool{
+	Is: true, IsNot: true, Less: true, More: true,
+	AtMost: true, AtLeast: true, Any: true, Older: true, Within: true,
+}
+
 // symbols : The word form of each operator, as it is stored.
 var symbols = map[string]string{
 	Is:    Equals,
@@ -354,6 +360,16 @@ func (w Where) Gate() (Gate, error) {
 	// Stored as a symbol, read as the word the parser knows.
 	if word, found := words[w.Op]; found {
 		gate.Op = word
+	}
+	// Checked here and nowhere else, because this is the only door
+	// an unknown one can come through. Written as a sentence it was
+	// impossible -- the parser recognised the operators and refused
+	// everything else -- but a structured rule hands the operator
+	// over as a string, and "op": "nonsense" was accepted and made
+	// into a rule that could never hold.
+	if !known[gate.Op] {
+		return Gate{}, fmt.Errorf("%w: there is nothing a condition does called %q",
+			ErrUnreadableGate, w.Op)
 	}
 
 	switch {
@@ -751,4 +767,105 @@ func (o Occasion) Repeats() bool {
 		}
 	}
 	return false
+}
+
+// Written : The hooks as the sentence they are read back as.
+//
+// The structure is what is stored and what a model writes; this is
+// what a person hears when they ask what rules they have. "every
+// 30m also when battery.level < 20" is what they said, and it is
+// what they should be told.
+func (o Occasion) Written() string {
+	parts := make([]string, 0, len(o.Wake))
+	for _, h := range o.Wake {
+		if clock := h.Schedule(); clock != "" {
+			parts = append(parts, clock)
+			continue
+		}
+		if h.On == nil {
+			continue
+		}
+		said := When + " " + h.On.Describe()
+		if strings.TrimSpace(h.After) != "" {
+			said += Then + h.After
+		}
+		parts = append(parts, said)
+	}
+	return strings.Join(parts, Also)
+}
+
+// Steps : The acts as the older shape held them.
+//
+// Kept so the column that held a rule before today goes on holding
+// one, and so the page that lists rules and the record of a run
+// read the same whichever shape a rule arrived in.
+func (o Occasion) Steps(acts []Act) []Step {
+	out := make([]Step, 0, len(acts)+len(o.where()))
+	for _, w := range o.where() {
+		out = append(out, Step{Do: Check, When: w.Describe()})
+	}
+	for _, a := range acts {
+		switch a.Do {
+		case DoTool:
+			out = append(out, Step{Do: Call, Tool: a.Use, Args: a.With})
+		case DoWrite:
+			out = append(out, Step{Do: Write, Ask: a.Ask, Tools: a.Tools})
+		case DoSay:
+			out = append(out, Step{Do: Announce, Say: a.Text})
+		case DoRelay:
+			out = append(out, Step{Do: Relay})
+		}
+	}
+	return out
+}
+
+// Speaks : Whether any of these acts says anything.
+func Speaks(acts []Act) bool {
+	for _, a := range acts {
+		switch a.Do {
+		case DoWrite, DoSay, DoRelay:
+			return true
+		}
+	}
+	return false
+}
+
+// Make : A rule from its two halves.
+//
+// What [New] is for a rule written as sentences. The structured
+// halves are the truth; the schedule and the steps are rendered
+// from them, so a rule written either way sits in the table the
+// same and reads back the same.
+func Make(id, userID, name, kind string, when Occasion, acts []Act, from time.Time) (Job, error) {
+	if strings.TrimSpace(name) == "" {
+		return Job{}, fmt.Errorf("%w: a rule needs a name", ErrUnreadable)
+	}
+	if len(acts) == 0 {
+		return Job{}, ErrNoSteps
+	}
+	if err := when.Sound(); err != nil {
+		return Job{}, err
+	}
+	for _, a := range acts {
+		switch a.Do {
+		case DoTool, DoPattern, DoWrite, DoSay, DoRelay:
+		default:
+			return Job{}, fmt.Errorf("job: nothing carries out %q", a.Do)
+		}
+	}
+
+	j := Job{
+		ID: id, UserID: userID, Name: name, Kind: kind,
+		Schedule: when.Written(), Steps: when.Steps(acts),
+		When: when, Perform: acts, State: Active,
+	}
+	// A watching rule has no first moment: it waits for a reading.
+	if len(when.Ticking()) > 0 {
+		next, err := when.Next(from, from.Location())
+		if err != nil {
+			return Job{}, err
+		}
+		j.Next = next
+	}
+	return j, nil
 }

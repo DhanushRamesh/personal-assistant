@@ -62,8 +62,9 @@ func call(t *testing.T, which tool.Tool, args string) tool.Result {
 func TestARuleCanBeSetUpAndListedAndCalledOff(t *testing.T) {
 	store, by := made()
 
-	out := call(t, by["rule_add"], `{"name":"the morning diary","schedule":"at 08:00",
-		"ask":"say what is coming up today","look_up":[{"tool":"calendar_events","args":"{\"days\":1}"}]}`)
+	out := call(t, by["rule_add"], `{"name":"the morning diary","when":{"wake":[{"at":"08:00"}]},
+		"perform":[{"do":"tool","use":"calendar_events","with":{"days":1}},
+		{"do":"write","ask":"say what is coming up today"}]}`)
 	if out.Outcome == conversation.OutcomeFailed {
 		t.Fatalf("rule_add refused: %s", out.Content)
 	}
@@ -107,19 +108,29 @@ func TestARuleCanBeSetUpAndListedAndCalledOff(t *testing.T) {
 func TestAConditionBecomesACheckBeforeItSpeaks(t *testing.T) {
 	store, by := made()
 
-	out := call(t, by["rule_add"], `{"name":"stand up","schedule":"every 2h",
-		"when":"presence is here","say":"Time to stand up."}`)
+	out := call(t, by["rule_add"], `{"name":"stand up","when":{"wake":[{"every":"2h"}],
+		"all":[{"source":"presence","op":"==","value":"here"}]},
+		"perform":[{"do":"say","text":"Time to stand up."}]}`)
 	if out.Outcome == conversation.OutcomeFailed {
 		t.Fatalf("refused: %s", out.Content)
 	}
 
 	mine, _ := store.Mine(context.Background(), "usr_1", "rule", 50)
-	steps := mine[0].Steps
-	if len(steps) != 2 || steps[0].Do != job.Check || steps[1].Do != job.Announce {
-		t.Fatalf("the sequence is %+v", steps)
+	// The condition is a condition on the rule, and the sequence
+	// is only the doing.
+	if len(mine[0].When.All) != 1 || len(mine[0].Perform) != 1 {
+		t.Fatalf("%d conditions and %d acts", len(mine[0].When.All), len(mine[0].Perform))
 	}
-	if steps[0].When != "presence is here" {
-		t.Errorf("the check reads %q", steps[0].When)
+	if said := mine[0].When.Describe(); said != "presence is here" {
+		t.Errorf("the condition reads %q", said)
+	}
+	if mine[0].Perform[0].Do != job.DoSay {
+		t.Errorf("the sequence is %+v", mine[0].Perform)
+	}
+	// The older columns are rendered from it, so a listing and a
+	// record of a run read the same whichever shape it arrived in.
+	if len(mine[0].Steps) != 2 || mine[0].Steps[0].Do != job.Check {
+		t.Errorf("the rendered steps are %+v", mine[0].Steps)
 	}
 }
 
@@ -129,8 +140,9 @@ func TestAConditionBecomesACheckBeforeItSpeaks(t *testing.T) {
 func TestARuleMayNotRunSomethingThatChangesThings(t *testing.T) {
 	_, by := made()
 
-	out := call(t, by["rule_add"], `{"name":"bad","schedule":"every 5m",
-		"ask":"say something","look_up":[{"tool":"calendar_cancel"}]}`)
+	out := call(t, by["rule_add"], `{"name":"bad","when":{"wake":[{"every":"5m"}]},
+		"perform":[{"do":"tool","use":"calendar_cancel","with":{"id":"x"}},
+		{"do":"write","ask":"say something"}]}`)
 	if out.Outcome != conversation.OutcomeFailed {
 		t.Fatalf("a writing tool was accepted into a rule: %s", out.Content)
 	}
@@ -147,19 +159,35 @@ func TestAnUnworkableRuleIsRefused(t *testing.T) {
 		why  string
 		args string
 	}{
-		{"no name", `{"schedule":"every 5m","say":"hello"}`},
-		{"no schedule", `{"name":"x","say":"hello"}`},
-		{"a schedule nobody can read", `{"name":"x","schedule":"sometimes","say":"hello"}`},
-		{"nothing to say", `{"name":"x","schedule":"every 5m"}`},
-		{"both ways of saying", `{"name":"x","schedule":"every 5m","say":"a","ask":"b"}`},
-		{"a condition nobody can read", `{"name":"x","schedule":"every 5m","say":"a","when":"nonsense"}`},
-		{"a tool that does not exist", `{"name":"x","schedule":"every 5m","ask":"a","look_up":[{"tool":"nope"}]}`},
-		{"arguments that are not JSON", `{"name":"x","schedule":"every 5m","ask":"a",` +
-			`"look_up":[{"tool":"calendar_events","args":"kind=battery"}]}`},
-		{"waiting on presence, which never arrives", `{"name":"x","schedule":"when presence is away","say":"a"}`},
-		{"too many lookups", `{"name":"x","schedule":"every 5m","ask":"a","look_up":[` +
-			`{"tool":"calendar_events"},{"tool":"calendar_events"},` +
-			`{"tool":"calendar_events"},{"tool":"calendar_events"}]}`},
+		{"no name", `{"when":{"wake":[{"every":"5m"}]},"perform":[{"do":"say","text":"hello"}]}`},
+		{"nothing to wake it", `{"name":"x","perform":[{"do":"say","text":"hello"}]}`},
+		{"a clock nobody can read", `{"name":"x","when":{"wake":[{"every":"sometimes"}]},` +
+			`"perform":[{"do":"say","text":"hello"}]}`},
+		{"nothing to do", `{"name":"x","when":{"wake":[{"every":"5m"}]}}`},
+		{"nothing that says anything", `{"name":"x","when":{"wake":[{"every":"5m"}]},` +
+			`"perform":[{"do":"tool","use":"calendar_events","with":{"days":1}}]}`},
+		{"a say with no words", `{"name":"x","when":{"wake":[{"every":"5m"}]},` +
+			`"perform":[{"do":"say"}]}`},
+		{"a write with nothing to work out", `{"name":"x","when":{"wake":[{"every":"5m"}]},` +
+			`"perform":[{"do":"write"}]}`},
+		{"a condition nobody can read", `{"name":"x","when":{"wake":[{"every":"5m"}],` +
+			`"all":[{"source":"battery.level","op":"nonsense","value":1}]},` +
+			`"perform":[{"do":"say","text":"a"}]}`},
+		{"a tool that does not exist", `{"name":"x","when":{"wake":[{"every":"5m"}]},` +
+			`"perform":[{"do":"tool","use":"nope","with":{"a":1}},{"do":"write","ask":"a"}]}`},
+		{"a tool with no arguments", `{"name":"x","when":{"wake":[{"every":"5m"}]},` +
+			`"perform":[{"do":"tool","use":"calendar_events"},{"do":"write","ask":"a"}]}`},
+		{"something a rule does not do", `{"name":"x","when":{"wake":[{"every":"5m"}]},` +
+			`"perform":[{"do":"dance"}]}`},
+		{"waiting on presence, which never arrives", `{"name":"x",` +
+			`"when":{"wake":[{"on":{"source":"presence","op":"==","value":"away"}}]},` +
+			`"perform":[{"do":"say","text":"a"}]}`},
+		{"too many lookups", `{"name":"x","when":{"wake":[{"every":"5m"}]},"perform":[` +
+			`{"do":"tool","use":"calendar_events","with":{"days":1}},` +
+			`{"do":"tool","use":"calendar_events","with":{"days":2}},` +
+			`{"do":"tool","use":"calendar_events","with":{"days":3}},` +
+			`{"do":"tool","use":"calendar_events","with":{"days":4}},` +
+			`{"do":"write","ask":"a"}]}`},
 	} {
 		if out := call(t, by["rule_add"], c.args); out.Outcome != conversation.OutcomeFailed {
 			t.Errorf("%s was accepted: %s", c.why, out.Content)
@@ -170,7 +198,7 @@ func TestAnUnworkableRuleIsRefused(t *testing.T) {
 // An identifier from somewhere else calls nothing off.
 func TestOnlyTheirOwnRuleIsCalledOff(t *testing.T) {
 	store, by := made()
-	call(t, by["rule_add"], `{"name":"theirs","schedule":"every 5m","say":"hello"}`)
+	call(t, by["rule_add"], `{"name":"theirs","when":{"wake":[{"every":"5m"}]},"perform":[{"do":"say","text":"hello"}]}`)
 	mine, _ := store.Mine(context.Background(), "usr_1", "rule", 50)
 
 	out := by["rule_cancel"].Run(context.Background(), tool.Invocation{
@@ -225,9 +253,9 @@ func TestWritingRulesInsistsOnReadingThemFirst(t *testing.T) {
 func TestALookupCarriesItsArguments(t *testing.T) {
 	store, by := made()
 
-	out := call(t, by["rule_add"], `{"name":"battery","schedule":"every 1m",
-		"ask":"say what the battery is at now",
-		"look_up":[{"tool":"calendar_events","args":"{\"kind\":\"battery.level\",\"limit\":1}"}]}`)
+	out := call(t, by["rule_add"], `{"name":"battery","when":{"wake":[{"every":"1m"}]},
+		"perform":[{"do":"tool","use":"calendar_events","with":{"kind":"battery.level","limit":1}},
+		{"do":"write","ask":"say what the battery is at now"}]}`)
 	if out.Outcome == conversation.OutcomeFailed {
 		t.Fatalf("rule_add refused: %s", out.Content)
 	}
@@ -252,19 +280,20 @@ func TestALookupCarriesItsArguments(t *testing.T) {
 func TestARuleCanBeGivenToolsToDecideWith(t *testing.T) {
 	store, by := made()
 
-	out := call(t, by["rule_add"], `{"name":"anything wrong","schedule":"every 30m",
-		"ask":"say whether anything needs their attention","tools":["calendar_events"]}`)
+	out := call(t, by["rule_add"], `{"name":"anything wrong","when":{"wake":[{"every":"30m"}]},
+		"perform":[{"do":"write","ask":"say whether anything needs their attention",
+		"tools":["calendar_events"]}]}`)
 	if out.Outcome == conversation.OutcomeFailed {
 		t.Fatalf("rule_add refused: %s", out.Content)
 	}
 
 	mine, _ := store.Mine(context.Background(), "usr_1", "rule", 50)
-	steps := mine[0].Steps
-	if len(steps) != 1 || steps[0].Do != job.Write {
-		t.Fatalf("the sequence is %+v", steps)
+	acts := mine[0].Perform
+	if len(acts) != 1 || acts[0].Do != job.DoWrite {
+		t.Fatalf("the sequence is %+v", acts)
 	}
-	if len(steps[0].Tools) != 1 || steps[0].Tools[0] != "calendar_events" {
-		t.Errorf("the write may call %v", steps[0].Tools)
+	if len(acts[0].Tools) != 1 || acts[0].Tools[0] != "calendar_events" {
+		t.Errorf("the write may call %v", acts[0].Tools)
 	}
 
 	// And what it may reach is readable back, which is the reason
@@ -279,8 +308,8 @@ func TestARuleCanBeGivenToolsToDecideWith(t *testing.T) {
 // a lookup.
 func TestAToolAWriteMayCallMustOnlyRead(t *testing.T) {
 	_, by := made()
-	out := call(t, by["rule_add"], `{"name":"bad","schedule":"every 5m",
-		"ask":"say something","tools":["calendar_cancel"]}`)
+	out := call(t, by["rule_add"], `{"name":"bad","when":{"wake":[{"every":"5m"}]},
+		"perform":[{"do":"write","ask":"say something","tools":["calendar_cancel"]}]}`)
 	if out.Outcome != conversation.OutcomeFailed {
 		t.Fatalf("a writing tool was accepted: %s", out.Content)
 	}
@@ -363,10 +392,14 @@ func TestChangingARuleLeavesTheRestOfItAlone(t *testing.T) {
 
 	made := call(t, by["rule_add"], `{
 		"name": "low battery",
-		"schedule": "when battery.level < 20",
-		"when": "presence is here",
-		"ask": "say how low it is",
-		"look_up": [{"tool":"calendar_events","args":"{\"days\":1}"}]
+		"when": {
+			"wake": [{"on":{"source":"battery.level","op":"<","value":20}}],
+			"all":  [{"source":"presence","op":"==","value":"here"}]
+		},
+		"perform": [
+			{"do":"tool","use":"calendar_events","with":{"days":1}},
+			{"do":"write","ask":"say how low it is"}
+		]
 	}`)
 	if made.Outcome == conversation.OutcomeFailed {
 		t.Fatalf("could not make one: %s", made.Content)
@@ -377,8 +410,13 @@ func TestChangingARuleLeavesTheRestOfItAlone(t *testing.T) {
 	}
 	id := held[0].ID
 
-	// Only the threshold.
-	got := call(t, by["rule_update"], `{"id":"`+id+`","schedule":"when battery.level < 25"}`)
+	// Only the when half, and all of it: a half given is given
+	// whole, so the condition has to be sent again with the
+	// changed threshold or it goes.
+	got := call(t, by["rule_update"], `{"id":"`+id+`","when":{
+		"wake": [{"on":{"source":"battery.level","op":"<","value":25}}],
+		"all":  [{"source":"presence","op":"==","value":"here"}]
+	}}`)
 	if got.Outcome == conversation.OutcomeFailed {
 		t.Fatalf("could not change it: %s", got.Content)
 	}
@@ -389,44 +427,48 @@ func TestChangingARuleLeavesTheRestOfItAlone(t *testing.T) {
 	}
 	after := held[0]
 	if after.Schedule != "when battery.level < 25" {
-		t.Errorf("schedule is %q", after.Schedule)
+		t.Errorf("schedule reads back as %q", after.Schedule)
 	}
 	if after.Name != "low battery" {
 		t.Errorf("the name was lost: %q", after.Name)
 	}
-	if len(after.Steps) != 3 {
-		t.Fatalf("it has %d steps, want the lookup, check and write it had: %+v",
-			len(after.Steps), after.Steps)
+	// The other half was not named, so it is untouched.
+	if len(after.Perform) != 2 {
+		t.Fatalf("it has %d acts, want the lookup and write it had: %+v",
+			len(after.Perform), after.Perform)
 	}
-	if after.Steps[0].Tool != "calendar_events" {
-		t.Errorf("the lookup was lost: %+v", after.Steps[0])
+	if after.Perform[0].Use != "calendar_events" {
+		t.Errorf("the lookup was lost: %+v", after.Perform[0])
 	}
-	if after.Steps[1].When != "presence is here" {
-		t.Errorf("the condition was lost: %+v", after.Steps[1])
+	if after.Perform[1].Ask != "say how low it is" {
+		t.Errorf("what it says was lost: %+v", after.Perform[1])
 	}
-	if after.Steps[2].Ask != "say how low it is" {
-		t.Errorf("what it says was lost: %+v", after.Steps[2])
+	if said := after.When.Describe(); said != "presence is here" {
+		t.Errorf("the condition reads %q", said)
 	}
 }
 
-// TestChangingToFixedWordsDropsTheQuestion : Words and a question are
-// alternatives, so naming one takes the other away. Without that,
-// turning a rule from a worked-out sentence into fixed words would be
-// refused for having both.
+// TestChangingToFixedWordsDropsTheQuestion : Words and a question
+// were alternatives on the same rule and naming one had to take the
+// other away, which was a rule of its own to remember. A sequence
+// given whole cannot have both, so there is nothing left to
+// remember: what is sent is what it does.
 func TestChangingToFixedWordsDropsTheQuestion(t *testing.T) {
 	store, by := made()
-	call(t, by["rule_add"], `{"name":"n","schedule":"every 10m","ask":"work it out"}`)
+	call(t, by["rule_add"], `{"name":"n","when":{"wake":[{"every":"10m"}]},
+		"perform":[{"do":"write","ask":"work it out"}]}`)
 	held, _ := store.Mine(context.Background(), "usr_1", "rule", 10)
 	id := held[0].ID
 
-	got := call(t, by["rule_update"], `{"id":"`+id+`","say":"the fixed words"}`)
+	got := call(t, by["rule_update"], `{"id":"`+id+`",
+		"perform":[{"do":"say","text":"the fixed words"}]}`)
 	if got.Outcome == conversation.OutcomeFailed {
 		t.Fatalf("could not change it: %s", got.Content)
 	}
 	held, _ = store.Mine(context.Background(), "usr_1", "rule", 10)
-	last := held[0].Steps[len(held[0].Steps)-1]
-	if last.Do != job.Announce || last.Say != "the fixed words" {
-		t.Errorf("it still works the sentence out: %+v", last)
+	acts := held[0].Perform
+	if len(acts) != 1 || acts[0].Do != job.DoSay || acts[0].Text != "the fixed words" {
+		t.Errorf("it still works the sentence out: %+v", acts)
 	}
 }
 
@@ -435,24 +477,33 @@ func TestChangingToFixedWordsDropsTheQuestion(t *testing.T) {
 func TestChangingARuleThatIsNotThere(t *testing.T) {
 	_, by := made()
 	got := call(t, by["rule_update"],
-		`{"id":"job_01M48E09RJW0G247RBST6712D9","schedule":"every 5m"}`)
+		`{"id":"job_01M48E09RJW0G247RBST6712D9","when":{"wake":[{"every":"5m"}]}}`)
 	if got.Outcome != conversation.OutcomeFailed {
 		t.Errorf("it changed a rule that does not exist: %s", got.Content)
 	}
 }
 
-// TestARuleCannotBeEditedIntoSomethingItCouldNotHaveBeen : The change
-// goes through job.New, so a schedule is read by the same thing that
-// reads a new one.
+// TestARuleCannotBeEditedIntoSomethingItCouldNotHaveBeen : The
+// change goes through job.Make, so a rule is read by the same thing
+// that reads a new one.
 func TestARuleCannotBeEditedIntoSomethingItCouldNotHaveBeen(t *testing.T) {
 	store, by := made()
-	call(t, by["rule_add"], `{"name":"n","schedule":"every 10m","say":"hello"}`)
+	call(t, by["rule_add"], `{"name":"n","when":{"wake":[{"every":"10m"}]},
+		"perform":[{"do":"say","text":"hello"}]}`)
 	held, _ := store.Mine(context.Background(), "usr_1", "rule", 10)
 	id := held[0].ID
 
 	for _, bad := range []string{
-		`{"id":"` + id + `","schedule":"whenever I feel like it"}`,
-		`{"id":"` + id + `","when":"hour >= 99"}`,
+		`{"id":"` + id + `","when":{"wake":[{"every":"whenever I feel like it"}]}}`,
+		`{"id":"` + id + `","when":{"wake":[{"every":"10m"}],` +
+			`"all":[{"source":"hour","op":">=","value":99}]}}`,
+		// Nothing would ever wake it.
+		`{"id":"` + id + `","when":{"all":[{"source":"hour","op":">=","value":10}]}}`,
+		// An operator that does not exist, which only a structured
+		// rule can even express.
+		`{"id":"` + id + `","when":{"wake":[{"every":"10m"}],` +
+			`"all":[{"source":"hour","op":"nonsense","value":10}]}}`,
+		`{"id":"` + id + `","perform":[]}`,
 		`{"id":"` + id + `","keep":"a while"}`,
 	} {
 		if got := call(t, by["rule_update"], bad); got.Outcome != conversation.OutcomeFailed {
@@ -474,9 +525,11 @@ func TestARuleDictatedWithTwoConditions(t *testing.T) {
 
 	got := call(t, by["rule_add"], `{
 		"name": "late and low",
-		"schedule": "every 20m",
-		"when": "hour >= 22 and battery.level < 20",
-		"say": "it is late and the battery is low"
+		"when": {"wake":[{"every":"20m"}], "all":[
+			{"source":"hour","op":">=","value":22},
+			{"source":"battery.level","op":"<","value":20}
+		]},
+		"perform": [{"do":"say","text":"it is late and the battery is low"}]
 	}`)
 	if got.Outcome == conversation.OutcomeFailed {
 		t.Fatalf("two conditions were refused: %s", got.Content)
@@ -486,48 +539,47 @@ func TestARuleDictatedWithTwoConditions(t *testing.T) {
 	if len(held) != 1 {
 		t.Fatalf("made %d rules", len(held))
 	}
-	var checks []string
-	for _, step := range held[0].Steps {
-		if step.Do == job.Check {
-			checks = append(checks, step.When)
-		}
+	if len(held[0].When.All) != 2 {
+		t.Fatalf("it has %d conditions, want both: %+v", len(held[0].When.All), held[0].When.All)
 	}
-	if len(checks) != 2 {
-		t.Fatalf("it has %d checks, want one per condition: %v", len(checks), checks)
-	}
-	if checks[0] != "hour >= 22" || checks[1] != "battery.level < 20" {
-		t.Errorf("the checks read %v", checks)
+	if said := held[0].When.Describe(); said != "hour >= 22 and battery.level < 20" {
+		t.Errorf("the conditions read %q", said)
 	}
 }
 
 // TestChangingARuleKeepsEveryCondition : parts reads the arguments
 // back off the steps, and reading only the last check would quietly
 // drop the others the first time anybody changed the words.
+//
+// The halves are separate now, so changing what a rule says cannot
+// reach its conditions at all -- which is the same guarantee got
+// structurally rather than by remembering to read them all back.
 func TestChangingARuleKeepsEveryCondition(t *testing.T) {
 	store, by := made()
 	call(t, by["rule_add"], `{
 		"name": "late and low",
-		"schedule": "every 20m",
-		"when": "hour >= 22 and battery.level < 20",
-		"say": "the old words"
+		"when": {"wake":[{"every":"20m"}], "all":[
+			{"source":"hour","op":">=","value":22},
+			{"source":"battery.level","op":"<","value":20}
+		]},
+		"perform": [{"do":"say","text":"the old words"}]
 	}`)
 	held, _ := store.Mine(context.Background(), "usr_1", "rule", 10)
 	id := held[0].ID
 
-	got := call(t, by["rule_update"], `{"id":"`+id+`","say":"the new words"}`)
+	got := call(t, by["rule_update"], `{"id":"`+id+`",
+		"perform":[{"do":"say","text":"the new words"}]}`)
 	if got.Outcome == conversation.OutcomeFailed {
 		t.Fatalf("could not change it: %s", got.Content)
 	}
 
 	held, _ = store.Mine(context.Background(), "usr_1", "rule", 10)
-	var checks []string
-	for _, step := range held[0].Steps {
-		if step.Do == job.Check {
-			checks = append(checks, step.When)
-		}
+	if len(held[0].When.All) != 2 {
+		t.Fatalf("changing the words left %d conditions, want both: %+v",
+			len(held[0].When.All), held[0].When.All)
 	}
-	if len(checks) != 2 {
-		t.Fatalf("changing the words left %d checks, want both: %v", len(checks), checks)
+	if held[0].Perform[0].Text != "the new words" {
+		t.Errorf("the words did not change: %+v", held[0].Perform)
 	}
 }
 
@@ -536,7 +588,7 @@ func TestChangingARuleKeepsEveryCondition(t *testing.T) {
 // how it was written in order to have it again.
 func TestARuleCanBePutAsideAndComeBack(t *testing.T) {
 	store, by := made()
-	call(t, by["rule_add"], `{"name":"n","schedule":"every 10m","say":"hello"}`)
+	call(t, by["rule_add"], `{"name":"n","when":{"wake":[{"every":"10m"}]},"perform":[{"do":"say","text":"hello"}]}`)
 	held, _ := store.Mine(context.Background(), "usr_1", "rule", 10)
 	id := held[0].ID
 
@@ -575,7 +627,7 @@ func TestARuleCanBePutAsideAndComeBack(t *testing.T) {
 func TestARuleThatHoldsOffAfterSpeaking(t *testing.T) {
 	store, by := made()
 	got := call(t, by["rule_add"],
-		`{"name":"n","schedule":"every 10m","say":"hello","cool":"1h"}`)
+		`{"name":"n","when":{"wake":[{"every":"10m"}]},"perform":[{"do":"say","text":"hello"}],"cool":"1h"}`)
 	if got.Outcome == conversation.OutcomeFailed {
 		t.Fatalf("a cooling rule was refused: %s", got.Content)
 	}
@@ -587,7 +639,7 @@ func TestARuleThatHoldsOffAfterSpeaking(t *testing.T) {
 	// And a length of time that is not one is caught when it is
 	// written, in front of whoever wrote it.
 	if got := call(t, by["rule_add"],
-		`{"name":"m","schedule":"every 10m","say":"hello","cool":"a while"}`); got.Outcome != conversation.OutcomeFailed {
+		`{"name":"m","when":{"wake":[{"every":"10m"}]},"perform":[{"do":"say","text":"hello"}],"cool":"a while"}`); got.Outcome != conversation.OutcomeFailed {
 		t.Error("a cool of \"a while\" was accepted")
 	}
 }
@@ -618,7 +670,7 @@ func TestARuleIsTriedTheMomentItIsMade(t *testing.T) {
 	}
 
 	got := call(t, by["rule_add"],
-		`{"name":"late","schedule":"every 20m","when":"hour >= 22","say":"it is late"}`)
+		`{"name":"late","when":{"wake":[{"every":"20m"}],"all":[{"source":"hour","op":">=","value":22}]},"perform":[{"do":"say","text":"it is late"}]}`)
 	if got.Outcome == conversation.OutcomeFailed {
 		t.Fatalf("could not make one: %s", got.Content)
 	}
@@ -649,7 +701,7 @@ func TestARuleIsTriedTheMomentItIsMade(t *testing.T) {
 // made and unproven, which is how every rule was made before this.
 func TestARuleIsStillMadeWithNothingToTryItWith(t *testing.T) {
 	_, by := made()
-	got := call(t, by["rule_add"], `{"name":"n","schedule":"every 10m","say":"hello"}`)
+	got := call(t, by["rule_add"], `{"name":"n","when":{"wake":[{"every":"10m"}]},"perform":[{"do":"say","text":"hello"}]}`)
 	if got.Outcome == conversation.OutcomeFailed {
 		t.Fatalf("a rule was refused for want of a trier: %s", got.Content)
 	}

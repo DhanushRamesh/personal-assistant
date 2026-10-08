@@ -130,33 +130,34 @@ var WhenUnasked = prompt.Text(
 	"Listing them back unasked is the assistant talking about its own filing.",
 )
 
-// howToSchedule : The schedule forms, written for the model.
-var howToSchedule = prompt.Lines(
-	"When it runs. One of these four, written exactly like this:",
-	`  "every 30m" -- over and over, at that spacing`,
-	`  "at 08:00" -- that hour, every day, in their own zone`,
-	`  "once 2026-10-07 06:40" -- one time, then finished`,
-	`  "cron 0 9 * * 1-5" -- minute, hour, day, month, weekday, in their own zone`,
-	"Use cron where the plain words cannot say when NOT to run -- weekdays only, the first of the month, every quarter of an hour between nine and five.",
-	`Each field takes a number, a range "9-17", a list "1,15", a step "*/15", or "*" for all. Months may be named jan to dec and days sun to sat, and Sunday is 0.`,
-	`Prefer the plain words where they fit: "every 30m" and "at 08:00" are read back to them in those words, and "cron 0 8 * * *" is the same rule said worse.`,
-	`  "when battery.level < 20" -- no clock at all; it runs the moment a reading from their device crosses that line`,
-	`  "every 30m also when battery.level < 20" -- both at once: the clock brings it round and a crossing sets it off, and either will do`,
-	`  "when power.plugged arrives" -- any reading of that kind at all, whatever it says`,
-	"Use arrives for a thing that happens rather than a level that moves. A phone cannot always say what it was plugged into, and what matters is that it was.",
-	`A trigger may wait before it runs: "when power.plugged is true then 15m".`,
-	"For a question that cannot be answered at the moment it is asked -- whether the phone is really charging is only known later, by whether the level moved.",
+// howToWake : What sets a rule off, written for the model.
+var howToWake = prompt.Lines(
+	"What sets the rule off. One or more, and ANY ONE of them fires it.",
+	`  {"every": "30m"} -- over and over, at that spacing`,
+	`  {"at": "08:00"} -- that hour, every day, in their own zone`,
+	`  {"once": "2026-10-07 06:40"} -- one time, then finished`,
+	`  {"cron": "0 9 * * 1-5"} -- minute, hour, day, month, weekday`,
+	`  {"on": {"source": "battery.level", "op": "<", "value": 20}} -- when a reading crosses that line`,
+	`  {"on": {"source": "power.plugged", "op": "arrives"}, "after": "15m"} -- when one lands, then wait`,
+	"Use cron where the plain words cannot say when NOT to run: weekdays only, the first of the month.",
+	`Use "arrives" for a thing that happens rather than a level that moves: a phone cannot always say what it was plugged into, and what matters is that it was.`,
+	`"after" is for a question that cannot be answered at the moment it is asked -- whether the phone is really charging is only known later, by whether the level moved.`,
+	"Two hooks means two ways in: the door opening or the window opening, one rule.",
+	"Only a reading their devices send can be a hook. The hour, the day, presence, a routine, a connection and anything beginning ha. or counted are asked, never delivered, so they can qualify a rule and never start one.",
 )
 
-// most : [Most], addressable, for a schema bound.
-var most = Most
-
-// howToLookUp : What a lookup is for, written for the model.
-var howToLookUp = prompt.Text(
-	"Things to look up first, so that ask has something to work from.",
-	"Reading tools only, at most three, and leave it out entirely unless ask needs them.",
-	"Give each one its arguments: a lookup runs once a minute with nobody watching,",
-	"and the tool's defaults are usually everything rather than the one thing the rule is about.",
+// howToPerform : The sequence, written for the model.
+var howToPerform = prompt.Lines(
+	"What to do when it holds, in order. No conditions here -- those all live in when.",
+	`  {"do": "tool", "use": "event_recent", "with": {"kind": "battery.level", "limit": 1}} -- look something up`,
+	`  {"do": "write", "ask": "say what the battery is at"} -- work the words out each time`,
+	`  {"do": "say", "text": "Time to stand up."} -- the same words every time`,
+	`  {"do": "relay"} -- say what the tool before it already worked out, word for word`,
+	"It has to end in something being said: a write, a say, or a relay.",
+	"Use say for words they dictated and write for anything that depends on the day -- a reading, the diary, who rang.",
+	"Give a tool its arguments. A rule runs with nobody watching, and a tool's defaults are usually everything rather than the one thing the rule is about: a rule asking for the battery every minute, given no arguments, read out a reading from the day before.",
+	"Reading tools only, at most three. A rule runs unattended and may run every few minutes; reading is safe to repeat and writing is not.",
+	`A write may be given "tools" it can call for itself when the rule runs, where what is needed depends on what it finds.`,
 )
 
 // howToArgue : Why the arguments matter, written for the model.
@@ -200,45 +201,27 @@ var howLongToCool = prompt.Lines(
 	"Only use it where being told twice is worse than being told late.",
 )
 
-// howToTools : When to let it decide for itself, written for the
-// model.
-var howToTools = prompt.Text(
-	"Tools the rule may call for itself when it runs, choosing whether to and with what arguments.",
-	"Reading tools only, at most three.",
-	"Use this where what is needed depends on what it finds -- \"tell me if anything needs attention\" --",
-	"and look_up where the rule always wants the same thing, which costs one round trip less.",
-	"Giving both is fine: the lookups run first and the tools are there if more is wanted.",
-)
-
-// howToCondition : The condition forms, written for the model.
-var howToCondition = prompt.Lines(
-	"A condition checked each time it runs, which stops it when it does not hold. Leave it out unless they said one.",
-	`  "battery.level < 20", "battery.level is not 100"`,
-	`  "power.plugged arrives" -- any reading of that kind, whatever it says`,
-	`  "battery.level older than 2h" -- nothing has been reported for that long`,
-	`  "presence is here", "presence is away"`,
-	`  "hour >= 10", "hour < 18" -- the hour of the day where they are, 0 to 23`,
-	`  "day is weekday", "day is weekend", "day is saturday"`,
-	`  "usually.home.leaves older than 90m" -- past the time they usually go`,
-	`  "link.google is broken" -- a permission that has stopped working, so everything standing on it quietly does nothing`,
-	`  "ha.sensor.pixel_7_battery_state is charging" -- what Home Assistant says a thing is at the moment the rule runs`,
-	"Anything beginning ha. is asked of Home Assistant rather than read from what a device sent, so it is what is true now and not what was last reported.",
-	"Use it where the rule waits before it looks: whether the phone is still charging twenty minutes after it was plugged in is a question only the phone can answer.",
-	"The name after ha. is the entity exactly as Home Assistant spells it. It cannot be a trigger, because nothing here arrives -- it is asked.",
-	`  "counted call.missed within 2h >= 2" -- how many arrived, rather than what the latest one said`,
-	`  "counted call.missed is amma within 2h >= 2" -- only the ones whose value is that`,
-	`  "counted call.missed by value within 2h >= 2" -- counted per caller, so this is "somebody has tried twice" without naming anybody`,
-	`  "counted door.opened within 12h is 0" -- the one way to write a rule about a thing NOT happening`,
-	"A count is always compared with a number, always needs a length of time, and cannot be a trigger: use it as a condition on a rule that a clock or an arrival sets off.",
-	`Several conditions may be joined with "and", and every one of them must hold: "hour >= 22 and battery.level < 20".`,
-	`Alternatives within one are joined with "or", and any of them will do: "hour >= 22 or day is weekend".`,
-	`"and" is the looser of the two, so "a and b or c" is a, and either b or c.`,
-	`  "battery.level <= 15m ago" -- no higher than it was then, so it is not rising`,
-	`  "battery.level > 1h ago" -- higher than it was an hour back`,
-	`The value "15m ago" compares a reading with its own earlier self, which is the only way to know whether something is moving.`,
-	"It needs readings going back that far, and says the condition does not hold when there are none rather than guessing.",
-	"The name on the left is an event kind their devices report, or one of the above.",
-
+// howToWhen : The conditions, written for the model.
+var howToWhen = prompt.Lines(
+	"Whether it holds, checked each time it runs. Leave it out unless they said one.",
+	`  {"all": [ ... ]} -- every one must hold`,
+	`  {"any": [ ... ]} -- one of them is enough`,
+	"Either may hold a condition or another group, so (here or late) and (the battery is low) can be said.",
+	"One condition is:",
+	`  {"source": "battery.level", "op": "<", "value": 20}`,
+	`  {"source": "presence", "op": "==", "value": "here"} -- also !=, <, >, <=, >=`,
+	`  {"source": "power.plugged", "op": "arrives"} -- any reading of that kind, whatever it says`,
+	`  {"source": "battery.level", "op": "older_than", "value": "2h"} -- nothing reported for that long`,
+	`  {"source": "hour", "op": ">=", "value": 10} -- the hour where they are, 0 to 23`,
+	`  {"source": "day", "op": "==", "value": "weekend"} -- or weekday, or saturday`,
+	`  {"source": "usually.home.leaves", "op": "older_than", "value": "90m"} -- past when they usually go`,
+	`  {"source": "link.google", "op": "==", "value": "broken"} -- a permission that has stopped working`,
+	`  {"source": "ha.sensor.pixel_7_battery_state", "op": "==", "value": "charging"} -- what Home Assistant says NOW, not what was last reported`,
+	`  {"source": "battery.level", "op": "<=", "ago": "15m"} -- no higher than it was then, so it is not rising`,
+	`  {"count": {"kind": "call.missed", "by": "value", "within": "2h"}, "op": ">=", "value": 2} -- how many arrived, counted per caller`,
+	`A count takes "kind" and "within"; "is" narrows it to one value and "by": "value" counts each caller separately, so this is "somebody has tried twice" without naming anybody.`,
+	`"ago" is its own key and never a value: it compares a reading with its own earlier self, which is the only way to know whether something is moving.`,
+	"The name in source is an event kind their devices report, or one of the above.",
 	"If nothing is known about it, the condition does not hold and the rule stays quiet.",
 )
 
@@ -307,76 +290,58 @@ func add(store Store, clock Clock, id func() string, look Lookup, try Trier) too
 			"Not for doing something now; just do it.",
 		Channels: []chat.Channel{chat.ChannelVoice, chat.ChannelDirect},
 		Params: tool.Schema{
-			Required: []string{"name", "schedule"},
+			Required: []string{"name", "when", "perform"},
 			Properties: map[string]tool.Property{
 				"name": {
 					Type: "string",
 					Description: "A short name in their own words, how they would refer to it later. " +
 						"\"the morning diary\", \"low battery warning\".",
 				},
-				"schedule": {Type: "string", Description: howToSchedule},
-				"say": {
-					Type: "string",
-					Description: "The exact words to say, for when the same sentence will do every " +
-						"time -- \"Time to stand up.\" If the sentence ought to mention anything that " +
-						"changes, such as a reading or what is in the diary, use ask instead: these " +
-						"words are fixed now and will be identical on the hundredth time it runs. " +
-						"Give this or ask, never both.",
-				},
-				"ask": {
-					Type: "string",
-					Description: "What to work out and say, when the words depend on what is true at the " +
-						"time and cannot be written now. An instruction to yourself, in the second person: " +
-						"\"say what is in the diary today\". You will be asked this each time the rule runs, " +
-						"and may answer that there is nothing worth saying. Give this or say, never both.",
-				},
-				"when":     {Type: "string", Description: howToCondition},
+				"when":     {Type: "object", Description: howToWake + "\n\n" + howToWhen},
+				"perform":  {Type: "array", Description: howToPerform},
 				"keep":     {Type: "string", Description: howLongToKeep},
 				"cool":     {Type: "string", Description: howLongToCool},
 				"anywhere": {Type: "boolean", Description: whetherToFollow},
-				"tools": {
-					Type:        "array",
-					Description: howToTools,
-					MaxItems:    &most,
-					Items: &tool.Property{
-						Type:        "string",
-						Description: "A reading tool's name, such as event_recent.",
-					},
-				},
-				"look_up": {
-					Type:        "array",
-					Description: howToLookUp,
-					MaxItems:    &most,
-					Items:       lookUpItem(),
-				},
 			},
 		},
 		Examples: []tool.Example{
 			{
-				Ask:  "every morning at eight tell me what is coming up",
-				Args: `{"saying":"setting that up","name":"the morning diary","schedule":"at 08:00","ask":"say what is coming up in their diary today","look_up":[{"tool":"calendar_events","args":"{\"days\":1}"}]}`,
+				Ask: "every morning at eight tell me what is coming up",
+				Args: `{"saying":"setting that up","name":"the morning diary",` +
+					`"when":{"wake":[{"at":"08:00"}]},` +
+					`"perform":[{"do":"tool","use":"calendar_events","with":{"days":1}},` +
+					`{"do":"write","ask":"say what is coming up in their diary today"}]}`,
 			},
 			{
-				Ask:  "whenever my battery drops below twenty say something",
-				Args: `{"saying":"setting that up","name":"low battery warning","schedule":"when battery.level < 20","ask":"say that the battery is getting low, and what it is at","look_up":[{"tool":"event_recent","args":"{\"kind\":\"battery.level\",\"limit\":5}"}]}`,
+				Ask: "whenever my battery drops below twenty say something",
+				Args: `{"saying":"setting that up","name":"low battery warning",` +
+					`"when":{"wake":[{"on":{"source":"battery.level","op":"<","value":20}}]},` +
+					`"perform":[{"do":"tool","use":"event_recent","with":{"kind":"battery.level","limit":5}},` +
+					`{"do":"write","ask":"say that the battery is getting low, and what it is at"}]}`,
 			},
 			{
-				Ask:  "every two hours remind me to stand up, but only when I am here",
-				Args: `{"saying":"setting that up","name":"stand up","schedule":"every 2h","when":"presence is here","say":"Time to stand up."}`,
+				Ask: "every two hours remind me to stand up, but only when I am here",
+				Args: `{"saying":"setting that up","name":"stand up",` +
+					`"when":{"wake":[{"every":"2h"}],"all":[{"source":"presence","op":"==","value":"here"}]},` +
+					`"perform":[{"do":"say","text":"Time to stand up."}]}`,
+			},
+			{
+				Ask: "when I plug the phone in, check a quarter of an hour later that it is charging",
+				Args: `{"saying":"setting that up","name":"plugged in and not charging",` +
+					`"when":{"wake":[{"on":{"source":"power.plugged","op":"arrives"},"after":"15m"}],` +
+					`"all":[{"source":"battery.level","op":"<=","ago":"15m"}]},` +
+					`"perform":[{"do":"tool","use":"event_recent","with":{"kind":"battery.level","limit":6}},` +
+					`{"do":"write","ask":"say the level has not risen and the cable may not be working"}]}`,
 			},
 		},
 		Run: func(ctx context.Context, in tool.Invocation) tool.Result {
 			var args struct {
-				Name     string   `json:"name"`
-				Schedule string   `json:"schedule"`
-				Say      string   `json:"say"`
-				Ask      string   `json:"ask"`
-				When     string   `json:"when"`
-				Keep     string   `json:"keep"`
-				Cool     string   `json:"cool"`
-				Anywhere bool     `json:"anywhere"`
-				LookUp   []lookUp `json:"look_up"`
-				Tools    []string `json:"tools"`
+				Name     string       `json:"name"`
+				When     job.Occasion `json:"when"`
+				Perform  []job.Act    `json:"perform"`
+				Keep     string       `json:"keep"`
+				Cool     string       `json:"cool"`
+				Anywhere bool         `json:"anywhere"`
 			}
 			if err := json.Unmarshal(in.Args, &args); err != nil {
 				return tool.Failed("Those arguments could not be read.")
@@ -388,8 +353,7 @@ func add(store Store, clock Clock, id func() string, look Lookup, try Trier) too
 				return tool.Failed("This request did not come from a known person.")
 			}
 
-			steps, bad := assemble(args.When, args.LookUp, args.Tools, args.Say, args.Ask, look)
-			if bad != "" {
+			if bad := allowed(args.Perform, look); bad != "" {
 				return tool.Failed(bad)
 			}
 
@@ -400,8 +364,8 @@ func add(store Store, clock Clock, id func() string, look Lookup, try Trier) too
 			if err := job.Kept(args.Keep); err != nil {
 				return tool.Failed(readable(err))
 			}
-			made, err := job.New(id(), in.Caller.UserID, name, Kind,
-				strings.TrimSpace(args.Schedule), steps, clock.now().In(clock.where()))
+			made, err := job.Make(id(), in.Caller.UserID, name, Kind,
+				args.When, args.Perform, clock.now().In(clock.where()))
 			if err != nil {
 				return tool.Failed(readable(err))
 			}
@@ -420,33 +384,6 @@ func add(store Store, clock Clock, id func() string, look Lookup, try Trier) too
 			))
 		},
 	}
-}
-
-// parts : A rule's arguments, read back off its steps.
-//
-// The sequence is assembled from these and never stored as them,
-// so changing one of them means taking the rest back out. It is
-// exact rather than nearly so: [assemble] writes one step per
-// thing and nothing else goes in, which is what makes reading it
-// back a matter of looking rather than of guessing.
-func parts(j job.Job) (when, say, ask string, reads []lookUp, mayCall []string) {
-	// Every check, rejoined. A rule may have several and they are
-	// the and: reading only the last back would quietly drop the
-	// others the first time anybody changed the words.
-	var checks []string
-	for _, step := range j.Steps {
-		switch step.Do {
-		case job.Call:
-			reads = append(reads, lookUp{Tool: step.Tool, Args: string(step.Args)})
-		case job.Check:
-			checks = append(checks, strings.TrimSpace(step.When))
-		case job.Announce:
-			say = step.Say
-		case job.Write:
-			ask, mayCall = step.Ask, step.Tools
-		}
-	}
-	return strings.Join(checks, job.And), say, ask, reads, mayCall
 }
 
 // given : The new value where one was given, and the old where
@@ -494,46 +431,48 @@ func update(store Store, clock Clock, look Lookup, try Trier) tool.Tool {
 					Description: "The rule's identifier, exactly as the listing gave it.",
 					Pattern:     idPattern,
 				},
-				"name":     {Type: "string", Description: "A new name for it."},
-				"schedule": {Type: "string", Description: howToSchedule},
-				"say":      {Type: "string", Description: "New fixed words for it to say."},
-				"ask":      {Type: "string", Description: "A new thing for it to work out and say."},
-				"when":     {Type: "string", Description: howToCondition},
+				"name": {Type: "string", Description: "A new name for it."},
+				"when": {
+					Type: "object",
+					Description: "The whole of when it looks and whether it holds, replacing what is " +
+						"there. Give all of it, not the part that changes: a rule listed as waking " +
+						"every ten minutes and keeping to weekdays, told only to wake every hour, " +
+						"would lose the weekdays.\n\n" + howToWake + "\n\n" + howToWhen,
+				},
+				"perform": {
+					Type:        "array",
+					Description: "The whole sequence, replacing what is there.\n\n" + howToPerform,
+				},
 				"keep":     {Type: "string", Description: howLongToKeep},
 				"cool":     {Type: "string", Description: howLongToCool},
 				"anywhere": {Type: "boolean", Description: whetherToFollow},
-				"tools": {
-					Type:        "array",
-					Description: howToTools,
-					MaxItems:    &most,
-					Items:       &tool.Property{Type: "string"},
-				},
-				"look_up": {Type: "array", Description: howToLookUp, MaxItems: &most, Items: lookUpItem()},
 			},
 		},
 		Examples: []tool.Example{
 			{
-				Ask:  "make the battery one twenty-five instead of twenty",
-				Args: `{"saying":"changing that","id":"job_01M48E09RJW0G247RBST6712D3","schedule":"when battery.level < 25"}`,
+				Ask: "make the battery one twenty-five instead of twenty",
+				Args: `{"saying":"changing that","id":"job_01M48E09RJW0G247RBST6712D3",` +
+					`"when":{"wake":[{"on":{"source":"battery.level","op":"<","value":25}}]}}`,
 			},
 			{
-				Ask:  "only tell me that on weekdays",
-				Args: `{"saying":"changing that","id":"job_01M48E09RJW0G247RBST6712D3","when":"day is weekday"}`,
+				Ask: "only tell me that on weekdays",
+				Args: `{"saying":"changing that","id":"job_01M48E09RJW0G247RBST6712D3",` +
+					`"when":{"wake":[{"every":"10m"}],"all":[{"source":"day","op":"==","value":"weekday"}]}}`,
+			},
+			{
+				Ask:  "stop sending that one to my phone",
+				Args: `{"saying":"changing that","id":"job_01M48E09RJW0G247RBST6712D3","anywhere":false}`,
 			},
 		},
 		Run: func(ctx context.Context, in tool.Invocation) tool.Result {
 			var args struct {
-				ID       string   `json:"id"`
-				Name     *string  `json:"name"`
-				Schedule *string  `json:"schedule"`
-				Say      *string  `json:"say"`
-				Ask      *string  `json:"ask"`
-				When     *string  `json:"when"`
-				Keep     *string  `json:"keep"`
-				Cool     *string  `json:"cool"`
-				Anywhere *bool    `json:"anywhere"`
-				LookUp   []lookUp `json:"look_up"`
-				Tools    []string `json:"tools"`
+				ID       string        `json:"id"`
+				Name     *string       `json:"name"`
+				When     *job.Occasion `json:"when"`
+				Perform  []job.Act     `json:"perform"`
+				Keep     *string       `json:"keep"`
+				Cool     *string       `json:"cool"`
+				Anywhere *bool         `json:"anywhere"`
 			}
 			if err := json.Unmarshal(in.Args, &args); err != nil {
 				return tool.Failed("Those arguments could not be read.")
@@ -560,26 +499,18 @@ func update(store Store, clock Clock, look Lookup, try Trier) tool.Tool {
 				return tool.Failed("There is no rule with that identifier.")
 			}
 
-			when, say, ask, reads, mayCall := parts(was)
-			// Words and a question are alternatives, so naming one
-			// takes the other away. Otherwise changing a rule from
-			// fixed words to a worked-out sentence would be
-			// refused for having both.
-			if args.Say != nil {
-				ask = ""
+			// Each half is replaced whole or left alone. There is
+			// no merging a tree with another tree that anybody
+			// could predict, and a rule half changed is worse than
+			// one that refused to change at all.
+			when, acts := was.When, was.Perform
+			if args.When != nil {
+				when = *args.When
 			}
-			if args.Ask != nil {
-				say = ""
+			if args.Perform != nil {
+				acts = args.Perform
 			}
-			if args.LookUp != nil {
-				reads = args.LookUp
-			}
-			if args.Tools != nil {
-				mayCall = args.Tools
-			}
-
-			steps, bad := assemble(given(args.When, when), reads, mayCall,
-				given(args.Say, say), given(args.Ask, ask), look)
+			bad := allowed(acts, look)
 			if bad != "" {
 				return tool.Failed(bad)
 			}
@@ -587,13 +518,12 @@ func update(store Store, clock Clock, look Lookup, try Trier) tool.Tool {
 				return tool.Failed(readable(err))
 			}
 
-			// Through job.New, so a changed schedule is read by the
-			// same thing that reads a new one and a rule cannot be
-			// edited into a state it could not have been made in.
-			made, err := job.New(was.ID, was.UserID,
+			// Through job.Make, so a changed rule is read by the
+			// same thing that reads a new one and cannot be edited
+			// into a state it could not have been made in.
+			made, err := job.Make(was.ID, was.UserID,
 				given(args.Name, was.Name), Kind,
-				given(args.Schedule, was.Schedule), steps,
-				clock.now().In(clock.where()))
+				when, acts, clock.now().In(clock.where()))
 			if err != nil {
 				return tool.Failed(readable(err))
 			}
@@ -757,101 +687,67 @@ func cancel(store Store) tool.Tool {
 	}
 }
 
-// lookUpItem : What one lookup looks like, for a schema.
+// allowed : Whether a sequence may run, and why not.
 //
-// Shared by making a rule and changing one, so the two cannot
-// describe the same argument differently.
-func lookUpItem() *tool.Property {
-	return &tool.Property{
-		Type:     "object",
-		Required: []string{"tool"},
-		Properties: map[string]tool.Property{
-			"tool": {
-				Type:        "string",
-				Description: "The tool's name, such as event_recent or calendar_events.",
-			},
-			"args": {Type: "string", Description: howToArgue},
-		},
+// Everything assemble used to refuse, asked of a sequence the model
+// wrote itself rather than of the parts it was given.
+//
+// A rule runs unattended and may run every few minutes. Reading is
+// safe to repeat; writing is not, and nobody is there to notice the
+// first time it goes wrong.
+func allowed(acts []job.Act, look Lookup) string {
+	if len(acts) == 0 {
+		return "A rule has to do something. Give it at least one thing to perform."
 	}
-}
-
-// lookUp : One thing a rule reads before it speaks.
-type lookUp struct {
-	// Tool : Which tool to run.
-	Tool string `json:"tool"`
-	// Args : Its arguments, as JSON written in a string.
-	Args string `json:"args"`
-}
-
-// assemble : The sequence a rule's arguments describe.
-//
-// The order is fixed and not the model's to choose: look things up,
-// then check, then speak. A condition is cheap and a lookup is not,
-// but the check may be about something a lookup fetched -- so the
-// readings come first and the one thing that can stop the rule
-// comes last before it speaks.
-func assemble(when string, reads []lookUp, mayCall []string, say, ask string, look Lookup) ([]job.Step, string) {
-	say, ask = strings.TrimSpace(say), strings.TrimSpace(ask)
-	switch {
-	case say != "" && ask != "":
-		return nil, prompt.Text(
-			"A rule either says words you give it or works them out each time, not both.",
-			"Use say for words they dictated, ask for anything that depends on the day.",
+	tools := 0
+	for _, a := range acts {
+		switch a.Do {
+		case job.DoSay:
+			if strings.TrimSpace(a.Text) == "" {
+				return "A say needs the words to say."
+			}
+		case job.DoWrite:
+			if strings.TrimSpace(a.Ask) == "" {
+				return "A write needs to be told what to work out and say."
+			}
+			if names, bad := reading(a.Tools, look); bad != "" {
+				return bad
+			} else if len(names) != len(a.Tools) {
+				return "Some of those tools could not be read."
+			}
+		case job.DoTool:
+			tools++
+			if tools > Most {
+				return fmt.Sprintf("A rule may look up at most %d things.", Most)
+			}
+			name := strings.TrimSpace(a.Use)
+			found, ok := look(name)
+			if !ok {
+				return fmt.Sprintf("There is no tool called %q.", name)
+			}
+			if found.Writes {
+				return fmt.Sprintf(
+					"%s changes things, and a rule may only look things up.", name)
+			}
+			if len(a.With) == 0 {
+				return fmt.Sprintf(
+					"%s needs its arguments. A rule runs with nobody watching, "+
+						"and without them it answers from the wrong row.", name)
+			}
+		case job.DoRelay:
+		default:
+			return fmt.Sprintf("There is nothing a rule does called %q.", a.Do)
+		}
+	}
+	// It has to end in something being said, or it is a rule that
+	// looks things up and tells nobody.
+	if !job.Speaks(acts) {
+		return prompt.Text(
+			"A rule has to end in something being said.",
+			"Finish it with a say for words they dictated, a write for anything that depends on the day, or a relay where the tool before it has already worked the words out.",
 		)
-	case say == "" && ask == "":
-		return nil, "A rule has to end in something being said. Give either say or ask."
 	}
-
-	var steps []job.Step
-	for _, read := range reads {
-		name := strings.TrimSpace(read.Tool)
-		if name == "" {
-			continue
-		}
-		if len(steps) >= Most {
-			return nil, fmt.Sprintf("A rule may look up at most %d things.", Most)
-		}
-		found, ok := look(name)
-		if !ok {
-			return nil, fmt.Sprintf("There is no tool called %q.", name)
-		}
-		if found.Writes {
-			// A rule runs unattended and may run every few minutes.
-			// Reading is safe to repeat; writing is not, and nobody
-			// is there to notice the first time it goes wrong.
-			return nil, fmt.Sprintf(
-				"%s changes things, and a rule may only look things up.", name)
-		}
-		args, bad := arguments(name, read.Args)
-		if bad != "" {
-			return nil, bad
-		}
-		steps = append(steps, job.Step{Do: job.Call, Tool: name, Args: args})
-	}
-
-	// One check per condition, which is how the engine ands them: a
-	// step may stop the ones after it, so two in a row are two
-	// things that must both hold.
-	if w := strings.TrimSpace(when); w != "" {
-		all, err := job.ParseAll(w)
-		if err != nil {
-			return nil, readable(err)
-		}
-		for _, one := range all {
-			steps = append(steps, job.Step{Do: job.Check, When: one.Written()})
-		}
-	}
-
-	if ask != "" {
-		allowed, bad := reading(mayCall, look)
-		if bad != "" {
-			return nil, bad
-		}
-		steps = append(steps, job.Step{Do: job.Write, Ask: ask, Tools: allowed})
-	} else {
-		steps = append(steps, job.Step{Do: job.Announce, Say: say})
-	}
-	return steps, ""
+	return ""
 }
 
 // reading : The tools a write may call, refusing any that write.
@@ -883,23 +779,6 @@ func reading(names []string, look Lookup) ([]string, string) {
 		out = append(out, name)
 	}
 	return out, ""
-}
-
-// arguments : A lookup's arguments, checked before they are stored.
-//
-// Refused here rather than at three in the morning, when the only
-// sign would be a rule quietly answering from the wrong row.
-func arguments(name, raw string) (json.RawMessage, string) {
-	raw = strings.TrimSpace(raw)
-	if raw == "" {
-		return nil, ""
-	}
-	var into map[string]any
-	if err := json.Unmarshal([]byte(raw), &into); err != nil {
-		return nil, fmt.Sprintf(
-			"The arguments for %s are not a JSON object: %s", name, raw)
-	}
-	return json.RawMessage(raw), ""
 }
 
 // readable : An engine error as something worth saying back.

@@ -14710,6 +14710,58 @@ does not run at all is worth checking `next_at` on before anything
 cleverer.
 
 
+### The rule tool speaks the shape it stores
+
+`rule_add` and `rule_update` take `when` and `perform` now, as
+objects, and the flat arguments they had -- schedule, say, ask,
+when-as-a-sentence, look_up, tools -- are gone. A hundred and eight
+lines of the file went with them: `assemble`, `parts`, `lookUpItem`
+and four descriptions existed only to turn those parts into a
+sequence, and there are no parts any more.
+
+Two things the old arguments could not express at all, and both
+were already possible in the engine: two hooks on one rule, and a
+group inside a group. A schedule was one sentence with one trigger
+in it, and a condition was one string with one level of `or`.
+
+Changing one is whole-half: name `when` and all of it is replaced,
+name `perform` and all of that is. There is no merging one tree
+with another that anybody could predict, and the rule that used to
+be needed -- *naming say takes ask away* -- stops existing, because
+a sequence given whole cannot have both.
+
+### An operator that could not be written could now be typed
+
+The structured path let `{"op": "nonsense"}` through, and it was
+written to the database and read back as a rule that could never
+hold.
+
+Written as a sentence this was impossible: the parser recognised
+the operators and refused everything that was not one. Handed over
+as a string in a JSON object, nothing looked. That is the whole
+class of thing structure buys -- the model cannot typo a grammar --
+and the whole class it costs, since a key may hold anything at all.
+
+Every leaf is checked against the nine operators as it lowers to a
+gate, which is the only door an unknown one can come through.
+Caught by writing the refusals test before believing the happy
+path, which is the only reason it was caught at all.
+
+### make evals had been pointing at nothing
+
+Before changing a tool description, the thing to do is measure it
+both ways. `make evals` names six packages and `make evals-greeting`
+one, and all seven paths were the ones they had before the move into
+base, domain and app. They have not run since.
+
+Mended. But it is worth saying what it cost: the rule tool's
+description changed shape entirely with no before-measurement to
+compare against, because there was nothing to run. And what the
+rules eval measures is which tool the model reaches for, not the
+arguments it writes -- its own comment says so. So the arguments a
+model will now produce for a structured rule are, today, unmeasured.
+
+
 ## 12. Maintaining this file
 
 When the owner states a preference, makes a decision, or corrects something,
