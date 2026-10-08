@@ -32,7 +32,7 @@ var usernamePattern = regexp.MustCompile(`^[a-z0-9][a-z0-9._-]*$`)
 var (
 	// ErrInvalidUsername : The username was empty, too long, or held
 	// characters that are not allowed.
-	ErrInvalidUsername = errors.New("chat: username is not valid")
+	ErrInvalidUsername = errors.New("user: username is not valid")
 	// ErrUsernameTaken : Another user already has that username.
 	ErrUsernameTaken = errors.New("user: username is taken")
 )
@@ -65,7 +65,7 @@ func NewUser(username, passwordHash string) (*User, error) {
 		return nil, ErrInvalidUsername
 	}
 	if passwordHash == "" {
-		return nil, errors.New("chat: a password hash is required")
+		return nil, errors.New("user: a password hash is required")
 	}
 
 	created := stored.Now()

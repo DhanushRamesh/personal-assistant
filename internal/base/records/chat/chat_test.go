@@ -376,3 +376,102 @@ func TestAChatMustSayHowItsPromptArrived(t *testing.T) {
 		t.Errorf("channel = %q, want voice", spoken.Channel)
 	}
 }
+
+// TestWhenTheAnswerBeganIsTheFirstTimeOnly : Speech starts on the
+// first piece, and the model writes many. Moving this with each one
+// would make every turn look instant.
+func TestWhenTheAnswerBeganIsTheFirstTimeOnly(t *testing.T) {
+	c, err := chat.New("", chat.ChannelVoice, "what is the time")
+	if err != nil {
+		t.Fatalf("New: %v", err)
+	}
+
+	first := time.Date(2026, 10, 8, 12, 0, 0, 0, time.UTC)
+	c.Begun(first)
+	if c.AnswerBeganAt == nil || !c.AnswerBeganAt.Equal(first) {
+		t.Fatalf("AnswerBeganAt = %v, want %v", c.AnswerBeganAt, first)
+	}
+
+	c.Begun(first.Add(2 * time.Second))
+	if !c.AnswerBeganAt.Equal(first) {
+		t.Errorf("a later piece moved the start to %v", c.AnswerBeganAt)
+	}
+
+	// Kept in UTC whatever it is given, because the row is.
+	d, _ := chat.New("", chat.ChannelDirect, "and again")
+	elsewhere := time.FixedZone("IST", 5*3600+1800)
+	d.Begun(first.In(elsewhere))
+	if d.AnswerBeganAt.Location() != time.UTC {
+		t.Errorf("AnswerBeganAt is in %v, want UTC", d.AnswerBeganAt.Location())
+	}
+}
+
+// TestHowLongAChatTookDependsOnWhereItGot : Nothing before it starts,
+// still counting while it runs, fixed once it is over.
+func TestHowLongAChatTookDependsOnWhereItGot(t *testing.T) {
+	c, err := chat.New("", chat.ChannelVoice, "what is the time")
+	if err != nil {
+		t.Fatalf("New: %v", err)
+	}
+	if got := c.Duration(); got != 0 {
+		t.Errorf("a chat that has not started took %v", got)
+	}
+
+	if err := c.Start(); err != nil {
+		t.Fatalf("Start: %v", err)
+	}
+	if got := c.Duration(); got <= 0 {
+		t.Errorf("a running chat took %v, want it still counting", got)
+	}
+
+	if err := c.Complete("the time is four"); err != nil {
+		t.Fatalf("Complete: %v", err)
+	}
+	fixed := c.Duration()
+	time.Sleep(2 * time.Millisecond)
+	if c.Duration() != fixed {
+		t.Error("a finished chat is still counting")
+	}
+}
+
+// TestNothingRecalledIsNotTheSameAsSomething : A chat that used no
+// memory must not read as one that used some, or the listing says it
+// leaned on something it never saw.
+func TestNothingRecalledIsNotTheSameAsSomething(t *testing.T) {
+	var none chat.Recalled
+	if !none.Empty() {
+		t.Error("a Recalled with nothing in it does not read as empty")
+	}
+	for _, some := range []chat.Recalled{
+		{Always: []chat.RecalledNote{{}}},
+		{Notes: []chat.RecalledNote{{}}},
+		{Exchanges: []chat.RecalledExchange{{}}},
+		{Tools: []chat.RecalledTool{{}}},
+	} {
+		if some.Empty() {
+			t.Errorf("%+v reads as empty", some)
+		}
+	}
+}
+
+// TestAModelIsChosenOrLeftToTheServer : The zero value means the
+// server's, which is what every client starts as.
+func TestAModelIsChosenOrLeftToTheServer(t *testing.T) {
+	if chat.ServerDefault.Chosen() {
+		t.Error("the zero model reads as a choice")
+	}
+	if chat.NewModel("anthropic", "  ").Chosen() {
+		t.Error("whitespace reads as a choice")
+	}
+	if chat.NewModel("anthropic", "").Vendor != "" {
+		t.Error("a vendor with no model named something to call")
+	}
+
+	m := chat.NewModel("  anthropic  ", "  claude-sonnet-5-5  ")
+	if !m.Chosen() {
+		t.Error("a named model does not read as chosen")
+	}
+	if m.Vendor != "anthropic" || m.ID != "claude-sonnet-5-5" {
+		t.Errorf("model = %+v, want it trimmed", m)
+	}
+}

@@ -14016,6 +14016,42 @@ disappearing in the middle of a migration.
 	storage  81.2 -> 83.2     failure  75.0 -> 100
 
 
+### The half of chat that was never tested
+
+Auditing records. user, client, stored and store had no tests at all
+-- they were split out of chat that morning and the tests stayed
+behind, having never covered them in the first place.
+
+chat read 63.9 per cent, and which half was missing was the point: the
+state machine was tested, because a state machine is the obvious thing
+to test, and the conversation resolution was not. That is the half
+where a bug is quiet. Nothing crashes; somebody just ends up talking
+into the wrong conversation, or a new one each turn, and the history
+they were relying on is simply not there.
+
+Writing those tests needed a stub, and the stub would not compile:
+EnsureConversation and ActiveConversation took the whole
+Conversations interface and use three of its eight methods. So they
+take Somewhere now -- list what a person has, make one when there is
+none, remember which -- and renaming or deleting a conversation is not
+their business to be handed.
+
+Two stale errors turned up in passing, still saying "chat:" after the
+move: ErrInvalidUsername and the one about a password hash.
+
+	chat    63.9 -> 98.1      user     none -> 100
+	client  none -> 100       stored   none -> 100
+
+conversation was already at 87.8 and was left alone. store is an
+interface with no statements in it, and both implementations already
+assert they satisfy it at compile time, which is the right check for
+an interface.
+
+The user tests were checked by widening the username pattern to accept
+anything: ten assertions failed. A test that cannot be made to fail
+has not been tested.
+
+
 ## 12. Maintaining this file
 
 When the owner states a preference, makes a decision, or corrects something,

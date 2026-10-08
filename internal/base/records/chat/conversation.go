@@ -114,6 +114,19 @@ func ValidConversationID(id string) bool {
 	return err == nil
 }
 
+// Somewhere : The three things needed to find somebody somewhere to
+// talk, which is fewer than [Conversations] has.
+//
+// Named for what the two functions below are for rather than for the
+// store behind them: they read what a person has, make one when there
+// is none, and remember which. Renaming or deleting a conversation is
+// not their business and they should not be handed it.
+type Somewhere interface {
+	ListConversations(ctx context.Context, userID string, limit int) ([]Conversation, error)
+	CreateConversation(ctx context.Context, c *Conversation) error
+	SetActiveConversation(ctx context.Context, userID, clientID, conversationID string) error
+}
+
 // EnsureConversation : Returns a conversation for userID to talk in, reusing their most
 // recent one and creating one only when there is none.
 //
@@ -121,7 +134,7 @@ func ValidConversationID(id string) bool {
 // finding the active conversation gone, must not start a fresh thread and lose the
 // history. Reuse rather than creation is therefore the default, and a new
 // conversation is something the user asks for explicitly.
-func EnsureConversation(ctx context.Context, repo Conversations, userID string) (string, error) {
+func EnsureConversation(ctx context.Context, repo Somewhere, userID string) (string, error) {
 	existing, err := repo.ListConversations(ctx, userID, 1)
 	if err != nil {
 		return "", err
@@ -143,7 +156,7 @@ func EnsureConversation(ctx context.Context, repo Conversations, userID string) 
 // has just logged in, or may name a conversation that has since been removed. In
 // either case the user's most recent conversation is taken up and remembered, so
 // that a client never finds itself without somewhere to talk.
-func ActiveConversation(ctx context.Context, repo Conversations, userID, clientID, active string) (string, error) {
+func ActiveConversation(ctx context.Context, repo Somewhere, userID, clientID, active string) (string, error) {
 	if active != "" {
 		return active, nil
 	}
