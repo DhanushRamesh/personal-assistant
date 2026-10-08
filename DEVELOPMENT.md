@@ -14762,6 +14762,56 @@ arguments it writes -- its own comment says so. So the arguments a
 model will now produce for a structured rule are, today, unmeasured.
 
 
+### A rule is written by something that does nothing else
+
+Owner, 9 October 2026: *"for writing a rule we should have a
+separate agent with all the specification clearly written so that no
+mistake is made."*
+
+Two things were wrong with the tool writing its own arguments, and
+the second is the one that matters.
+
+The grammar had to live in the tool's description, and a description
+is paid for on every turn by every conversation. Sources, operators,
+values, hooks and the sequence came to some sixty lines sitting in
+front of a model being asked what the weather is.
+
+And it could not be measured. The eval that exists asks which tool
+the model reaches for -- the thing that used to go wrong -- and says
+in its own comment that it does not measure the rule that comes out.
+Arguments written mid-turn, among fifty-one other tools, by a model
+holding a conversation, are not a thing that can be tested on its
+own. Written by something whose whole prompt is the specification,
+they are.
+
+`rule_add` takes `asked` now: what they want, in their words, plus
+whatever the assistant knows that their words leave out. The writer
+is given the grammar, the kinds this person's devices *actually*
+report, the tools a rule may use, and their own existing rules as
+examples -- because a rule of theirs is about their devices, their
+places and their way of saying things.
+
+The part that earns the owner's "no mistake is made" is the loop.
+Every refusal in this package is already a sentence somebody could
+read, so it is handed straight back: *nothing would ever wake this
+rule*, *there is nothing a condition does called "nonsense"*,
+*calendar_cancel changes things, and a rule may only look things
+up*. A mistake is described in the same words whether a person is
+being told or a model is being corrected. Three goes: the answer,
+the answer with the mistake pointed out, and one for a bad minute.
+
+One thing the tests found. A writer that answers *"nothing a device
+reports says whether the bins are out"* has read the request and
+done the thinking; asking it twice more spends two model calls and
+the seconds somebody is standing there on an answer that will not
+change. A malformed object is a mistake to mend; a refusal is the
+end of it, and the two are told apart.
+
+The fast model, and no persona. This one is not speaking to anybody
+-- it answers with JSON -- and a manner would only be something else
+for it to spend its reply on.
+
+
 ## 12. Maintaining this file
 
 When the owner states a preference, makes a decision, or corrects something,

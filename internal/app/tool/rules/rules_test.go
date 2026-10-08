@@ -3,6 +3,7 @@ package rules_test
 import (
 	"context"
 	"encoding/json"
+	"strconv"
 	"strings"
 	"testing"
 	"time"
@@ -31,6 +32,64 @@ func look(name string) (tool.Tool, bool) {
 	return t, ok
 }
 
+// echoing : A writer that hands back whatever it was asked for.
+//
+// The real one puts the request into a brief and asks a model for
+// JSON. This takes the request straight back out of that brief and
+// answers with it, so a test writes the JSON itself and it still
+// travels the whole of the real path -- the brief, the reading, the
+// sequence being checked, the tree being sound. What is not
+// measured here is the model, which is the one part a test could
+// never measure anyway.
+func echoing() rules.Writer {
+	return rules.Writer{
+		Ask: func(_ context.Context, _, brief string) (string, error) {
+			_, after, found := strings.Cut(brief, "What they asked for: ")
+			if !found {
+				return "", nil
+			}
+			said, _, _ := strings.Cut(after, "\n\n")
+			return said, nil
+		},
+		// One go, so a test that means to be refused is refused
+		// rather than asked the same thing three times.
+		Tries: 1,
+	}
+}
+
+// adding : rule_add arguments, from a rule written the way the
+// writer answers one.
+//
+// The two halves move into asked, where the echoing writer finds
+// them and hands them back; everything else -- the name, how long
+// to keep it, whether it follows them out of the room -- stays an
+// argument to the tool, because none of those is the writer's
+// business. The literals in these tests are unchanged, which is
+// the point: what they assert is what they asserted.
+func adding(args string) string {
+	var all map[string]json.RawMessage
+	if err := json.Unmarshal([]byte(args), &all); err != nil {
+		return args
+	}
+	rule := map[string]json.RawMessage{}
+	for _, half := range []string{"when", "perform"} {
+		if v, ok := all[half]; ok {
+			rule[half] = v
+			delete(all, half)
+		}
+	}
+	body, err := json.Marshal(rule)
+	if err != nil {
+		return args
+	}
+	all["asked"] = json.RawMessage(strconv.Quote(string(body)))
+	out, err := json.Marshal(all)
+	if err != nil {
+		return args
+	}
+	return string(out)
+}
+
 // made : The tools over a fresh store.
 func made() (*inmemory.Store, map[string]tool.Tool) {
 	store := inmemory.New()
@@ -42,7 +101,7 @@ func made() (*inmemory.Store, map[string]tool.Tool) {
 	by := map[string]tool.Tool{}
 	for _, t := range rules.All(store, rules.Clock{
 		Now: func() time.Time { return noon }, Location: india,
-	}, id, look, nil, nil) {
+	}, id, look, nil, nil, echoing()) {
 		by[t.Name] = t
 	}
 	return store, by
@@ -62,9 +121,9 @@ func call(t *testing.T, which tool.Tool, args string) tool.Result {
 func TestARuleCanBeSetUpAndListedAndCalledOff(t *testing.T) {
 	store, by := made()
 
-	out := call(t, by["rule_add"], `{"name":"the morning diary","when":{"wake":[{"at":"08:00"}]},
+	out := call(t, by["rule_add"], adding(`{"name":"the morning diary","when":{"wake":[{"at":"08:00"}]},
 		"perform":[{"do":"tool","use":"calendar_events","with":{"days":1}},
-		{"do":"write","ask":"say what is coming up today"}]}`)
+		{"do":"write","ask":"say what is coming up today"}]}`))
 	if out.Outcome == conversation.OutcomeFailed {
 		t.Fatalf("rule_add refused: %s", out.Content)
 	}
@@ -108,9 +167,9 @@ func TestARuleCanBeSetUpAndListedAndCalledOff(t *testing.T) {
 func TestAConditionBecomesACheckBeforeItSpeaks(t *testing.T) {
 	store, by := made()
 
-	out := call(t, by["rule_add"], `{"name":"stand up","when":{"wake":[{"every":"2h"}],
+	out := call(t, by["rule_add"], adding(`{"name":"stand up","when":{"wake":[{"every":"2h"}],
 		"all":[{"source":"presence","op":"==","value":"here"}]},
-		"perform":[{"do":"say","text":"Time to stand up."}]}`)
+		"perform":[{"do":"say","text":"Time to stand up."}]}`))
 	if out.Outcome == conversation.OutcomeFailed {
 		t.Fatalf("refused: %s", out.Content)
 	}
@@ -140,9 +199,9 @@ func TestAConditionBecomesACheckBeforeItSpeaks(t *testing.T) {
 func TestARuleMayNotRunSomethingThatChangesThings(t *testing.T) {
 	_, by := made()
 
-	out := call(t, by["rule_add"], `{"name":"bad","when":{"wake":[{"every":"5m"}]},
+	out := call(t, by["rule_add"], adding(`{"name":"bad","when":{"wake":[{"every":"5m"}]},
 		"perform":[{"do":"tool","use":"calendar_cancel","with":{"id":"x"}},
-		{"do":"write","ask":"say something"}]}`)
+		{"do":"write","ask":"say something"}]}`))
 	if out.Outcome != conversation.OutcomeFailed {
 		t.Fatalf("a writing tool was accepted into a rule: %s", out.Content)
 	}
@@ -189,7 +248,7 @@ func TestAnUnworkableRuleIsRefused(t *testing.T) {
 			`{"do":"tool","use":"calendar_events","with":{"days":4}},` +
 			`{"do":"write","ask":"a"}]}`},
 	} {
-		if out := call(t, by["rule_add"], c.args); out.Outcome != conversation.OutcomeFailed {
+		if out := call(t, by["rule_add"], adding(c.args)); out.Outcome != conversation.OutcomeFailed {
 			t.Errorf("%s was accepted: %s", c.why, out.Content)
 		}
 	}
@@ -198,7 +257,7 @@ func TestAnUnworkableRuleIsRefused(t *testing.T) {
 // An identifier from somewhere else calls nothing off.
 func TestOnlyTheirOwnRuleIsCalledOff(t *testing.T) {
 	store, by := made()
-	call(t, by["rule_add"], `{"name":"theirs","when":{"wake":[{"every":"5m"}]},"perform":[{"do":"say","text":"hello"}]}`)
+	call(t, by["rule_add"], adding(`{"name":"theirs","when":{"wake":[{"every":"5m"}]},"perform":[{"do":"say","text":"hello"}]}`))
 	mine, _ := store.Mine(context.Background(), "usr_1", "rule", 50)
 
 	out := by["rule_cancel"].Run(context.Background(), tool.Invocation{
@@ -220,7 +279,7 @@ func TestWritingRulesInsistsOnReadingThemFirst(t *testing.T) {
 	store, _ := made()
 	n := 0
 	id := func() string { n++; return "job_01M48E09RJW0G247RBST6712D1" }
-	all := rules.All(store, rules.Clock{Now: func() time.Time { return noon }, Location: india}, id, look, nil, nil)
+	all := rules.All(store, rules.Clock{Now: func() time.Time { return noon }, Location: india}, id, look, nil, nil, echoing())
 
 	var writes, lists int
 	for _, which := range all {
@@ -253,9 +312,9 @@ func TestWritingRulesInsistsOnReadingThemFirst(t *testing.T) {
 func TestALookupCarriesItsArguments(t *testing.T) {
 	store, by := made()
 
-	out := call(t, by["rule_add"], `{"name":"battery","when":{"wake":[{"every":"1m"}]},
+	out := call(t, by["rule_add"], adding(`{"name":"battery","when":{"wake":[{"every":"1m"}]},
 		"perform":[{"do":"tool","use":"calendar_events","with":{"kind":"battery.level","limit":1}},
-		{"do":"write","ask":"say what the battery is at now"}]}`)
+		{"do":"write","ask":"say what the battery is at now"}]}`))
 	if out.Outcome == conversation.OutcomeFailed {
 		t.Fatalf("rule_add refused: %s", out.Content)
 	}
@@ -280,9 +339,9 @@ func TestALookupCarriesItsArguments(t *testing.T) {
 func TestARuleCanBeGivenToolsToDecideWith(t *testing.T) {
 	store, by := made()
 
-	out := call(t, by["rule_add"], `{"name":"anything wrong","when":{"wake":[{"every":"30m"}]},
+	out := call(t, by["rule_add"], adding(`{"name":"anything wrong","when":{"wake":[{"every":"30m"}]},
 		"perform":[{"do":"write","ask":"say whether anything needs their attention",
-		"tools":["calendar_events"]}]}`)
+		"tools":["calendar_events"]}]}`))
 	if out.Outcome == conversation.OutcomeFailed {
 		t.Fatalf("rule_add refused: %s", out.Content)
 	}
@@ -308,8 +367,8 @@ func TestARuleCanBeGivenToolsToDecideWith(t *testing.T) {
 // a lookup.
 func TestAToolAWriteMayCallMustOnlyRead(t *testing.T) {
 	_, by := made()
-	out := call(t, by["rule_add"], `{"name":"bad","when":{"wake":[{"every":"5m"}]},
-		"perform":[{"do":"write","ask":"say something","tools":["calendar_cancel"]}]}`)
+	out := call(t, by["rule_add"], adding(`{"name":"bad","when":{"wake":[{"every":"5m"}]},
+		"perform":[{"do":"write","ask":"say something","tools":["calendar_cancel"]}]}`))
 	if out.Outcome != conversation.OutcomeFailed {
 		t.Fatalf("a writing tool was accepted: %s", out.Content)
 	}
@@ -343,7 +402,7 @@ func TestListingARuleShowsWhatElseOneCanAskAbout(t *testing.T) {
 		Now: func() time.Time { return noon }, Location: india,
 	}, id, look, stored{
 		{Subject: "home", What: routine.Leaves, Hour: 10, Days: 4, Over: 6},
-	}, nil) {
+	}, nil, echoing()) {
 		by[one.Name] = one
 	}
 
@@ -370,7 +429,7 @@ func TestListingSaysNothingAboutARoutineNobodyHasYet(t *testing.T) {
 	by := map[string]tool.Tool{}
 	for _, one := range rules.All(store, rules.Clock{
 		Now: func() time.Time { return noon }, Location: india,
-	}, id, look, stored{}, nil) {
+	}, id, look, stored{}, nil, echoing()) {
 		by[one.Name] = one
 	}
 
@@ -390,7 +449,7 @@ func TestListingSaysNothingAboutARoutineNobodyHasYet(t *testing.T) {
 func TestChangingARuleLeavesTheRestOfItAlone(t *testing.T) {
 	store, by := made()
 
-	made := call(t, by["rule_add"], `{
+	made := call(t, by["rule_add"], adding(`{
 		"name": "low battery",
 		"when": {
 			"wake": [{"on":{"source":"battery.level","op":"<","value":20}}],
@@ -400,7 +459,7 @@ func TestChangingARuleLeavesTheRestOfItAlone(t *testing.T) {
 			{"do":"tool","use":"calendar_events","with":{"days":1}},
 			{"do":"write","ask":"say how low it is"}
 		]
-	}`)
+	}`))
 	if made.Outcome == conversation.OutcomeFailed {
 		t.Fatalf("could not make one: %s", made.Content)
 	}
@@ -455,8 +514,8 @@ func TestChangingARuleLeavesTheRestOfItAlone(t *testing.T) {
 // remember: what is sent is what it does.
 func TestChangingToFixedWordsDropsTheQuestion(t *testing.T) {
 	store, by := made()
-	call(t, by["rule_add"], `{"name":"n","when":{"wake":[{"every":"10m"}]},
-		"perform":[{"do":"write","ask":"work it out"}]}`)
+	call(t, by["rule_add"], adding(`{"name":"n","when":{"wake":[{"every":"10m"}]},
+		"perform":[{"do":"write","ask":"work it out"}]}`))
 	held, _ := store.Mine(context.Background(), "usr_1", "rule", 10)
 	id := held[0].ID
 
@@ -488,8 +547,8 @@ func TestChangingARuleThatIsNotThere(t *testing.T) {
 // that reads a new one.
 func TestARuleCannotBeEditedIntoSomethingItCouldNotHaveBeen(t *testing.T) {
 	store, by := made()
-	call(t, by["rule_add"], `{"name":"n","when":{"wake":[{"every":"10m"}]},
-		"perform":[{"do":"say","text":"hello"}]}`)
+	call(t, by["rule_add"], adding(`{"name":"n","when":{"wake":[{"every":"10m"}]},
+		"perform":[{"do":"say","text":"hello"}]}`))
 	held, _ := store.Mine(context.Background(), "usr_1", "rule", 10)
 	id := held[0].ID
 
@@ -523,14 +582,14 @@ func TestARuleCannotBeEditedIntoSomethingItCouldNotHaveBeen(t *testing.T) {
 func TestARuleDictatedWithTwoConditions(t *testing.T) {
 	store, by := made()
 
-	got := call(t, by["rule_add"], `{
+	got := call(t, by["rule_add"], adding(`{
 		"name": "late and low",
 		"when": {"wake":[{"every":"20m"}], "all":[
 			{"source":"hour","op":">=","value":22},
 			{"source":"battery.level","op":"<","value":20}
 		]},
 		"perform": [{"do":"say","text":"it is late and the battery is low"}]
-	}`)
+	}`))
 	if got.Outcome == conversation.OutcomeFailed {
 		t.Fatalf("two conditions were refused: %s", got.Content)
 	}
@@ -556,14 +615,14 @@ func TestARuleDictatedWithTwoConditions(t *testing.T) {
 // structurally rather than by remembering to read them all back.
 func TestChangingARuleKeepsEveryCondition(t *testing.T) {
 	store, by := made()
-	call(t, by["rule_add"], `{
+	call(t, by["rule_add"], adding(`{
 		"name": "late and low",
 		"when": {"wake":[{"every":"20m"}], "all":[
 			{"source":"hour","op":">=","value":22},
 			{"source":"battery.level","op":"<","value":20}
 		]},
 		"perform": [{"do":"say","text":"the old words"}]
-	}`)
+	}`))
 	held, _ := store.Mine(context.Background(), "usr_1", "rule", 10)
 	id := held[0].ID
 
@@ -588,7 +647,7 @@ func TestChangingARuleKeepsEveryCondition(t *testing.T) {
 // how it was written in order to have it again.
 func TestARuleCanBePutAsideAndComeBack(t *testing.T) {
 	store, by := made()
-	call(t, by["rule_add"], `{"name":"n","when":{"wake":[{"every":"10m"}]},"perform":[{"do":"say","text":"hello"}]}`)
+	call(t, by["rule_add"], adding(`{"name":"n","when":{"wake":[{"every":"10m"}]},"perform":[{"do":"say","text":"hello"}]}`))
 	held, _ := store.Mine(context.Background(), "usr_1", "rule", 10)
 	id := held[0].ID
 
@@ -627,7 +686,7 @@ func TestARuleCanBePutAsideAndComeBack(t *testing.T) {
 func TestARuleThatHoldsOffAfterSpeaking(t *testing.T) {
 	store, by := made()
 	got := call(t, by["rule_add"],
-		`{"name":"n","when":{"wake":[{"every":"10m"}]},"perform":[{"do":"say","text":"hello"}],"cool":"1h"}`)
+		adding(`{"name":"n","when":{"wake":[{"every":"10m"}]},"perform":[{"do":"say","text":"hello"}],"cool":"1h"}`))
 	if got.Outcome == conversation.OutcomeFailed {
 		t.Fatalf("a cooling rule was refused: %s", got.Content)
 	}
@@ -639,7 +698,7 @@ func TestARuleThatHoldsOffAfterSpeaking(t *testing.T) {
 	// And a length of time that is not one is caught when it is
 	// written, in front of whoever wrote it.
 	if got := call(t, by["rule_add"],
-		`{"name":"m","when":{"wake":[{"every":"10m"}]},"perform":[{"do":"say","text":"hello"}],"cool":"a while"}`); got.Outcome != conversation.OutcomeFailed {
+		adding(`{"name":"m","when":{"wake":[{"every":"10m"}]},"perform":[{"do":"say","text":"hello"}],"cool":"a while"}`)); got.Outcome != conversation.OutcomeFailed {
 		t.Error("a cool of \"a while\" was accepted")
 	}
 }
@@ -665,12 +724,12 @@ func TestARuleIsTriedTheMomentItIsMade(t *testing.T) {
 	by := map[string]tool.Tool{}
 	for _, one := range rules.All(store, rules.Clock{
 		Now: func() time.Time { return noon }, Location: india,
-	}, id, look, nil, silent.try) {
+	}, id, look, nil, silent.try, echoing()) {
 		by[one.Name] = one
 	}
 
 	got := call(t, by["rule_add"],
-		`{"name":"late","when":{"wake":[{"every":"20m"}],"all":[{"source":"hour","op":">=","value":22}]},"perform":[{"do":"say","text":"it is late"}]}`)
+		adding(`{"name":"late","when":{"wake":[{"every":"20m"}],"all":[{"source":"hour","op":">=","value":22}]},"perform":[{"do":"say","text":"it is late"}]}`))
 	if got.Outcome == conversation.OutcomeFailed {
 		t.Fatalf("could not make one: %s", got.Content)
 	}
@@ -686,7 +745,7 @@ func TestARuleIsTriedTheMomentItIsMade(t *testing.T) {
 	by2 := map[string]tool.Tool{}
 	for _, one := range rules.All(store, rules.Clock{
 		Now: func() time.Time { return noon }, Location: india,
-	}, id, look, nil, spoke.try) {
+	}, id, look, nil, spoke.try, echoing()) {
 		by2[one.Name] = one
 	}
 	held, _ := store.Mine(context.Background(), "usr_1", "rule", 10)
@@ -701,7 +760,7 @@ func TestARuleIsTriedTheMomentItIsMade(t *testing.T) {
 // made and unproven, which is how every rule was made before this.
 func TestARuleIsStillMadeWithNothingToTryItWith(t *testing.T) {
 	_, by := made()
-	got := call(t, by["rule_add"], `{"name":"n","when":{"wake":[{"every":"10m"}]},"perform":[{"do":"say","text":"hello"}]}`)
+	got := call(t, by["rule_add"], adding(`{"name":"n","when":{"wake":[{"every":"10m"}]},"perform":[{"do":"say","text":"hello"}]}`))
 	if got.Outcome == conversation.OutcomeFailed {
 		t.Fatalf("a rule was refused for want of a trier: %s", got.Content)
 	}

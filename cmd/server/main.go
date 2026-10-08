@@ -347,6 +347,22 @@ func run() error {
 					return job.Trial{}
 				}
 				return running.Try(ctx, j)
+			},
+			rules.Writer{
+				// The fast model, and no persona at all. This one
+				// is not speaking to anybody -- it answers with
+				// JSON -- and a manner would only be something
+				// else for it to spend its reply on.
+				Ask: func(ctx context.Context, system, ask string) (string, error) {
+					return askAs(ctx, answerer, cfg.PlatformAI.Vendor,
+						cmp.Or(cfg.PlatformAI.FastModel, cfg.PlatformAI.Model),
+						system, environment.PurposeRemark, ask)
+				},
+				Kinds: deviceEvents.Kinds,
+				// Only what a rule may actually use, so it cannot
+				// reach for a tool that writes and be refused for
+				// it afterwards.
+				Reading: func() []string { return readable(registry) },
 			}),
 		memories.All(remembering),
 		reminders.All(reminderStore, clock, alarms),
@@ -1257,6 +1273,25 @@ func announcer(cfg config.Config, logger *slog.Logger) announce.Announcer {
 		slog.String("satellite", cfg.HomeAssistant.Satellite),
 		slog.Any("also_notifying", cfg.HomeAssistant.Notify))
 	return speaker
+}
+
+// readable : The tools a rule may look things up with.
+//
+// Everything that does not change anything. A rule runs unattended
+// and may run every few minutes; reading is safe to repeat and
+// writing is not, and the thing that writes rules should be told
+// what it may have rather than corrected afterwards.
+func readable(registry *tool.Registry) []string {
+	if registry == nil {
+		return nil
+	}
+	var out []string
+	for _, t := range registry.All() {
+		if !t.Writes {
+			out = append(out, t.Name)
+		}
+	}
+	return out
 }
 
 // aside : Where the assistant says what it is about to do, mid-turn.

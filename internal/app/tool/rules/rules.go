@@ -227,11 +227,11 @@ var howToWhen = prompt.Lines(
 
 // All : Every rule tool, in the order they are offered.
 func All(store Store, clock Clock, id func() string, look Lookup,
-	usually routine.Store, try Trier,
+	usually routine.Store, try Trier, writer Writer,
 ) []tool.Tool {
 	return []tool.Tool{
 		list(store, clock, usually),
-		add(store, clock, id, look, try),
+		add(store, clock, id, look, try, writer),
 		update(store, clock, look, try),
 		quieten(store, clock),
 		cancel(store),
@@ -277,7 +277,7 @@ func list(store Store, clock Clock, usually routine.Store) tool.Tool {
 }
 
 // add : Sets one up.
-func add(store Store, clock Clock, id func() string, look Lookup, try Trier) tool.Tool {
+func add(store Store, clock Clock, id func() string, look Lookup, try Trier, writer Writer) tool.Tool {
 	return tool.Tool{
 		Name:    "rule_add",
 		Domain:  Kind,
@@ -290,15 +290,22 @@ func add(store Store, clock Clock, id func() string, look Lookup, try Trier) too
 			"Not for doing something now; just do it.",
 		Channels: []chat.Channel{chat.ChannelVoice, chat.ChannelDirect},
 		Params: tool.Schema{
-			Required: []string{"name", "when", "perform"},
+			Required: []string{"name", "asked"},
 			Properties: map[string]tool.Property{
 				"name": {
 					Type: "string",
 					Description: "A short name in their own words, how they would refer to it later. " +
 						"\"the morning diary\", \"low battery warning\".",
 				},
-				"when":     {Type: "object", Description: howToWake + "\n\n" + howToWhen},
-				"perform":  {Type: "array", Description: howToPerform},
+				"asked": {
+					Type: "string",
+					Description: "What the rule should do, in their own words, as fully as they said it. " +
+						"Something that only writes rules is given this, along with what their devices " +
+						"report and the rules they already have, and works out the rest. " +
+						"Add anything you know that their words leave out -- which place they mean, " +
+						"what they call it, which of two things they were talking about -- and leave " +
+						"out nothing they said, including the part that sounds like a detail.",
+				},
 				"keep":     {Type: "string", Description: howLongToKeep},
 				"cool":     {Type: "string", Description: howLongToCool},
 				"anywhere": {Type: "boolean", Description: whetherToFollow},
@@ -308,40 +315,26 @@ func add(store Store, clock Clock, id func() string, look Lookup, try Trier) too
 			{
 				Ask: "every morning at eight tell me what is coming up",
 				Args: `{"saying":"setting that up","name":"the morning diary",` +
-					`"when":{"wake":[{"at":"08:00"}]},` +
-					`"perform":[{"do":"tool","use":"calendar_events","with":{"days":1}},` +
-					`{"do":"write","ask":"say what is coming up in their diary today"}]}`,
+					`"asked":"every morning at eight, say what is coming up in their diary that day"}`,
 			},
 			{
 				Ask: "whenever my battery drops below twenty say something",
 				Args: `{"saying":"setting that up","name":"low battery warning",` +
-					`"when":{"wake":[{"on":{"source":"battery.level","op":"<","value":20}}]},` +
-					`"perform":[{"do":"tool","use":"event_recent","with":{"kind":"battery.level","limit":5}},` +
-					`{"do":"write","ask":"say that the battery is getting low, and what it is at"}]}`,
+					`"asked":"whenever the phone battery drops below twenty per cent, say so and what it is at"}`,
 			},
 			{
 				Ask: "every two hours remind me to stand up, but only when I am here",
 				Args: `{"saying":"setting that up","name":"stand up",` +
-					`"when":{"wake":[{"every":"2h"}],"all":[{"source":"presence","op":"==","value":"here"}]},` +
-					`"perform":[{"do":"say","text":"Time to stand up."}]}`,
-			},
-			{
-				Ask: "when I plug the phone in, check a quarter of an hour later that it is charging",
-				Args: `{"saying":"setting that up","name":"plugged in and not charging",` +
-					`"when":{"wake":[{"on":{"source":"power.plugged","op":"arrives"},"after":"15m"}],` +
-					`"all":[{"source":"battery.level","op":"<=","ago":"15m"}]},` +
-					`"perform":[{"do":"tool","use":"event_recent","with":{"kind":"battery.level","limit":6}},` +
-					`{"do":"write","ask":"say the level has not risen and the cable may not be working"}]}`,
+					`"asked":"every two hours say \"Time to stand up.\", but only while they are in the room"}`,
 			},
 		},
 		Run: func(ctx context.Context, in tool.Invocation) tool.Result {
 			var args struct {
-				Name     string       `json:"name"`
-				When     job.Occasion `json:"when"`
-				Perform  []job.Act    `json:"perform"`
-				Keep     string       `json:"keep"`
-				Cool     string       `json:"cool"`
-				Anywhere bool         `json:"anywhere"`
+				Name     string `json:"name"`
+				Asked    string `json:"asked"`
+				Keep     string `json:"keep"`
+				Cool     string `json:"cool"`
+				Anywhere bool   `json:"anywhere"`
 			}
 			if err := json.Unmarshal(in.Args, &args); err != nil {
 				return tool.Failed("Those arguments could not be read.")
@@ -353,10 +346,6 @@ func add(store Store, clock Clock, id func() string, look Lookup, try Trier) too
 				return tool.Failed("This request did not come from a known person.")
 			}
 
-			if bad := allowed(args.Perform, look); bad != "" {
-				return tool.Failed(bad)
-			}
-
 			name := strings.TrimSpace(args.Name)
 			if name == "" {
 				return tool.Failed("A rule needs a name, so they can ask for it later.")
@@ -364,8 +353,22 @@ func add(store Store, clock Clock, id func() string, look Lookup, try Trier) too
 			if err := job.Kept(args.Keep); err != nil {
 				return tool.Failed(readable(err))
 			}
+
+			// Their own rules, as examples, because a rule of
+			// theirs is about their devices, their places and
+			// their way of saying things.
+			held, err := store.Mine(ctx, in.Caller.UserID, Kind, job.Limit)
+			if err != nil {
+				return tool.Broke("Their rules could not be read.", err)
+			}
+			when, acts, bad := writer.Written(ctx, in.Caller.UserID,
+				args.Asked, examples(held), look)
+			if bad != "" {
+				return tool.Failed(bad)
+			}
+
 			made, err := job.Make(id(), in.Caller.UserID, name, Kind,
-				args.When, args.Perform, clock.now().In(clock.where()))
+				when, acts, clock.now().In(clock.where()))
 			if err != nil {
 				return tool.Failed(readable(err))
 			}
