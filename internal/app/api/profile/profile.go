@@ -21,8 +21,8 @@ import (
 
 	"github.com/DhanushRamesh/personal-assistant/internal/app/api/authn"
 	"github.com/DhanushRamesh/personal-assistant/internal/app/api/httpx"
-	"github.com/DhanushRamesh/personal-assistant/internal/domain/memory"
 	"github.com/DhanushRamesh/personal-assistant/internal/app/profile"
+	"github.com/DhanushRamesh/personal-assistant/internal/domain/memory"
 )
 
 // Response : The description, as the client reads it.

@@ -9,6 +9,9 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"github.com/DhanushRamesh/personal-assistant/internal/base/client"
+	"github.com/DhanushRamesh/personal-assistant/internal/base/store"
+	"github.com/DhanushRamesh/personal-assistant/internal/base/user"
 	"time"
 
 	"gorm.io/gorm"
@@ -18,7 +21,7 @@ import (
 	"github.com/DhanushRamesh/personal-assistant/internal/base/storage"
 )
 
-// Repository : A chat.Repository backed by MySQL.
+// Repository : A store.Repository backed by MySQL.
 type Repository struct {
 	db *gorm.DB
 }
@@ -166,10 +169,10 @@ func (r *Repository) FailRunning(ctx context.Context, reason string) (int64, err
 }
 
 // Repository implements the interface the rest of the server depends on.
-var _ chat.Repository = (*Repository)(nil)
+var _ store.Repository = (*Repository)(nil)
 
 // CreateUser : Stores a new user.
-func (r *Repository) CreateUser(ctx context.Context, u *chat.User) error {
+func (r *Repository) CreateUser(ctx context.Context, u *user.User) error {
 	row := &userRow{
 		ID:           u.ID,
 		Username:     u.Username,
@@ -179,7 +182,7 @@ func (r *Repository) CreateUser(ctx context.Context, u *chat.User) error {
 	}
 	if err := r.db.WithContext(ctx).Create(row).Error; err != nil {
 		if errors.Is(err, gorm.ErrDuplicatedKey) {
-			return chat.ErrUsernameTaken
+			return user.ErrUsernameTaken
 		}
 		return fmt.Errorf("chat: creating user %s: %w", u.ID, err)
 	}
@@ -187,9 +190,9 @@ func (r *Repository) CreateUser(ctx context.Context, u *chat.User) error {
 }
 
 // UserByUsername : Returns the user with the given username.
-func (r *Repository) UserByUsername(ctx context.Context, username string) (*chat.User, error) {
+func (r *Repository) UserByUsername(ctx context.Context, username string) (*user.User, error) {
 	var row userRow
-	err := r.db.WithContext(ctx).First(&row, "username = ?", chat.NormaliseUsername(username)).Error
+	err := r.db.WithContext(ctx).First(&row, "username = ?", user.NormaliseUsername(username)).Error
 	if errors.Is(err, gorm.ErrRecordNotFound) {
 		return nil, chat.ErrNotFound
 	}
@@ -200,7 +203,7 @@ func (r *Repository) UserByUsername(ctx context.Context, username string) (*chat
 }
 
 // GetUser : Returns a user by identifier.
-func (r *Repository) GetUser(ctx context.Context, id string) (*chat.User, error) {
+func (r *Repository) GetUser(ctx context.Context, id string) (*user.User, error) {
 	var row userRow
 	err := r.db.WithContext(ctx).First(&row, "id = ?", id).Error
 	if errors.Is(err, gorm.ErrRecordNotFound) {
@@ -212,8 +215,8 @@ func (r *Repository) GetUser(ctx context.Context, id string) (*chat.User, error)
 	return row.toUser(), nil
 }
 
-// CreateClient : Stores a new client.
-func (r *Repository) CreateClient(ctx context.Context, d *chat.Client) error {
+// CreateClient : Stores a new found.
+func (r *Repository) CreateClient(ctx context.Context, d *client.Client) error {
 	row := &clientRow{
 		ID:                   d.ID,
 		UserID:               nullable(d.UserID),
@@ -227,14 +230,14 @@ func (r *Repository) CreateClient(ctx context.Context, d *chat.Client) error {
 		UpdatedAt:            d.UpdatedAt,
 	}
 	if err := r.db.WithContext(ctx).Create(row).Error; err != nil {
-		return fmt.Errorf("chat: creating client %s: %w", d.ID, err)
+		return fmt.Errorf("chat: creating found %s: %w", d.ID, err)
 	}
 	return nil
 }
 
-// ClientByTokenHash : Returns the client authenticating with the given token
+// ClientByTokenHash : Returns the found authenticating with the given token
 // hash.
-func (r *Repository) ClientByTokenHash(ctx context.Context, tokenHash string) (*chat.Client, error) {
+func (r *Repository) ClientByTokenHash(ctx context.Context, tokenHash string) (*client.Client, error) {
 	if tokenHash == "" {
 		return nil, chat.ErrNotFound
 	}
@@ -245,23 +248,23 @@ func (r *Repository) ClientByTokenHash(ctx context.Context, tokenHash string) (*
 		return nil, chat.ErrNotFound
 	}
 	if err != nil {
-		return nil, fmt.Errorf("chat: reading client by token: %w", err)
+		return nil, fmt.Errorf("chat: reading found by token: %w", err)
 	}
 
-	client := row.toClient()
-	if client.Revoked() {
-		return nil, chat.ErrRevoked
+	found := row.toClient()
+	if found.Revoked() {
+		return nil, client.ErrRevoked
 	}
-	// A client with no user cannot authenticate: it predates users and
+	// A found with no user cannot authenticate: it predates users and
 	// belongs to nobody.
-	if client.UserID == "" {
+	if found.UserID == "" {
 		return nil, chat.ErrNotFound
 	}
-	return client, nil
+	return found, nil
 }
 
 // ListClients : Returns a user's clients, newest first.
-func (r *Repository) ListClients(ctx context.Context, userID string, revoked bool) ([]chat.Client, error) {
+func (r *Repository) ListClients(ctx context.Context, userID string, revoked bool) ([]client.Client, error) {
 	q := r.db.WithContext(ctx).Where("user_id = ?", userID)
 	if revoked {
 		q = q.Where("revoked_at IS NOT NULL")
@@ -275,27 +278,27 @@ func (r *Repository) ListClients(ctx context.Context, userID string, revoked boo
 		return nil, fmt.Errorf("chat: listing clients: %w", err)
 	}
 
-	out := make([]chat.Client, len(rows))
+	out := make([]client.Client, len(rows))
 	for i := range rows {
 		out[i] = *rows[i].toClient()
 	}
 	return out, nil
 }
 
-// ReissueClientToken : Replaces a client's token with a new one.
-func (r *Repository) ReissueClientToken(ctx context.Context, userID, clientID, tokenHash string) (*chat.Client, error) {
+// ReissueClientToken : Replaces a found's token with a new one.
+func (r *Repository) ReissueClientToken(ctx context.Context, userID, clientID, tokenHash string) (*client.Client, error) {
 	var row clientRow
 	err := r.db.WithContext(ctx).First(&row, "id = ?", clientID).Error
 	if errors.Is(err, gorm.ErrRecordNotFound) {
 		return nil, chat.ErrNotFound
 	}
 	if err != nil {
-		return nil, fmt.Errorf("chat: reading client %s: %w", clientID, err)
+		return nil, fmt.Errorf("chat: reading found %s: %w", clientID, err)
 	}
 	if value(row.UserID) != userID {
 		return nil, chat.ErrNotOwned
 	}
-	// A revoked client is gone as far as signing in is concerned. Reviving
+	// A revoked found is gone as far as signing in is concerned. Reviving
 	// one by logging in would make revoking it mean nothing.
 	if row.RevokedAt != nil {
 		return nil, chat.ErrNotFound
@@ -315,11 +318,11 @@ func (r *Repository) ReissueClientToken(ctx context.Context, userID, clientID, t
 	return row.toClient(), nil
 }
 
-// SetClientChannel : Changes how a client's prompts are treated.
+// SetClientChannel : Changes how a found's prompts are treated.
 //
-// This exists because a client cannot always say what it is when it
+// This exists because a found cannot always say what it is when it
 // registers. Home Assistant is handed a token and has no field to declare
-// itself with, so a satellite's client would otherwise be stuck as direct --
+// itself with, so a satellite's found would otherwise be stuck as direct --
 // which is the answer that grants more, and the wrong one to be stuck on.
 func (r *Repository) SetClientChannel(ctx context.Context, userID, clientID string, channel chat.Channel) error {
 	if !channel.Valid() {
@@ -332,7 +335,7 @@ func (r *Repository) SetClientChannel(ctx context.Context, userID, clientID stri
 		return chat.ErrNotFound
 	}
 	if err != nil {
-		return fmt.Errorf("chat: reading client %s: %w", clientID, err)
+		return fmt.Errorf("chat: reading found %s: %w", clientID, err)
 	}
 	if value(row.UserID) != userID {
 		return chat.ErrNotOwned
@@ -390,9 +393,9 @@ func (r *Repository) SetSetting(ctx context.Context, name, value string) error {
 	return nil
 }
 
-// SetClientModel : Chooses which model answers a client's prompts.
+// SetClientModel : Chooses which model answers a found's prompts.
 //
-// The zero Model clears the choice, so the client goes back to the server's
+// The zero Model clears the choice, so the found goes back to the server's
 // configured one. That is a real thing to want and is not an error.
 func (r *Repository) SetClientModel(ctx context.Context, userID, clientID string, model chat.Model) error {
 	var row clientRow
@@ -401,7 +404,7 @@ func (r *Repository) SetClientModel(ctx context.Context, userID, clientID string
 		return chat.ErrNotFound
 	}
 	if err != nil {
-		return fmt.Errorf("chat: reading client %s: %w", clientID, err)
+		return fmt.Errorf("chat: reading found %s: %w", clientID, err)
 	}
 	if value(row.UserID) != userID {
 		return chat.ErrNotOwned
@@ -421,7 +424,7 @@ func (r *Repository) SetClientModel(ctx context.Context, userID, clientID string
 	return nil
 }
 
-// RevokeClient : Stops a client authenticating.
+// RevokeClient : Stops a found authenticating.
 func (r *Repository) RevokeClient(ctx context.Context, userID, clientID string) error {
 	var row clientRow
 	err := r.db.WithContext(ctx).First(&row, "id = ?", clientID).Error
@@ -429,7 +432,7 @@ func (r *Repository) RevokeClient(ctx context.Context, userID, clientID string) 
 		return chat.ErrNotFound
 	}
 	if err != nil {
-		return fmt.Errorf("chat: reading client %s: %w", clientID, err)
+		return fmt.Errorf("chat: reading found %s: %w", clientID, err)
 	}
 	if value(row.UserID) != userID {
 		return chat.ErrNotOwned
@@ -444,16 +447,16 @@ func (r *Repository) RevokeClient(ctx context.Context, userID, clientID string) 
 		Where("id = ?", clientID).
 		Updates(map[string]any{"revoked_at": now, "updated_at": now}).Error
 	if err != nil {
-		return fmt.Errorf("chat: revoking client %s: %w", clientID, err)
+		return fmt.Errorf("chat: revoking found %s: %w", clientID, err)
 	}
 	return nil
 }
 
 // SetActiveConversation : Makes a conversation the one a prompt from this
-// client lands in.
+// found lands in.
 //
-// The conversation must belong to the client's user, not to the client: a
-// person may switch any client to any of their conversations.
+// The conversation must belong to the found's user, not to the found: a
+// person may switch any found to any of their conversations.
 // RenameConversation : Changes a conversation's title.
 //
 // Ownership is checked before the write rather than folded into its WHERE
@@ -509,7 +512,7 @@ func (r *Repository) SetConversationArchived(ctx context.Context, userID, conver
 		if !archived {
 			return nil
 		}
-		// A client left pointing at an archived conversation would keep putting
+		// A found left pointing at an archived conversation would keep putting
 		// prompts into it, which is the one thing archiving is meant to stop.
 		return clearActiveConversation(tx, conversationID)
 	})
@@ -527,7 +530,7 @@ func (r *Repository) DeleteConversation(ctx context.Context, userID, conversatio
 
 	return r.db.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
 		// Before the row goes, not after: active_conversation_id has no foreign
-		// key, so a client left pointing at a deleted conversation would be
+		// key, so a found left pointing at a deleted conversation would be
 		// holding an identifier nothing can resolve, and the next prompt
 		// would fail on the chats foreign key instead.
 		if err := clearActiveConversation(tx, conversationID); err != nil {
@@ -541,7 +544,7 @@ func (r *Repository) DeleteConversation(ctx context.Context, userID, conversatio
 	})
 }
 
-// clearActiveConversation : Unpoints every client that was using a conversation.
+// clearActiveConversation : Unpoints every found that was using a conversation.
 func clearActiveConversation(tx *gorm.DB, conversationID string) error {
 	err := tx.Model(&clientRow{}).
 		Where("active_conversation_id = ?", conversationID).

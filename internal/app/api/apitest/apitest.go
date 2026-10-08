@@ -19,6 +19,8 @@ import (
 	"encoding/json"
 	"errors"
 	announcementsapi "github.com/DhanushRamesh/personal-assistant/internal/app/api/announcements"
+	"github.com/DhanushRamesh/personal-assistant/internal/base/client"
+	"github.com/DhanushRamesh/personal-assistant/internal/base/user"
 	"log/slog"
 	"net/http"
 	"net/http/httptest"
@@ -63,7 +65,7 @@ const (
 var (
 	SomeChatID         = chat.NewID()
 	SomeConversationID = chat.NewConversationID()
-	SomeClientID       = chat.NewClientID()
+	SomeClientID       = client.NewClientID()
 )
 
 // ErrStorage : A storage failure used to check that internal errors are
@@ -145,8 +147,8 @@ type Env struct {
 	// Token : The bearer token the request helpers present by default.
 	Token string
 	// User and Client : Who that token belongs to.
-	User   *chat.User
-	Client *chat.Client
+	User   *user.User
+	Client *client.Client
 }
 
 // New : Builds an environment with a stub provider and a reachable database.
@@ -231,9 +233,9 @@ func (e *Env) register(t *testing.T) {
 	t.Helper()
 	ctx := context.Background()
 
-	user, err := chat.NewUser(Username, fixtureHash())
+	user, err := user.NewUser(Username, fixtureHash())
 	if err != nil {
-		t.Fatalf("chat.NewUser: %v", err)
+		t.Fatalf("user.NewUser: %v", err)
 	}
 	if err := e.Repo.CreateUser(ctx, user); err != nil {
 		t.Fatalf("CreateUser: %v", err)
@@ -243,9 +245,9 @@ func (e *Env) register(t *testing.T) {
 	if err != nil {
 		t.Fatalf("auth.NewToken: %v", err)
 	}
-	client, err := chat.NewClient(user.ID, "test client", tokenHash, chat.ChannelDirect)
+	client, err := client.NewClient(user.ID, "test client", tokenHash, chat.ChannelDirect)
 	if err != nil {
-		t.Fatalf("chat.NewClient: %v", err)
+		t.Fatalf("client.NewClient: %v", err)
 	}
 	if err := e.Repo.CreateClient(ctx, client); err != nil {
 		t.Fatalf("CreateClient: %v", err)

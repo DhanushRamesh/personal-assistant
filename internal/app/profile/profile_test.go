@@ -7,12 +7,12 @@ import (
 	"testing"
 	"time"
 
+	"github.com/DhanushRamesh/personal-assistant/internal/app/profile"
 	"github.com/DhanushRamesh/personal-assistant/internal/base/conversation"
 	"github.com/DhanushRamesh/personal-assistant/internal/base/event"
 	"github.com/DhanushRamesh/personal-assistant/internal/base/routine"
 	"github.com/DhanushRamesh/personal-assistant/internal/domain/memory"
 	"github.com/DhanushRamesh/personal-assistant/internal/domain/memory/inmemory"
-	"github.com/DhanushRamesh/personal-assistant/internal/app/profile"
 )
 
 // reported : A stand-in for the event store.

@@ -9,6 +9,7 @@ package conversations
 import (
 	"context"
 	"errors"
+	"github.com/DhanushRamesh/personal-assistant/internal/base/store"
 	"log/slog"
 	"net/http"
 	"sort"
@@ -66,13 +67,13 @@ type DetailResponse struct {
 // Handler : Serves the conversation endpoints.
 type Handler struct {
 	httpx.Responder
-	repo     chat.Repository
+	repo     store.Repository
 	messages conversation.Repository
 }
 
 // New : Builds the handler from the stores holding the conversations and
 // what was said in them.
-func New(logger *slog.Logger, repo chat.Repository, messages conversation.Repository) *Handler {
+func New(logger *slog.Logger, repo store.Repository, messages conversation.Repository) *Handler {
 	return &Handler{
 		Responder: httpx.Responder{Logger: logger},
 		repo:      repo,

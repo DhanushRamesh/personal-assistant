@@ -2,6 +2,7 @@ package mysql_test
 
 import (
 	"context"
+	"github.com/DhanushRamesh/personal-assistant/internal/base/user"
 	"strings"
 	"testing"
 	"time"
@@ -50,9 +51,9 @@ func newTranscript(t *testing.T) *spoken {
 	}
 
 	repo := chatmysql.NewRepository(db)
-	owner, err := chat.NewUser(uniqueName(), "hash")
+	owner, err := user.NewUser(uniqueName(), "hash")
 	if err != nil {
-		t.Fatalf("chat.NewUser: %v", err)
+		t.Fatalf("user.NewUser: %v", err)
 	}
 	if err := repo.CreateUser(context.Background(), owner); err != nil {
 		t.Fatalf("CreateUser: %v", err)

@@ -6,6 +6,7 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/DhanushRamesh/personal-assistant/internal/app/profile"
 	"github.com/DhanushRamesh/personal-assistant/internal/app/tool"
 	"github.com/DhanushRamesh/personal-assistant/internal/app/tool/memories"
 	"github.com/DhanushRamesh/personal-assistant/internal/base/chat"
@@ -13,7 +14,6 @@ import (
 	"github.com/DhanushRamesh/personal-assistant/internal/base/embed"
 	"github.com/DhanushRamesh/personal-assistant/internal/domain/memory"
 	"github.com/DhanushRamesh/personal-assistant/internal/domain/memory/inmemory"
-	"github.com/DhanushRamesh/personal-assistant/internal/app/profile"
 )
 
 const user = "usr_01M3D477HXQ4YNQX7BNXJZZCV0"

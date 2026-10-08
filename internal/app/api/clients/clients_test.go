@@ -1,6 +1,8 @@
 package clients_test
 
 import (
+	"github.com/DhanushRamesh/personal-assistant/internal/base/client"
+	"github.com/DhanushRamesh/personal-assistant/internal/base/user"
 	"net/http"
 	"testing"
 
@@ -66,9 +68,9 @@ func TestAClientCannotRevokeAnotherUsers(t *testing.T) {
 	e := apitest.New(t)
 	mine := e.Login(t, "mine")
 
-	stranger, _ := chat.NewUser("stranger", "hash")
+	stranger, _ := user.NewUser("stranger", "hash")
 	_ = e.Repo.CreateUser(t.Context(), stranger)
-	theirClient, _ := chat.NewClient(stranger.ID, "theirs", "their-hash", chat.ChannelDirect)
+	theirClient, _ := client.NewClient(stranger.ID, "theirs", "their-hash", chat.ChannelDirect)
 	_ = e.Repo.CreateClient(t.Context(), theirClient)
 
 	rec := e.As(t, mine.Token, http.MethodDelete, "/v1/clients/"+theirClient.ID)
@@ -80,7 +82,7 @@ func TestAClientCannotRevokeAnotherUsers(t *testing.T) {
 func TestRevokingAnUnknownClientIsNotFound(t *testing.T) {
 	e := apitest.New(t)
 
-	for _, id := range []string{chat.NewClientID(), "not-an-id"} {
+	for _, id := range []string{client.NewClientID(), "not-an-id"} {
 		rec := e.Do(t, http.MethodDelete, "/v1/clients/"+id, "")
 		if rec.Code != http.StatusNotFound {
 			t.Errorf("client %q: status = %d, want 404", id, rec.Code)
@@ -142,9 +144,9 @@ func TestClientListingMarksTheOneInUse(t *testing.T) {
 func TestClientListingIsScopedToTheUser(t *testing.T) {
 	e := apitest.New(t)
 
-	stranger, _ := chat.NewUser("stranger", "hash")
+	stranger, _ := user.NewUser("stranger", "hash")
 	_ = e.Repo.CreateUser(t.Context(), stranger)
-	theirClient, _ := chat.NewClient(stranger.ID, "theirs", "their-hash", chat.ChannelDirect)
+	theirClient, _ := client.NewClient(stranger.ID, "theirs", "their-hash", chat.ChannelDirect)
 	_ = e.Repo.CreateClient(t.Context(), theirClient)
 
 	rec := e.Get(t, "/v1/clients")
@@ -203,9 +205,9 @@ func TestAnInventedChannelIsRefused(t *testing.T) {
 // Another user's client is answered as missing, as everywhere else.
 func TestAnotherUsersClientChannelCannotBeChanged(t *testing.T) {
 	e := apitest.New(t)
-	stranger, _ := chat.NewUser("stranger-chan", "hash")
+	stranger, _ := user.NewUser("stranger-chan", "hash")
 	_ = e.Repo.CreateUser(t.Context(), stranger)
-	theirClient, _ := chat.NewClient(stranger.ID, "theirs", "their-hash", chat.ChannelDirect)
+	theirClient, _ := client.NewClient(stranger.ID, "theirs", "their-hash", chat.ChannelDirect)
 	_ = e.Repo.CreateClient(t.Context(), theirClient)
 
 	rec := e.Do(t, http.MethodPost,

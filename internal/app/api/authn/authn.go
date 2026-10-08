@@ -3,13 +3,16 @@
 //
 // It is the one module every other one depends on, because a handler that
 // does not know the caller cannot decide what they may see. What it puts on
-// the context — a user and the client they are using — is the only identity
+// the context — a user and the device they are using — is the only identity
 // the rest of the API has.
 package authn
 
 import (
 	"context"
 	"errors"
+	"github.com/DhanushRamesh/personal-assistant/internal/base/client"
+	"github.com/DhanushRamesh/personal-assistant/internal/base/store"
+	"github.com/DhanushRamesh/personal-assistant/internal/base/user"
 	"log/slog"
 	"net/http"
 
@@ -22,21 +25,21 @@ import (
 	"github.com/DhanushRamesh/personal-assistant/internal/base/logging"
 )
 
-// header : The header carrying a client's token.
+// header : The header carrying a device's token.
 const header = "Authorization"
 
 // callerKey : The context key under which the authenticated caller is
 // carried.
 type callerKey struct{}
 
-// Caller : Who is making a request: a user, and the client they are using.
+// Caller : Who is making a request: a user, and the device they are using.
 //
 // The user is the boundary — everything is owned by and visible to them. The
-// client is only which credential was presented, and matters for where a
+// device is only which credential was presented, and matters for where a
 // prompt lands and which token to revoke.
 type Caller struct {
-	User   *chat.User
-	Client *chat.Client
+	User   *user.User
+	Client *client.Client
 }
 
 // Of : Returns who is making the request. Valid only inside a handler behind
@@ -50,19 +53,19 @@ func Of(ctx context.Context) *Caller {
 type LoginRequest struct {
 	Username string `json:"username"`
 	Password string `json:"password"`
-	// ClientName : What to call the client being logged in from, such as
+	// ClientName : What to call the device being logged in from, such as
 	// "my phone". Optional.
 	ClientName string `json:"client_name,omitempty"`
-	// ClientID : The client this install registered as last time.
+	// ClientID : The device this install registered as last time.
 	//
-	// Signing in again on the same install re-issues that client's token
+	// Signing in again on the same install re-issues that device's token
 	// rather than registering another, so a browser signed out and back in
-	// stays one client instead of leaving a trail of them holding live
+	// stays one device instead of leaving a trail of them holding live
 	// tokens. Unknown, revoked or somebody else's is treated as absent: the
 	// password is the authority here, and a wrong identifier should cost a
 	// fresh registration rather than a refusal.
 	ClientID string `json:"client_id,omitempty"`
-	// Channel : How this client's prompts will arrive, "voice" or "direct".
+	// Channel : How this device's prompts will arrive, "voice" or "direct".
 	//
 	// Declared once, here, because it is a property of the thing holding the
 	// token rather than of any request it later makes. Omitted means direct,
@@ -78,17 +81,17 @@ type LoginRequest struct {
 type LoginResponse struct {
 	Token  string       `json:"token"`
 	User   views.User   `json:"user"`
-	Client views.Client `json:"client"`
+	Client views.Client `json:"device"`
 }
 
 // Handler : Serves logging in, and guards everything that requires a token.
 type Handler struct {
 	httpx.Responder
-	repo chat.Repository
+	repo store.Repository
 }
 
 // New : Builds the handler from the store it authenticates against.
-func New(logger *slog.Logger, repo chat.Repository) *Handler {
+func New(logger *slog.Logger, repo store.Repository) *Handler {
 	return &Handler{Responder: httpx.Responder{Logger: logger}, repo: repo}
 }
 
@@ -99,11 +102,11 @@ func (h *Handler) Mount(r chi.Router) {
 	r.Post("/v1/auth/login", h.Login)
 }
 
-// Login : Authenticates a user and registers the client they are logging in
+// Login : Authenticates a user and registers the device they are logging in
 // from, returning its token.
 //
-// Logging in and registering a client are one act: a token exists only for a
-// client, and a client may be created only by someone who proved who they
+// Logging in and registering a device are one act: a token exists only for a
+// device, and a device may be created only by someone who proved who they
 // are. There is nothing to register separately.
 func (h *Handler) Login(w http.ResponseWriter, r *http.Request) {
 	ctx := r.Context()
@@ -147,46 +150,46 @@ func (h *Handler) Login(w http.ResponseWriter, r *http.Request) {
 		channel = chat.ChannelDirect
 	}
 
-	client, reused, err := h.clientFor(ctx, user.ID, req, tokenHash, channel)
+	device, reused, err := h.clientFor(ctx, user.ID, req, tokenHash, channel)
 	switch {
-	case errors.Is(err, chat.ErrClientNameTooLong):
-		httpx.WriteError(ctx, w, http.StatusBadRequest, "That client name is too long.")
+	case errors.Is(err, client.ErrClientNameTooLong):
+		httpx.WriteError(ctx, w, http.StatusBadRequest, "That device name is too long.")
 		return
 	case errors.Is(err, chat.ErrUnknownChannel):
 		httpx.WriteError(ctx, w, http.StatusBadRequest,
 			`The channel must be "voice" or "direct".`)
 		return
 	case err != nil:
-		h.Fail(ctx, w, "registering client", err)
+		h.Fail(ctx, w, "registering device", err)
 		return
 	}
 	if reused {
-		h.Logger.InfoContext(ctx, "client token reissued",
-			slog.String("client_id", client.ID))
+		h.Logger.InfoContext(ctx, "device token reissued",
+			slog.String("client_id", device.ID))
 	}
 
 	// Somewhere to talk at once. A conversation belongs to the user, so a second
-	// client joins whatever already exists rather than starting over.
+	// device joins whatever already exists rather than starting over.
 	conversationID, err := chat.EnsureConversation(ctx, h.repo, user.ID)
 	if err != nil {
 		h.Fail(ctx, w, "preparing a conversation", err)
 		return
 	}
-	if err := h.repo.SetActiveConversation(ctx, user.ID, client.ID, conversationID); err != nil {
+	if err := h.repo.SetActiveConversation(ctx, user.ID, device.ID, conversationID); err != nil {
 		h.Fail(ctx, w, "activating conversation", err)
 		return
 	}
-	client.ActiveConversationID = conversationID
+	device.ActiveConversationID = conversationID
 
-	h.Logger.InfoContext(ctx, "client logged in",
+	h.Logger.InfoContext(ctx, "device logged in",
 		slog.String("user_id", user.ID),
-		slog.String("client_id", client.ID))
+		slog.String("client_id", device.ID))
 
 	// The only moment the token exists outside the caller's hands.
 	httpx.WriteJSON(ctx, w, http.StatusCreated, LoginResponse{
 		Token:  token,
 		User:   views.OfUser(user),
-		Client: views.OfClient(*client, true),
+		Client: views.OfClient(*device, true),
 	})
 }
 
@@ -211,32 +214,32 @@ func (h *Handler) Require(next http.Handler) http.Handler {
 			return
 		}
 
-		client, err := h.repo.ClientByTokenHash(ctx, auth.HashToken(token))
+		device, err := h.repo.ClientByTokenHash(ctx, auth.HashToken(token))
 		switch {
-		case errors.Is(err, chat.ErrNotFound), errors.Is(err, chat.ErrRevoked):
+		case errors.Is(err, chat.ErrNotFound), errors.Is(err, client.ErrRevoked):
 			// Logged apart so a revocation is diagnosable, answered alike so
 			// it is not discoverable.
 			h.Logger.WarnContext(ctx, "rejected a token", slog.Any("reason", err))
 			Unauthorised(ctx, w, "That token is not valid.")
 			return
 		case err != nil:
-			h.Fail(ctx, w, "authenticating client", err)
+			h.Fail(ctx, w, "authenticating device", err)
 			return
 		}
 
-		user, err := h.repo.GetUser(ctx, client.UserID)
+		user, err := h.repo.GetUser(ctx, device.UserID)
 		if err != nil {
-			// The client outlived its user, so the token is worthless.
-			h.Logger.WarnContext(ctx, "token belongs to a client with no user",
-				slog.String("client_id", client.ID))
+			// The device outlived its user, so the token is worthless.
+			h.Logger.WarnContext(ctx, "token belongs to a device with no user",
+				slog.String("client_id", device.ID))
 			Unauthorised(ctx, w, "That token is not valid.")
 			return
 		}
 
-		ctx = context.WithValue(ctx, callerKey{}, &Caller{User: user, Client: client})
+		ctx = context.WithValue(ctx, callerKey{}, &Caller{User: user, Client: device})
 		ctx = logging.WithAttrs(ctx,
 			slog.String("user_id", user.ID),
-			slog.String("client_id", client.ID))
+			slog.String("client_id", device.ID))
 		next.ServeHTTP(w, r.WithContext(ctx))
 	})
 }
@@ -247,12 +250,12 @@ func Unauthorised(ctx context.Context, w http.ResponseWriter, message string) {
 	httpx.WriteError(ctx, w, http.StatusUnauthorized, message)
 }
 
-// clientFor : The client this sign-in belongs to, and whether it already
+// clientFor : The device this sign-in belongs to, and whether it already
 // existed.
 //
-// Presenting a client id re-issues that client's token; the previous one stops
-// working, because one client is one credential. An id that is unknown,
-// revoked or somebody else's falls through to registering a new client rather
+// Presenting a device id re-issues that device's token; the previous one stops
+// working, because one device is one credential. An id that is unknown,
+// revoked or somebody else's falls through to registering a new device rather
 // than failing: the password is what authorises this, and a stale identifier
 // in a browser's storage should cost a fresh registration, not a sign-in.
 func (h *Handler) clientFor(
@@ -261,8 +264,8 @@ func (h *Handler) clientFor(
 	req LoginRequest,
 	tokenHash string,
 	channel chat.Channel,
-) (*chat.Client, bool, error) {
-	if chat.ValidClientID(req.ClientID) {
+) (*client.Client, bool, error) {
+	if client.ValidClientID(req.ClientID) {
 		existing, err := h.repo.ReissueClientToken(ctx, userID, req.ClientID, tokenHash)
 		switch {
 		case err == nil:
@@ -274,12 +277,12 @@ func (h *Handler) clientFor(
 		}
 	}
 
-	client, err := chat.NewClient(userID, req.ClientName, tokenHash, channel)
+	device, err := client.NewClient(userID, req.ClientName, tokenHash, channel)
 	if err != nil {
 		return nil, false, err
 	}
-	if err := h.repo.CreateClient(ctx, client); err != nil {
+	if err := h.repo.CreateClient(ctx, device); err != nil {
 		return nil, false, err
 	}
-	return client, false, nil
+	return device, false, nil
 }

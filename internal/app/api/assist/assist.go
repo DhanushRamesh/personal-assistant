@@ -19,6 +19,7 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"github.com/DhanushRamesh/personal-assistant/internal/base/store"
 	"log/slog"
 	"net/http"
 	"strings"
@@ -190,14 +191,14 @@ type ModelDetails struct {
 // Handler : Serves the endpoints Home Assistant calls.
 type Handler struct {
 	httpx.Responder
-	repo   chat.Repository
+	repo   store.Repository
 	runner Runner
 	events Subscriber
 }
 
 // New : Builds the handler from the store, the runner that executes chats and
 // the bus that carries what they say.
-func New(logger *slog.Logger, repo chat.Repository, runner Runner, bus Subscriber) *Handler {
+func New(logger *slog.Logger, repo store.Repository, runner Runner, bus Subscriber) *Handler {
 	return &Handler{
 		Responder: httpx.Responder{Logger: logger},
 		repo:      repo,

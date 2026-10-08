@@ -5,13 +5,13 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"github.com/DhanushRamesh/personal-assistant/internal/base/store"
 	"net/http"
 	"net/url"
 	"os"
 	"strings"
 	"time"
 
-	"github.com/DhanushRamesh/personal-assistant/internal/base/chat"
 	chatmysql "github.com/DhanushRamesh/personal-assistant/internal/base/chat/mysql"
 	"github.com/DhanushRamesh/personal-assistant/internal/base/config"
 	"github.com/DhanushRamesh/personal-assistant/internal/base/logging"
@@ -105,7 +105,7 @@ func runGoogleCheck(username string) error {
 	}
 	defer db.Close()
 
-	user, err := chat.Repository(chatmysql.NewRepository(db)).UserByUsername(ctx, username)
+	person, err := store.Repository(chatmysql.NewRepository(db)).UserByUsername(ctx, username)
 	if err != nil {
 		return fmt.Errorf("finding %s: %w", username, err)
 	}
@@ -115,7 +115,7 @@ func runGoogleCheck(username string) error {
 		return errors.New("no Google client is configured")
 	}
 
-	account, err := link.Account(ctx, user.ID)
+	account, err := link.Account(ctx, person.ID)
 	if errors.Is(err, google.ErrNotConnected) {
 		fmt.Println("no Google account is connected")
 		return nil
@@ -136,7 +136,7 @@ func runGoogleCheck(username string) error {
 	}
 
 	// The part worth having: ask Google now rather than trust the row.
-	source, err := link.TokenSource(ctx, user.ID)
+	source, err := link.TokenSource(ctx, person.ID)
 	if err != nil {
 		return err
 	}

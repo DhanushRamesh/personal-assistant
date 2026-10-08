@@ -2,13 +2,13 @@ package reminders_test
 
 import (
 	"encoding/json"
+	"github.com/DhanushRamesh/personal-assistant/internal/base/user"
 	"net/http"
 	"testing"
 	"time"
 
 	"github.com/DhanushRamesh/personal-assistant/internal/app/api/apitest"
 	"github.com/DhanushRamesh/personal-assistant/internal/app/api/reminders"
-	"github.com/DhanushRamesh/personal-assistant/internal/base/chat"
 	"github.com/DhanushRamesh/personal-assistant/internal/domain/remind"
 	"github.com/DhanushRamesh/personal-assistant/internal/domain/remind/inmemory"
 )
@@ -152,9 +152,9 @@ func TestAnUnknownReminderIsNotFound(t *testing.T) {
 func TestAnotherPersonsReminderIsHidden(t *testing.T) {
 	e, store := env(t)
 
-	stranger, err := chat.NewUser("stranger", "hash")
+	stranger, err := user.NewUser("stranger", "hash")
 	if err != nil {
-		t.Fatalf("chat.NewUser: %v", err)
+		t.Fatalf("user.NewUser: %v", err)
 	}
 	if err := e.Repo.CreateUser(t.Context(), stranger); err != nil {
 		t.Fatalf("CreateUser: %v", err)
@@ -293,7 +293,7 @@ func TestSnoozingACancelledOneConflicts(t *testing.T) {
 // revealed by the difference between a refusal and a miss.
 func TestSnoozingAnotherPersonsIsNotFound(t *testing.T) {
 	e, store := env(t)
-	other, err := remind.New(chat.NewUserID(), "", remind.ScopeUser, "Theirs", "Not yours.",
+	other, err := remind.New(user.NewUserID(), "", remind.ScopeUser, "Theirs", "Not yours.",
 		time.Now().UTC().Add(time.Hour), remind.Once)
 	if err != nil {
 		t.Fatalf("remind.New: %v", err)

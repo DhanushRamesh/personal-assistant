@@ -121,7 +121,7 @@ func ValidConversationID(id string) bool {
 // finding the active conversation gone, must not start a fresh thread and lose the
 // history. Reuse rather than creation is therefore the default, and a new
 // conversation is something the user asks for explicitly.
-func EnsureConversation(ctx context.Context, repo Repository, userID string) (string, error) {
+func EnsureConversation(ctx context.Context, repo Conversations, userID string) (string, error) {
 	existing, err := repo.ListConversations(ctx, userID, 1)
 	if err != nil {
 		return "", err
@@ -143,7 +143,7 @@ func EnsureConversation(ctx context.Context, repo Repository, userID string) (st
 // has just logged in, or may name a conversation that has since been removed. In
 // either case the user's most recent conversation is taken up and remembered, so
 // that a client never finds itself without somewhere to talk.
-func ActiveConversation(ctx context.Context, repo Repository, userID, clientID, active string) (string, error) {
+func ActiveConversation(ctx context.Context, repo Conversations, userID, clientID, active string) (string, error) {
 	if active != "" {
 		return active, nil
 	}

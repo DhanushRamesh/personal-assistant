@@ -2,6 +2,7 @@ package chats_test
 
 import (
 	"encoding/json"
+	"github.com/DhanushRamesh/personal-assistant/internal/base/user"
 	"net/http"
 	"strings"
 	"testing"
@@ -224,7 +225,7 @@ func TestUnknownConversationIsRejected(t *testing.T) {
 func TestAnotherUsersConversationCannotBeUsed(t *testing.T) {
 	e := apitest.New(t)
 
-	stranger, _ := chat.NewUser("stranger", "hash")
+	stranger, _ := user.NewUser("stranger", "hash")
 	_ = e.Repo.CreateUser(t.Context(), stranger)
 	theirs := chat.NewConversation(stranger.ID, "private")
 	_ = e.Repo.CreateConversation(t.Context(), theirs)

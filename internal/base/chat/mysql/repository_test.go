@@ -3,6 +3,8 @@ package mysql_test
 import (
 	"context"
 	"errors"
+	"github.com/DhanushRamesh/personal-assistant/internal/base/client"
+	"github.com/DhanushRamesh/personal-assistant/internal/base/user"
 	"io"
 	"log/slog"
 	"os"
@@ -85,9 +87,9 @@ func newRepository(t *testing.T) *chatmysql.Repository {
 // storedConversation : Creates a conversation for a test to attach chats to.
 func storedConversation(t *testing.T, r *chatmysql.Repository) string {
 	t.Helper()
-	owner, err := chat.NewUser("tester"+chat.NewUserID()[4:14], "hash")
+	owner, err := user.NewUser("tester"+user.NewUserID()[4:14], "hash")
 	if err != nil {
-		t.Fatalf("chat.NewUser: %v", err)
+		t.Fatalf("user.NewUser: %v", err)
 	}
 	if err := r.CreateUser(context.Background(), owner); err != nil {
 		t.Fatalf("CreateUser: %v", err)
@@ -100,21 +102,21 @@ func storedConversation(t *testing.T, r *chatmysql.Repository) string {
 }
 
 // storedClient : Creates a user and a client of theirs, and stores both.
-func storedClient(t *testing.T, r *chatmysql.Repository) *chat.Client {
+func storedClient(t *testing.T, r *chatmysql.Repository) *client.Client {
 	t.Helper()
 	ctx := context.Background()
 
-	owner, err := chat.NewUser("tester"+chat.NewUserID()[4:14], "hash")
+	owner, err := user.NewUser("tester"+user.NewUserID()[4:14], "hash")
 	if err != nil {
-		t.Fatalf("chat.NewUser: %v", err)
+		t.Fatalf("user.NewUser: %v", err)
 	}
 	if err := r.CreateUser(ctx, owner); err != nil {
 		t.Fatalf("CreateUser: %v", err)
 	}
 
-	client, err := chat.NewClient(owner.ID, "tester", "hash"+chat.NewClientID(), chat.ChannelDirect)
+	client, err := client.NewClient(owner.ID, "tester", "hash"+client.NewClientID(), chat.ChannelDirect)
 	if err != nil {
-		t.Fatalf("chat.NewClient: %v", err)
+		t.Fatalf("client.NewClient: %v", err)
 	}
 	if err := r.CreateClient(ctx, client); err != nil {
 		t.Fatalf("CreateClient: %v", err)
@@ -548,9 +550,9 @@ func TestAModelCannotBeSetOnAnotherUsersClient(t *testing.T) {
 	ctx := context.Background()
 	client := storedClient(t, r)
 
-	stranger, err := chat.NewUser("stranger"+chat.NewUserID()[4:14], "hash")
+	stranger, err := user.NewUser("stranger"+user.NewUserID()[4:14], "hash")
 	if err != nil {
-		t.Fatalf("chat.NewUser: %v", err)
+		t.Fatalf("user.NewUser: %v", err)
 	}
 	if err := r.CreateUser(ctx, stranger); err != nil {
 		t.Fatalf("CreateUser: %v", err)
@@ -605,7 +607,7 @@ func TestAnUnwrittenSettingIsEmpty(t *testing.T) {
 func TestASettingSurvivesStorage(t *testing.T) {
 	r := newRepository(t)
 	ctx := context.Background()
-	name := "persona-" + chat.NewUserID()[5:15]
+	name := "persona-" + user.NewUserID()[5:15]
 
 	if err := r.SetSetting(ctx, name, "jarvis"); err != nil {
 		t.Fatalf("SetSetting: %v", err)
@@ -625,7 +627,7 @@ func TestASettingSurvivesStorage(t *testing.T) {
 func TestASettingIsReplaced(t *testing.T) {
 	r := newRepository(t)
 	ctx := context.Background()
-	name := "persona-" + chat.NewUserID()[5:15]
+	name := "persona-" + user.NewUserID()[5:15]
 
 	for _, want := range []string{"jarvis", "friday", "plain"} {
 		if err := r.SetSetting(ctx, name, want); err != nil {

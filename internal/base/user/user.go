@@ -1,7 +1,9 @@
-package chat
+package user
 
 import (
+	"context"
 	"errors"
+	"github.com/DhanushRamesh/personal-assistant/internal/base/stored"
 	"regexp"
 	"strings"
 	"time"
@@ -32,7 +34,7 @@ var (
 	// characters that are not allowed.
 	ErrInvalidUsername = errors.New("chat: username is not valid")
 	// ErrUsernameTaken : Another user already has that username.
-	ErrUsernameTaken = errors.New("chat: username is taken")
+	ErrUsernameTaken = errors.New("user: username is taken")
 )
 
 // User : The person the assistant belongs to.
@@ -66,7 +68,7 @@ func NewUser(username, passwordHash string) (*User, error) {
 		return nil, errors.New("chat: a password hash is required")
 	}
 
-	created := now()
+	created := stored.Now()
 	return &User{
 		ID:           NewUserID(),
 		Username:     username,
@@ -91,4 +93,20 @@ func ValidUserID(id string) bool {
 // NormaliseUsername : Returns the form a username is stored and compared in.
 func NormaliseUsername(username string) string {
 	return strings.ToLower(strings.TrimSpace(username))
+}
+
+// Users : The people the server knows.
+type Users interface {
+
+	// CreateUser : Stores a new user. It reports ErrUsernameTaken if the
+	// username is already in use.
+	CreateUser(ctx context.Context, u *User) error
+
+	// UserByUsername : Returns the user with the given username. It reports
+	// ErrNotFound if there is none.
+	UserByUsername(ctx context.Context, username string) (*User, error)
+
+	// GetUser : Returns a user by identifier. It reports ErrNotFound if
+	// there is none.
+	GetUser(ctx context.Context, id string) (*User, error)
 }

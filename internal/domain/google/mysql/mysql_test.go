@@ -5,6 +5,7 @@ package mysql_test
 import (
 	"context"
 	"fmt"
+	"github.com/DhanushRamesh/personal-assistant/internal/base/user"
 	"io"
 	"log/slog"
 	"os"
@@ -12,7 +13,6 @@ import (
 	"testing"
 	"time"
 
-	"github.com/DhanushRamesh/personal-assistant/internal/base/chat"
 	chatmysql "github.com/DhanushRamesh/personal-assistant/internal/base/chat/mysql"
 	"github.com/DhanushRamesh/personal-assistant/internal/base/config"
 	"github.com/DhanushRamesh/personal-assistant/internal/base/logging"
@@ -70,7 +70,7 @@ func newStore(t *testing.T) (*googlemysql.Store, string) {
 	}
 
 	name := fmt.Sprintf("keeper%d", time.Now().UnixNano())
-	user, err := chat.NewUser(name, "hash-not-used-here")
+	user, err := user.NewUser(name, "hash-not-used-here")
 	if err != nil {
 		t.Fatalf("NewUser: %v", err)
 	}

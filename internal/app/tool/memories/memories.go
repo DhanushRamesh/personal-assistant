@@ -14,11 +14,11 @@ import (
 	"strconv"
 	"strings"
 
+	"github.com/DhanushRamesh/personal-assistant/internal/app/profile"
 	"github.com/DhanushRamesh/personal-assistant/internal/app/tool"
 	"github.com/DhanushRamesh/personal-assistant/internal/base/chat"
 	"github.com/DhanushRamesh/personal-assistant/internal/base/prompt"
 	"github.com/DhanushRamesh/personal-assistant/internal/domain/memory"
-	"github.com/DhanushRamesh/personal-assistant/internal/app/profile"
 )
 
 // idPattern : The shape of a memory identifier, so one the model invented is

@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"github.com/DhanushRamesh/personal-assistant/internal/base/user"
 	"os"
 	"strings"
 	"syscall"
@@ -12,18 +13,17 @@ import (
 	"golang.org/x/term"
 
 	"github.com/DhanushRamesh/personal-assistant/internal/base/auth"
-	"github.com/DhanushRamesh/personal-assistant/internal/base/chat"
 	chatmysql "github.com/DhanushRamesh/personal-assistant/internal/base/chat/mysql"
 )
 
-// createUser : Creates a user from the terminal.
+// createUser : Creates a person from the terminal.
 //
-// There is no endpoint for this. An endpoint that creates the first user must
+// There is no endpoint for this. An endpoint that creates the first person must
 // either be open, which lets a stranger claim the assistant, or be guarded by
 // a shared secret, which is the same problem one level up. A command run by
 // whoever already has the machine avoids both, and is needed exactly once.
 func createUser(username string, db *storageDB) error {
-	username = chat.NormaliseUsername(username)
+	username = user.NormaliseUsername(username)
 
 	password, err := readPassword()
 	if err != nil {
@@ -35,11 +35,11 @@ func createUser(username string, db *storageDB) error {
 		return err
 	}
 
-	user, err := chat.NewUser(username, hash)
+	person, err := user.NewUser(username, hash)
 	if err != nil {
-		if errors.Is(err, chat.ErrInvalidUsername) {
+		if errors.Is(err, user.ErrInvalidUsername) {
 			return fmt.Errorf("a username must be %d to %d characters of letters, digits, dots, dashes or underscores",
-				chat.MinUsernameLen, chat.MaxUsernameLen)
+				user.MinUsernameLen, user.MaxUsernameLen)
 		}
 		return err
 	}
@@ -48,18 +48,18 @@ func createUser(username string, db *storageDB) error {
 	defer cancel()
 
 	repo := chatmysql.NewRepository(db)
-	if err := repo.CreateUser(ctx, user); err != nil {
-		if errors.Is(err, chat.ErrUsernameTaken) {
+	if err := repo.CreateUser(ctx, person); err != nil {
+		if errors.Is(err, user.ErrUsernameTaken) {
 			return fmt.Errorf("the username %q is already taken", username)
 		}
 		return err
 	}
 
-	fmt.Printf("created user %s (%s)\n", user.Username, user.ID)
+	fmt.Printf("created person %s (%s)\n", person.Username, person.ID)
 	fmt.Println("log in from a client with:")
 	fmt.Printf("  curl -X POST localhost:8080/v1/auth/login \\\n")
 	fmt.Printf("    -H 'Content-Type: application/json' \\\n")
-	fmt.Printf("    -d '{\"username\":%q,\"password\":\"...\",\"client_name\":\"my phone\"}'\n", user.Username)
+	fmt.Printf("    -d '{\"username\":%q,\"password\":\"...\",\"client_name\":\"my phone\"}'\n", person.Username)
 	return nil
 }
 

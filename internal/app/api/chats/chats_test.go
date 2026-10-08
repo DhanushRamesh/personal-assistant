@@ -2,6 +2,7 @@ package chats_test
 
 import (
 	"bytes"
+	"github.com/DhanushRamesh/personal-assistant/internal/base/user"
 	"net/http"
 	"net/http/httptest"
 	"strings"
@@ -33,7 +34,7 @@ func TestGetUnknownChatIsNotFound(t *testing.T) {
 func TestAnotherUsersChatIsHidden(t *testing.T) {
 	e := apitest.New(t)
 
-	stranger, _ := chat.NewUser("stranger", "hash")
+	stranger, _ := user.NewUser("stranger", "hash")
 	_ = e.Repo.CreateUser(t.Context(), stranger)
 	theirConversation := chat.NewConversation(stranger.ID, "private")
 	_ = e.Repo.CreateConversation(t.Context(), theirConversation)
@@ -81,7 +82,7 @@ func TestListReturnsChatsWithoutResponses(t *testing.T) {
 func TestListIsScopedToTheUser(t *testing.T) {
 	e := apitest.New(t)
 
-	stranger, _ := chat.NewUser("stranger", "hash")
+	stranger, _ := user.NewUser("stranger", "hash")
 	_ = e.Repo.CreateUser(t.Context(), stranger)
 	theirConversation := chat.NewConversation(stranger.ID, "private")
 	_ = e.Repo.CreateConversation(t.Context(), theirConversation)

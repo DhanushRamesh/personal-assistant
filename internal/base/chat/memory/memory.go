@@ -3,7 +3,7 @@
 // It exists so that everything above the repository can be exercised without
 // MySQL: the runner's execution logic, the API's handlers, and anything else
 // that only needs somewhere to put a chat. It is a real implementation of
-// chat.Repository, not a stub, and behaves as the MySQL one does wherever the
+// store.Repository, not a stub, and behaves as the MySQL one does wherever the
 // difference would let a bug through — listings come back newest first, and
 // ownership is enforced between users.
 //
@@ -13,6 +13,9 @@ package memory
 import (
 	"context"
 	"fmt"
+	"github.com/DhanushRamesh/personal-assistant/internal/base/client"
+	"github.com/DhanushRamesh/personal-assistant/internal/base/store"
+	"github.com/DhanushRamesh/personal-assistant/internal/base/user"
 	"sort"
 	"sync"
 	"time"
@@ -21,7 +24,7 @@ import (
 	"github.com/DhanushRamesh/personal-assistant/internal/base/conversation"
 )
 
-// Repository : An in-memory chat.Repository.
+// Repository : An in-memory store.Repository.
 //
 // The zero value is unusable; call New.
 type Repository struct {
@@ -36,8 +39,8 @@ type Repository struct {
 	// settings : What belongs to the assistant rather than to any user.
 	settings      map[string]string
 	conversations map[string]chat.Conversation
-	clients       map[string]chat.Client
-	users         map[string]chat.User
+	clients       map[string]client.Client
+	users         map[string]user.User
 
 	// Fault injection, for exercising the paths a caller takes when storage
 	// misbehaves. A real repository fails; one that never does lets those
@@ -59,8 +62,8 @@ func New() *Repository {
 		summaries:     map[string]conversation.Summary{},
 		settings:      map[string]string{},
 		conversations: map[string]chat.Conversation{},
-		clients:       map[string]chat.Client{},
-		users:         map[string]chat.User{},
+		clients:       map[string]client.Client{},
+		users:         map[string]user.User{},
 	}
 }
 
@@ -174,7 +177,7 @@ func (m *Repository) FailRunning(_ context.Context, reason string) (int64, error
 	return changed, nil
 }
 
-var _ chat.Repository = (*Repository)(nil)
+var _ store.Repository = (*Repository)(nil)
 
 // CreateConversation : Stores a new conversation.
 func (m *Repository) CreateConversation(_ context.Context, c *chat.Conversation) error {
@@ -284,12 +287,12 @@ func (m *Repository) clearActive(conversationID string) {
 }
 
 // CreateUser : Stores a new user.
-func (m *Repository) CreateUser(_ context.Context, u *chat.User) error {
+func (m *Repository) CreateUser(_ context.Context, u *user.User) error {
 	m.mu.Lock()
 	defer m.mu.Unlock()
 	for _, existing := range m.users {
 		if existing.Username == u.Username {
-			return chat.ErrUsernameTaken
+			return user.ErrUsernameTaken
 		}
 	}
 	m.users[u.ID] = *u
@@ -297,7 +300,7 @@ func (m *Repository) CreateUser(_ context.Context, u *chat.User) error {
 }
 
 // GetUser : Returns a stored user.
-func (m *Repository) GetUser(_ context.Context, id string) (*chat.User, error) {
+func (m *Repository) GetUser(_ context.Context, id string) (*user.User, error) {
 	m.mu.Lock()
 	defer m.mu.Unlock()
 	u, ok := m.users[id]
@@ -308,10 +311,10 @@ func (m *Repository) GetUser(_ context.Context, id string) (*chat.User, error) {
 }
 
 // UserByUsername : Returns the user with the given username.
-func (m *Repository) UserByUsername(_ context.Context, username string) (*chat.User, error) {
+func (m *Repository) UserByUsername(_ context.Context, username string) (*user.User, error) {
 	m.mu.Lock()
 	defer m.mu.Unlock()
-	want := chat.NormaliseUsername(username)
+	want := user.NormaliseUsername(username)
 	for _, u := range m.users {
 		if u.Username == want {
 			found := u
@@ -322,7 +325,7 @@ func (m *Repository) UserByUsername(_ context.Context, username string) (*chat.U
 }
 
 // CreateClient : Stores a new client.
-func (m *Repository) CreateClient(_ context.Context, d *chat.Client) error {
+func (m *Repository) CreateClient(_ context.Context, d *client.Client) error {
 	m.mu.Lock()
 	defer m.mu.Unlock()
 	m.clients[d.ID] = *d
@@ -330,7 +333,7 @@ func (m *Repository) CreateClient(_ context.Context, d *chat.Client) error {
 }
 
 // ClientByTokenHash : Returns the client authenticating with a token hash.
-func (m *Repository) ClientByTokenHash(_ context.Context, tokenHash string) (*chat.Client, error) {
+func (m *Repository) ClientByTokenHash(_ context.Context, tokenHash string) (*client.Client, error) {
 	if tokenHash == "" {
 		return nil, chat.ErrNotFound
 	}
@@ -339,7 +342,7 @@ func (m *Repository) ClientByTokenHash(_ context.Context, tokenHash string) (*ch
 	for _, d := range m.clients {
 		if d.TokenHash == tokenHash {
 			if d.Revoked() {
-				return nil, chat.ErrRevoked
+				return nil, client.ErrRevoked
 			}
 			found := d
 			return &found, nil
@@ -349,10 +352,10 @@ func (m *Repository) ClientByTokenHash(_ context.Context, tokenHash string) (*ch
 }
 
 // ListClients : Returns a user's clients, newest first.
-func (m *Repository) ListClients(_ context.Context, userID string, revoked bool) ([]chat.Client, error) {
+func (m *Repository) ListClients(_ context.Context, userID string, revoked bool) ([]client.Client, error) {
 	m.mu.Lock()
 	defer m.mu.Unlock()
-	var out []chat.Client
+	var out []client.Client
 	for _, d := range m.clients {
 		if d.UserID == userID && d.Revoked() == revoked {
 			out = append(out, d)
@@ -363,7 +366,7 @@ func (m *Repository) ListClients(_ context.Context, userID string, revoked bool)
 }
 
 // ReissueClientToken : Replaces a stored client's token.
-func (m *Repository) ReissueClientToken(_ context.Context, userID, clientID, tokenHash string) (*chat.Client, error) {
+func (m *Repository) ReissueClientToken(_ context.Context, userID, clientID, tokenHash string) (*client.Client, error) {
 	m.mu.Lock()
 	defer m.mu.Unlock()
 

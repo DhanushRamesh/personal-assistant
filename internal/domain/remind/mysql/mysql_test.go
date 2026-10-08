@@ -3,6 +3,7 @@ package mysql_test
 import (
 	"context"
 	"errors"
+	"github.com/DhanushRamesh/personal-assistant/internal/base/user"
 	"io"
 	"log/slog"
 	"os"
@@ -10,7 +11,6 @@ import (
 	"testing"
 	"time"
 
-	"github.com/DhanushRamesh/personal-assistant/internal/base/chat"
 	chatmysql "github.com/DhanushRamesh/personal-assistant/internal/base/chat/mysql"
 	"github.com/DhanushRamesh/personal-assistant/internal/base/config"
 	"github.com/DhanushRamesh/personal-assistant/internal/base/storage"
@@ -74,10 +74,10 @@ func newStore(t *testing.T) (*remindmysql.Store, string) {
 		t.Fatalf("Migrate: %v", err)
 	}
 
-	id := chat.NewUserID()
-	owner, err := chat.NewUser("tester"+id[len(id)-12:], "hash")
+	id := user.NewUserID()
+	owner, err := user.NewUser("tester"+id[len(id)-12:], "hash")
 	if err != nil {
-		t.Fatalf("chat.NewUser: %v", err)
+		t.Fatalf("user.NewUser: %v", err)
 	}
 	if err := chatmysql.NewRepository(db).CreateUser(context.Background(), owner); err != nil {
 		t.Fatalf("CreateUser: %v", err)

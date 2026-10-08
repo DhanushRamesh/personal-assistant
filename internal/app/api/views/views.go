@@ -9,6 +9,8 @@
 package views
 
 import (
+	"github.com/DhanushRamesh/personal-assistant/internal/base/client"
+	"github.com/DhanushRamesh/personal-assistant/internal/base/user"
 	"time"
 
 	"github.com/DhanushRamesh/personal-assistant/internal/base/chat"
@@ -142,7 +144,7 @@ type User struct {
 }
 
 // OfUser : Renders a user for the API.
-func OfUser(u *chat.User) User {
+func OfUser(u *user.User) User {
 	return User{ID: u.ID, Username: u.Username, CreatedAt: u.CreatedAt}
 }
 
@@ -165,7 +167,7 @@ type Client struct {
 
 // OfClient : Renders a client for the API. Current marks the one the request
 // was made from.
-func OfClient(d chat.Client, current bool) Client {
+func OfClient(d client.Client, current bool) Client {
 	return Client{
 		ID:                   d.ID,
 		Name:                 d.Name,

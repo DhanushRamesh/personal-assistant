@@ -3,6 +3,7 @@ package mysql_test
 import (
 	"context"
 	"errors"
+	"github.com/DhanushRamesh/personal-assistant/internal/base/user"
 	"io"
 	"log/slog"
 	"os"
@@ -10,7 +11,6 @@ import (
 	"testing"
 	"time"
 
-	"github.com/DhanushRamesh/personal-assistant/internal/base/chat"
 	chatmysql "github.com/DhanushRamesh/personal-assistant/internal/base/chat/mysql"
 	"github.com/DhanushRamesh/personal-assistant/internal/base/config"
 	"github.com/DhanushRamesh/personal-assistant/internal/base/embed"
@@ -46,7 +46,7 @@ func testEnv(key string) (string, bool) {
 // them collides between two users made in the same one. The remainder is the
 // random half.
 func uniqueName() string {
-	id := chat.NewUserID()
+	id := user.NewUserID()
 	return "tester" + id[len(id)-12:]
 }
 
@@ -77,9 +77,9 @@ func newStore(t *testing.T) (*memorymysql.Store, string) {
 		t.Fatalf("Migrate: %v", err)
 	}
 
-	owner, err := chat.NewUser(uniqueName(), "hash")
+	owner, err := user.NewUser(uniqueName(), "hash")
 	if err != nil {
-		t.Fatalf("chat.NewUser: %v", err)
+		t.Fatalf("user.NewUser: %v", err)
 	}
 	if err := chatmysql.NewRepository(db).CreateUser(context.Background(), owner); err != nil {
 		t.Fatalf("CreateUser: %v", err)

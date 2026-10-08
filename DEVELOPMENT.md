@@ -13890,6 +13890,42 @@ straight into internal/ belongs to no layer and would be checked by
 nothing.
 
 
+### Five jobs in one package, and one interface doing all of them
+
+chat held eight files and one shared unexported helper between them,
+which is a package in name only: Chat, Client, User, Conversation and
+Model are five independent types that happened to share a directory
+because they all touch the same database. Measured against the others
+-- runner shares thirty-nine helpers across seven files and is one
+mechanism -- chat was the one that would come apart almost for free.
+
+The interface was the real finding. Repository had twenty-six methods
+covering all five, so a handler that renamed a conversation was handed
+the means to create a user. It is now Chats, Conversations and
+Settings where the chat is, Users where the user is, Clients where the
+client is, and store.Repository joining them for the two
+implementations that really do store all of it.
+
+Why store is its own package: client needs Channel and Model from
+chat, so chat cannot import client, so the joined interface cannot
+live in either. stored is the same shape of answer for the one helper
+all four shared -- the millisecond the database keeps time at belongs
+to the columns, not to any of the types written into them.
+
+Splitting files into directories was the thing asked for and is not
+what Go does: a directory is a package, so aside.go in its own
+directory means thirty-nine unexported helpers in runner become public
+API. The package is the unit. What was wrong here was not that chat
+had eight files but that it had five responsibilities.
+
+The work was mostly renaming locals. A variable called client shadows
+the package called client, and a blanket rewrite turned
+chat.ErrRevoked into client.ErrRevoked inside functions where client
+was a row from the database. Renaming the local first and moving the
+types second is the order that works; twice it was done the other way
+and twice the file had to be restored from HEAD.
+
+
 ## 12. Maintaining this file
 
 When the owner states a preference, makes a decision, or corrects something,

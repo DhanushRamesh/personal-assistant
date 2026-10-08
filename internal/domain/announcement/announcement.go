@@ -17,6 +17,8 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"github.com/DhanushRamesh/personal-assistant/internal/base/client"
+	"github.com/DhanushRamesh/personal-assistant/internal/base/store"
 	"log/slog"
 	"strings"
 	"time"
@@ -123,7 +125,7 @@ type Writer struct {
 	Conversations conversation.Repository
 	// Clients : Where the person's clients are read from, to find the one
 	// that is listening. Required.
-	Clients chat.Repository
+	Clients store.Repository
 	// Location : The person's zone, which is what a written hour means.
 	// Nil is UTC.
 	Location *time.Location
@@ -241,7 +243,7 @@ func (w *Writer) found(ctx context.Context, userID string) (string, error) {
 		return "", err
 	}
 
-	var heard *chat.Client
+	var heard *client.Client
 	for i := range clients {
 		if clients[i].Channel != chat.ChannelVoice {
 			continue

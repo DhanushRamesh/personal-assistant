@@ -2,6 +2,8 @@ package mysql
 
 import (
 	"encoding/json"
+	"github.com/DhanushRamesh/personal-assistant/internal/base/client"
+	"github.com/DhanushRamesh/personal-assistant/internal/base/user"
 	"time"
 
 	"github.com/DhanushRamesh/personal-assistant/internal/base/chat"
@@ -85,8 +87,8 @@ type userRow struct {
 func (userRow) TableName() string { return "users" }
 
 // toUser : Converts a stored row back into a user.
-func (r *userRow) toUser() *chat.User {
-	return &chat.User{
+func (r *userRow) toUser() *user.User {
+	return &user.User{
 		ID:           r.ID,
 		Username:     r.Username,
 		PasswordHash: r.PasswordHash,
@@ -114,8 +116,8 @@ type clientRow struct {
 func (clientRow) TableName() string { return "clients" }
 
 // toClient : Converts a stored row back into a client.
-func (r *clientRow) toClient() *chat.Client {
-	return &chat.Client{
+func (r *clientRow) toClient() *client.Client {
+	return &client.Client{
 		ID:                   r.ID,
 		UserID:               value(r.UserID),
 		Name:                 r.Name,

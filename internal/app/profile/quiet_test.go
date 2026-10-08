@@ -6,8 +6,8 @@ import (
 	"testing"
 	"time"
 
-	"github.com/DhanushRamesh/personal-assistant/internal/base/event"
 	"github.com/DhanushRamesh/personal-assistant/internal/app/profile"
+	"github.com/DhanushRamesh/personal-assistant/internal/base/event"
 )
 
 // nights : A fortnight of somebody stopping at one in the morning

@@ -12,6 +12,7 @@
 package api
 
 import (
+	"github.com/DhanushRamesh/personal-assistant/internal/base/store"
 	"log/slog"
 	"net/http"
 	"time"
@@ -40,7 +41,6 @@ import (
 	vocabularyapi "github.com/DhanushRamesh/personal-assistant/internal/app/api/vocabulary"
 	"github.com/DhanushRamesh/personal-assistant/internal/app/tool"
 	"github.com/DhanushRamesh/personal-assistant/internal/base/announce"
-	"github.com/DhanushRamesh/personal-assistant/internal/base/chat"
 	"github.com/DhanushRamesh/personal-assistant/internal/base/conversation"
 	"github.com/DhanushRamesh/personal-assistant/internal/base/event"
 	"github.com/DhanushRamesh/personal-assistant/internal/base/llm"
@@ -77,7 +77,7 @@ type Options struct {
 	// DB : Checked by the readiness endpoint. Required.
 	DB Pinger
 	// Chats : Stores and retrieves chats. Required.
-	Chats chat.Repository
+	Chats store.Repository
 
 	// Messages : Reads what a turn wrote, for the timeline of an answer.
 	// Optional; without it a timeline carries only what the chat records.

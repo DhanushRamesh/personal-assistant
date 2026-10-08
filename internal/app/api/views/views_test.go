@@ -2,6 +2,8 @@ package views_test
 
 import (
 	"encoding/json"
+	"github.com/DhanushRamesh/personal-assistant/internal/base/client"
+	"github.com/DhanushRamesh/personal-assistant/internal/base/user"
 	"strings"
 	"testing"
 	"time"
@@ -80,9 +82,9 @@ func TestSummaryOmitsTheResponse(t *testing.T) {
 
 // The password hash must never be published, whatever else a user carries.
 func TestUserNeverPublishesTheHash(t *testing.T) {
-	user, err := chat.NewUser("tester", "$2a$04$averyrealisticlookinghashvalue")
+	user, err := user.NewUser("tester", "$2a$04$averyrealisticlookinghashvalue")
 	if err != nil {
-		t.Fatalf("chat.NewUser: %v", err)
+		t.Fatalf("user.NewUser: %v", err)
 	}
 
 	assertKeys(t, views.OfUser(user), "id", "username", "created_at")
@@ -98,9 +100,9 @@ func TestUserNeverPublishesTheHash(t *testing.T) {
 // The token is never published with a client: only its hash is stored, and
 // the one time the token itself appears is the login response.
 func TestClientNeverPublishesTheToken(t *testing.T) {
-	client, err := chat.NewClient(chat.NewUserID(), "my phone", "a-token-hash", chat.ChannelDirect)
+	client, err := client.NewClient(user.NewUserID(), "my phone", "a-token-hash", chat.ChannelDirect)
 	if err != nil {
-		t.Fatalf("chat.NewClient: %v", err)
+		t.Fatalf("client.NewClient: %v", err)
 	}
 	client.ActiveConversationID = chat.NewConversationID()
 
@@ -117,7 +119,7 @@ func TestClientNeverPublishesTheToken(t *testing.T) {
 // Revoked is published even when false, so a client that is fine is visibly
 // fine rather than merely silent about it.
 func TestClientAlwaysStatesWhetherRevoked(t *testing.T) {
-	client, _ := chat.NewClient(chat.NewUserID(), "", "hash", chat.ChannelDirect)
+	client, _ := client.NewClient(user.NewUserID(), "", "hash", chat.ChannelDirect)
 
 	got := keys(t, views.OfClient(*client, false))
 	if !got["revoked"] || !got["current"] {
@@ -130,7 +132,7 @@ func TestClientAlwaysStatesWhetherRevoked(t *testing.T) {
 }
 
 func TestConversationPublishesItsFields(t *testing.T) {
-	conversation := chat.NewConversation(chat.NewUserID(), "groceries")
+	conversation := chat.NewConversation(user.NewUserID(), "groceries")
 
 	assertKeys(t, views.OfConversation(*conversation, true),
 		"id", "title", "active", "created_at", "updated_at")

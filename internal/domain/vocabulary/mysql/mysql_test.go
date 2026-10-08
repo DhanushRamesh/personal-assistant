@@ -2,6 +2,7 @@ package mysql_test
 
 import (
 	"context"
+	"github.com/DhanushRamesh/personal-assistant/internal/base/user"
 	"io"
 	"log/slog"
 	"os"
@@ -9,7 +10,6 @@ import (
 	"testing"
 	"time"
 
-	"github.com/DhanushRamesh/personal-assistant/internal/base/chat"
 	chatmysql "github.com/DhanushRamesh/personal-assistant/internal/base/chat/mysql"
 	"github.com/DhanushRamesh/personal-assistant/internal/base/config"
 	"github.com/DhanushRamesh/personal-assistant/internal/base/storage"
@@ -39,7 +39,7 @@ func testEnv(key string) (string, bool) {
 
 // uniqueName : A username no other test will take.
 func uniqueName() string {
-	id := chat.NewUserID()
+	id := user.NewUserID()
 	return "tester" + id[len(id)-12:]
 }
 
@@ -70,9 +70,9 @@ func newStore(t *testing.T) (*vocabularymysql.Store, string) {
 		t.Fatalf("Migrate: %v", err)
 	}
 
-	owner, err := chat.NewUser(uniqueName(), "hash")
+	owner, err := user.NewUser(uniqueName(), "hash")
 	if err != nil {
-		t.Fatalf("chat.NewUser: %v", err)
+		t.Fatalf("user.NewUser: %v", err)
 	}
 	if err := chatmysql.NewRepository(db).CreateUser(context.Background(), owner); err != nil {
 		t.Fatalf("CreateUser: %v", err)

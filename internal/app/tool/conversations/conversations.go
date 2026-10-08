@@ -11,6 +11,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"github.com/DhanushRamesh/personal-assistant/internal/base/store"
 	"strconv"
 	"strings"
 	"time"
@@ -31,7 +32,7 @@ const Listed = 10
 //
 // Reading and reversible things may be said out loud. Deleting may not: on
 // voice a misheard sentence is the whole authorisation, and there is no undo.
-func All(repo chat.Repository) []tool.Tool {
+func All(repo store.Repository) []tool.Tool {
 	return []tool.Tool{
 		list(repo),
 		find(repo),
@@ -44,7 +45,7 @@ func All(repo chat.Repository) []tool.Tool {
 }
 
 // list : The conversations, newest first.
-func list(repo chat.Repository) tool.Tool {
+func list(repo store.Repository) tool.Tool {
 	return tool.Tool{
 		Name:     "conversation_list",
 		Domain:   "conversation",
@@ -90,7 +91,7 @@ func list(repo chat.Repository) tool.Tool {
 }
 
 // find : Conversations whose name matches what the person said.
-func find(repo chat.Repository) tool.Tool {
+func find(repo store.Repository) tool.Tool {
 	return tool.Tool{
 		Name:    "conversation_find",
 		Domain:  "conversation",
@@ -155,7 +156,7 @@ func find(repo chat.Repository) tool.Tool {
 }
 
 // switchTo : Make a conversation the one this client talks in.
-func switchTo(repo chat.Repository) tool.Tool {
+func switchTo(repo store.Repository) tool.Tool {
 	return tool.Tool{
 		Name:    "conversation_switch",
 		Domain:  "conversation",
@@ -222,7 +223,7 @@ func switchTo(repo chat.Repository) tool.Tool {
 }
 
 // create : Start a fresh conversation.
-func create(repo chat.Repository) tool.Tool {
+func create(repo store.Repository) tool.Tool {
 	return tool.Tool{
 		Name:    "conversation_new",
 		Domain:  "conversation",
@@ -284,7 +285,7 @@ func create(repo chat.Repository) tool.Tool {
 }
 
 // rename : Change what a conversation is called.
-func rename(repo chat.Repository) tool.Tool {
+func rename(repo store.Repository) tool.Tool {
 	return tool.Tool{
 		Name:     "conversation_rename",
 		Domain:   "conversation",
@@ -341,7 +342,7 @@ func rename(repo chat.Repository) tool.Tool {
 }
 
 // archive : Put a conversation away, or bring it back.
-func archive(repo chat.Repository) tool.Tool {
+func archive(repo store.Repository) tool.Tool {
 	return tool.Tool{
 		Name:    "conversation_archive",
 		Domain:  "conversation",
@@ -399,7 +400,7 @@ func archive(repo chat.Repository) tool.Tool {
 }
 
 // remove : Destroy a conversation and everything in it.
-func remove(repo chat.Repository) tool.Tool {
+func remove(repo store.Repository) tool.Tool {
 	return tool.Tool{
 		Name:    "conversation_delete",
 		Domain:  "conversation",
@@ -509,7 +510,7 @@ func refusal(err error, id string) string {
 // up and say the thing does not exist instead. An identifier that was
 // misremembered and one that was never real look the same from here, and
 // only one of them is worth an apology.
-func missing(ctx context.Context, repo chat.Repository, userID, said string) tool.Result {
+func missing(ctx context.Context, repo store.Repository, userID, said string) tool.Result {
 	found, err := listing(ctx, repo, userID, Listed, false)
 	if err != nil || len(found) == 0 {
 		return tool.Failed(fmt.Sprintf("There is no conversation with the identifier %q.", said))
@@ -526,7 +527,7 @@ func missing(ctx context.Context, repo chat.Repository, userID, said string) too
 }
 
 // listing : The conversations to choose from.
-func listing(ctx context.Context, repo chat.Repository, userID string, limit int, archived bool) ([]chat.Conversation, error) {
+func listing(ctx context.Context, repo store.Repository, userID string, limit int, archived bool) ([]chat.Conversation, error) {
 	if userID == "" {
 		return nil, errors.New("there is nobody to list conversations for")
 	}
@@ -641,7 +642,7 @@ func ago(at time.Time) string {
 // titleOf : What a conversation is called, or "untitled" when it has no
 // name. Read rather than assumed, because the point of asking twice is
 // to find out what actually happened.
-func titleOf(ctx context.Context, repo chat.Repository, userID, id string) string {
+func titleOf(ctx context.Context, repo store.Repository, userID, id string) string {
 	c, err := repo.GetConversation(ctx, id)
 	if err != nil || c == nil {
 		return "untitled"
@@ -653,7 +654,7 @@ func titleOf(ctx context.Context, repo chat.Repository, userID, id string) strin
 }
 
 // shelved : Whether a conversation is put away, in words.
-func shelved(ctx context.Context, repo chat.Repository, userID, id string) string {
+func shelved(ctx context.Context, repo store.Repository, userID, id string) string {
 	c, err := repo.GetConversation(ctx, id)
 	if err != nil || c == nil {
 		return "gone"
@@ -666,7 +667,7 @@ func shelved(ctx context.Context, repo chat.Repository, userID, id string) strin
 
 // howMany : How many conversations there are, for saying what a
 // deletion cost.
-func howMany(ctx context.Context, repo chat.Repository, userID string) int {
+func howMany(ctx context.Context, repo store.Repository, userID string) int {
 	found, err := repo.ListConversations(ctx, userID, chat.MaxListLimit)
 	if err != nil {
 		return 0
@@ -676,7 +677,7 @@ func howMany(ctx context.Context, repo chat.Repository, userID string) int {
 
 // activeOf : Which conversation a client is actually in, read back
 // rather than assumed.
-func activeOf(ctx context.Context, repo chat.Repository, userID, clientID string) string {
+func activeOf(ctx context.Context, repo store.Repository, userID, clientID string) string {
 	clients, err := repo.ListClients(ctx, userID, false)
 	if err != nil {
 		return ""

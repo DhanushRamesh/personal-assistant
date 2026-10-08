@@ -7,9 +7,9 @@ import (
 	"testing"
 	"time"
 
+	"github.com/DhanushRamesh/personal-assistant/internal/app/profile"
 	"github.com/DhanushRamesh/personal-assistant/internal/base/conversation"
 	"github.com/DhanushRamesh/personal-assistant/internal/base/event"
-	"github.com/DhanushRamesh/personal-assistant/internal/app/profile"
 )
 
 // india : The timezone their days are counted in. A week of evenings

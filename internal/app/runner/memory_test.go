@@ -2,6 +2,7 @@ package runner_test
 
 import (
 	"context"
+	"github.com/DhanushRamesh/personal-assistant/internal/base/user"
 	"strings"
 	"testing"
 	"time"
@@ -42,7 +43,7 @@ func withMemories(t *testing.T, p *recordingProvider, facts map[memory.Tier][][2
 		Store: store, Transcript: past, Embedder: embed.Fake{}, Logger: discard(),
 	}
 
-	userID := chat.NewUserID()
+	userID := user.NewUserID()
 	c := chat.NewConversation(userID, "Roof Quotes")
 	if err := repo.CreateConversation(ctx, c); err != nil {
 		t.Fatalf("CreateConversation: %v", err)
@@ -199,7 +200,7 @@ func TestAnotherPersonsMemoriesAreNotOffered(t *testing.T) {
 	p := &recordingProvider{}
 	h := withMemories(t, p, nil)
 
-	mine, err := memory.New(chat.NewUserID(), memory.TierRecall, "Roof quote", "forty thousand rupees")
+	mine, err := memory.New(user.NewUserID(), memory.TierRecall, "Roof quote", "forty thousand rupees")
 	if err != nil {
 		t.Fatalf("memory.New: %v", err)
 	}

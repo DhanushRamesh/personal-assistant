@@ -8,6 +8,8 @@ package clients
 import (
 	"context"
 	"errors"
+	"github.com/DhanushRamesh/personal-assistant/internal/base/client"
+	"github.com/DhanushRamesh/personal-assistant/internal/base/store"
 	"log/slog"
 	"net/http"
 	"strings"
@@ -72,7 +74,7 @@ type PersonaRequest struct {
 // Handler : Serves the client endpoints.
 type Handler struct {
 	httpx.Responder
-	repo chat.Repository
+	repo store.Repository
 	// models : What the configured provider can actually reach. Offering
 	// anything else would offer a model the server cannot call.
 	models []llm.Model
@@ -88,7 +90,7 @@ type Handler struct {
 // provider in use can reach, and the one it falls back to.
 func New(
 	logger *slog.Logger,
-	repo chat.Repository,
+	repo store.Repository,
 	models []llm.Model,
 	defaultModel string,
 	manner *persona.Setting,
@@ -176,7 +178,7 @@ func (h *Handler) SetChannel(w http.ResponseWriter, r *http.Request) {
 	c := authn.Of(ctx)
 	id := chi.URLParam(r, "id")
 
-	if !chat.ValidClientID(id) {
+	if !client.ValidClientID(id) {
 		httpx.WriteError(ctx, w, http.StatusNotFound, "No such client.")
 		return
 	}
@@ -227,7 +229,7 @@ func (h *Handler) Revoke(w http.ResponseWriter, r *http.Request) {
 	c := authn.Of(ctx)
 	id := chi.URLParam(r, "id")
 
-	if !chat.ValidClientID(id) {
+	if !client.ValidClientID(id) {
 		httpx.WriteError(ctx, w, http.StatusNotFound, "No such client.")
 		return
 	}
@@ -270,7 +272,7 @@ func (h *Handler) SetModel(w http.ResponseWriter, r *http.Request) {
 	c := authn.Of(ctx)
 	id := chi.URLParam(r, "id")
 
-	if !chat.ValidClientID(id) {
+	if !client.ValidClientID(id) {
 		httpx.WriteError(ctx, w, http.StatusNotFound, "No such client.")
 		return
 	}

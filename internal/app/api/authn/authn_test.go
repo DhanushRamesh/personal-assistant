@@ -1,6 +1,7 @@
 package authn_test
 
 import (
+	"github.com/DhanushRamesh/personal-assistant/internal/base/client"
 	"net/http"
 	"os"
 	"strings"
@@ -39,7 +40,7 @@ func TestLoginRegistersTheClientAndIssuesAToken(t *testing.T) {
 	if out.User.Username != apitest.Username {
 		t.Errorf("username = %q, want %q", out.User.Username, apitest.Username)
 	}
-	if !chat.ValidClientID(out.Client.ID) {
+	if !client.ValidClientID(out.Client.ID) {
 		t.Errorf("client id = %q, want a client identifier", out.Client.ID)
 	}
 	if out.Client.Name != "my phone" {
@@ -146,7 +147,7 @@ func TestMalformedOrUnissuedTokensAreRefused(t *testing.T) {
 func TestLoginRejectsBadRequests(t *testing.T) {
 	e := apitest.New(t)
 
-	long := strings.Repeat("a", chat.MaxClientNameRunes+1)
+	long := strings.Repeat("a", client.MaxClientNameRunes+1)
 	cases := map[string]string{
 		"not json":         `nonsense`,
 		"unknown field":    `{"username":"x","password":"y","admin":true}`,
@@ -193,7 +194,7 @@ func TestSigningInAgainReusesTheClient(t *testing.T) {
 func TestAnUnknownClientIDRegistersANewOne(t *testing.T) {
 	e := apitest.New(t)
 
-	out := e.LoginAsClient(t, chat.NewClientID(), "a new browser")
+	out := e.LoginAsClient(t, client.NewClientID(), "a new browser")
 
 	if out.Client.ID == "" {
 		t.Fatal("no client was registered")

@@ -2,6 +2,8 @@ package announcement_test
 
 import (
 	"context"
+	"github.com/DhanushRamesh/personal-assistant/internal/base/client"
+	"github.com/DhanushRamesh/personal-assistant/internal/base/user"
 	"strings"
 	"testing"
 	"time"
@@ -19,11 +21,11 @@ func at() time.Time { return time.Date(2026, 9, 27, 10, 20, 0, 0, time.UTC) }
 func india() *time.Location { return time.FixedZone("IST", 5*3600+1800) }
 
 // writer : A writer over a fresh repository, with a user already in it.
-func writer(t *testing.T) (*announcement.Writer, *memory.Repository, *chat.User) {
+func writer(t *testing.T) (*announcement.Writer, *memory.Repository, *user.User) {
 	t.Helper()
 	repo := memory.New()
 
-	user := &chat.User{ID: "usr_test"}
+	user := &user.User{ID: "usr_test"}
 	if err := repo.CreateUser(context.Background(), user); err != nil {
 		t.Fatalf("creating a user: %v", err)
 	}
@@ -36,10 +38,10 @@ func writer(t *testing.T) (*announcement.Writer, *memory.Repository, *chat.User)
 	}, repo, user
 }
 
-// client : Registers one on the given channel.
-func client(t *testing.T, repo *memory.Repository, userID, name string, ch chat.Channel) *chat.Client {
+// registerClient : Registers one on the given channel.
+func registerClient(t *testing.T, repo *memory.Repository, userID, name string, ch chat.Channel) *client.Client {
 	t.Helper()
-	c := &chat.Client{UserID: userID, Name: name, Channel: ch}
+	c := &client.Client{UserID: userID, Name: name, Channel: ch}
 	if err := repo.CreateClient(context.Background(), c); err != nil {
 		t.Fatalf("creating a client: %v", err)
 	}
@@ -47,7 +49,7 @@ func client(t *testing.T, repo *memory.Repository, userID, name string, ch chat.
 }
 
 // reread : The client as it now stands.
-func reread(t *testing.T, repo *memory.Repository, userID, clientID string) chat.Client {
+func reread(t *testing.T, repo *memory.Repository, userID, clientID string) client.Client {
 	t.Helper()
 	clients, err := repo.ListClients(context.Background(), userID, false)
 	if err != nil {
@@ -59,14 +61,14 @@ func reread(t *testing.T, repo *memory.Repository, userID, clientID string) chat
 		}
 	}
 	t.Fatalf("client %s is gone", clientID)
-	return chat.Client{}
+	return client.Client{}
 }
 
 // What was said aloud is written into the conversation the voice client is
 // talking in, which is where the reply to it will arrive.
 func TestAnAsideLandsWhereTheReplyWill(t *testing.T) {
 	w, repo, user := writer(t)
-	voice := client(t, repo, user.ID, "home assistant", chat.ChannelVoice)
+	voice := registerClient(t, repo, user.ID, "home assistant", chat.ChannelVoice)
 
 	w.Arrived(context.Background(), user.ID, "You should have heard this at 3:50 pm, sir. Call the bank.")
 
@@ -99,7 +101,7 @@ func TestAnAsideLandsWhereTheReplyWill(t *testing.T) {
 // unanswerable.
 func TestAnAsideCarriesTheHourItWasSaid(t *testing.T) {
 	w, repo, user := writer(t)
-	client(t, repo, user.ID, "home assistant", chat.ChannelVoice)
+	registerClient(t, repo, user.ID, "home assistant", chat.ChannelVoice)
 
 	w.Arrived(context.Background(), user.ID, "Good afternoon, sir.")
 
@@ -132,7 +134,7 @@ func TestAnAsideCarriesTheHourItWasSaid(t *testing.T) {
 // to write down and no conversation is disturbed.
 func TestNothingIsWrittenWhenNobodyIsListening(t *testing.T) {
 	w, repo, user := writer(t)
-	typed := client(t, repo, user.ID, "chrome", chat.ChannelDirect)
+	typed := registerClient(t, repo, user.ID, "chrome", chat.ChannelDirect)
 
 	w.Arrived(context.Background(), user.ID, "Good afternoon, sir.")
 

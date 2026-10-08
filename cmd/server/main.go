@@ -7,6 +7,8 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"github.com/DhanushRamesh/personal-assistant/internal/base/client"
+	"github.com/DhanushRamesh/personal-assistant/internal/base/store"
 	"log/slog"
 	"net/http"
 	"os"
@@ -21,6 +23,7 @@ import (
 
 	"github.com/DhanushRamesh/personal-assistant/internal/app/api"
 	"github.com/DhanushRamesh/personal-assistant/internal/app/api/presence"
+	"github.com/DhanushRamesh/personal-assistant/internal/app/profile"
 	"github.com/DhanushRamesh/personal-assistant/internal/app/runner"
 	"github.com/DhanushRamesh/personal-assistant/internal/app/tool"
 	calendartool "github.com/DhanushRamesh/personal-assistant/internal/app/tool/calendar"
@@ -82,7 +85,6 @@ import (
 	"github.com/DhanushRamesh/personal-assistant/internal/domain/outbox"
 	outboxmysql "github.com/DhanushRamesh/personal-assistant/internal/domain/outbox/mysql"
 	"github.com/DhanushRamesh/personal-assistant/internal/domain/persona"
-	"github.com/DhanushRamesh/personal-assistant/internal/app/profile"
 	"github.com/DhanushRamesh/personal-assistant/internal/domain/remind"
 	remindmysql "github.com/DhanushRamesh/personal-assistant/internal/domain/remind/mysql"
 	"github.com/DhanushRamesh/personal-assistant/internal/domain/situation"
@@ -1330,7 +1332,7 @@ func catchUpEmbeddings(ctx context.Context, remembering *memory.Recall, logger *
 // What was last chosen, or configuration when nothing has been. A database
 // that will not answer is not a reason to refuse to start: the configured
 // manner is a working assistant, and the next choice will store itself.
-func startingPersona(ctx context.Context, repo chat.Repository, cfg config.Config, logger *slog.Logger) string {
+func startingPersona(ctx context.Context, repo store.Repository, cfg config.Config, logger *slog.Logger) string {
 	stored, err := repo.Setting(ctx, persona.SettingName)
 	if err != nil {
 		logger.Warn("cannot read the stored manner, using the configured one",
@@ -1899,7 +1901,7 @@ func lastSeenAt(ctx context.Context, reported interface {
 // else from the repository behind them.
 type subscribed interface {
 	Talkers(ctx context.Context, since time.Time) ([]string, error)
-	ListClients(ctx context.Context, userID string, revoked bool) ([]chat.Client, error)
+	ListClients(ctx context.Context, userID string, revoked bool) ([]client.Client, error)
 }
 
 // subscribers : Every client of this person, which is every client

@@ -9,6 +9,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"github.com/DhanushRamesh/personal-assistant/internal/base/store"
 	"log/slog"
 	"strings"
 	"sync"
@@ -66,7 +67,7 @@ type Publisher interface {
 // Options : The dependencies and settings a Runner is built from.
 type Options struct {
 	// Repository : Stores chats and their messages. Required.
-	Repository chat.Repository
+	Repository store.Repository
 	// Environment : Where prompts are sent to be answered. Required.
 	Environment environment.Environment
 	// Logger : Receives execution records. Required.
@@ -150,7 +151,7 @@ type Aside interface {
 //
 // It is safe for concurrent use.
 type Runner struct {
-	repo            chat.Repository
+	repo            store.Repository
 	messages        conversation.Repository
 	announcements   Announcements
 	publishing      Publishing
