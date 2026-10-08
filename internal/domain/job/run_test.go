@@ -28,23 +28,34 @@ type hands struct {
 	got     map[string]string
 	stopAt  string
 	failAt  string
-	failure error
+	// withhold : What the conditions answer, where a test is about
+	// a rule that does not hold. Empty is a rule that does.
+	withhold string
+	failure  error
 }
 
-func (h *hands) Do(_ context.Context, run job.Turn, s job.Step) (job.Outcome, error) {
+func (h *hands) Holds(_ context.Context, _ string, _ job.Occasion) (bool, string, error) {
+	if h.withhold != "" {
+		h.did = append(h.did, "when:"+h.withhold)
+		return false, h.withhold, nil
+	}
+	return true, "", nil
+}
+
+func (h *hands) Do(_ context.Context, run job.Turn, s job.Act) (job.Outcome, error) {
 	h.saw = append(h.saw, len(run.Already))
 	h.heard = append(h.heard, job.Tools(run.Already))
 	h.carried = append(h.carried, run.Already)
 	h.before = append(h.before, run.Before)
-	what := string(s.Do) + ":" + s.Say + s.Tool + s.When
+	what := s.Do + ":" + s.Text + s.Use
 	h.did = append(h.did, what)
 	if h.failAt != "" && strings.Contains(what, h.failAt) {
 		return job.Outcome{}, h.failure
 	}
 	if h.stopAt != "" && strings.Contains(what, h.stopAt) {
-		return job.Outcome{Stop: true, Why: "the check " + what + " did not pass"}, nil
+		return job.Outcome{Stop: true, Why: what + " found nothing"}, nil
 	}
-	return job.Outcome{Got: h.got[s.Tool], Said: h.says}, nil
+	return job.Outcome{Got: h.got[s.Use], Said: h.says}, nil
 }
 
 // runner : A runner over a store, with the clock held still.
@@ -76,7 +87,7 @@ func TestASequenceRunsInOrder(t *testing.T) {
 	if got := runner(s, h, noon).Once(context.Background()); got.Ran != 1 {
 		t.Fatalf("pass = %+v, want it run", got)
 	}
-	if len(h.did) != 2 || h.did[0] != "announce:take the tablets" || h.did[1] != "tool:alarm_set" {
+	if len(h.did) != 2 || h.did[0] != "say:take the tablets" || h.did[1] != "tool:alarm_set" {
 		t.Errorf("the sequence ran as %v", h.did)
 	}
 }
@@ -375,7 +386,11 @@ func TestASilentRunIsNotRecordedAsHavingSpoken(t *testing.T) {
 // memory forward, as the real tool and write steps do.
 type stops struct{}
 
-func (stops) Do(_ context.Context, run job.Turn, _ job.Step) (job.Outcome, error) {
+func (stops) Holds(_ context.Context, _ string, _ job.Occasion) (bool, string, error) {
+	return true, "", nil
+}
+
+func (stops) Do(_ context.Context, run job.Turn, _ job.Act) (job.Outcome, error) {
 	return job.Outcome{Stop: true, Why: "situation_find found nothing", Said: run.Before}, nil
 }
 
@@ -415,8 +430,8 @@ func TestATrialSaysWhatItWouldSayAndSaysNothing(t *testing.T) {
 	}
 	tried := running.Try(context.Background(), j)
 
-	if len(tried.Steps) != 2 {
-		t.Fatalf("it ran %d steps, want both", len(tried.Steps))
+	if len(tried.Acts) != 2 {
+		t.Fatalf("it ran %d steps, want both", len(tried.Acts))
 	}
 	if tried.Stopped {
 		t.Error("it stopped, and nothing in it stops")
@@ -475,7 +490,11 @@ type remembers struct {
 	trying bool
 }
 
-func (r *remembers) Do(_ context.Context, run job.Turn, _ job.Step) (job.Outcome, error) {
+func (r *remembers) Holds(_ context.Context, _ string, _ job.Occasion) (bool, string, error) {
+	return true, "", nil
+}
+
+func (r *remembers) Do(_ context.Context, run job.Turn, _ job.Act) (job.Outcome, error) {
 	r.before, r.trying = run.Before, run.Trying
 	return job.Outcome{}, nil
 }
@@ -591,7 +610,8 @@ func (w *writes) Wrote(_ context.Context, r job.Record) error {
 // rewritten is exactly the occasion this is for, and a name is the
 // one thing that will not survive it.
 func TestARunWritesDownWhatEachStepDid(t *testing.T) {
-	s, h := inmemory.New(), &hands{stopAt: "battery.level >= 5", says: "never said"}
+	s, h := inmemory.New(), &hands{
+		withhold: "the condition battery.level >= 5 did not hold", says: "never said"}
 	j := put(t, s, "every 10m",
 		job.Step{Do: job.Call, Tool: "event_recent"},
 		job.Step{Do: job.Check, When: "battery.level >= 5"},
@@ -616,23 +636,26 @@ func TestARunWritesDownWhatEachStepDid(t *testing.T) {
 	// The step that ended it, and every step before it. A record
 	// of only the last one could not say what had already been
 	// done when it stopped.
-	if len(rec.Steps) != 2 {
-		t.Fatalf("recorded %d steps, want 2: %+v", len(rec.Steps), rec.Steps)
+	// The conditions are answered before any step, so the record
+	// begins with them and the steps that never ran are not in it.
+	if len(rec.Steps) != 1 {
+		t.Fatalf("recorded %d steps, want only the conditions: %+v", len(rec.Steps), rec.Steps)
 	}
-	if rec.Steps[0].Do != job.Call || rec.Steps[0].Use != "event_recent" ||
-		rec.Steps[0].Came != job.Went {
-		t.Errorf("first step recorded as %+v", rec.Steps[0])
+	if rec.Steps[0].Do != "when" || rec.Steps[0].Came != job.Halted {
+		t.Errorf("the conditions recorded as %+v", rec.Steps[0])
 	}
-	if rec.Steps[1].Do != job.Check || rec.Steps[1].Came != job.Halted {
-		t.Errorf("the step that stopped it recorded as %+v", rec.Steps[1])
+	if !strings.Contains(rec.Steps[0].When, "battery.level >= 5") {
+		t.Errorf("did not keep which condition stopped it: %q", rec.Steps[0].When)
 	}
-	if rec.Steps[1].When != "battery.level >= 5" {
-		t.Errorf("did not keep which condition stopped it: %q", rec.Steps[1].When)
+	if rec.Steps[0].Why == "" {
+		t.Error("did not say why the conditions did not hold")
 	}
-	// The write step never ran, so it is not in the record.
+	// Nothing was fetched, which is the point of asking first: the
+	// old shape ran the lookup and then found it had nothing to
+	// say, and one live rule spent 1255ms a time doing it.
 	for _, st := range rec.Steps {
-		if st.Do == job.Write {
-			t.Error("recorded a step that never ran")
+		if st.Do == job.Call || st.Do == job.Write {
+			t.Errorf("recorded a step that should never have run: %+v", st)
 		}
 	}
 }

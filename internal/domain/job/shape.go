@@ -718,3 +718,37 @@ func (w Where) sound() error {
 	_, err := w.Gate()
 	return err
 }
+
+// Describe : The conditions in the words somebody would say, for
+// reading a rule back and for the record of a run that said
+// nothing.
+func (o Occasion) Describe() string {
+	where := o.where()
+	if len(where) == 0 {
+		return "nothing to check"
+	}
+	join := " and "
+	if len(o.Any) > 0 {
+		join = " " + strings.TrimSpace(Or) + " "
+	}
+	parts := make([]string, 0, len(where))
+	for _, w := range where {
+		parts = append(parts, w.Describe())
+	}
+	return strings.Join(parts, join)
+}
+
+// Repeats : Whether any of this rule's clocks comes round again.
+//
+// A once is finished when it has run; an every, an at or a cron is
+// not. A rule with both is not finished until the once is the only
+// one left, which is why this asks whether any of them repeats
+// rather than whether the first does.
+func (o Occasion) Repeats() bool {
+	for _, h := range o.Ticking() {
+		if Repeats(h.Schedule()) {
+			return true
+		}
+	}
+	return false
+}

@@ -150,7 +150,20 @@ type Job struct {
 	Kind string
 
 	// Schedule : When to run, as it was written.
+	//
+	// The older shape, kept for rules written before the structured
+	// one and for reading a converted rule back aloud. [Job.When]
+	// is what the engine uses.
 	Schedule string
+	// When : When to look and whether it holds.
+	//
+	// Built from [Job.Schedule] and the check steps where a rule
+	// has not been converted, so the engine knows one shape while
+	// the rows arrive in two.
+	When Occasion
+	// Perform : What to do when it holds, with no condition left
+	// among them.
+	Perform []Act
 	// Next : When it next runs.
 	Next time.Time
 	// Steps : What to do, in order.
@@ -333,10 +346,22 @@ func New(id, userID, name, kind, schedule string, steps []Step, from time.Time) 
 	if !Watches(schedule) && !Ticks(schedule) {
 		return Job{}, fmt.Errorf("%w: %q", ErrUnreadable, schedule)
 	}
-	return Job{
+	j := Job{
 		ID: id, UserID: userID, Name: name, Kind: kind,
 		Schedule: schedule, Next: next, Steps: steps, State: Active,
-	}, nil
+	}
+	// The structured half, worked out from the written one. A rule
+	// made the old way is a rule in the new shape from the moment
+	// it exists, so nothing downstream has to know which it was.
+	when, acts, err := Reshape(j)
+	if err != nil {
+		return Job{}, err
+	}
+	if err := when.Sound(); err != nil {
+		return Job{}, err
+	}
+	j.When, j.Perform = when, acts
+	return j, nil
 }
 
 // Speaks : Whether any of this rule's steps says anything.

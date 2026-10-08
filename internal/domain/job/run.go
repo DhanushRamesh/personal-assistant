@@ -284,6 +284,15 @@ type Journal interface {
 var ErrBlind = errors.New("job: a step that was meant to find something failed")
 
 type Doer interface {
+	// Holds : Whether a rule's conditions hold, and which one did
+	// not when they do not.
+	//
+	// On the doer rather than the runner because answering it
+	// needs the readings *and* whether anybody is in the room, and
+	// the one place that has both is the thing that was already
+	// carrying out check steps.
+	Holds(ctx context.Context, userID string, when Occasion) (bool, string, error)
+
 	// Do : Carries out one step for one person. Returns a stop when
 	// the rest of the sequence should not run.
 	//
@@ -298,7 +307,7 @@ type Doer interface {
 	// that forgot its own first step could never satisfy that. It
 	// is also what makes [list, add] mean anything, which is the
 	// reason sequences exist.
-	Do(ctx context.Context, t Turn, s Step) (Outcome, error)
+	Do(ctx context.Context, t Turn, a Act) (Outcome, error)
 }
 
 // Runner : Runs jobs when their time comes.
@@ -443,20 +452,35 @@ func (r *Runner) Landed(ctx context.Context, userID string, kinds []string) Pass
 
 	now := r.clock()
 	for _, j := range watching {
-		gate, err := Watched(j.Schedule)
+		hooks, gates, err := j.When.Watching()
 		if err != nil {
-			r.note("a rule's condition can no longer be read", j, err.Error())
+			r.note("a rule's trigger can no longer be read", j, err.Error())
 			continue
 		}
-		if !landed[gate.Needs()] {
-			continue
+		// Several hooks mean any one of them fires it, so the
+		// first that both landed and crossed wins and the rest are
+		// not asked. One arrival is one occasion however many
+		// hooks it satisfies.
+		fired, wait := false, time.Duration(0)
+		for i, gate := range gates {
+			if !landed[gate.Needs()] {
+				continue
+			}
+			crossed, err := r.crossed(ctx, userID, gate, now)
+			if err != nil {
+				r.log("cannot read what a rule is waiting on", err)
+				continue
+			}
+			if !crossed {
+				continue
+			}
+			fired = true
+			if held, err := hooks[i].Waits(); err == nil {
+				wait = held
+			}
+			break
 		}
-		crossed, err := r.crossed(ctx, userID, gate, now)
-		if err != nil {
-			r.log("cannot read what a rule is waiting on", err)
-			continue
-		}
-		if !crossed {
+		if !fired {
 			continue
 		}
 
@@ -468,7 +492,7 @@ func (r *Runner) Landed(ctx context.Context, userID string, kinds []string) Pass
 		// right way round: plugged in, pulled out, plugged in
 		// again is a fresh fifteen minutes and not the tail of the
 		// old one.
-		if wait, err := Waits(j.Schedule); err == nil && wait > 0 {
+		if wait > 0 {
 			if err := r.Store.Arm(ctx, j.ID, now.Add(wait)); err != nil {
 				r.log("cannot set when a waiting rule runs", err)
 				continue
@@ -531,8 +555,8 @@ type Trial struct {
 	Stopped bool
 	// Why : Which step stopped it, or what went wrong.
 	Why string
-	// Steps : What each step did, in order, as far as it got.
-	Steps []Step
+	// Acts : What each step did, in order, as far as it got.
+	Acts []Act
 	// Did : What came of each step, beside it.
 	Did []string
 }
@@ -556,12 +580,30 @@ func (r *Runner) Try(ctx context.Context, j Job) Trial {
 		return out
 	}
 
+	// The conditions first, as a real run asks them, so a trial
+	// says "it would not have held, because this" rather than
+	// walking steps a run would never have reached.
+	if len(j.When.All) > 0 || len(j.When.Any) > 0 {
+		held, says, err := r.Doer.Holds(ctx, j.UserID, j.When)
+		switch {
+		case err != nil:
+			out.Why = err.Error()
+			out.Did = append(out.Did, err.Error())
+			return out
+		case !held:
+			out.Why = says
+			out.Did = append(out.Did, says)
+			return out
+		}
+		out.Did = append(out.Did, "the conditions held")
+	}
+
 	var already []Ran
-	for _, step := range j.Steps {
+	for _, act := range j.Perform {
 		done, err := r.Doer.Do(ctx,
 			Turn{UserID: j.UserID, Already: already, Before: j.Said,
-				Worth: j.Worth(), Anywhere: j.Anywhere, Trying: true}, step)
-		out.Steps = append(out.Steps, step)
+				Worth: j.Worth(), Anywhere: j.Anywhere, Trying: true}, act)
+		out.Acts = append(out.Acts, act)
 
 		switch {
 		case err != nil:
@@ -577,8 +619,8 @@ func (r *Runner) Try(ctx context.Context, j Job) Trial {
 			out.Did = append(out.Did, "")
 		}
 
-		if step.Do == Call && step.Tool != "" {
-			already = append(already, Ran{Tool: step.Tool, Got: done.Got})
+		if act.Do == DoTool && act.Use != "" {
+			already = append(already, Ran{Tool: act.Use, Got: done.Got})
 		}
 		if err != nil {
 			continue
@@ -655,15 +697,58 @@ func (r *Runner) one(ctx context.Context, j Job, now time.Time, pass *Pass) {
 	// What each step did, collected as it goes. A run is written
 	// down once at the end, so this is the only record of the
 	// steps that came before whichever one ended it.
-	tried := make([]Tried, 0, len(j.Steps))
+	tried := make([]Tried, 0, len(j.Perform)+1)
 	began := r.clock()
-	for _, step := range j.Steps {
+
+	// Whether it holds at all, before anything is done. Every
+	// condition is a precondition -- a condition can only read a
+	// source, never what a step returned, so it would give the
+	// same answer wherever it sat -- and asking them all first is
+	// what stops a rule fetching a diary to find out it had
+	// nothing to say.
+	if len(j.When.All) > 0 || len(j.When.Any) > 0 {
+		at := r.clock()
+		held, says, err := r.Doer.Holds(ctx, j.UserID, j.When)
+		note := Tried{Do: "when", When: j.When.Describe(), Came: Went,
+			Took: r.clock().Sub(at).Milliseconds()}
+		switch {
+		case err != nil:
+			note.Came, note.Why = Errored, shorten(err.Error())
+		case !held:
+			note.Came, note.Why = Halted, shorten(says)
+		}
+		tried = append(tried, note)
+		if err != nil {
+			pass.Failed++
+			pass.Stopped++
+			r.note("a rule's conditions could not be read, so it said nothing", j, err.Error())
+			r.wrote(ctx, Record{
+				UserID: j.UserID, JobID: j.ID, Name: j.Name,
+				Schedule: j.Schedule, At: now, Took: r.clock().Sub(began),
+				Steps: tried, Why: err.Error(), Stopped: true, Failed: true,
+			})
+			r.settle(ctx, j, now, err.Error(), j.Said)
+			return
+		}
+		if !held {
+			pass.Stopped++
+			r.wrote(ctx, Record{
+				UserID: j.UserID, JobID: j.ID, Name: j.Name,
+				Schedule: j.Schedule, At: now, Took: r.clock().Sub(began),
+				Steps: tried, Why: says, Stopped: true,
+			})
+			r.settle(ctx, j, now, says, j.Said)
+			return
+		}
+	}
+
+	for _, act := range j.Perform {
 		at := r.clock()
 		done, err := r.Doer.Do(ctx,
 			Turn{UserID: j.UserID, Already: already, Before: j.Said,
-				Worth: j.Worth(), Anywhere: j.Anywhere}, step)
+				Worth: j.Worth(), Anywhere: j.Anywhere}, act)
 		note := Tried{
-			Do: step.Do, Use: step.Tool, When: step.When, Came: Went,
+			Do: Task(act.Do), Use: act.Use, Came: Went,
 			Took: r.clock().Sub(at).Milliseconds(),
 		}
 		switch {
@@ -673,15 +758,15 @@ func (r *Runner) one(ctx context.Context, j Job, now time.Time, pass *Pass) {
 			note.Came, note.Why = Halted, shorten(done.Why)
 		}
 		tried = append(tried, note)
-		if step.Do == Call && step.Tool != "" {
-			already = append(already, Ran{Tool: step.Tool, Got: done.Got})
+		if act.Do == DoTool && act.Use != "" {
+			already = append(already, Ran{Tool: act.Use, Got: done.Got})
 		}
 		if err != nil {
 			pass.Failed++
 			failed = true
 			why = err.Error()
 
-			// A check that could not be read stops the sequence.
+			// A read that failed stops the sequence.
 			// Everything else carries on: a phone alarm that could
 			// not be set must not swallow the words that go with
 			// it, which is the rule the reminder and its alarm
@@ -697,15 +782,11 @@ func (r *Runner) one(ctx context.Context, j Job, now time.Time, pass *Pass) {
 			//
 			// Nothing else in the sequence can be wrong in this
 			// direction. A lookup that fails leaves the steps after
-			// it less to go on; a check that fails leaves them
-			// unguarded.
-			if step.Do == Check {
-				pass.Stopped++
-				stopped = true
-				r.note("a rule's condition could not be read, so it said nothing", j, why)
-				break
-			}
-
+			// it less to go on; a condition that fails leaves them
+			// unguarded -- and that one is answered before any of
+			// this, where a rule whose conditions cannot be read
+			// does nothing at all.
+			//
 			// A lookup that failed. Everything after it would be
 			// working from what it did not return, and a write
 			// step cannot tell the difference between a thing
@@ -790,7 +871,8 @@ func (r *Runner) settle(ctx context.Context, j Job, now time.Time, why, said str
 	// for the next reading that crosses its line -- unless it has
 	// a clock as well, in which case the clock decides when it
 	// next comes round and the trigger goes on watching between.
-	if Watches(j.Schedule) && !Ticks(j.Schedule) {
+	hooks, _, _ := j.When.Watching()
+	if len(hooks) > 0 && len(j.When.Ticking()) == 0 {
 		if err := r.Store.Ran(ctx, j.ID, time.Time{}, Active, why, said, now); err != nil {
 			r.log("cannot record that a job ran", err)
 		}
@@ -798,8 +880,10 @@ func (r *Runner) settle(ctx context.Context, j Job, now time.Time, why, said str
 	}
 
 	state, next := Done, time.Time{}
-	if Repeats(j.Schedule) {
-		following, err := Following(j.Schedule, now, r.where())
+	if j.When.Repeats() {
+		// The soonest of its clocks, not the first written. Several
+		// hooks mean any one of them fires it.
+		following, err := j.When.Next(now, r.where())
 		if err != nil {
 			// A schedule that parsed when it was written and does
 			// not now is a job that would be read and skipped for

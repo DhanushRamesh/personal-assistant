@@ -14626,6 +14626,50 @@ a bare number instead, and it was found by reading the output
 rather than by a test, which is why the output was read.
 
 
+### The engine reads one shape while the table holds two
+
+The conversion, wired. Every rule is now a `when` and a `perform`
+by the time anything looks at it, whichever shape its row is in.
+
+Three things made it safe to change how sixteen live rules are
+evaluated in one go.
+
+The leaves lower back to a `Gate`. Every operator, every source,
+the counting and the Home Assistant reading are the ones already
+written and tested, and none of them had to learn that a rule now
+arrives as a tree. What is new is the walking, not what is at the
+bottom of it.
+
+A row with no structured columns is reshaped as it is read. So the
+engine knows one shape while the table holds two, the columns could
+be backfilled afterwards rather than before, and a rule written
+before any of this goes on working whether or not anybody converts
+it. `job.New` does the same, so a rule made the old way is in the
+new shape from the moment it exists.
+
+And the run journal, written first for exactly this. The conversion
+can be compared against what each rule did before it, by id, across
+a rewrite that changed both the name and the shape.
+
+What changed in behaviour, which is the part worth stating plainly:
+
+Conditions are answered before anything is done, because every one
+of them was a precondition anyway. A rule that does not hold now
+fetches nothing at all -- where the old shape ran the lookups
+written before the check and then found it had nothing to say.
+
+All the conditions are fetched together. A rule asking three things
+about the battery reads it once; each check step used to be
+answered on its own and knew nothing of the ones beside it.
+
+The next moment is the soonest clock rather than the first written,
+which only matters because a rule may now have more than one.
+
+And `Watching` returns every event hook rather than one, so two
+triggers on a single rule exist. The old shape held a schedule, and
+a schedule is one sentence with one trigger in it.
+
+
 ## 12. Maintaining this file
 
 When the owner states a preference, makes a decision, or corrects something,

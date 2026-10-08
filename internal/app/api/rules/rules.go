@@ -97,14 +97,21 @@ func (h *Handler) Try(w http.ResponseWriter, r *http.Request) {
 
 	tried := h.trier.Try(ctx, want)
 	out := TriedResponse{Said: tried.Said, Stopped: tried.Stopped, Why: tried.Why}
-	out.Steps = make([]Step, 0, len(tried.Steps))
-	for i, step := range tried.Steps {
-		did := ""
-		if i < len(tried.Did) {
-			did = tried.Did[i]
+	// The conditions are answered before any step, so a trial that
+	// stopped on them has one more thing to say than it has acts.
+	// It is shown first, where it happened.
+	out.Steps = make([]Step, 0, len(tried.Acts)+1)
+	for i, did := range tried.Did {
+		if i >= len(tried.Acts) {
+			break
 		}
 		out.Steps = append(out.Steps, Step{
-			Do: string(step.Do), Says: says(step), Did: did,
+			Do: tried.Acts[i].Do, Says: says(tried.Acts[i]), Did: did,
+		})
+	}
+	if len(tried.Did) > len(tried.Acts) {
+		out.Steps = append(out.Steps, Step{
+			Do: "when", Says: want.When.Describe(), Did: tried.Did[len(tried.Acts)],
 		})
 	}
 	httpx.WriteJSON(ctx, w, http.StatusOK, out)
@@ -302,10 +309,15 @@ func described(j job.Job) Rule {
 		ID: j.ID, Name: j.Name, Kind: j.Kind,
 		Schedule: j.Schedule, Waits: job.Watches(j.Schedule),
 		State: string(j.State), Why: j.Why, Said: j.Said,
-		Steps: make([]Step, 0, len(j.Steps)),
+		Steps: make([]Step, 0, len(j.Perform)+1),
 	}
-	for _, s := range j.Steps {
-		out.Steps = append(out.Steps, Step{Do: string(s.Do), Says: says(s)})
+	// The conditions, where there are any, shown as the first
+	// thing the rule does -- which is what they now are.
+	if when := j.When.Describe(); when != "nothing to check" {
+		out.Steps = append(out.Steps, Step{Do: "when", Says: when})
+	}
+	for _, a := range j.Perform {
+		out.Steps = append(out.Steps, Step{Do: a.Do, Says: says(a)})
 	}
 	if !j.Next.IsZero() {
 		at := j.Next.UTC()
@@ -324,21 +336,19 @@ func described(j job.Job) Rule {
 // nobody has thought of here still reads as something rather than as
 // a blank. The field names are the grammar's own and are what the
 // person said when they made the rule.
-func says(s job.Step) string {
+func says(a job.Act) string {
 	switch {
-	case strings.TrimSpace(s.Say) != "":
-		return s.Say
-	case strings.TrimSpace(s.When) != "":
-		return s.When
-	case strings.TrimSpace(s.Ask) != "":
-		return s.Ask
-	case strings.TrimSpace(s.Tool) != "":
-		if with := arguments(s.Args); with != "" {
-			return s.Tool + " (" + with + ")"
+	case strings.TrimSpace(a.Text) != "":
+		return a.Text
+	case strings.TrimSpace(a.Ask) != "":
+		return a.Ask
+	case strings.TrimSpace(a.Use) != "":
+		if with := arguments(a.With); with != "" {
+			return a.Use + " (" + with + ")"
 		}
-		return s.Tool
+		return a.Use
 	}
-	return ""
+	return a.Do
 }
 
 // arguments : What a tool step passes, as words rather than as JSON.

@@ -33,6 +33,8 @@ type row struct {
 	Anywhere  bool       `gorm:"column:anywhere"`
 	Cool      string     `gorm:"column:cool"`
 	QuietAt   *time.Time `gorm:"column:quiet_until"`
+	When      *string    `gorm:"column:when"`
+	Perform   *string    `gorm:"column:perform"`
 	CreatedAt time.Time  `gorm:"column:created_at"`
 	UpdatedAt time.Time  `gorm:"column:updated_at"`
 }
@@ -61,10 +63,15 @@ func (s *Store) Keep(ctx context.Context, j job.Job) error {
 	if j.ID == "" {
 		j.ID = ID()
 	}
+	when, perform, err := written(j)
+	if err != nil {
+		return err
+	}
 	now := time.Now().UTC()
 	r := row{
 		ID: j.ID, UserID: j.UserID, Name: j.Name, Kind: j.Kind,
 		Schedule: j.Schedule, Steps: string(steps), State: string(j.State),
+		When: when, Perform: perform,
 		Why: j.Why, Keep: j.Keep, Cool: j.Cool, Anywhere: j.Anywhere,
 		CreatedAt: now, UpdatedAt: now,
 	}
@@ -93,10 +100,16 @@ func (s *Store) Change(ctx context.Context, j job.Job) error {
 	if err != nil {
 		return fmt.Errorf("job: %w", err)
 	}
+	when, perform, err := written(j)
+	if err != nil {
+		return err
+	}
 	fields := map[string]any{
 		"name":       j.Name,
 		"schedule":   j.Schedule,
 		"steps":      string(steps),
+		"when":       when,
+		"perform":    perform,
 		"keep":       j.Keep,
 		"anywhere":   j.Anywhere,
 		"cool":       j.Cool,
@@ -322,6 +335,11 @@ func (s *Store) Mine(ctx context.Context, userID, kind string, limit int,
 }
 
 // assemble : One row as a job.
+//
+// The structured halves where the row has them, and worked out
+// from the written ones where it does not. The engine knows one
+// shape; the table holds two, and a rule written before the shape
+// existed goes on working whether or not anybody converts it.
 func assemble(r row) (job.Job, error) {
 	var steps []job.Step
 	if err := json.Unmarshal([]byte(r.Steps), &steps); err != nil {
@@ -331,6 +349,9 @@ func assemble(r row) (job.Job, error) {
 		ID: r.ID, UserID: r.UserID, Name: r.Name, Kind: r.Kind,
 		Schedule: r.Schedule, Steps: steps, State: job.State(r.State),
 		Why: r.Why, Said: r.LastSaid, Keep: r.Keep, Cool: r.Cool, Anywhere: r.Anywhere,
+	}
+	if err := shape(&j, r); err != nil {
+		return job.Job{}, err
 	}
 	if r.QuietAt != nil {
 		j.Quiet = r.QuietAt.UTC()
@@ -342,6 +363,49 @@ func assemble(r row) (job.Job, error) {
 		j.Last = r.LastAt.UTC()
 	}
 	return j, nil
+}
+
+// shape : A job's structured halves, from the row or from the
+// sentences.
+//
+// Both columns or neither. A rule half converted would be a rule
+// whose conditions came from one shape and whose steps came from
+// the other, and there is no reading of that which is the rule
+// anybody wrote.
+func shape(j *job.Job, r row) error {
+	if r.When != nil && r.Perform != nil {
+		if err := json.Unmarshal([]byte(*r.When), &j.When); err != nil {
+			return fmt.Errorf("job: reading when: %w", err)
+		}
+		if err := json.Unmarshal([]byte(*r.Perform), &j.Perform); err != nil {
+			return fmt.Errorf("job: reading perform: %w", err)
+		}
+		return nil
+	}
+	when, acts, err := job.Reshape(*j)
+	if err != nil {
+		return fmt.Errorf("job: %q cannot be read in the new shape: %w", r.Name, err)
+	}
+	j.When, j.Perform = when, acts
+	return nil
+}
+
+// written : A job's structured halves, as the columns hold them.
+func written(j job.Job) (*string, *string, error) {
+	when, err := json.Marshal(j.When)
+	if err != nil {
+		return nil, nil, fmt.Errorf("job: writing when: %w", err)
+	}
+	acts := j.Perform
+	if acts == nil {
+		acts = []job.Act{}
+	}
+	perform, err := json.Marshal(acts)
+	if err != nil {
+		return nil, nil, fmt.Errorf("job: writing perform: %w", err)
+	}
+	a, b := string(when), string(perform)
+	return &a, &b, nil
 }
 
 // clip : Keeps a value inside its column.

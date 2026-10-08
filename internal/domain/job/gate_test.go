@@ -138,21 +138,30 @@ func TestAGateSaysWhatItNeeds(t *testing.T) {
 	}
 }
 
-// A check as the first step is a condition on the whole job: it
-// does not run, it is not a failure, and it comes round again.
+// A condition is a condition on the whole rule: it does not run,
+// it is not a failure, and it comes round again.
+//
+// Written as a check step, which is how a rule reaching this from
+// the old table still arrives -- and the conversion puts it where
+// every condition now lives, which is before any of the doing.
 func TestACheckAtTheFrontGatesTheWholeJob(t *testing.T) {
-	s, h := inmemory.New(), &hands{stopAt: "battery.level"}
-	put(t, s, "every 5m",
+	s, h := inmemory.New(), &hands{withhold: "the battery is not low"}
+	j := put(t, s, "every 5m",
 		job.Step{Do: job.Check, When: "battery.level < 20"},
 		job.Step{Do: job.Announce, Say: "you are low"},
 		job.Step{Do: job.Call, Tool: "alarm_set"})
+
+	// The check left the sequence and became the rule's condition.
+	if len(j.Perform) != 2 || len(j.When.All) != 1 {
+		t.Fatalf("converted to %d conditions and %d acts", len(j.When.All), len(j.Perform))
+	}
 
 	got := runner(s, h, noon).Once(context.Background())
 	if got.Stopped != 1 || got.Failed != 0 {
 		t.Fatalf("pass = %+v, want stopped and not failed", got)
 	}
 	if len(h.did) != 1 {
-		t.Errorf("it carried on past the check: %v", h.did)
+		t.Errorf("it carried on past the condition: %v", h.did)
 	}
 	after, _ := s.Get("job_1")
 	if after.State != job.Active || !after.Next.Equal(noon.Add(5*time.Minute)) {

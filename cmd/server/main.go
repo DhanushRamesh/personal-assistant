@@ -2089,61 +2089,54 @@ func heard(anywhere bool) conversation.Kind {
 	return conversation.Immediate
 }
 
-func (d doing) Do(ctx context.Context, run job.Turn, s job.Step) (job.Outcome, error) {
-	if err := s.Valid(); err != nil {
-		return job.Outcome{}, err
-	}
-
+func (d doing) Do(ctx context.Context, run job.Turn, s job.Act) (job.Outcome, error) {
 	switch s.Do {
-	case job.Announce:
+	case job.DoSay:
 		// A trial says what it would say and says nothing. The
 		// sentence is fixed, so there is nothing to work out and
 		// nothing to hold back but the announcing itself.
 		if run.Trying {
-			return job.Outcome{Said: s.Say}, nil
+			return job.Outcome{Said: s.Text}, nil
 		}
 		// Published, which is where announcements go now, and
 		// spoken, which is the only way one is currently heard.
 		// The second half goes when a client collects.
 		kind := heard(run.Anywhere)
 		o, err := outbox.Keeping(outboxmysql.ID(), run.UserID,
-			kind, s.Say, d.now(), run.Worth)
+			kind, s.Text, d.now(), run.Worth)
 		if err != nil {
 			return job.Outcome{}, err
 		}
 		if err := d.to.Publish(ctx, o); err != nil {
 			return job.Outcome{}, err
 		}
-		if err := announcement.Speak(ctx, d.speaker, kind, s.Say); err != nil {
+		if err := announcement.Speak(ctx, d.speaker, kind, s.Text); err != nil {
 			return job.Outcome{}, err
 		}
-		d.written.Announced(ctx, run.UserID, s.Say)
-		return job.Outcome{Said: s.Say}, nil
+		d.written.Announced(ctx, run.UserID, s.Text)
+		return job.Outcome{Said: s.Text}, nil
 
-	case job.Relay:
+	case job.DoRelay:
 		return d.relay(ctx, run)
 
-	case job.Write:
+	case job.DoWrite:
 		return d.write(ctx, run, s)
 
-	case job.Check:
-		return d.check(ctx, run.UserID, s)
-
-	case job.Call:
+	case job.DoTool:
 		// As the person, on the typed channel. A job is not a
 		// voice turn: nothing is waiting in a room for it, and the
 		// tools that withhold themselves from a speaker should not
 		// withhold themselves here.
-		out := d.tools.Call(ctx, s.Tool, tool.Invocation{
+		out := d.tools.Call(ctx, s.Use, tool.Invocation{
 			Caller: tool.Caller{UserID: run.UserID, Channel: chat.ChannelDirect},
-			Args:   s.Args,
+			Args:   s.With,
 			// What the sequence has already run. The tools refuse
 			// to write something they have not read in this turn,
 			// and a sequence is one turn.
 			Ran: job.Tools(run.Already),
 		})
 		if out.Outcome == conversation.OutcomeFailed {
-			err := fmt.Errorf("%s: %s", s.Tool, out.Content)
+			err := fmt.Errorf("%s: %s", s.Use, out.Content)
 			// Whether the steps after this one were relying on it.
 			// A tool that writes was asked to do something and the
 			// sequence goes on without it; a tool that reads was
@@ -2153,13 +2146,13 @@ func (d doing) Do(ctx context.Context, run job.Turn, s job.Step) (job.Outcome, e
 			// A name the registry does not know counts as a read.
 			// Nothing is known about it, so nothing is risked by
 			// the quieter answer.
-			if t, found := d.tools.Get(s.Tool); !found || !t.Writes {
+			if t, found := d.tools.Get(s.Use); !found || !t.Writes {
 				err = fmt.Errorf("%w: %w", job.ErrBlind, err)
 			}
 			return job.Outcome{}, err
 		}
 		d.logger.InfoContext(ctx, "a job ran a tool",
-			slog.String("tool", s.Tool), slog.String("outcome", string(out.Outcome)))
+			slog.String("tool", s.Use), slog.String("outcome", string(out.Outcome)))
 
 		// A tool may end the sequence by finding nothing, in the
 		// same word a write step uses for it. Without this a rule
@@ -2168,7 +2161,7 @@ func (d doing) Do(ctx context.Context, run job.Turn, s job.Step) (job.Outcome, e
 		// looking is cheap and deterministic, and the sentence is
 		// neither.
 		if prompt.Nothing(out.Content) {
-			return job.Outcome{Stop: true, Why: s.Tool + " found nothing", Said: run.Before}, nil
+			return job.Outcome{Stop: true, Why: s.Use + " found nothing", Said: run.Before}, nil
 		}
 
 		// Kept for the steps after it. A write step composes its
@@ -2536,7 +2529,7 @@ func (d doing) publish(ctx context.Context, run job.Turn, said string) error {
 // over the toolbox; what it could not do before was decide at the
 // time, and a rule written on Monday cannot know what Thursday
 // needs.
-func (d doing) write(ctx context.Context, run job.Turn, s job.Step) (job.Outcome, error) {
+func (d doing) write(ctx context.Context, run job.Turn, s job.Act) (job.Outcome, error) {
 	specs, bad := d.offered(s.Tools)
 	if bad != nil {
 		return job.Outcome{}, bad
@@ -2853,26 +2846,28 @@ func writing(ask string, already []job.Ran, before string, usually string) strin
 // Through the runner's own reader rather than a fresh one. Built
 // here it is a reader with no routine store, and every condition
 // on what somebody usually does would quietly never hold.
-func (d doing) check(ctx context.Context, userID string, s job.Step) (job.Outcome, error) {
-	conditions, err := job.ParseConditions(s.When)
-	if err != nil {
-		return job.Outcome{}, err
-	}
-
+// Holds : Whether a rule's conditions hold, and which one did not.
+//
+// One fetch for the whole tree rather than one per condition. The
+// sources are collected first, however deeply they are nested, so
+// a rule asking three things about the battery reads it once --
+// which the old shape could not do, because each check step was
+// answered on its own and knew nothing of the ones beside it.
+func (d doing) Holds(ctx context.Context, userID string, when job.Occasion) (bool, string, error) {
 	// One reading each, unless something is being compared with its
 	// own past -- then enough of them to reach back that far. A
 	// phone reports its level every few minutes, so a quarter of an
 	// hour is a handful and a day would still be inside the cap.
 	deep := 1
-	if back := conditions.Deep(); back > 0 {
+	if back := when.Deep(); back > 0 {
 		deep = job.Over
 	}
 
 	got := map[string][]job.Reading{}
-	for _, kind := range conditions.Needs() {
+	for _, kind := range when.Needs() {
 		latest, err := d.look.Latest(ctx, userID, kind, deep)
 		if err != nil {
-			return job.Outcome{}, err
+			return false, "", err
 		}
 		got[kind] = latest
 	}
@@ -2884,13 +2879,10 @@ func (d doing) check(ctx context.Context, userID string, s job.Step) (job.Outcom
 	// In their own zone, because an hour means nothing anywhere
 	// else: ten o'clock is ten where they are standing. Lengths of
 	// time are unaffected, being lengths rather than moments.
-	passed := conditions.Passes(got, away, d.now().In(d.where()))
-	d.logger.InfoContext(ctx, "a job checked a condition",
-		slog.String("when", s.When), slog.Bool("passed", passed))
-	if passed {
-		return job.Outcome{}, nil
-	}
-	return job.Outcome{Stop: true, Why: "the check " + s.When + " did not pass"}, nil
+	held, why := when.Holds(got, away, d.now().In(d.where()))
+	d.logger.InfoContext(ctx, "a job checked its conditions",
+		slog.String("when", when.Describe()), slog.Bool("held", held))
+	return held, why, nil
 }
 
 // where : The person's zone, or UTC.
