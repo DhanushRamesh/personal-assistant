@@ -14527,6 +14527,42 @@ sweep is its own loop so that failing to drop old rows cannot stop
 the loop that drops old position readings.
 
 
+### The cheapest question first
+
+The run journal was four minutes old when it paid for itself:
+
+	tool   calendar_events                      ran      1241ms
+	tool   event_recent                         ran        12ms
+	check  usually.home.leaves older than 90m   stopped     1ms
+
+A Google API call and one and a quarter seconds, to reach an answer
+that was available in a millisecond. Every fifteen minutes, ninety-six
+times a day. `low battery with something on` had the same shape on a
+ten-minute clock, so the two together were spending about two hundred
+and forty calendar fetches a day on questions that were nearly always
+answered no.
+
+The same engine, the same evening, for contrast:
+
+	the Google link has died        check first, then act      4ms
+	still in when you would have    act first, then check   1255ms
+
+Three hundred times apart, and nothing between them but the order the
+steps were written in.
+
+A check reads a *source* and never what the step before it returned --
+so every check gives the same answer wherever it sits, and a check
+written after a lookup is a lookup that did not need to happen. The
+steps are reordered now, cheapest question first: the clock and the day
+cost no read at all, a source costs one, and anything that leaves the
+machine goes last.
+
+It is a fix with a shelf life. In the structured rule the conditions
+live in `when` and the steps are only doing, so this cannot be written
+wrongly at all. Worth doing today because the saving is real now and
+the conversion is not.
+
+
 ## 12. Maintaining this file
 
 When the owner states a preference, makes a decision, or corrects something,
