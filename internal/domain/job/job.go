@@ -235,6 +235,11 @@ const (
 	When  = "when"
 )
 
+// The clock forms are [Every], [At], [Once] and [Cron]. The first
+// three are what somebody says out loud and are read back in the
+// same words; [Cron] is for the patterns speech has no short way of
+// naming, such as weekdays only or the first of the month.
+
 // Stale : How late a run may be and still happen.
 //
 // A server that was off over the moment comes back owing runs, and
@@ -582,6 +587,13 @@ func Following(schedule string, after time.Time, where *time.Location) (time.Tim
 		}
 		return next, nil
 
+	case Cron:
+		pattern, err := ReadCron(schedule)
+		if err != nil {
+			return time.Time{}, err
+		}
+		return pattern.Next(after, where)
+
 	case Once:
 		when := strings.Join(fields[1:], " ")
 		for _, layout := range []string{time.RFC3339, "2006-01-02 15:04", "2006-01-02t15:04"} {
@@ -597,7 +609,7 @@ func Following(schedule string, after time.Time, where *time.Location) (time.Tim
 // Repeats : Whether this schedule comes round again.
 func Repeats(schedule string) bool {
 	fields := strings.Fields(strings.ToLower(strings.TrimSpace(Clock(schedule))))
-	return len(fields) > 0 && (fields[0] == Every || fields[0] == At)
+	return len(fields) > 0 && (fields[0] == Every || fields[0] == At || fields[0] == Cron)
 }
 
 // Valid : Whether a step is one the runner can carry out.

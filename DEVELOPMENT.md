@@ -14407,6 +14407,41 @@ implementation exists for: run the query against the real rows
 before believing the unit test.
 
 
+### A clock that can say when not to run
+
+Owner, 8 October 2026: *"I want the time to be in cron style,
+because it can cover every kind of pattern."*
+
+`every 30m` and `at 08:00` are what somebody says out loud and are
+read back in those words, so they stay. What they could never say is
+*when not to*. "at 08:00" is every day of the year; a weekdays-only
+rule had to wake every morning and decline on the two it was never
+meant for. A condition can stop a rule running but it cannot stop it
+waking, and a rule whose next time is a moment it will refuse is a
+rule whose next time is a lie.
+
+	cron 0 9 * * 1-5      nine, Monday to Friday
+	cron */15 9-17 * * *  every quarter of an hour, nine till five
+	cron 0 7 1 * *        the first of the month
+
+Written here rather than taken from a library, for one reason: the
+day rule. When both day fields are given, cron runs on a date
+matching *either* -- "cron 0 9 1 * mon" is the first of the month
+and every Monday, not the Mondays that fall on the first. It
+surprises everybody and it is kept, because a pattern copied from
+anywhere else has to mean here what it meant there. Inherited from a
+dependency it would be true and undocumented; written here it is
+true, documented, and the test that proves it fails if anybody
+"corrects" it.
+
+The search skips rather than counts: a wrong month jumps to the
+first of the next, a wrong day to midnight tomorrow, a wrong hour to
+the top of the next. A pattern naming one minute a year is found in
+a few hundred steps rather than half a million. Five years and it
+gives up, because "cron 0 0 30 2 *" parses perfectly and can never
+happen, and the answer to that is a refusal and not a loop.
+
+
 ## 12. Maintaining this file
 
 When the owner states a preference, makes a decision, or corrects something,
