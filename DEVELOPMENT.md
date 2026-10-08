@@ -13755,6 +13755,51 @@ been asked and does not want one.
 The correction in that exchange was about the day, not the hour.
 
 
+### Something that puts the server back
+
+The server was a nohup and a pid file. Every other thing on this
+machine -- presence, the turn detector, the satellite's resume watch,
+the vocabulary refresh -- is a systemd user service with a restart
+policy. The one they all depend on was the exception.
+
+health.go has said so since it was written: it answers *"the two
+questions a supervisor and a load balancer ask"*, and is careful to
+keep liveness apart from readiness so that a database outage does not
+restart a working process. There was no supervisor to ask either.
+
+What makes it matter is the twenty-odd background goroutines -- the
+rule engine, reminders, the outbox sweeper, the collectors -- none of
+them behind a recover(). A panic in any one takes the process with it,
+and the first sign would have been the assistant quietly not
+answering. Nothing in 285 recorded starts has panicked, which is the
+right time to fix it rather than the wrong one.
+
+deployments/personal-assistant-local.service, beside the production
+one it is the counterpart of, and on-failure rather than always for
+the same reason production chose it: stopping it on purpose should
+stop it. The log keeps the property it was given on purpose: appended rather than truncated, with a line
+marking where one run ends and the next begins, because restarting
+used to destroy the record of whatever had just gone wrong.
+
+make start, stop, restart and status drive the unit. Not a second way
+of running it beside the first: two mechanisms for the same job is
+what left the voice patches reporting as neither upstream nor ours
+earlier the same day, and once was enough.
+
+status reports restarts rather than uptime. "Up 8 seconds" reads as
+healthy and can mean it has died four hundred times.
+
+Tested by killing it with SIGKILL, which is what a panic looks like
+from outside. Back in under five seconds, on a new pid, and status
+said so. Tested the other way too: make stop stays stopped.
+
+It is not enabled. Everything else here is started by hand -- the
+voice stack by ./voice on, presence deliberately not enabled so that
+it obeys the same rule -- and a server that came back at login when
+nothing else did would be the odd one out. make enable is there for
+whenever that is wanted.
+
+
 ## 12. Maintaining this file
 
 When the owner states a preference, makes a decision, or corrects something,

@@ -16,7 +16,7 @@ BINARY   := personal-assistant
 PKG      := ./cmd/server
 
 BUILD    := build
-PIDFILE  := .personal-assistant.pid
+UNIT     := personal-assistant-local.service
 LOGFILE  := personal-assistant.log
 
 # The server. Override on the command line if it moves:
@@ -55,32 +55,17 @@ run: ## Run in the foreground, logs to the terminal (ctrl-c to stop)
 	@go run $(PKG)
 
 .PHONY: start
-start: build ## Start in the background
-	@if [ -f $(PIDFILE) ] && kill -0 $$(cat $(PIDFILE)) 2>/dev/null; then \
-		echo "already running (pid $$(cat $(PIDFILE)))"; exit 0; \
-	fi
-	@# Appended, not truncated. Restarting used to destroy the record of
-	@# whatever had just gone wrong, which is exactly when a restart happens.
-	@printf '\n=== started %s ===\n' "$$(date -Is)" >> $(LOGFILE)
-	@./$(BINARY) >> $(LOGFILE) 2>&1 & echo $$! > $(PIDFILE)
+start: build ## Start it (systemd keeps it up)
+	@systemctl --user start $(UNIT)
 	@sleep 2
-	@if kill -0 $$(cat $(PIDFILE)) 2>/dev/null; then \
-		echo "started (pid $$(cat $(PIDFILE))), logging to $(LOGFILE)"; \
-		grep -o 'addr=[^ ]*' $(LOGFILE) | tail -1 | sed 's/^/  listening on /'; \
-	else \
-		rm -f $(PIDFILE); echo "failed to start:"; tail -3 $(LOGFILE); exit 1; \
-	fi
+	@$(MAKE) --no-print-directory status
 
 .PHONY: stop
-stop: ## Stop the background one
-	@if [ -f $(PIDFILE) ] && kill -0 $$(cat $(PIDFILE)) 2>/dev/null; then \
-		kill -TERM $$(cat $(PIDFILE)); \
-		for i in 1 2 3 4 5 6 7 8 9 10; do kill -0 $$(cat $(PIDFILE)) 2>/dev/null || break; sleep 1; done; \
-		rm -f $(PIDFILE); echo "stopped"; \
-	else \
-		rm -f $(PIDFILE); echo "not running"; \
-	fi
-	@# Anything else of ours left holding the port, from a crash or an older run.
+stop: ## Stop it, and stop systemd putting it back
+	@systemctl --user stop $(UNIT)
+	@echo "stopped"
+	@# Anything of ours left holding the port, from a crash or a run
+	@# started by hand before this unit existed.
 	@#
 	@# Matched on the command line, not the process name. Linux
 	@# truncates a name to fifteen characters, so -x personal-assistant
@@ -90,15 +75,28 @@ stop: ## Stop the background one
 	@pkill -f '^\./$(BINARY)$$' 2>/dev/null && echo "  (also cleared a stray $(BINARY))" || true
 
 .PHONY: restart
-restart: stop start ## Stop then start
+restart: build ## Rebuild and restart it
+	@systemctl --user restart $(UNIT)
+	@sleep 2
+	@$(MAKE) --no-print-directory status
+
+.PHONY: enable
+enable: ## Start it at login as well as now
+	@systemctl --user enable --now $(UNIT) && echo "enabled"
+
+.PHONY: disable
+disable: ## Stop starting it at login
+	@systemctl --user disable $(UNIT) && echo "disabled"
 
 .PHONY: status
 status: ## Is it running, and is it answering
-	@if [ -f $(PIDFILE) ] && kill -0 $$(cat $(PIDFILE)) 2>/dev/null; then \
-		echo "running (pid $$(cat $(PIDFILE)))"; \
-	else \
-		echo "not running"; \
-	fi
+	@systemctl --user is-active $(UNIT) >/dev/null 2>&1 \
+		&& echo "running (pid $$(systemctl --user show -p MainPID --value $(UNIT)))" \
+		|| echo "not running ($$(systemctl --user is-active $(UNIT) 2>&1))"
+	@# Restarts, not uptime. "Up 8 seconds" reads as healthy and can
+	@# mean it has died four hundred times.
+	@n=$$(systemctl --user show -p NRestarts --value $(UNIT) 2>/dev/null); \
+		[ "$${n:-0}" != "0" ] && echo "  restarted $$n times since it was last started by hand" || true
 	@ss -lntp 2>/dev/null | grep ':8080' | awk '{print "  listening " $$4}' || echo "  nothing on :8080"
 	@curl -s -m 3 localhost:8080/health 2>/dev/null | sed 's/^/  health: /' || echo "  health: no answer"
 	@curl -s -m 3 localhost:8080/ready  2>/dev/null | sed 's/^/  ready:  /' || true
@@ -142,7 +140,7 @@ logs-clear: ## Empty the local log
 	@echo "cleared $(LOGFILE)"
 
 clean: stop ## Stop and remove build output
-	@rm -rf $(BUILD) $(BINARY) $(LOGFILE) $(PIDFILE) $(CLIENT_OUT) $(CLIENT_PID)
+	@rm -rf $(BUILD) $(BINARY) $(LOGFILE) $(CLIENT_OUT) $(CLIENT_PID)
 	@echo "cleaned"
 
 # ############################# Client ###################################### #

@@ -1,0 +1,61 @@
+# The personal assistant server on the machine it is written on, as a
+# service. The one beside this, personal-assistant.service, is the
+# production counterpart and runs as root-installed and hardened.
+#
+#   cp personal-assistant-local.service ~/.config/systemd/user/
+#   systemctl --user daemon-reload
+#   make start          # or: systemctl --user enable --now personal-assistant-local
+#
+# A user service, like everything else on this machine: presence, the
+# turn detector, the satellite's resume watch, the vocabulary refresh.
+# The server was the one thing they all depend on and the one thing
+# with nothing watching it.
+
+[Unit]
+Description=The assistant's server, locally
+Documentation=https://github.com/DhanushRamesh/personal-assistant
+# Nothing is waited for and nothing waits for this. The voice stack
+# reaches it over HTTP and reports it unreachable when it is not,
+# which is a better failure than a container that will not start.
+#
+# Enough that a crash loop is visible as one rather than as a server
+# that is sometimes there. It gives up after five in two minutes, and
+# a unit in failed state is a thing somebody can see.
+StartLimitIntervalSec=120
+StartLimitBurst=5
+
+[Service]
+Type=simple
+WorkingDirectory=%h/workspace/personal-assistant
+ExecStart=%h/workspace/personal-assistant/personal-assistant
+
+# Appended, not truncated, and marked. Restarting used to destroy the
+# record of whatever had just gone wrong, which is exactly when a
+# restart happens -- so the log outlives the process, and the line
+# below says where one run ends and the next begins. Production sends
+# the same output to the journal instead; here the file is what every
+# make logs and every grep already reads.
+ExecStartPre=/bin/sh -c 'printf "\n=== started %%s ===\n" "$(date -Is)" >> %h/workspace/personal-assistant/personal-assistant.log'
+StandardOutput=append:%h/workspace/personal-assistant/personal-assistant.log
+StandardError=append:%h/workspace/personal-assistant/personal-assistant.log
+
+# The reason this exists. Twenty-odd background goroutines run
+# unattended -- the rule engine, reminders, the outbox sweeper, the
+# collectors -- and none is behind a recover(), so a panic in any one
+# takes the whole process with it. Before this there was nothing to
+# notice: a nohup and a pid file, and the first sign would have been
+# the assistant quietly not answering.
+#
+# on-failure rather than always, as in production: stopping it on
+# purpose should stop it.
+Restart=on-failure
+RestartSec=5s
+
+# The server drains in-flight requests and lets running chats record
+# where they got to, so it is given time rather than being killed
+# outright.
+KillSignal=SIGTERM
+TimeoutStopSec=45
+
+[Install]
+WantedBy=default.target
