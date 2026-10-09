@@ -16448,6 +16448,76 @@ failure scrolled past above the word "green". The guard added this
 morning -- `make check` compiling the evals -- exists for exactly
 this and was not used. Run the suite, read it, then commit.
 
+### One thing said eighteen times
+
+Owner, on a four-second answer of nine words: *"it took 4 seconds,
+why the delay."*
+
+Nothing was stuck. No tool ran. The median turn sends **32,574
+input tokens** and gets back thirteen, and four seconds is roughly
+what reading that costs.
+
+	system prompt           4,207 tokens
+	18 tool specs          15,444
+	  of which "saying"     3,636
+	deferred catalogue        690
+	fixed every turn      ~20,342          + ~11,000 history and memory
+
+The `saying` argument is 808 bytes of rules and examples, and
+`Narrated` staples it to every tool. The model read the same
+paragraph eighteen times a turn -- **18% of the fixed prompt to say
+one thing eighteen times.**
+
+It could not simply be deleted, and `saidWhile`'s own comment says
+why: the model ignored this as a rule stated beside the tools and
+obeyed it only once the examples lived in the schema property,
+*"where the model is already reading"*. So the examples were doing
+the work and the rules were the part that could move. One example
+with the address stays in the schema; the rest is said once in the
+persona.
+
+	                     before      after
+	saying argument    3,636 tok   1,467 tok
+	fixed every turn  20,342 tok  18,299 tok   -2,043  (-10%)
+	narration           8 of 8      8 of 8
+
+#### The measurement had to be written first
+
+There was no eval for this. Nothing anywhere judged whether a tool
+call arrived with a sentence or whether the sentence was any good --
+so the saving could have been taken and the narration quietly lost,
+exactly as the search was quietly emptied earlier the same day.
+
+`TestWhatTheNarrationCosts` was written before the change and run
+before and after. Both runs: eight of eight.
+
+**And the test's own verdict was wrong once, which is worth more
+than the result.** It flagged *"reading your diary for tomorrow"* as
+poor for being under six words. The baseline had answered the same
+question with *"reading your diary for tomorrow, sir"* -- six words.
+Both are far under the twelve to twenty the instruction demands, so
+the real finding is that **neither version obeys the word count**,
+and a threshold invented while writing the test nearly reported that
+as a regression caused by the change.
+
+What can be claimed: the 2,043 tokens, because that is a
+measurement of a prompt and not of a model. What cannot: any
+behaviour difference, on eight samples run once.
+
+Nor can the latency be attributed yet. "hi" came back in 2.8s
+against 5.2s earlier, and `in_tokens` was unchanged at ~32,600 --
+the conversation history had grown by as much as the fixed prompt
+shrank. A clean reading needs a fresh conversation.
+
+#### Still on the table
+
+`event_recent` is 1,710 tokens on its own, more than twice the
+median tool, and grew twice today. The persona is 4,333 tokens and
+has never been weighed against what it buys. Tool deferral already
+works -- 18 offered rather than 58, for a 690-token catalogue -- so
+the remaining weight is the tools that are offered, not the ones
+that are not.
+
 ## 12. Maintaining this file
 
 When the owner states a preference, makes a decision, or corrects something,

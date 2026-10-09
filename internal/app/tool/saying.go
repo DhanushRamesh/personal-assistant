@@ -27,18 +27,26 @@ func saidWhile(address string) Property {
 		end = ", " + address
 		second = ", " + address
 	}
+	// Short on purpose, and the rest of it said once in the system
+	// prompt.
+	//
+	// This was the whole instruction -- 808 bytes of rules and two
+	// examples -- and it is stapled to every tool, so the model read
+	// the same paragraph eighteen times a turn: 3,636 tokens, 18% of
+	// the fixed prompt, to say one thing eighteen times. Measured on
+	// a median turn of 32,574 input tokens for an answer of thirteen.
+	//
+	// What stays here is what the comment above says cannot leave: an
+	// example, carrying the address. The model ignored this as a rule
+	// beside the tools and obeyed it once the examples lived where it
+	// was already reading, so the example is the part that was doing
+	// the work and the rules are the part that can be said elsewhere.
+	_ = second
 	return Property{
 		Type: "string",
-		Description: "One sentence, present tense, saying what you are about to do with this call. " +
-			"It is read aloud while the call runs, so the person is not waiting in silence. " +
-			"Name what you are reading or changing and what it is about, in twelve to twenty words. " +
-			"No question, and name the thing rather than the tool: " +
-			strconv.Quote("creating the event on the twenty-second of August, at half past six"+end) + ", " +
-			strconv.Quote("reading your diary for tomorrow morning and the rest of the week"+second) + ". " +
-			"Never a restatement of what was asked and never what you are about to find: " +
-			strconv.Quote("checking what you are listening to") + " in front of an answer about " +
-			"what they are listening to tells them nothing they did not just say. " +
-			"It is not the answer and not a claim that anything worked.",
+		Description: "One sentence, present tense, twelve to twenty words, saying what you are " +
+			"about to do with this call -- read aloud while it runs. Name the thing, not the tool: " +
+			strconv.Quote("reading your diary for tomorrow morning and the rest of the week"+end) + ".",
 	}
 }
 
