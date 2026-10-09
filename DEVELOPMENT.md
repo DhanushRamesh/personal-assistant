@@ -15919,11 +15919,38 @@ is allowed to pause while the next item is found. This setting moves
 where that curve starts, which is why "aggressive" is not a small
 change: the office runs at **0.25s**, and that is live right now.
 
-Whether it still should is a separate question and has not been
-changed. Aggressive was chosen when the audio gate was one number for
-the whole machine and the office kept turns alive on room noise; the
-gate now follows the microphone and sits at 400 there, so the reason
-may have expired. It wants measuring, not assuming.
+Whether it still should was measured rather than assumed, and the
+guess was wrong: it still should. Twenty-seven seconds of the office
+through the live chain -- gain 15, suppression High, then the gate --
+and then through Home Assistant's own detector, counting the gaps the
+segmenter could actually end a turn in:
+
+	gate   speech%   longest gap   gaps >=0.25s   gaps >=0.70s
+	 400    84.2%       0.76s           7              1
+	 800    83.1%       0.88s           7              1
+	1200    78.3%       0.88s           9              3
+	1600    74.9%       0.93s           9              4
+	2400    46.4%       3.64s          11              8
+
+**At the relaxed 0.70s there is exactly one qualifying gap in
+twenty-seven seconds.** A turn in that room would run until TURN_MAX
+stopped it. At 0.25s there are seven, roughly one every four seconds,
+which is a turn that ends when somebody stops talking. Aggressive
+stays.
+
+The second half of the table is the more useful finding, because it
+was not what the question was about. **At 400 the gate is very nearly
+doing nothing** -- 84.2% against 90.3% with no gate at all. The room
+is simply louder than the line, so almost everything opens it. What
+would quiet it is somewhere past 2400, and the owner's voice across a
+room measures 1400: a gate big enough to work here is a gate that
+cuts him off, which is precisely the bug the earbuds were rescued
+from this morning.
+
+So it is left at 400 and nothing pretends otherwise. The office is
+held together by the 0.25s cut-off and the turn cap, not by the gate,
+and the belief that the gate was the thing protecting it was wrong
+for as long as it was held.
 
 ### Deepgram does not decide when a turn ends
 
