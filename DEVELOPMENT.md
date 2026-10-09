@@ -15246,6 +15246,76 @@ Triggering `automation.the_room_is_chosen_by_the_network` -- the id --
 returned 200 and ran nothing at all.
 
 
+### The gate was not stuck open; the patience was growing
+
+Owner: *"suppose in a noisy room, if I talk louder than them, that is
+considered -- and when the same loud sound is not heard, it means I
+stopped talking."*
+
+A good idea, measured and rejected, and the measuring found the real
+mechanism instead.
+
+Eighteen seconds of the office, through the satellite's own
+processor, with its shape visible for once:
+
+	sec 0-3    5071 1183 1368  418   somebody talking
+	sec 4-8      27   38   40   28   genuinely quiet
+	sec 9-16   434 ... 11311 ... 3755   talking again
+
+The room is not constantly loud. It has real silence between bursts,
+and its floor is about thirty -- not the five hundred my first floor
+tracker settled on, which was the tracker being wrong rather than the
+room.
+
+What the gate actually allows, as the longest unbroken silence:
+
+	gate     longest silence   opens on speech
+	  400          1.36s            96.4%
+	 1000          3.23s            91.9%
+	 1500          4.87s            90.4%
+	adaptive x8    1.04s            98.4%
+	adaptive x30   1.35s            96.4%
+
+So the gate at 400 was never simply stuck open. It allows 1.36
+seconds, which is twice what the segmenter needs to end a short
+command -- and short commands did end, in one or two seconds, all
+day.
+
+The thing it cannot do is end a long one. `_allowed_gap` grows the
+silence it asks for the longer a turn has run: 0.70s while the
+command is still short, approaching 3.5s with a seven-second time
+constant. After ten seconds it wants 2.47s; after twenty, 3.12s. The
+office never offers more than 1.36. So a turn that gets past about
+eight seconds can never end at all, and runs to Home Assistant's
+two-minute cap.
+
+1500 allows 4.87s, which clears the 3.5 ceiling, so a turn can end
+however long it has run.
+
+And the adaptive gate loses at every margin, for a reason worth
+keeping: the room's quiet sits near thirty and its bursts near ten
+thousand, three hundred times apart. Any fixed line between them
+separates them. Tracking the floor only makes the line wander, and a
+margin large enough to be useful is a fixed line with extra steps.
+
+### Setting a thing to what it already is changes nothing
+
+The recreate that applied the gate restarted the satellite, which
+read `CONTINUE_AFTER_EVERY_REPLY=1` again and turned the reopened
+window back on -- while the panel showed `Noisy office`, which means
+off.
+
+The automation that picks the room from the network had run. It sets
+the profile, the profile was already `Noisy office`, and setting an
+input_select to the value it already holds is not a state change, so
+the automation that applies the settings never fired. Everything
+looked right and nothing had been written.
+
+It applies on the satellite returning now, as well as on the profile
+changing. The same lesson as the switch itself: a thing that has to
+survive a restart must be driven by *arriving*, not only by changing.
+
+
 ## 12. Maintaining this file
 
 When the owner states a preference, makes a decision, or corrects something,
