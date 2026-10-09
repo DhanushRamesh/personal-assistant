@@ -3,6 +3,7 @@ package job
 import (
 	"context"
 	"fmt"
+	"net/url"
 	"sort"
 	"strings"
 )
@@ -74,7 +75,15 @@ func patternSource(name string, with map[string]any) string {
 	}
 	sort.Strings(keys)
 	for _, k := range keys {
-		out += " " + strings.ToLower(k) + "=" + value(with[k])
+		// Escaped, because a source is one string split on spaces
+		// and a blank is free text. A bluetooth device called
+		// "bike helmet" made `is=bike helmet` into two fields, the
+		// second of which was not a blank at all -- caught by the
+		// first rule anybody wrote against real data rather than
+		// by any of the tests, every one of which had used a value
+		// with no space in it.
+		out += " " + url.QueryEscape(strings.ToLower(k)) +
+			"=" + url.QueryEscape(value(with[k]))
 	}
 	return out
 }
@@ -97,9 +106,40 @@ func Pattern(source string) (name string, with map[string]any, err error) {
 		if !found || k == "" {
 			return "", nil, fmt.Errorf("%w: %q is not a blank a pattern fills in", ErrUnreadableGate, f)
 		}
-		with[k] = v
+		key, err := url.QueryUnescape(k)
+		if err != nil {
+			return "", nil, fmt.Errorf("%w: %q is not a blank a pattern fills in", ErrUnreadableGate, f)
+		}
+		held, err := url.QueryUnescape(v)
+		if err != nil {
+			return "", nil, fmt.Errorf("%w: %q is not a value a pattern takes", ErrUnreadableGate, v)
+		}
+		with[key] = held
 	}
 	return fields[0], with, nil
+}
+
+// Spoken : A pattern source as somebody would write it.
+//
+// The escaping exists so a blank with a space in it survives being
+// part of one string, and it has no business in a sentence anybody
+// reads. Falls back to the raw source, because a description that
+// cannot be rendered is still better than none.
+func Spoken(source string) string {
+	name, with, err := Pattern(source)
+	if err != nil {
+		return strings.TrimPrefix(source, Patterned)
+	}
+	keys := make([]string, 0, len(with))
+	for k := range with {
+		keys = append(keys, k)
+	}
+	sort.Strings(keys)
+	out := name
+	for _, k := range keys {
+		out += " " + k + "=" + fmt.Sprint(with[k])
+	}
+	return out
 }
 
 // IsPattern : Whether a gate source asks a pattern.

@@ -224,6 +224,8 @@ var howToWhen = prompt.Lines(
 	`A count takes "kind" and "within"; "is" narrows it to one value and "by": "value" counts each caller separately, so this is "somebody has tried twice" without naming anybody.`,
 	`  {"pattern": "reaching", "with": {"tries": 2}} -- somebody has tried that many times AND still not got through`,
 	`A pattern is a shape worked out in code, for questions counting cannot ask. "reaching" is the count above with the part that matters added: getting through cancels it, so it is about somebody who needs them rather than about calls that happened. Its blanks are "tries" (default 2), "among" (one person by name, default anybody) and "within" (default 3h).`,
+	`  {"pattern": "still", "with": {"on": "bluetooth.connected", "off": "bluetooth.disconnected", "is": "bike helmet"}} -- that started and has not been ended since`,
+	`"still" answers which of two kinds happened last, which no condition can: the newest bluetooth.connected is the helmet whether or not it was unpaired afterwards, and "no disconnect lately" is true of one unpaired an hour ago. Its blanks are "on", "off" and "is" (one value, default any).`,
 	`A pattern asked for plainly means it holds; add "op": "==", "value": "no" for the absence. It cannot be what wakes a rule -- give the rule a clock or an arriving event and ask the pattern as a condition.`,
 	`"ago" is its own key and never a value: it compares a reading with its own earlier self, which is the only way to know whether something is moving.`,
 	"The name in source is an event kind their devices report, or one of the above.",

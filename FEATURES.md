@@ -425,7 +425,9 @@ events that already landed, so a rule standing only on one would
 wait for ever. Give it a clock or an arriving event, and ask the
 pattern as a condition.
 
-Shapes now: **reaching**. The others named when this was scoped --
+Shapes now: **reaching** and **still** (`on`, `off`, `is` -- which
+of two kinds happened last, for "connected and not disconnected
+since"). The others named when this was scoped --
 cancelled-by, gone-quiet -- turned out not to need their own:
 `reaching` *is* the cancelled-by shape, and gone-quiet falls out of
 counting (`counted battery.level within 30m is 0`).

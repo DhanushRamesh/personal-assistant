@@ -16289,6 +16289,73 @@ evals ./...`, a second, run before every commit. `go vet ./...` does
 not see them, because they are behind a build tag, which is exactly
 how they came to rot unnoticed.
 
+### The second pattern, and what real data found
+
+Owner, after the waking greeting: *"when I come home, if more than
+15 minutes the helmet bluetooth is connected, it can say to turn it
+off."*
+
+Which the grammar cannot ask, and the two near misses are worth
+writing down because both look right. **"Connected"** -- the newest
+`bluetooth.connected` is the helmet -- is true whether or not it
+was unpaired afterwards. **"No disconnect lately"** -- nothing in
+the last fifteen minutes -- is true of a helmet unpaired an hour
+ago. What settles it is which of the two happened *last*, and no
+condition can compare the times of two sources.
+
+So `still`, the second shape: `on`, `off`, and `is`. It is
+`reaching` with the specifics taken out -- there it was answered
+calls cancelling missed ones, here it is any kind cancelling any
+other -- and that is the argument for having built the general
+mechanism rather than the one check. The first customer was about
+people and the second is about a helmet, and neither needed a word
+added to the grammar.
+
+#### A space broke it, and no test had one
+
+The first rule written against real data failed at once:
+
+	"helmet" is not a blank a pattern fills in
+
+A pattern source is one string split on spaces, and the device is
+called **bike helmet**. `is=bike helmet` became two fields, the
+second of which was not a blank at all.
+
+Every test of the mechanism had passed. Every one of them had used
+a value with no space in it -- `tries=2`, `among=amma` -- because
+the examples were written by the person who had just written the
+parser and was thinking in the shape of it. The blanks are
+percent-encoded now, and `Describe` decodes them again, because the
+escaping exists to survive a string and has no business in a
+sentence a person reads: nobody should be told their rule did not
+run because of `bike+helmet`.
+
+The lesson is not "escape your strings". It is that **the examples
+in a test are chosen by the same mind that chose the format**, and
+the first real value broke what twelve tests had agreed on. Rules
+written against this person's own data are worth more as tests than
+anything invented.
+
+#### Three rules, from his own senders
+
+Two of the three things he picked were already expressible; the
+third is what produced the pattern above. All three use kinds no
+rule had touched -- places, bluetooth, calls made and received --
+of which there were four entirely unused.
+
+	still out when you would normally be home
+	  every 30m, usually.home.arrives older than 90m, 19:00-23:00
+	the helmet is still on
+	  place.entered is home, then 15m, still on/off/is
+	slept and woke  (extended)
+	  the calls missed while they slept, folded into the greeting
+
+The third was asked for as a rule of its own and built as an
+extension instead. Two rules firing on the same unlock is two
+announcements seconds apart, and the engine deduplicates within a
+rule and not across them. One greeting that mentions both is what a
+person would say.
+
 ## 12. Maintaining this file
 
 When the owner states a preference, makes a decision, or corrects something,

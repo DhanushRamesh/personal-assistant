@@ -57,6 +57,7 @@ type Shape func(evs []event.Event, now time.Time, with Blanks) (bool, error)
 // whatever is going to write rules out of them.
 var Of = map[string]Shape{
 	"reaching": reaching,
+	"still":    still,
 }
 
 // Names : Every shape a rule may ask for, in order.

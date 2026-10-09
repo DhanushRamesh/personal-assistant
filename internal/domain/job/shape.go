@@ -628,7 +628,11 @@ func (w Where) Describe() string {
 	// "reaching, with two tries", and that is what a person is
 	// shown when they are told why a rule did or did not run.
 	if IsPattern(gate.Source) {
-		out := strings.TrimPrefix(gate.Source, Patterned)
+		// Read back as it was written, not as it is stored. The
+		// source escapes its blanks so that a value with a space
+		// in it survives being one string; a person asking why a
+		// rule did not run should not be told about "bike+helmet".
+		out := Spoken(gate.Source)
 		if gate.Value == No {
 			return "not " + out
 		}

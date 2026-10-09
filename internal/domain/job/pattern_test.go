@@ -41,6 +41,31 @@ func TestTheBlanksAreOrderedTheSameEveryTime(t *testing.T) {
 	}
 }
 
+// TestABlankWithASpaceInIt : the first rule written against real
+// data broke on a bluetooth device called "bike helmet". A source
+// is one string split on spaces, so a free-text blank has to be
+// escaped or the second word is read as a blank of its own.
+func TestABlankWithASpaceInIt(t *testing.T) {
+	g, err := job.Where{Pattern: "still",
+		With: map[string]any{"is": "bike helmet", "on": "bluetooth.connected"}}.Gate()
+	if err != nil {
+		t.Fatalf("lowering it: %v", err)
+	}
+	name, with, err := job.Pattern(g.Source)
+	if err != nil {
+		t.Fatalf("reading it back: %v", err)
+	}
+	if name != "still" {
+		t.Errorf("name: %q", name)
+	}
+	if with["is"] != "bike helmet" {
+		t.Errorf("the value came back as %q", with["is"])
+	}
+	if with["on"] != "bluetooth.connected" {
+		t.Errorf("the other blank came back as %q", with["on"])
+	}
+}
+
 // TestAPatternReadsBackBothWays : the source is the truth and is
 // nobody's sentence.
 func TestAPatternReadsBackBothWays(t *testing.T) {
