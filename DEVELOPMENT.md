@@ -15373,6 +15373,47 @@ wearing them all day pleasant, and that is the thing to decide with
 earbuds in rather than from here.
 
 
+### The microphone matters more than the room
+
+Owner, earbuds in: *"it's working."*
+
+	09:33:13  "What is the time?"
+	09:33:20  "What is the date?"
+	09:33:29  "What is the status of, b..."
+	09:34:01  "Hey, Jarvis. Look again..."
+
+Four in a row, clean, with reopened windows between them. The same
+room an hour earlier, through the laptop microphone, gave *"We'll be
+waiting later tomorrow morning"* for something that was not that, and
+once nothing at all.
+
+The numbers say why. Through the earbuds, after the same gain and
+suppression, the median ten-millisecond chunk is **1**. Through the
+laptop microphone in that office it is **985**. The noise this whole
+day was spent fighting is a far-field problem, and near-field does
+not have it.
+
+Which makes most of the day's tuning beside the point while they are
+in. The gate at 1500 exists to reject a room; there is no room. The
+suppression at High exists to stop the detector hearing furniture;
+the detector hears silence. `Noisy office` is solving a problem that
+is no longer there.
+
+So the settings should follow the microphone and not only the
+network, and one of the six cannot: `AUDIO_GATE_RMS` is an
+environment variable rather than an entity, so unlike the rest it
+cannot change without recreating the container. Worth an entity only
+if the gate turns out to clip quiet speech, which four clean
+sentences suggest it does not -- the hundred and fifty milliseconds
+of hold carries the soft parts of words.
+
+One thing to watch rather than act on: the stop word fired seven
+times in ten minutes at a threshold of 0.75. Some of those were
+asked for. If they were not, it is the office profile's number on a
+microphone that is in somebody's ear, where nothing else is competing
+to sound like "stop".
+
+
 ## 12. Maintaining this file
 
 When the owner states a preference, makes a decision, or corrects something,
