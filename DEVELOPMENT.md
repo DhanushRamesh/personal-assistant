@@ -15449,6 +15449,43 @@ battery is low."* -- the old behaviour written down rather than the
 right one.
 
 
+### One gate, two microphones
+
+Owner: *"sometimes it's listening, but I talk some words and it goes
+idle."*
+
+	10:05:08  STT_START                   no VAD_START  -> 13s -> "Hello"
+	10:05:22  STT_START  -> nothing said in 5.0s, window closed
+	10:05:32  STT_START                   no VAD_START  -> 13s -> "Hello?"
+	10:05:46  STT_START  -> STT_VAD_START -> 2s -> "What is t..."
+	10:05:58  STT_START  -> nothing said in 5.0s, window closed
+
+The detector was not firing. Where it did, the turn was two seconds
+and correct; where it did not, Deepgram scraped a "Hello" out of
+thirteen seconds of nothing, or the five-second timer closed the
+window with somebody talking into it. That timer was doing its job
+and looked like the fault.
+
+The gate. 1500 was measured this morning on the office through the
+laptop microphone, where it is right: that room has to be rejected
+and a turn has to be able to end. Through earbuds the room is not
+there -- the median ten-millisecond chunk is 1 -- so 1500 sits in
+the middle of the speech rather than above the noise. A tenth of
+chunks cleared it and the rest were replaced with silence before
+anything could hear them.
+
+300 for now, which is above an earbud's floor and far below anything
+said into one.
+
+But the number is wrong whichever way it is set, because it is one
+number for two microphones, and that is the thing to fix. Every
+other audio setting is an entity and follows the room; the gate is
+read once from the environment at startup, so it can follow nothing
+and changing it costs a recreate. It wants to be a number entity
+like the gain beside it, and then the profile can set it and the
+microphone can choose it.
+
+
 ## 12. Maintaining this file
 
 When the owner states a preference, makes a decision, or corrects something,
