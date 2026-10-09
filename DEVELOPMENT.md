@@ -15846,6 +15846,47 @@ it.
 `webrtc.py` is a third patched file, mounted like the others, so this
 needs a `docker compose up -d` rather than a restart.
 
+### Waiting is not the same as being deaf
+
+Owner, having taken the earbuds out: *"it's not waking."*
+
+It was hearing digital silence. `audio heartbeat: rms=0`, three
+minutes of it, with the container healthy, Home Assistant connected,
+the wake word armed and every setting correct.
+
+`module-loopback` was simply gone. A loopback dies with the source it
+reads, so an earbud removed takes the whole feed with it and leaves
+`mic_in` -- the null sink the chain is built on -- with nothing going
+into it. `voice_only` went on existing and delivering zeros.
+
+The watcher saw it and said so and did nothing:
+
+	17:10:51  no Bluetooth microphone is connected.
+
+That silence was a deliberate decision, and the reasoning still
+holds: it does not throw the earbuds toggle off when a headset
+drops, because a one-second dropout would otherwise move the
+microphone back and forth all day. The setting is held, the headset
+is waited for.
+
+What the reasoning missed is that **waiting and being deaf are not
+the same state**, and the code could not tell them apart. So the test
+is now the chain rather than the headset: when nothing at all is
+feeding the microphone, the laptop is picked up immediately. The
+toggle stays on, still wanting the headset, and the next round moves
+back the moment one is offered.
+
+The general form, which is worth keeping because it is the same
+mistake as counting a container's restarts: **a component that
+reports a problem has not handled it.** The log line read like an
+outcome and was only an observation.
+
+Two numbers from the recovery, both worth remembering. The chain came
+back at rms 408 the second the loopback loaded. And the laptop
+source is at 19% / -43.28 dB with ALSA Capture at +16.50 dB -- which
+looks broken and is the measured good chain; `restart-satellite`
+carries the warning not to "restore" either end to 100%.
+
 ## 12. Maintaining this file
 
 When the owner states a preference, makes a decision, or corrects something,
