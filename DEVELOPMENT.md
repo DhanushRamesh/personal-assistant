@@ -15138,6 +15138,64 @@ Owner chose the cap over switching the reopened window off, which is
 the harder of the two and the one that still works at home.
 
 
+### A switch that belongs in different positions in different rooms
+
+Owner, having taken the cap: *"have the top option home and office."*
+
+Both, then, and chosen by where the laptop is. At home a reopened
+window is answered or falls quiet; in an office it opens into other
+people's conversations and no threshold tells them apart.
+
+An environment variable could not do it. `CONTINUE_AFTER_EVERY_REPLY`
+is read once at startup, and changing it means recreating the
+container, which stops the wake word -- for a thing that should
+change twice a day.
+
+So it is a switch. Not a new entity class, which would have meant
+patching a third file of upstream's: `ThinkingSoundEntity` is already
+a switch with a getter, a setter and a name, and the name is a
+parameter. A second instance of it is
+`switch.…_continue_conversation`, and the only care needed was
+matching the existing ones by `object_id` rather than by class, or
+each would adopt the other and delete it.
+
+Home Assistant throws it from the network:
+
+	Dhanush, Dhanush_5G, Dhanush_EXT  ->  on
+	everything else                   ->  off
+
+Named networks here, where presence deliberately does not name them.
+Different question: presence asks *has the laptop moved*, where the
+change is the signal and a name would be a lie; this asks *which room
+is this*, and the answer is a name. Everything not known to be home
+turns it off -- the office, its guest network, a hotspot, a cafe --
+because the quiet side is the safe side in a room nobody has
+measured.
+
+Thrown on arriving and not only on changing: on Home Assistant
+starting, and when the switch comes back from unavailable. The
+satellite reads the environment when it starts and the switch is only
+for the run, so a restart in the office would otherwise quietly turn
+it back on.
+
+### Dead in its own constructor
+
+The switch asks for its value while it is being registered, and
+`_after_every` was set two hundred lines further down. The satellite
+died in `__init__`, restarted, died again, and the entities went
+unavailable in Home Assistant.
+
+Found because the check after a restart is not *did it come back* --
+it said `Up 25 seconds (healthy)` throughout -- but whether the log
+is clean *since the current start*. `RestartCount` is no use here
+either: `restart-satellite` stops and starts rather than letting
+Docker do it, so Docker counts nought while the process loops.
+
+	docker inspect linux-voice-assistant --format '{{.State.StartedAt}}'
+
+and read only what came after it.
+
+
 ## 12. Maintaining this file
 
 When the owner states a preference, makes a decision, or corrects something,
