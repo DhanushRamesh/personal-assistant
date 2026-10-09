@@ -15795,6 +15795,57 @@ stored value could only ever be overwritten -- and one kept from a
 room the owner has since walked out of is worse than none.
 `AUDIO_GATE_RMS` stays as the fallback.
 
+### A sound is not a word
+
+Owner: *"only the voice should be detected, not the sound."*
+
+That sentence is the answer to a problem two wrong turns had already
+been taken on. Turns were being abandoned by a `stop` nobody said --
+four in eight minutes -- and sixteen of the twenty-six firings sat at
+exactly 0.812, which read as the signature of one recurring noise. So
+the threshold went to 0.9 to clear it.
+
+0.9 is unreachable. Recording the owner saying "stop" six times into
+the earbud and scoring every frame with the model itself, cutoff at
+zero so nothing was hidden:
+
+	0.812   0.812   0.677   0.462
+
+**0.812 is this model's ceiling on this chain, not a noise
+signature.** A real "stop" is what reaches it. The threshold had been
+set where the stop word could never fire at all, and it stayed there
+for twenty minutes.
+
+Worse, it cannot be fixed by moving the line. Running the same
+recording through the live processing chain, the loudest candidate in
+the first second scored **0.803** -- over any workable threshold --
+and it was not speech at all:
+
+	  time    stop score   voice present?
+	   1.0s     0.803      no   <- a sound
+	  26.7s     0.812      yes
+	  28.4s     0.812      yes
+
+A sound and a word land in the same place. This is the third setting
+in one day with that shape, after the audio gate and the earbud's
+view of a colleague, and the resolution is the same every time:
+**when one number cannot separate two things, stop looking for a
+better number and find a second question to ask.**
+
+The second question was already being answered and thrown away.
+WebRTC decides `is_speech` on every 10 ms frame and `webrtc.py` read
+`result.audio` and discarded the rest of the struct. It is now kept,
+and the stop word acts only when a voice was heard in the last 500 ms
+-- the gap allows for the model reporting a word some way after the
+audio that contained it.
+
+Only the stop word. The wake word fires at 0.996 and is not in
+trouble; a condition added to something that works is a way to break
+it.
+
+`webrtc.py` is a third patched file, mounted like the others, so this
+needs a `docker compose up -d` rather than a restart.
+
 ## 12. Maintaining this file
 
 When the owner states a preference, makes a decision, or corrects something,
