@@ -149,7 +149,12 @@ func TestTheModelWritesARuleProperly(t *testing.T) {
 		rules.All(jobmemory.New(), rules.Clock{Location: time.UTC},
 			func() string { return "job_01M48E09RJW0G247RBST6712D1" },
 			func(string) (tool.Tool, bool) { return tool.Tool{}, false },
-			settled{}, nil),
+			// usually, then the trier and the writer. A writer with
+			// no model in it refuses rather than writes, which is
+			// what this suite wants: it measures whether the model
+			// picks the right tool and fills its arguments, not
+			// what a second model would then do with them.
+			settled{}, nil, rules.Writer{}),
 		reminders.All(remindmemory.New(), clock, nil),
 		events.Tools(eventmemory.New(), events.Clock{Location: time.UTC}),
 	)...)

@@ -112,6 +112,19 @@ func (s *Store) Waits(_ context.Context, id string, at time.Time, step int) erro
 	return nil
 }
 
+// Forgets : Clears what a rule last said.
+func (s *Store) Forgets(_ context.Context, id string) error {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	j, ok := s.jobs[id]
+	if !ok {
+		return nil
+	}
+	j.Said = ""
+	s.jobs[id] = j
+	return nil
+}
+
 // Get : One job, for a test to look at how it ended.
 func (s *Store) Get(id string) (job.Job, bool) {
 	s.mu.Lock()

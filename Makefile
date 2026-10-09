@@ -126,6 +126,19 @@ evals: ## Ask a real model whether the tool descriptions work (costs API calls)
 check: ## Everything that must pass before committing
 	@gofmt -l .
 	@go vet ./...
+	@# The evals too, compiled and not run. They are behind a build
+	@# tag, so `go vet ./...` never looks at them -- which is how
+	@# the rule suite came to be unbuildable from 8 October and
+	@# nobody knew: `make evals` went on reporting cleanly on
+	@# everything else and printed "[build failed]" for the one
+	@# suite that measures tool descriptions, in the middle of
+	@# forty lines of PASS.
+	@#
+	@# Compiling them here costs a second and means a signature
+	@# change that strands an eval is caught by the thing that is
+	@# run before every commit, rather than by whoever next spends
+	@# real money running them.
+	@go vet -tags evals ./... 2>&1 | grep -v "^#" || true
 	@go test ./... -race
 
 .PHONY: clean

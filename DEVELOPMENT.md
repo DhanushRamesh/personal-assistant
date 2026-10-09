@@ -16213,6 +16213,82 @@ either time, and this codebase has least patience with silent
 nothing. A wait that is not a length of time is refused the same
 way, rather than discovered at the moment it would have run.
 
+### The memory outlived the occasion
+
+Owner, with the phone at thirteen per cent: *"why didn't it
+announce 15 percent, 20 percent alert?"*
+
+Every rule fired, at exactly the right reading:
+
+	12:21   24%   "battery at 25" ran
+	13:05   19%   "battery at 20" ran
+	13:23   14%   "battery at 15" ran
+
+And every one was declined. `outcome: declined`, *"there was
+nothing new to say"*, nothing spoken.
+
+Before writing, the model is shown what the rule said **last
+time**. For "battery at 15" that was *"Your battery has passed the
+level you set, sir, and is now at fourteen"* -- from a previous
+discharge. The battery was at fourteen again, so the model read it
+as the same news and said nothing.
+
+Which is right for a condition that is **still** true and wrong
+here, and the difference is the whole of it. These rules fire on
+the **crossing**. By construction they cannot repeat themselves on
+a standing condition -- they only run when the reading comes over
+the line -- so the protection against repeating was pure cost.
+
+**And it sealed itself.** A decline deliberately keeps the
+sentence (`Said: run.Before`) so that a thing still true is not
+announced afresh. For a crossing rule that means one decline
+guarantees the next. The journal is unambiguous: four runs for
+these rules, four declines, **not one word ever spoken**.
+
+There was a lie in the documentation holding it up. `Job.Said` says
+it is *"cleared whenever a run says nothing, so a thing that goes
+away and comes back is announced again."* Nothing cleared it. Every
+path -- declined, check withheld, failed -- passes the old sentence
+through, and the comment described an intention rather than the
+code.
+
+**The memory is now let go when the reading comes back over the
+line.** `Landed` already reads what a watching rule waits on, and
+it is the only place that sees the readings of a rule that stayed
+quiet -- a rule that is not firing is not running, so nothing else
+could do it. Where a gate measures a line and the newest reading no
+longer passes it, the sentence is forgotten.
+
+Scoped to gates that measure. A thing that happened has no line to
+come back over, and leaving home twice is twice.
+
+The general form: **a memory that stops something repeating must be
+scoped to the occasion it is about.** This one was scoped to the
+rule, which is for ever.
+
+### A suite that could not run said nothing about it
+
+Found while running `make evals` to measure the two tool
+descriptions widened today. `internal/app/tool/evals` -- the suite
+that measures tool descriptions, the only thing that could answer
+the question -- **had not compiled since 8 October.** `rules.All`
+gained a `routine.Store` parameter and the eval's call site was
+never updated.
+
+`make evals` went on reporting cleanly on five other suites and
+printed `[build failed]` for that one in the middle of forty lines
+of PASS. Nobody reads the middle.
+
+It is the same failure as the turn detector answering into a closed
+socket, and as `docker inspect` reporting `restarts=0` through seven
+crashes: **a thing that looks like it runs and does not.** The
+pattern is frequent enough here to be worth naming as a class.
+
+So `make check` now compiles the evals as well -- `go vet -tags
+evals ./...`, a second, run before every commit. `go vet ./...` does
+not see them, because they are behind a build tag, which is exactly
+how they came to rot unnoticed.
+
 ## 12. Maintaining this file
 
 When the owner states a preference, makes a decision, or corrects something,

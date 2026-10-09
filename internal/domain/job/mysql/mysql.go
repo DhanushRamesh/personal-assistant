@@ -324,6 +324,24 @@ func (s *Store) Waits(ctx context.Context, id string, at time.Time, step int) er
 	return nil
 }
 
+// Forgets : Clears what a rule last said.
+//
+// Only the sentence. Not the run, not the next time, not the
+// state: the rule has not done anything, it has stopped being
+// about something.
+func (s *Store) Forgets(ctx context.Context, id string) error {
+	if s == nil || s.db == nil {
+		return fmt.Errorf("job: there is nowhere to read jobs")
+	}
+	out := s.db.WithContext(ctx).Model(&row{}).
+		Where("id = ? AND last_said <> ''", id).
+		Updates(map[string]any{"last_said": "", "updated_at": time.Now().UTC()})
+	if out.Error != nil {
+		return fmt.Errorf("job: letting %s forget: %w", id, out.Error)
+	}
+	return nil
+}
+
 // Mine : One person's jobs, newest first. Kind filters when given.
 func (s *Store) Mine(ctx context.Context, userID, kind string, limit int,
 	states ...job.State,

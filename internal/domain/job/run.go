@@ -67,6 +67,9 @@ type Store interface {
 	// finished, so writing it down as a run would put a line in
 	// the record for something that is still happening.
 	Waits(ctx context.Context, id string, at time.Time, step int) error
+	// Forgets : Clears what a rule last said, so the next time it
+	// has something to say it is heard.
+	Forgets(ctx context.Context, id string) error
 }
 
 // Ran : What a step earlier in the same sequence did.
@@ -479,6 +482,40 @@ func (r *Runner) Landed(ctx context.Context, userID string, kinds []string) Pass
 				continue
 			}
 			if !crossed {
+				// Not crossing is two different things, and one of
+				// them is the end of an occasion.
+				//
+				// A rule woken by a crossing is told what it said
+				// last time, so that the same news is not
+				// announced twice. For a rule that watches a
+				// *line* that memory must not outlive the time
+				// spent on the wrong side of it: the battery
+				// passing fifteen per cent today is not the same
+				// news as it passing fifteen per cent yesterday,
+				// however alike the two sentences are.
+				//
+				// It was. Measured 9 October 2026: the battery
+				// fell from 52% to 13% over six hours, every one
+				// of "battery at 25", "battery at 20" and
+				// "battery at 15" fired at exactly the right
+				// reading, and all three were declined with
+				// "there was nothing new to say" against
+				// sentences from a previous discharge. Four runs
+				// in the journal, four declines, not one word
+				// spoken -- and because a decline deliberately
+				// keeps the sentence, each one guaranteed the
+				// next.
+				//
+				// So the memory is let go the moment the reading
+				// comes back over the line. Nothing else can do
+				// it: a rule that is not firing is not running,
+				// and this is the only place that sees the
+				// readings of a rule that stayed quiet.
+				if gate.Measures() && !r.holding(ctx, userID, gate, now) {
+					if err := r.Store.Forgets(ctx, j.ID); err != nil {
+						r.log("cannot let go of what a rule said", err)
+					}
+				}
 				continue
 			}
 			fired = true
@@ -551,6 +588,24 @@ func (r *Runner) crossed(ctx context.Context, userID string, g Gate, now time.Ti
 		return false, nil
 	}
 	return !g.Passes(got[1], false, now), nil
+}
+
+// holding : Whether this gate passes on the newest reading.
+//
+// The other half of [Runner.crossed], which asks whether a reading
+// has just come over a line. This asks only whether it is over it
+// now, and is how a rule learns that the thing it spoke about has
+// gone away.
+//
+// False when nothing can be read. Nothing known is not proof that
+// a condition holds, and the cost of being wrong here is one
+// sentence said twice rather than a warning never said at all.
+func (r *Runner) holding(ctx context.Context, userID string, g Gate, now time.Time) bool {
+	got, err := r.Readings.Latest(ctx, userID, g.Needs(), 1)
+	if err != nil || len(got) == 0 {
+		return false
+	}
+	return g.Passes(got[0], false, now)
 }
 
 // Trial : What a rule did when it was tried.
