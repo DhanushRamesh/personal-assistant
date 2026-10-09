@@ -15486,6 +15486,44 @@ like the gain beside it, and then the profile can set it and the
 microphone can choose it.
 
 
+### Earbuds are not a room
+
+Owner, with them in: *"I say 'Hey Jarvis' and it's not waking.
+Remember when I use earbuds I speak softly only."*
+
+It was waking -- fourteen times in twenty minutes -- just not when
+asked. The settings said why:
+
+	Room                   Noisy office    chosen by the office wifi
+	wake must be this sure 0.8
+	noise suppression      High
+
+Every one of those was raised to resist a room. A threshold is how
+certain the model must be before it acts, and 0.8 is deliberately
+hard to reach so that a room full of talking does not set it off. An
+inch from somebody's mouth nothing is competing, and 0.8 asked a
+softly spoken "Hey Jarvis" for a confidence it could not reach.
+Suppression at High was taking the quiet parts of quietly spoken
+words out of a signal that had no noise in it to justify the cutting.
+
+So the profile is chosen by the microphone when there is one worth
+choosing by, and by the network otherwise. Earbuds beat whichever
+room he is standing in, because they are not one: no echo, nothing
+else talking, and a person who speaks softly into them.
+
+	wake 0.5, stop 0.7, suppression Low, relaxed, gain 15, window reopens
+
+Relaxed rather than aggressive for the same reason the office needs
+the opposite. Aggressive exists to find a gap in a room that never
+has one; an earbud has nothing but gaps, and aggressive would cut
+somebody off between words.
+
+The thing that keeps coming back: these settings were all chosen
+against a room, and every one of them is wrong when the microphone
+is not in the room. The only one that still cannot follow is the
+gate, because it is read once from the environment at startup.
+
+
 ## 12. Maintaining this file
 
 When the owner states a preference, makes a decision, or corrects something,
