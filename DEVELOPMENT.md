@@ -15038,10 +15038,20 @@ network can reach it; and the healthcheck reads established
 connections locally and does not care. 0.0.0.0 bought the DHCP fix
 and an open door nobody asked for.
 
-Still open on every interface: 6055, the peripheral websocket, which
-the same probe hit first. It only closed its own connection, so it
-cost nothing this time. Left alone deliberately -- two changes at
-once and a broken satellite tells you nothing about which.
+6055, the peripheral websocket, went the same way a few minutes
+later. The same probe reached it first and it cost nothing, because
+it only closed its own connection -- but it carries LED and button
+events for peripherals nobody here has, nothing on this machine
+connects to it, and a port open for no reason is a door somebody
+else gets to knock on. Closed second rather than at the same time, so
+that if the satellite had broken it would have been clear which
+change did it.
+
+Both on the loopback now, and nothing the satellite does reaches
+past this machine:
+
+	LISTEN 127.0.0.1:6053
+	LISTEN 127.0.0.1:6055
 
 
 ## 12. Maintaining this file
