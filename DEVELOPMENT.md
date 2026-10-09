@@ -15196,6 +15196,56 @@ Docker do it, so Docker counts nought while the process loops.
 and read only what came after it.
 
 
+### The Room selector had been a ghost
+
+Owner, with a screenshot of the voice panel: *"keep the home and
+noisy office, and have an option for continuous reply on/off too."*
+
+The panel already had a Room selector, and it read **unavailable**.
+Home Assistant was restoring `input_select.voice_profile` from its
+registry -- `restored: true`, options still attached -- while nothing
+defined it any more. It had been made through the interface, which
+puts it in `.storage` where it cannot be read or reviewed, and then
+it was lost. So the automation that rewrites the settings for the
+room had nothing to read, and had been doing nothing for some time.
+
+Declared in `configuration.yaml` now, beside everything else that is
+declared. The dashboard's own comment said it should have been:
+*"so it lives in this repository rather than in .storage where it
+cannot be read or reviewed."*
+
+The profile grew two settings. Gain, at 15 in both -- it scales
+speech and noise together and changes no ratio, so there is nothing
+to choose per room. And whether the microphone reopens after a reply,
+which is the one that cannot be a threshold at all: at home a
+reopened window is answered or falls quiet, and in the office it
+opens into other people's conversations.
+
+One of the four it already had was a trap. Quiet room set suppression
+`Off`, which was right when it was written at gain 0 and is the
+disaster of this morning at gain 15 -- amplified room noise tripping
+the voice detector within a second, 92% of the time against 37%.
+`Low` now.
+
+And the network chooses the room rather than the settings. An earlier
+automation written an hour before this one threw the reopen switch
+directly; two things writing the same five entities would have each
+undone the other at startup. The profile is where the settings live
+and where the reasons for them are written, so the network sets the
+profile and stops there.
+
+Three things left behind, all the same shape. An entity in the
+registry that nothing defines does not disappear -- it sits there
+answering "unavailable", and a panel built on it looks configured and
+does nothing. `input_text.last_network` and the hour-old automation
+are two more of them, both dead and both harmless, and clearing them
+means editing `.storage` with Home Assistant stopped.
+
+The entity id of an automation comes from its `alias`, not its `id`.
+Triggering `automation.the_room_is_chosen_by_the_network` -- the id --
+returned 200 and ran nothing at all.
+
+
 ## 12. Maintaining this file
 
 When the owner states a preference, makes a decision, or corrects something,
