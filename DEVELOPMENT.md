@@ -15768,6 +15768,27 @@ like something chosen once for a machine, and each turned out to be
 wrong the moment the machine was listening through something else.
 If a new one is added, it is an entity on the first day.
 
+Two things went wrong putting it in, and both have been written
+down before.
+
+It died in its own constructor, exactly as the `_after_every` change
+did on 6 October. The entity is registered at line 482 and the value
+it reads was set at line 490, so `sync_with_state()` asked for an
+attribute that did not exist yet. Seven restarts in a minute, and
+`docker inspect` said `restarts=0` and `Up 12 seconds (healthy)`
+the whole time, because a stop-and-start resets the count. The field
+now sits at the top of `__init__` beside the other one that carries
+the same warning. **Anything an entity reads is set before any
+entity is built**, and the check after a restart is the log from
+`State.StartedAt`, never the uptime.
+
+And it came up as `number.bedroom_laptop_lva_mic_gate`, not
+`number.laptop_lva_mic_gate` like every setting next to it. An
+entity keeps the device name it was first discovered under, and the
+older ones predate a rename. The automation written against the
+pattern of its neighbours silently did nothing. **Read an entity id
+off the state machine before writing it into anything.**
+
 Not persisted to the preferences file, deliberately. The profile
 sets it on every change and again when Home Assistant starts, so a
 stored value could only ever be overwritten -- and one kept from a
