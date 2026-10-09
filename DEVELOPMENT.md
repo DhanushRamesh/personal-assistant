@@ -15887,6 +15887,66 @@ source is at 19% / -43.28 dB with ALSA Capture at +16.50 dB -- which
 looks broken and is the measured good chain; `restart-satellite`
 carries the warning not to "restore" either end to 100%.
 
+### Relaxed is the default wearing a different name
+
+Chasing a Deepgram setting for end-of-speech timing, and finding
+that none of them apply, turned up something nearer home. Read out of
+the running Home Assistant:
+
+	default      silence 0.70s
+	relaxed      silence 0.70s
+	aggressive   silence 0.25s
+
+**There are two values, not three.** The voice panel's "finished
+speaking detection" is the pipeline's `vad_sensitivity`, and the only
+thing it can do is make the cut-off *faster*. Quiet room and Earbuds
+have both been set to "relaxed" on the understanding that it bought
+patience in a room where silence is real. It buys nothing. 0.70s is
+the ceiling on how long Home Assistant will wait and no setting
+raises it.
+
+It is the opening bid rather than the whole story, because the
+segmenter here is patched to grow the allowance with the length of
+the turn:
+
+	after  2s of speech -> 0.70s of silence allowed
+	after  4s           -> 1.40s
+	after  7s           -> 2.13s
+	after 10s           -> 2.61s
+
+A short question ends the moment the voice stops; a list read aloud
+is allowed to pause while the next item is found. This setting moves
+where that curve starts, which is why "aggressive" is not a small
+change: the office runs at **0.25s**, and that is live right now.
+
+Whether it still should is a separate question and has not been
+changed. Aggressive was chosen when the audio gate was one number for
+the whole machine and the office kept turns alive on room noise; the
+gate now follows the microphone and sits at 400 there, so the reason
+may have expired. It wants measuring, not assuming.
+
+### Deepgram does not decide when a turn ends
+
+Worth writing down because the question will come back. Endpointing,
+`utterance_end_ms` and `vad_events` are all real Deepgram features
+and none of them can reach this system.
+
+Home Assistant decides the turn is over, locally, and only then tells
+the bridge. On `AudioStop` the bridge sends `CloseStream` and waits
+for the flush, so Deepgram's own trailing-silence endpointing is
+bypassed rather than tuned. `utterance_end_ms` and `vad_events` would
+have Deepgram announce that the speaker stopped -- and Wyoming has no
+message for a recogniser to say that, and nothing downstream to act
+on it.
+
+The one real idea in that direction is Flux, whose turn detection is
+semantic and in the model: it would end a turn when a *thought*
+finishes rather than 0.70s after a *noise* does. That is the shape of
+fix that worked three times in one day -- stop tuning a threshold,
+ask a different question -- but it means moving the turn decision out
+of Home Assistant and into a bridge that owns it. A project, not a
+parameter.
+
 ## 12. Maintaining this file
 
 When the owner states a preference, makes a decision, or corrects something,
