@@ -14991,6 +14991,59 @@ Nought and nothing the first time. Four and five after
 `patched/` was brought level and the container recreated.
 
 
+### A stranger knocking takes the wake word with it
+
+Owner, for the second or third time: *"why is it not waking? I'm
+facing this trouble many times."*
+
+The counters said it outright, and they were built to:
+
+	08:11:52  read=938  listened=938  unattached=0
+	08:12:23  Incorrect preamble: 72
+	08:12:26  Disconnected from Home Assistant
+	08:12:52  read=938  listened=535  unattached=403
+	08:13:52  read=938  listened=0    unattached=938
+	08:14:52  read=938  listened=0    unattached=938
+	08:15:15  Home Assistant reconnects
+
+Two minutes and fifty seconds stone deaf. The microphone was fine --
+938 blocks a minute at an ordinary level throughout -- and the
+container was healthy, and nothing was visible from the room but a
+wake word that did not answer. `unattached` means the wake word loop
+was skipped because `state.satellite` was None: no Home Assistant,
+no listening.
+
+What happened at 08:12:23, in order: a connection arrives and is
+rejected by the websocket server as not valid HTTP; the satellite
+begins an ESPHome handshake with it anyway and re-initialises its
+entities for it; the thing then sends HTTP, and the API server says
+*Incorrect preamble: 72*, which is the H of an HTTP verb; three
+seconds later Home Assistant is gone.
+
+Something on the network was probing the laptop's open ports. There
+is one connection slot, so the probe overwrote the real one, and
+when the probe died the slot was cleared with it.
+
+It was reachable because `HOST` was `0.0.0.0`, and that was set
+deliberately: upstream binds to whatever address the interface
+happens to have, and a DHCP lease change left Home Assistant dialling
+an address that no longer existed. The note in `.env` even says why
+0.0.0.0 was chosen -- *"the satellite is also reachable on 127.0.0.1,
+which is what Home Assistant uses and which DHCP cannot take away."*
+
+Which is the whole of what was wanted, and 127.0.0.1 is the setting
+that says only that. Home Assistant's config entry dials
+`127.0.0.1:6053`; DHCP cannot take the loopback away; nothing on the
+network can reach it; and the healthcheck reads established
+connections locally and does not care. 0.0.0.0 bought the DHCP fix
+and an open door nobody asked for.
+
+Still open on every interface: 6055, the peripheral websocket, which
+the same probe hit first. It only closed its own connection, so it
+cost nothing this time. Left alone deliberately -- two changes at
+once and a broken satellite tells you nothing about which.
+
+
 ## 12. Maintaining this file
 
 When the owner states a preference, makes a decision, or corrects something,
