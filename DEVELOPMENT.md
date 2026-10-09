@@ -15674,6 +15674,51 @@ where one is coming from -- a bone-conduction pickup, or an array
 doing beamforming. Earbuds at this price have one capsule and no
 array. It is not a setting that is missing.
 
+### A tone nobody can hear is not a quiet tone
+
+Owner: *"sometimes when it goes idle I don't get the sound."*
+
+The first move was to look for the ending that forgot to play it.
+There isn't one. Six hours of the satellite's log, every turn walked
+from `RUN_START` to the end:
+
+	turns that ended                     46
+	ended with idle.wav                  30
+	ended with stop.wav                  16
+	ended silently                        0
+
+Sixteen of those are a "stop", which has its own sound and
+deliberately suppresses the idle one. Every single ending made a
+noise. Then the file itself:
+
+	idle.wav      55 ms   -24.5 dBFS   392 Hz
+	stop.wav     180 ms   -16.7 dBFS   660 -> 440 Hz
+
+A quarter of the amplitude and a third of the length. Both were
+deliberate -- it marks an ending, and a chime after every turn would
+be worse than silence -- and both went too far.
+
+The frequency was the part that was not about volume at all. 392 Hz
+was chosen to sit *below* the stop sound's lowest note so the two
+could not be confused. A laptop speaker barely reproduces 392 Hz; a
+small driver rolls off well above it, and an earbud is not much
+better. The tone was being attenuated by the hardware before
+loudness entered into it.
+
+Now C5 at the stop sound's own amplitude, held 150 ms. What keeps
+the three sounds apart was never the level: one steady tone, two
+falling tones, a rising wake chime. Shape does that work.
+
+The general lesson, which is the reason this is written down: when
+something intermittently *is not perceived*, establish whether it
+happened before looking for why it did not. Here the code was right
+and had been right the whole time, and half an hour went into
+proving it. The measurement that mattered took one command on the
+file.
+
+`satellite/sounds/` is a bind mount and mpv opens the file on each
+play, so a new sound is live the moment it is written. No restart.
+
 ## 12. Maintaining this file
 
 When the owner states a preference, makes a decision, or corrects something,
