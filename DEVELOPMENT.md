@@ -16620,6 +16620,66 @@ of a failure.** A watchdog that has not fired, a search that returns
 an answer, a test that goes green -- none of them say which path was
 taken. Say what was measured, and say what was not.
 
+### A say, not a veto
+
+Owner, after the turn model was repaired that morning: *"audit the
+Deepgram transcribed words and audio time -- it's not detecting the
+end immediately?"*
+
+He was right, and the cause was the repair. Deepgram's own log
+gives the audit for nothing: it reports how many seconds of audio
+arrived beside what it made of them, and natural speech runs about
+0.6 seconds a word.
+
+	BEFORE                                AFTER
+	11.0s   2w   5.50  "Thank you."       2.6s  4w  0.65  "What is the time?"
+	10.0s   1w  10.00  "Hello?"           2.8s  4w  0.70  "What is the date?"
+	 3.0s   1w   3.00  "Hello?"           3.7s  6w  0.62  "What do you know about me?"
+	median sec/word 1.80                  median sec/word 0.70
+
+Eleven seconds of audio for two words. The silence was being sent
+to Deepgram because the turn had not ended.
+
+`keep_going` had no limit. Every time the model said the sentence
+was unfinished the whole silence budget came back, and the only
+backstop was the forty-five second timeout. The verdicts show what
+that bought:
+
+	still talking p=0.0131 over 1.7s of audio
+	still talking p=0.0126 over 2.4s
+	... eight times ...
+	finished      p=0.9673 over 8.0s
+
+Seventy-two of a hundred and thirteen verdicts were "not finished",
+at a confidence of 0.013 -- near-certain -- and it turned finished
+only when the eight-second window it is handed had filled. That is
+a fact about the window, not about the sentence.
+
+**The model may now hold a turn open twice and no more.** Two covers
+what it is for, somebody drawing breath mid-thought, and bounds what
+it was doing.
+
+#### What the cap did and did not do
+
+It did not improve the model. The verdict mix barely moved -- 64%
+"still talking" before, 57% after -- because a bound does not change
+what something says, only how far it is obeyed. What changed is the
+median trailing silence, 1.80 to 0.70 seconds a word, and 0.70 is
+natural speaking rate: there is almost no dead air left to cut.
+
+Worth keeping in view: this was a fix that made things worse. The
+model had been timing out at eighty milliseconds for as long as it
+had existed, so repairing it was the first time anything it said
+had ever been acted on -- and it immediately started holding every
+short answer open for eight seconds. **The first day a component is
+believed is the day to measure what believing it costs.**
+
+And the audit itself is the reusable part. `deepgram live: Xs of
+audio arrived over Ys: <text>` against the word count gives
+seconds-per-word, and anything far above 0.7 is silence somebody is
+paying for. No instrumentation needed; the bridge has been printing
+it all along.
+
 ## 12. Maintaining this file
 
 When the owner states a preference, makes a decision, or corrects something,
