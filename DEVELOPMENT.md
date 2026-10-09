@@ -16026,10 +16026,43 @@ turn, needs no cloud round trip and no protocol change -- and has
 never been given 140 milliseconds. Measure it working before
 spending anything on Flux.
 
+Measured working, 9 October 2026, with the owner speaking a sentence
+with a deliberate pause in the middle:
+
+	finished       p=0.9764 in  55ms over 1.6s of audio
+	still talking  p=0.0278 in  66ms over 2.4s of audio
+	finished       p=0.9043 in  84ms over 3.6s of audio
+	finished       p=0.8785 in 106ms over 3.7s of audio
+
+The second line is the pause, and it is the first time in this
+system that a turn has been held open by a model rather than a
+timer. Turns ran five to seven seconds and ended properly; nothing
+ran away.
+
+55-106ms, against the 140ms measured by hand. The hand measurement
+sent the full eight-second window because that is what Home
+Assistant's buffer holds; real questions are asked over one to four
+seconds of audio and are correspondingly quicker. Both numbers were
+over the 80ms that was killing them.
+
+A few still miss. The question is asked when speaking stops and read
+when the silence timer fires, so one asked late enough outlives its
+own turn -- five in the first few minutes. They are harmless and now
+say so in one line instead of a stack trace.
+
 The general form, and the reason this is written down rather than
 just fixed: **a timeout copied from another timeout is a number
 nobody chose.** 0.08 was right for the grace, meaningless for the
 request, and identical in the source.
+
+And the thing that kept it hidden for a day: **the service was
+silent on purpose.** `log_message` was overridden on the reasoning
+that the assistant's own logs tell the story better. They do not --
+nothing downstream records that the question was even asked -- so the
+only trace of a model that was never heard was a `BrokenPipeError`,
+which reads as a network hiccup rather than a feature that has never
+run. It now prints its verdict, every time. **A model whose answer
+nobody can see is a model nobody can tell is dead.**
 
 ## 12. Maintaining this file
 
