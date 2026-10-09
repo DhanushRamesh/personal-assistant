@@ -357,8 +357,24 @@ func (w Where) Gate() (Gate, error) {
 		return Gate{}, fmt.Errorf("%w: a group is not one condition", ErrUnreadableGate)
 	}
 	gate := Gate{Op: w.Op}
+	// A pattern asked for and nothing said about it means it holds.
+	//
+	// Every other source is a reading to compare, so an operator
+	// and a value are the whole of what a condition is. A pattern
+	// answers yes or no, and `{"pattern": "reaching"}` plainly
+	// means "when this is so" -- asking somebody to write
+	// `"op": "==", "value": "yes"` after it would be a ceremony
+	// with one possible outcome, and a blank nobody can get wrong
+	// is a blank worth not having.
+	//
+	// Said rather than assumed, so the opposite stays sayable:
+	// `"op": "==", "value": "no"` is the absence, and reads as
+	// what it is.
+	if w.Pattern != "" && gate.Op == "" && w.Value == nil {
+		gate.Op, gate.Value = Is, Yes
+	}
 	// Stored as a symbol, read as the word the parser knows.
-	if word, found := words[w.Op]; found {
+	if word, found := words[gate.Op]; found {
 		gate.Op = word
 	}
 	// Checked here and nowhere else, because this is the only door
@@ -376,7 +392,7 @@ func (w Where) Gate() (Gate, error) {
 	case w.Count != nil:
 		gate.Source = w.Count.Source()
 	case w.Pattern != "":
-		return Gate{}, fmt.Errorf("%w: a pattern is not a condition yet", ErrUnreadableGate)
+		gate.Source = patternSource(w.Pattern, w.With)
 	default:
 		gate.Source = strings.ToLower(strings.TrimSpace(w.Source))
 	}
@@ -386,6 +402,8 @@ func (w Where) Gate() (Gate, error) {
 
 	switch {
 	case gate.Op == Any:
+	case gate.Value != "":
+		// Already settled -- a pattern with nothing said about it.
 	case w.Ago != "":
 		gate.Value = w.Ago + Ago
 	case w.Value != nil:
@@ -578,6 +596,21 @@ func (w Where) Describe() string {
 	gate, err := w.Gate()
 	if err != nil {
 		return "something unreadable"
+	}
+	// A pattern asked for plainly is read back plainly. The gate
+	// underneath it says `pattern.reaching tries=2 is yes`, which
+	// is the truth and is nobody's sentence; the rule said
+	// "reaching, with two tries", and that is what a person is
+	// shown when they are told why a rule did or did not run.
+	if IsPattern(gate.Source) {
+		out := strings.TrimPrefix(gate.Source, Patterned)
+		if gate.Value == No {
+			return "not " + out
+		}
+		if gate.Op == Is && gate.Value == Yes {
+			return out
+		}
+		return out + " " + gate.Op + " " + gate.Value
 	}
 	out := gate.Source + " " + gate.Op
 	if gate.Op == Any {

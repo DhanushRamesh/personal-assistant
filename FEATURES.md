@@ -406,6 +406,30 @@ if it is, it says nothing. The memory is kept while the thing is
 still true and forgotten when a check stops holding, so something
 that goes away and comes back is announced again.
 
+**Patterns, for what the grammar cannot say.** A condition may ask
+a named shape instead of reading a source:
+
+    {"pattern": "reaching", "with": {"tries": 2}}
+
+A shape is worked out in Go, tested, and given blanks a rule fills
+in. It exists for questions no arrangement of counting and windows
+reaches: `reaching` is "somebody has tried twice **and still not got
+through**", and the second half is a thing that *cancels* the ones
+before it, which counting cannot express. Its blanks are `tries`
+(default 2), `among` (one person, default anybody) and `within`
+(default 3h).
+
+Asked plainly it means it holds; `"op": "==", "value": "no"` is the
+absence. A pattern cannot *wake* a rule — it is worked out from
+events that already landed, so a rule standing only on one would
+wait for ever. Give it a clock or an arriving event, and ask the
+pattern as a condition.
+
+Shapes now: **reaching**. The others named when this was scoped --
+cancelled-by, gone-quiet -- turned out not to need their own:
+`reaching` *is* the cancelled-by shape, and gone-quiet falls out of
+counting (`counted battery.level within 30m is 0`).
+
 **Linear, on purpose.** A check stops the steps after it, and that
 is the whole of the conditional. No branching, no loops, no
 variables — Tasker and Home Assistant already exist for that. A

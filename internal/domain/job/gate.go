@@ -796,10 +796,14 @@ func (g Gate) Measures() bool {
 // does not, a routine does not -- a time of day is worked out and
 // kept -- and neither does a connection or a Home Assistant
 // entity, both of which are read when somebody asks rather than
-// delivered.
+// delivered. Nor does a pattern, which is worked out from events
+// that have already landed: the things it is made of can wake a
+// rule, and it cannot, or a rule whose only condition was a
+// pattern would be woken by nothing and wait for ever.
 func (g Gate) Arrives() bool {
 	return g.Needs() != "" && !routine.Mine(g.Source) &&
-		!Linked(g.Source) && !Hassed(g.Source) && !Counts(g.Source)
+		!Linked(g.Source) && !Hassed(g.Source) && !Counts(g.Source) &&
+		!IsPattern(g.Source)
 }
 
 // Linked : Whether a gate source asks about a connection to

@@ -16064,6 +16064,91 @@ which reads as a network hiccup rather than a feature that has never
 run. It now prints its verdict, every time. **A model whose answer
 nobody can see is a model nobody can tell is dead.**
 
+### A pattern is a source like any other
+
+`Where.Pattern` had been in the shape since the engine was
+restructured, and the gate refused it in as many words -- *"a
+pattern is not a condition yet"* -- while `DoPattern` appeared in
+one validation list and was executed by nothing. The escape hatch
+for everything the grammar could not say was designed and never
+built, which is the worst state for it to be in: the shape implies
+it works.
+
+It is built, and the thing worth recording is how small it turned
+out to be. **A pattern is a source whose readings are worked out in
+Go.** Conditions are already evaluated by naming what they need,
+fetching it, and judging what came back -- so a pattern names
+itself (`pattern.reaching tries=2`), something computes it, and the
+judging is the code that was already there. The tree walking, the
+grouping, every operator and the describing all work on it without
+knowing it exists. Not one of them changed.
+
+Three decisions inside that:
+
+**Asked plainly means yes.** `{"pattern": "reaching"}` lowers to
+`is yes`. Requiring `"op": "==", "value": "yes"` after it would be
+ceremony with one possible outcome, and a blank nobody can get
+wrong is a blank worth not having. The opposite stays sayable and
+reads as what it is: `"value": "no"`.
+
+**The blanks are sorted into the source.** A map has no order, and
+two rules asking the same thing must name the same source or each
+is fetched twice and kept as two.
+
+**A pattern cannot wake a rule.** It is worked out from events that
+have already landed, so a rule whose only condition was a pattern
+would be woken by nothing and wait for ever. `Arrives()` refuses
+it, which is a loud no in place of a silent never.
+
+#### The first shape, and why it is a shape
+
+`reaching` -- somebody has tried more than once and still not got
+through.
+
+Counting gets close. `counted call.missed by value within 2h >= 2`
+is two missed calls from one person, and it is wrong in the way
+that matters: it goes on being true after they have got through.
+Somebody ringing twice and then being answered is not somebody who
+needs you, and **no window or threshold separates them, because the
+thing that settles it is an event that cancels the ones before
+it.**
+
+That is not a missing operator. It is a different question, and it
+is the fourth time in two days the answer has been the same shape:
+stop looking for a better number and ask something else.
+
+The cancelling itself is `event.Reaching`, which was already
+written -- it pairs attempts with what answered them and hands back
+the ones still open. `situation.Trying` was that function plus two
+constants. The pattern is that function plus two blanks.
+
+So of the four templates named when the engine was scoped --
+counted, grouped, cancelled-by, gone-quiet -- counted and grouped
+shipped as the count gate, **`reaching` is cancelled-by**, and
+gone-quiet needed nothing: `counted battery.level within 30m is 0`
+is a device that has stopped reporting.
+
+#### What is not done
+
+`situation` still stands. `Trying` has somewhere to go now and has
+not gone; `Quiet` was always expressible and never moved. Retiring
+the package, the `situation_find` tool and the `situations` tool
+package is the next piece, and it is deletion rather than
+construction.
+
+A pattern as an *act* -- `DoPattern` -- is still unbuilt. It was
+left deliberately: a condition is the half that was blocking
+anything, and an act that runs a shape has no customer yet. The
+constant stays in the validation list and nothing dispatches it,
+which is the same half-built state this section opened by
+complaining about, and is worth either building or deleting rather
+than leaving.
+
+And `howToWhen` grew by three lines to teach the writer about
+patterns. Per the standing rule that a widened tool description
+buys over-reach, `make evals` has **not** been run either side of
+that change. It should be.
+
 ## 12. Maintaining this file
 
 When the owner states a preference, makes a decision, or corrects something,

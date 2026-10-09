@@ -23,6 +23,7 @@ import (
 
 	"personal-assistant/internal/app/api"
 	"personal-assistant/internal/app/api/presence"
+	"personal-assistant/internal/app/pattern"
 	"personal-assistant/internal/app/profile"
 	"personal-assistant/internal/app/runner"
 	"personal-assistant/internal/app/tool"
@@ -724,6 +725,7 @@ func run() error {
 			tools: tools, speaker: speaker, written: announcements,
 			to: publishing, events: deviceEvents, here: here, look: look,
 			usually:  ordinarily(&profile.Reader{Memories: remembering.Store}, logger.Logger),
+			shapes:   pattern.Matcher{Events: deviceEvents, Now: cfg.Assistant.Now},
 			answerer: answerer, cfg: cfg,
 			now: cfg.Assistant.Now, logger: logger.Logger,
 		},
@@ -2103,7 +2105,11 @@ type doing struct {
 	// usually : The shape of this person's ordinary day, from the
 	// standing description. Nil leaves a rule writing without it,
 	// which is how every rule wrote before this.
-	usually  func(ctx context.Context, userID string) string
+	usually func(ctx context.Context, userID string) string
+	// shapes : What works out a named pattern. Nil makes every
+	// rule standing on one fail loudly rather than quietly not
+	// hold.
+	shapes   job.Patterns
 	answerer environment.Environment
 	cfg      config.Config
 	now      func() time.Time
@@ -2900,6 +2906,20 @@ func (d doing) Holds(ctx context.Context, userID string, when job.Occasion) (boo
 
 	got := map[string][]job.Reading{}
 	for _, kind := range when.Needs() {
+		// A pattern is a source like any other, and that is the
+		// whole of why it was a small change: it names itself,
+		// something works it out, and the judging is the code
+		// that was already there. What it answers is a reading of
+		// yes or no, which every operator already knows how to
+		// compare.
+		if job.IsPattern(kind) {
+			reading, err := d.patterned(ctx, userID, kind)
+			if err != nil {
+				return false, "", err
+			}
+			got[kind] = []job.Reading{reading}
+			continue
+		}
 		latest, err := d.look.Latest(ctx, userID, kind, deep)
 		if err != nil {
 			return false, "", err
@@ -2918,6 +2938,34 @@ func (d doing) Holds(ctx context.Context, userID string, when job.Occasion) (boo
 	d.logger.InfoContext(ctx, "a job checked its conditions",
 		slog.String("when", when.Describe()), slog.Bool("held", held))
 	return held, why, nil
+}
+
+// patterned : One pattern source, worked out.
+//
+// An error rather than an unknown reading when there is nothing to
+// work it out with. A rule standing on a shape nobody can compute
+// is broken, and a broken rule that reads as "did not hold" is a
+// rule that will be wrong in silence for as long as nobody checks.
+func (d doing) patterned(ctx context.Context, userID, source string) (job.Reading, error) {
+	if d.shapes == nil {
+		return job.Reading{}, fmt.Errorf("there is nothing on this server to work %q out with", source)
+	}
+	name, with, err := job.Pattern(source)
+	if err != nil {
+		return job.Reading{}, err
+	}
+	held, err := d.shapes.Match(ctx, userID, name, with)
+	if err != nil {
+		return job.Reading{}, err
+	}
+	value := job.No
+	if held {
+		value = job.Yes
+	}
+	// Known and now: a shape is worked out at the moment it is
+	// asked, so there is no older reading of one and nothing for
+	// `older than` to be true of.
+	return job.Reading{Value: value, At: d.now(), Known: true}, nil
 }
 
 // where : The person's zone, or UTC.
