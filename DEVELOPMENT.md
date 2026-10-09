@@ -16518,6 +16518,68 @@ works -- 18 offered rather than 58, for a 690-token catalogue -- so
 the remaining weight is the tools that are offered, not the ones
 that are not.
 
+### A timer is not a guarantee
+
+Owner, with the microphone open and nothing happening: *"it is
+indefinitely listening. In that case, in case of failure it should
+recover itself."*
+
+	assist_satellite = listening
+	last pipeline event: ten minutes earlier
+
+Two faults, both introduced the same evening, and the second is the
+one worth keeping.
+
+**The cap cannot cap itself.** `TURN_MAX` ends a turn that runs too
+long and it is a timer, so anything that cancels it removes the only
+thing that was going to end the turn. The wake-word interrupt added
+hours earlier does precisely that: it abandons the open turn, which
+forgets the cap, and the stale `RUN_END` that follows forgets it
+again. The log shows the whole thing in three milliseconds at
+16:59:05 -- wake word, `RUN_END`, idle sound -- and then nothing at
+all while the microphone stayed open.
+
+So the recovery is not another timer. A thread runs for the life of
+the process and asks one question every five seconds: **has the
+microphone been open longer than any turn is allowed to be?** Forty
+five seconds, comfortably past the cap so an ordinary long turn is
+still ended by its own words. Nothing can cancel it, because nothing
+holds a handle to it.
+
+The general form: **a timer that something else can cancel is not a
+guarantee, it is a hope with a clock on it.** Where the requirement
+is that a thing cannot stay stuck, the check has to be owned by
+something that does not take part in the thing going wrong.
+
+**And the Mic Gate entity disappeared**, which Home Assistant said
+three times and nobody read:
+
+	Referenced entities number.bedroom_laptop_lva_mic_gate
+	are missing or not currently available
+
+It was cached on the satellite object. Every other entity is cached
+on `state`. The satellite is rebuilt whenever Home Assistant
+reconnects and `state` is not -- so each reconnect found its own
+attribute empty, built another Mic Gate, appended it with a new key
+and shifted every entity registered after it, until Home Assistant
+dropped it from its registry altogether. The profile could then not
+set the gate, and said so to nobody. It is looked up among
+`state.entities` by `object_id` now.
+
+Worth adding to the restart habits: **restarting the satellite does
+not clear a stale entity list.** The satellite logged "Found 12
+entities in state" and Home Assistant still had the old set; the
+entity came back only after reloading the ESPHome config entry.
+That is the move whenever an entity goes missing after a change
+here.
+
+**Unproven, and recorded as such.** The watchdog thread starts and
+has not errored, and it has fired zero times -- which is correct and
+is not evidence. Verifying it properly means deliberately wedging a
+microphone, which has not been done. If the satellite goes quiet
+again and does *not* come back within forty-five seconds, that is
+this failing.
+
 ## 12. Maintaining this file
 
 When the owner states a preference, makes a decision, or corrects something,
