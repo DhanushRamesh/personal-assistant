@@ -15414,6 +15414,41 @@ microphone that is in somebody's ear, where nothing else is competing
 to sound like "stop".
 
 
+### Twice sir
+
+Owner, hearing one go out: *"while announcing it is using twice sir
+-- like 'Sir, the battery is 25%, sir'."*
+
+Both halves were obeying their own instruction, which is why neither
+looked wrong on its own.
+
+The persona says to address the person once in each reply and never
+twice, and the model does -- every stored announcement has exactly
+one. The opening is added afterwards, by `opened`, for a reason that
+is also right: the first second of an announcement is spent getting
+somebody's attention rather than carrying anything, so it is given a
+word it does not matter to lose. Neither knows about the other.
+
+The opening is the half that stays. A word at the end of a sentence
+cannot do the job of getting attention at the start of one, so the
+sentence gives its copy up.
+
+Taken out of the middle as well as off the end. It lands there as
+often as not -- *"The silence from your phone, sir, has now stretched
+to three hours"* -- and that is a second one just as much.
+
+Two things the tests caught that the fix needed and the description
+of it did not. The punctuation the address was leaning against:
+*"fifty percent, sir."* became *"fifty percent ."*, and a satellite
+reads that gap aloud as a pause. And the capital: taking *"Sir,"* off
+the front of *"Sir, the battery is low"* leaves a sentence that has to
+start somewhere.
+
+That capital changed an older test, which had asserted *"Sir. your
+battery is low."* -- the old behaviour written down rather than the
+right one.
+
+
 ## 12. Maintaining this file
 
 When the owner states a preference, makes a decision, or corrects something,

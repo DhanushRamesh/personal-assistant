@@ -20,6 +20,7 @@ import (
 	"log/slog"
 	"personal-assistant/internal/base/records/client"
 	"personal-assistant/internal/base/records/store"
+	"regexp"
 	"strings"
 	"time"
 
@@ -69,14 +70,86 @@ func Opening(kind conversation.Kind) string {
 	return strings.ToUpper(address[:1]) + address[1:] + "."
 }
 
-// opened : The announcement with its opening in front of it.
+// Spoken : The announcement as it will be heard.
+//
+// Exported so that what is said can be tested without a speaker, a
+// network and a satellite between the test and the sentence.
+func Spoken(kind conversation.Kind, text string) string { return opened(kind, text) }
+
+// opened : The announcement with its opening in front of it, and
+// said once.
+//
+// Owner, hearing one: *"while announcing it is using twice sir --
+// like 'Sir, the battery is 25%, sir'."*
+//
+// Both halves were obeying their own instruction. The persona says
+// to address the person once in each reply and never twice, and the
+// model does. The opening is added afterwards, by something the
+// model cannot see, and the two of them together say it twice.
+//
+// The opening is the half that stays. It exists because the first
+// second of an announcement is spent getting somebody's attention
+// rather than carrying anything, and a word at the end of a
+// sentence cannot do that job. So the sentence gives its copy up.
 func opened(kind conversation.Kind, text string) string {
 	lead := Opening(kind)
 	text = strings.TrimSpace(text)
 	if lead == "" || text == "" {
 		return text
 	}
-	return lead + " " + text
+	return lead + " " + once(text)
+}
+
+// said : The form of address as a word in a sentence, with whatever
+// punctuation is hanging off it.
+//
+// Matched on a word boundary so that a place or a name containing
+// the letters is left alone.
+var said = regexp.MustCompile(`(?i)\s*,?\s*\b` + regexp.QuoteMeta(addressOf()) + `\b\s*,?`)
+
+// addressOf : The form of address, for building the expression
+// above. A separate function because package-level variables are
+// built in the order they are written and address is set later, by
+// Addressing.
+func addressOf() string {
+	if address != "" {
+		return address
+	}
+	// Every persona that has one uses this, and a persona with none
+	// gets no opening at all, so this expression is never consulted.
+	return "sir"
+}
+
+// once : The sentence with the form of address taken out of it.
+//
+// Taken out rather than only trimmed from the end. It lands in the
+// middle as often as not -- "The silence from your phone, sir, has
+// now stretched to three hours" -- and that one is a second "sir"
+// just as much as a trailing one is.
+//
+// The punctuation around it goes with it, and the sentence is left
+// starting with a capital, because "Sir. , the battery" and "sir,
+// the battery has dropped" are both worse than what they replaced.
+func once(text string) string {
+	out := said.ReplaceAllString(text, " ")
+	// The space the replacement leaves behind, where the address sat
+	// against the punctuation that followed it. Without this, "fifty
+	// percent, sir." becomes "fifty percent ." and the satellite
+	// reads the gap aloud as a pause.
+	for _, tight := range []string{" .", " ,", " !", " ?", " ;"} {
+		out = strings.ReplaceAll(out, tight, tight[1:])
+	}
+	out = strings.Join(strings.Fields(out), " ")
+	out = strings.TrimLeft(out, " ,.")
+	if out == "" {
+		// The whole of it was the address. Nothing is better than an
+		// opening with nothing after it.
+		return text
+	}
+	// A capital, because what is now the first word may not have
+	// been: taking "Sir," off the front of "Sir, the battery is low"
+	// leaves a sentence that has to start somewhere.
+	return strings.ToUpper(out[:1]) + out[1:]
 }
 
 // Speak : Says an announcement to the audience its kind is for.
