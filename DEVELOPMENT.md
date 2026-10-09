@@ -15564,6 +15564,59 @@ What this does not fix is the chat it happened in, where the
 sequence is still visible. A new conversation starts clean.
 
 
+### Two sounds three milliseconds apart
+
+Owner: *"when it goes idle I should get a sound"*, and then *"when
+listening I say stop, it goes idle, but I don't get sound."*
+
+Two faults, and the second had been there longer.
+
+The idle sound played after the fifteen-second cap and not after the
+five-second wait. Both ended through `_tts_finished`, which plays it
+past two guards written for a turn that *spoke* -- and a window
+nobody answered is not one of those. A window closing is its own
+end and marks itself now, with a moment's guard so the other path
+does not mark it twice.
+
+The stop was worse and more interesting:
+
+	10:31:38.858  Asked Home Assistant to abandon the pipeline
+	10:31:38.858  stop.wav
+	10:31:38.861  idle.wav
+
+Three milliseconds, and the second cut the first. `stop()` already
+knew this could happen -- its own comment says *"two sounds one
+after the other say less than either alone"* -- and guards it with a
+flag held while it runs. But the RUN_END that Home Assistant sends
+in answer arrives after `stop()` has returned and cleared the flag.
+A flag cannot cover a race that outlives the function holding it.
+A moment can, so the stop records one.
+
+### The rate that should have been free
+
+Owner: *"in bluetooth there is a delay in wake word listening and
+stop to idle latency."*
+
+Measured, the chain was converting every chunk twice for nothing:
+the earbuds give 16000 mono, the null sink held 44100 stereo, and
+echo-cancel took it back to 32000 mono. Matching the sink to the
+rate at both ends looked free.
+
+It cost thirty milliseconds. `voice_only` went from six to
+thirty-six, measured settled and streaming, three readings apart.
+PulseAudio sizes these buffers in frames, so the same buffer at a
+lower rate is more time -- and the resampling it saved was the cheap
+kind.
+
+Put back the same hour. What was kept is the loopback's own buffer,
+twenty milliseconds to ten, which is small and real. The headset's
+own thirty-eight cannot be argued with and is most of what is left.
+
+Worth writing down because it looked like free waste and was not.
+The measurement that settled it is the same one that should have
+preceded it.
+
+
 ## 12. Maintaining this file
 
 When the owner states a preference, makes a decision, or corrects something,
