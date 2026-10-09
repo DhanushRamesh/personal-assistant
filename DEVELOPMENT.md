@@ -15511,6 +15511,10 @@ choosing by, and by the network otherwise. Earbuds beat whichever
 room he is standing in, because they are not one: no echo, nothing
 else talking, and a person who speaks softly into them.
 
+(*"Nothing else talking"* survived one day. See "An earbud is not a
+directional microphone" below: it is true of a room's hum and false
+of a person standing in it.)
+
 	wake 0.5, stop 0.7, suppression Low, relaxed, gain 15, window reopens
 
 Relaxed rather than aggressive for the same reason the office needs
@@ -15616,6 +15620,59 @@ Worth writing down because it looked like free waste and was not.
 The measurement that settled it is the same one that should have
 preceded it.
 
+
+### An earbud is not a directional microphone
+
+Owner, mid-sentence, the problem in it: *"I speak to the mic and I
+stopped, but my colleague speaking near me -- my mic is listening,
+why? That too I'm in earbuds."*
+
+Fourteen seconds captured from the earbud microphone while it was
+happening, run through the Earbuds profile's own settings -- gain 15,
+suppression Low -- the way the satellite would see it:
+
+	50th percentile of 10ms chunks       359
+	75th                                1093
+	90th                                2781
+	95th                                5337
+	max                                14138
+
+	above the gate of 300              54.1%
+	above 1500                         19.8%
+
+Fifty-four per cent is not leakage. That is a second voice arriving
+at full strength, and the peaks are as loud as speech gets.
+
+It overturns the reason the earbuds were reached for. The section
+above is right that they are not a room -- when nobody speaks the
+median chunk is **1**, against 985 on the laptop microphone, which is
+a two-order-of-magnitude rejection of fan, hum and air conditioning.
+But that is isolation from *noise*, and a colleague is not noise. An
+HFP earbud microphone is a single omnidirectional capsule. It is
+nearer the owner's mouth than anybody else's and that is the whole of
+its advantage: a few decibels, not a different signal.
+
+Which closes the door the gate was standing in. The owner's voice and
+the neighbour's land in the same range, so there is no number that
+admits one and refuses the other. 300 was lowered to 300 precisely so
+quiet speech into an earbud would pass; it lets a colleague past for
+the same reason. Raising it back to 1500 would reject both.
+
+So the turn is given an end that does not depend on hearing one --
+the same answer as the reopened window, extended to the half that was
+exempted. `TURN_MAX=30`: longer than any command measured here, a
+quarter of Home Assistant's own two minutes.
+
+The exemption was reasoned and wrong. It said a turn started by
+saying the wake word is a turn the person is present for, and so
+needs no cap. Presence is not the variable. What holds a window open
+is somebody *else* talking, and that is indifferent to whether the
+owner meant to open it.
+
+What would actually separate two voices is a microphone that can tell
+where one is coming from -- a bone-conduction pickup, or an array
+doing beamforming. Earbuds at this price have one capsule and no
+array. It is not a setting that is missing.
 
 ## 12. Maintaining this file
 
