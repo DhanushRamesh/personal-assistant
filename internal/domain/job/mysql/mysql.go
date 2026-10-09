@@ -33,6 +33,7 @@ type row struct {
 	Anywhere  bool       `gorm:"column:anywhere"`
 	Cool      string     `gorm:"column:cool"`
 	QuietAt   *time.Time `gorm:"column:quiet_until"`
+	Resume    int        `gorm:"column:resume_at_step"`
 	When      *string    `gorm:"column:when"`
 	Perform   *string    `gorm:"column:perform"`
 	CreatedAt time.Time  `gorm:"column:created_at"`
@@ -265,12 +266,18 @@ func (s *Store) Ran(ctx context.Context, id string, next time.Time,
 		return fmt.Errorf("job: there is nowhere to record that a job ran")
 	}
 	fields := map[string]any{
-		"state":      string(state),
-		"why":        clip(why, 500),
-		"last_said":  clip(said, 2000),
-		"last_at":    at.UTC(),
-		"next_at":    nil,
-		"updated_at": time.Now().UTC(),
+		"state":     string(state),
+		"why":       clip(why, 500),
+		"last_said": clip(said, 2000),
+		"last_at":   at.UTC(),
+		"next_at":   nil,
+		// A run that finished is not part-way through anything.
+		// Cleared here rather than by the runner so that a rule
+		// which stops for any reason -- a failed lookup, a check
+		// that withheld -- starts from the top next time, and a
+		// wait never leaves a rule stuck in the middle of itself.
+		"resume_at_step": 0,
+		"updated_at":     time.Now().UTC(),
 	}
 	if !next.IsZero() {
 		fields["next_at"] = next.UTC()
@@ -295,6 +302,24 @@ func (s *Store) Arm(ctx context.Context, id string, at time.Time) error {
 		Updates(map[string]any{"next_at": at.UTC(), "updated_at": time.Now().UTC()})
 	if out.Error != nil {
 		return fmt.Errorf("job: arming %s: %w", id, out.Error)
+	}
+	return nil
+}
+
+// Waits : Stops a rule part-way through, to carry on at a moment.
+func (s *Store) Waits(ctx context.Context, id string, at time.Time, step int) error {
+	if s == nil || s.db == nil {
+		return fmt.Errorf("job: there is nowhere to read jobs")
+	}
+	out := s.db.WithContext(ctx).Model(&row{}).
+		Where("id = ?", id).
+		Updates(map[string]any{
+			"next_at":        at.UTC(),
+			"resume_at_step": step,
+			"updated_at":     time.Now().UTC(),
+		})
+	if out.Error != nil {
+		return fmt.Errorf("job: setting %s to carry on: %w", id, out.Error)
 	}
 	return nil
 }
@@ -349,6 +374,7 @@ func assemble(r row) (job.Job, error) {
 		ID: r.ID, UserID: r.UserID, Name: r.Name, Kind: r.Kind,
 		Schedule: r.Schedule, Steps: steps, State: job.State(r.State),
 		Why: r.Why, Said: r.LastSaid, Keep: r.Keep, Cool: r.Cool, Anywhere: r.Anywhere,
+		Resume: r.Resume,
 	}
 	if err := shape(&j, r); err != nil {
 		return job.Job{}, err

@@ -16149,6 +16149,70 @@ patterns. Per the standing rule that a widened tool description
 buys over-reach, `make evals` has **not** been run either side of
 that change. It should be.
 
+### A wait is not a sleep
+
+Owner, on `perform` being a function: *"it should have the
+function's basics, like if, else, conditionals, loop, sleep."*
+
+Four things, and they are not four decisions. Three of them are one
+decision and its consequences, and the fourth is independent.
+
+**The one decision is whether a condition may read what a step
+returned.** Today it cannot, and that is why `perform` has no
+check: a condition reads a source, a source gives the same answer
+wherever it sits, so a check in the middle would be identical to a
+check at the front. Not forbidden -- meaningless. `if` needs that
+switch thrown; `else` needs `if` plus a second list; a loop needs
+both plus something to iterate. Waiting needs none of them.
+
+So waiting was built and the other three were not. The argument
+against them is the one already written down here -- *"not a
+licence to invent a programming language in a database column"* --
+and there is a second: **a general-purpose interpreter is already
+available as an act.** `{"do": "write", "tools": [...]}` hands
+control to a model that can branch, retry and decide on what it
+just found. The split is Go decides *whether* and a model decides
+*what*; control flow in the column moves deciding to the one place
+that has neither a compiler nor a test.
+
+#### Why it stops instead of sleeping
+
+The runner is one pass over every due rule, on one goroutine. A
+rule that slept five minutes would stop every other rule for five
+minutes -- including the ones that watch for a reading.
+
+So a wait records where it got to and moves the rule's next time.
+`jobs.resume_at_step` is the act to carry on at; zero is a rule
+that is not part-way through anything, which is almost all of them
+almost all of the time. `Ran` clears it, so a rule that stops for
+any other reason -- a failed lookup, a check that withheld --
+starts from the top rather than stranded in its own middle.
+
+It follows that a wait is accurate to within a tick and not to the
+second. Nothing a rule says is worth holding a goroutine open for.
+
+#### The conditions are not asked again
+
+The decision worth recording, because the other way is defensible
+and wrong. A resumed rule does not re-check its `when`.
+
+They held when the sequence began and that is what started it.
+Asking again would make a rule that waits mean something different
+from one that does not -- *"wait five minutes"* would quietly
+become *"wait five minutes and check nothing has changed"*, which
+is a different rule and not the one anybody wrote. Somebody who
+wants that can write the check as a second rule, and will have
+said so.
+
+#### Refused where it can be seen
+
+A wait at the end of a sequence is refused when the rule is made.
+It would run, move the rule's time, come back and find nothing
+left -- which from outside is a rule that ran twice and did nothing
+either time, and this codebase has least patience with silent
+nothing. A wait that is not a length of time is refused the same
+way, rather than discovered at the moment it would have run.
+
 ## 12. Maintaining this file
 
 When the owner states a preference, makes a decision, or corrects something,

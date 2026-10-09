@@ -430,6 +430,19 @@ cancelled-by, gone-quiet -- turned out not to need their own:
 `reaching` *is* the cancelled-by shape, and gone-quiet falls out of
 counting (`counted battery.level within 30m is 0`).
 
+**It can wait.** An act may be `{"do": "wait", "for": "5m"}`, and
+everything after it runs when that time is up. *"Say it, give it
+five minutes, look again"* is a whole thought.
+
+Not a sleep. One pass runs every due rule on one goroutine, so a
+rule that slept would stop all of them; it stops instead, records
+where it got to, and the next pass after that moment picks it up.
+So a wait is accurate to within a tick, which is all anything here
+needs. It must have something after it, and the conditions are
+**not** asked again on the way back -- they held when the sequence
+began, and re-asking would quietly turn "wait five minutes" into
+"wait five minutes and check nothing changed".
+
 **Linear, on purpose.** A check stops the steps after it, and that
 is the whole of the conditional. No branching, no loops, no
 variables — Tasker and Home Assistant already exist for that. A

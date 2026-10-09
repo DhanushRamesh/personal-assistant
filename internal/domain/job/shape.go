@@ -130,6 +130,8 @@ type Act struct {
 	Tools []string `json:"tools,omitempty"`
 	// Text : The words, for a say.
 	Text string `json:"text,omitempty"`
+	// For : How long to wait, for a wait.
+	For string `json:"for,omitempty"`
 }
 
 // What an Act may be.
@@ -139,6 +141,29 @@ const (
 	DoWrite   = "write"
 	DoSay     = "say"
 	DoRelay   = "relay"
+	// DoWait : Stop here and carry on later.
+	//
+	// Owner, on `perform` being a function: *"it should have the
+	// function's basics, like if, else, conditionals, loop,
+	// sleep."* Of those four this is the only one that means
+	// anything on its own. A branch needs a condition that can
+	// read what the step before it returned, and nothing can; a
+	// loop needs the branch and something to iterate; waiting
+	// needs neither. "Say it, give it five minutes, look again"
+	// is a whole thought today.
+	//
+	// Not a sleep, and the difference is the whole of the design.
+	// The runner is one pass over every due rule on one
+	// goroutine, so a rule sleeping five minutes would stop every
+	// other rule for five minutes. This stops the sequence and
+	// moves the rule's next time, and the run that follows picks
+	// up where this one left off.
+	//
+	// So a wait is not accurate to the second and is not meant to
+	// be: it resumes on the next pass after its moment, which is
+	// within a tick. Nothing a rule says is worth a goroutine
+	// held open.
+	DoWait = "wait"
 )
 
 // The operators as a structured rule writes them. The word forms
@@ -853,6 +878,10 @@ func (o Occasion) Steps(acts []Act) []Step {
 }
 
 // Speaks : Whether any of these acts says anything.
+//
+// A wait does not, which matters: a rule whose only acts were a
+// wait and a tool call is a rule that never speaks, and that is
+// allowed and should go on being allowed.
 func Speaks(acts []Act) bool {
 	for _, a := range acts {
 		switch a.Do {
@@ -879,9 +908,23 @@ func Make(id, userID, name, kind string, when Occasion, acts []Act, from time.Ti
 	if err := when.Sound(); err != nil {
 		return Job{}, err
 	}
-	for _, a := range acts {
+	for i, a := range acts {
 		switch a.Do {
 		case DoTool, DoPattern, DoWrite, DoSay, DoRelay:
+		case DoWait:
+			if _, err := Span(a.For); err != nil {
+				return Job{}, fmt.Errorf("%w: a wait is a length of time, and %q is not one",
+					ErrUnreadable, a.For)
+			}
+			// A wait with nothing after it waits for nothing. It
+			// would run, move the rule's next time, come back and
+			// find no acts left -- all of which looks from outside
+			// like a rule that ran twice and did nothing either
+			// time.
+			if i == len(acts)-1 {
+				return Job{}, fmt.Errorf("%w: a wait is before something, and there is nothing after this one",
+					ErrUnreadable)
+			}
 		default:
 			return Job{}, fmt.Errorf("job: nothing carries out %q", a.Do)
 		}

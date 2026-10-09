@@ -99,6 +99,19 @@ func (s *Store) Arm(_ context.Context, id string, at time.Time) error {
 	return nil
 }
 
+// Waits : Stops a rule part-way through, to carry on at a moment.
+func (s *Store) Waits(_ context.Context, id string, at time.Time, step int) error {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	j, ok := s.jobs[id]
+	if !ok {
+		return nil
+	}
+	j.Next, j.Resume = at, step
+	s.jobs[id] = j
+	return nil
+}
+
 // Get : One job, for a test to look at how it ended.
 func (s *Store) Get(id string) (job.Job, bool) {
 	s.mu.Lock()
@@ -178,6 +191,8 @@ func (s *Store) Ran(_ context.Context, id string, next time.Time,
 		return nil
 	}
 	j.Next, j.State, j.Why, j.Last, j.Said = next, state, why, at, said
+	// A run that finished is not part-way through anything.
+	j.Resume = 0
 	s.jobs[id] = j
 	return nil
 }

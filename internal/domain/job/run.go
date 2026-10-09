@@ -60,6 +60,13 @@ type Store interface {
 	// writing it down as a run would put a line in the record for
 	// something nobody did.
 	Arm(ctx context.Context, id string, at time.Time) error
+	// Waits : Stops a rule part-way through and says when to carry
+	// on and where from.
+	//
+	// Its own call for the same reason as [Arm]: the rule has not
+	// finished, so writing it down as a run would put a line in
+	// the record for something that is still happening.
+	Waits(ctx context.Context, id string, at time.Time, step int) error
 }
 
 // Ran : What a step earlier in the same sequence did.
@@ -706,7 +713,13 @@ func (r *Runner) one(ctx context.Context, j Job, now time.Time, pass *Pass) {
 	// same answer wherever it sat -- and asking them all first is
 	// what stops a rule fetching a diary to find out it had
 	// nothing to say.
-	if len(j.When.All) > 0 || len(j.When.Any) > 0 {
+	// Not asked again when a rule is carrying on from a wait. They
+	// held when the sequence began and that is what started it;
+	// asking again would make "wait five minutes" quietly mean
+	// "wait five minutes and check nothing has changed", which is
+	// a different rule and not the one anybody wrote.
+	if resuming := j.Resume > 0 && j.Resume < len(j.Perform); !resuming &&
+		(len(j.When.All) > 0 || len(j.When.Any) > 0) {
 		at := r.clock()
 		held, says, err := r.Doer.Holds(ctx, j.UserID, j.When)
 		note := Tried{Do: "when", When: j.When.Describe(), Came: Went,
@@ -742,7 +755,41 @@ func (r *Runner) one(ctx context.Context, j Job, now time.Time, pass *Pass) {
 		}
 	}
 
-	for _, act := range j.Perform {
+	from := 0
+	if j.Resume > 0 && j.Resume < len(j.Perform) {
+		from = j.Resume
+	}
+	for i := from; i < len(j.Perform); i++ {
+		act := j.Perform[i]
+		// Stop here and come back. Not a sleep: one pass runs every
+		// due rule on one goroutine, so a rule that slept would
+		// stop all of them.
+		//
+		// Nothing is recorded as a run, because the run has not
+		// finished. What it said so far is kept the same way a
+		// finished run keeps it, so the half that already spoke is
+		// not said again when the other half arrives.
+		if act.Do == DoWait {
+			d, err := Span(act.For)
+			if err != nil {
+				pass.Failed++
+				failed, why = true, err.Error()
+				r.note("a rule could not read how long to wait", j, why)
+				break
+			}
+			tried = append(tried, Tried{Do: Task(DoWait), When: act.For, Came: Went})
+			if err := r.Store.Waits(ctx, j.ID, now.Add(d), i+1); err != nil {
+				r.log("cannot set a rule to carry on", err)
+			}
+			if j.Speaks() {
+				r.wrote(ctx, Record{
+					UserID: j.UserID, JobID: j.ID, Name: j.Name,
+					Schedule: j.Schedule, At: now, Took: r.clock().Sub(began),
+					Steps: tried, Said: spoke, Why: "waiting " + act.For,
+				})
+			}
+			return
+		}
 		at := r.clock()
 		done, err := r.Doer.Do(ctx,
 			Turn{UserID: j.UserID, Already: already, Before: j.Said,

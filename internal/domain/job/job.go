@@ -217,6 +217,17 @@ type Job struct {
 	// words going out through a push service, which nothing else
 	// here does.
 	Anywhere bool
+	// Resume : Which act to carry on at, for a rule part-way
+	// through a wait. Zero is a rule that is not waiting, which is
+	// almost all of them almost all of the time.
+	//
+	// The conditions are not asked again when a rule resumes. They
+	// held when the sequence began and that is what started it;
+	// asking again would make a rule that waits mean something
+	// different from a rule that does not, and "wait five minutes"
+	// would quietly become "wait five minutes and check nothing
+	// has changed".
+	Resume int
 	// Said : The sentence this rule last said, so it does not say
 	// it again.
 	//
