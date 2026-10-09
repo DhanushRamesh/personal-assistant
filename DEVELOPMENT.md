@@ -15054,6 +15054,41 @@ past this machine:
 	LISTEN 127.0.0.1:6055
 
 
+### Nine times, at point eight one two
+
+Owner: *"while listening I say stop, it's not stopping."*
+
+	08:25:05  Continued conversation started
+	08:25:06  STT_VAD_START
+	08:25:32  Stop activated 0.777, 0.800, 0.629   -- nothing
+	08:25:54  Stop activated 0.812 x5, 0.803       -- nothing
+	08:26:01  STT_VAD_END
+	08:26:04  Stop activated 0.787  -- abandoned, stop.wav
+
+He said it twice while a turn ran for fifty-four seconds. Nine clean
+detections, the model certain every time, and the dispatcher threw
+all nine away. The third attempt worked because by then the window
+had closed and a different path had armed it.
+
+`_arm_stop_word` is called everywhere listening begins -- after a
+wake word, after the chime that follows one, after a button -- and
+was not called in the one place listening begins without anybody
+asking for it. `_tts_finished` discards the stop word when a turn
+ends, and the reopened window never put it back.
+
+The docstring on `_arm_stop_word` describes this failure exactly,
+including the number: *"The model fires -- Wake word 'Stop'
+activated (0.812) appears in the log -- and the dispatcher throws it
+away."* Somebody met it, fixed the path they were standing in, and
+left the other one. I added the follow-up timer to that same
+function an hour before this and did not notice what was missing
+beside it.
+
+Worth saying which window this is. A reopened one is the window
+most likely to need stopping, because nobody asked for it: the
+person who wants it to stop is the person who did not want it open.
+
+
 ## 12. Maintaining this file
 
 When the owner states a preference, makes a decision, or corrects something,
