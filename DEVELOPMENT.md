@@ -15968,11 +15968,68 @@ on it.
 
 The one real idea in that direction is Flux, whose turn detection is
 semantic and in the model: it would end a turn when a *thought*
-finishes rather than 0.70s after a *noise* does. That is the shape of
-fix that worked three times in one day -- stop tuning a threshold,
-ask a different question -- but it means moving the turn decision out
-of Home Assistant and into a bridge that owns it. A project, not a
-parameter.
+finishes rather than 0.70s after a *noise* does.
+
+Going to look at what that would cost turned up two things that
+change the answer.
+
+**Home Assistant already supports it.** `pipeline.py` only builds its
+own segmenter when `stt_provider.audio_processing.requires_external_vad`
+is true. An STT entity that declares otherwise is handed the audio
+and expected to find the end of speech itself. Flux would need no
+protocol work beyond a property on the Wyoming entity, and keyterm
+prompting -- which the proper-noun vocabulary depends on -- is
+supported on Flux. `wss://api.deepgram.com/v2/listen`,
+`model=flux-general-en`, `eot_threshold` 0.5-1.0 default 0.7,
+`eot_timeout_ms` 500-60000 default 5000, mono only, 80ms chunks
+recommended.
+
+**And it has already been built here, locally, and has never once
+run.** `satellite/turn/` holds smart-turn-v3 behind an HTTP service on
+port 10400, `pipeline.py` is patched to ask it whether the speaking
+has finished, and the answer has been thrown away every single time.
+See below.
+
+### The model has been answering into a closed socket
+
+	101.7 ms   {'finished': False, 'p': 0.2073}
+	121.6 ms
+	140.5 ms   <- median
+	147.4 ms
+	225.6 ms
+
+	Home Assistant's deadline:  80 ms
+	broken pipes in three hours: 479
+
+Every one of those 479 is a turn that asked the question, hung up
+before the answer, and ended on the timer instead -- *"which is what
+it did before any of this"*, as the patch's own comment says.
+
+The cause is one number, and it is the wrong number because two
+different deadlines were given the same value. The question is asked
+the moment the speaking stops and only read when the silence timer
+fires, so the model has the whole of `silence_seconds` to think in --
+0.25s in the office, 0.70s elsewhere -- and the 80ms grace at the
+await is what it gets *on top* of that if it is still going. But
+`_sounds_unfinished` also capped the HTTP request itself at 0.08, so
+the request died 80ms after it started and none of that headroom was
+ever reachable. 140ms of work inside an 80ms budget inside a 250ms
+window.
+
+The HTTP timeout is now 0.5s. The grace stays at 0.08 and remains the
+real cap on what a turn will wait for; a request is cancelled outright
+the moment speaking resumes.
+
+Which makes Flux the second-best option rather than the only one. The
+local model is already trained, already loaded, costs nothing per
+turn, needs no cloud round trip and no protocol change -- and has
+never been given 140 milliseconds. Measure it working before
+spending anything on Flux.
+
+The general form, and the reason this is written down rather than
+just fixed: **a timeout copied from another timeout is a number
+nobody chose.** 0.08 was right for the grace, meaningless for the
+request, and identical in the source.
 
 ## 12. Maintaining this file
 
