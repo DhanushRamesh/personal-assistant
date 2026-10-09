@@ -309,24 +309,36 @@ func TestPositionReadingsAreNeverReturned(t *testing.T) {
 		}
 	}
 
-	// Asked for by name, and by a coordinate in the payload. Both say
-	// nothing was found -- which does quote the question back, so what
-	// is checked is that no reading came with it.
-	for _, args := range []string{
-		`{"days":1,"kind":"location.fix"}`,
-		`{"days":1,"contains":"12.911"}`,
-	} {
-		got := ask(t, s, args).Content
-		if !strings.HasPrefix(got, "Nothing ") {
-			t.Errorf("%s should have found nothing, got:\n%s", args, got)
-		}
-		if strings.Contains(got, "10:") {
-			t.Errorf("%s returned a reading:\n%s", args, got)
-		}
+	// Asked for by kind, it still says nothing was found -- which
+	// does quote the question back, so what is checked is that no
+	// reading came with it. Reading coordinates back is a question
+	// for the database and not for a conversation.
+	got := ask(t, s, `{"days":1,"kind":"location.fix"}`).Content
+	if !strings.HasPrefix(got, "Nothing ") {
+		t.Errorf("asked by kind should have found nothing, got:\n%s", got)
+	}
+	if strings.Contains(got, "10:") {
+		t.Errorf("asked by kind returned a reading:\n%s", got)
+	}
+
+	// But a search finds them, and that is deliberate. This test
+	// asserted the opposite until 9 October 2026, when a search for
+	// "Demi Lovato" came back empty because the same omission hid
+	// music.state. Owner, on the fixes still being held back: *"a
+	// search should fetch whatever is in the record, even the
+	// tiniest one."*
+	//
+	// The distinction that survived is kind versus text. Asking for
+	// a kind is asking to browse it, and a browse of coordinates is
+	// useless; naming a thing is asking whether the record holds it,
+	// and the record is allowed to answer.
+	got = ask(t, s, `{"days":1,"contains":"12.911"}`).Content
+	if strings.HasPrefix(got, "Nothing ") {
+		t.Errorf("a search for what is in the record should find it, got:\n%s", got)
 	}
 
 	// And the things worth seeing are still there.
-	got := ask(t, s, `{"days":1}`).Content
+	got = ask(t, s, `{"days":1}`).Content
 	for _, want := range []string{"network.joined", event.Stayed} {
 		if !strings.Contains(got, want) {
 			t.Errorf("expected %q in:\n%s", want, got)

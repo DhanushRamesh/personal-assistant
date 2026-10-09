@@ -16427,6 +16427,27 @@ path it took.*
 The persona lines stay. They are about saying his fact first rather
 than second, which is a real thing and separate from this.
 
+#### A test that asserted the bug
+
+`TestPositionReadingsAreNeverReturned` failed on the change, and was
+right to: it asserted that `{"contains":"12.911"}` finds nothing.
+That was the old decision written down, and it had been passing for
+as long as the search had been broken.
+
+What survived of it is the distinction that actually matters.
+**Asking for a kind is asking to browse it**, and a browse of
+coordinates is useless, so `kind: location.fix` still answers that
+there is nothing. **Naming a text is asking whether the record holds
+it**, and the record is allowed to answer. The test now asserts
+both halves, which is a better test than either version of the
+rule.
+
+Worth saying plainly: the commit went in with that test failing,
+because the suite was run in the same command as the commit and the
+failure scrolled past above the word "green". The guard added this
+morning -- `make check` compiling the evals -- exists for exactly
+this and was not used. Run the suite, read it, then commit.
+
 ## 12. Maintaining this file
 
 When the owner states a preference, makes a decision, or corrects something,
