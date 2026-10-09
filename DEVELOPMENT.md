@@ -16573,12 +16573,52 @@ entity came back only after reloading the ESPHome config entry.
 That is the move whenever an entity goes missing after a change
 here.
 
-**Unproven, and recorded as such.** The watchdog thread starts and
-has not errored, and it has fired zero times -- which is correct and
-is not evidence. Verifying it properly means deliberately wedging a
-microphone, which has not been done. If the satellite goes quiet
-again and does *not* come back within forty-five seconds, that is
-this failing.
+#### The watchdog failed, in the way it was written to prevent
+
+It wedged again within the hour, and the watchdog did not fire. The
+log is six milliseconds wide:
+
+	17:40:09.122  wake word, so the open turn is abandoned
+	17:40:09.128  RUN_END for the abandoned turn
+	17:40:09.139  RUN_START for the turn that replaced it
+	              ... nothing at all for fifty-six seconds
+
+The new turn set `_listening_since`; the abandoned turn's `RUN_END`
+arrived eleven milliseconds later and cleared it. **The watchdog
+read a timestamp that the failure path resets**, saw a microphone
+that was not open, and skipped -- for fifty-six seconds, while it
+was open.
+
+The lesson had been written in this file one commit earlier: *the
+check has to be owned by something that does not take part in the
+thing going wrong.* Then the check was given a field the thing
+going wrong writes to. Writing a principle down is not the same as
+holding it, and the gap between the two was under an hour.
+
+It keeps its own mark now, in a local that nothing outside the loop
+can reach. It watches rather than asks.
+
+**And the cause was fixed as well**, which two attempts had stepped
+around while adding guards on top of it. Home Assistant answers an
+abandonment with a `RUN_END`, and it arrives *after* the replacement
+turn has started -- eleven milliseconds, measured. Taken at face
+value it ends the turn that replaced it. A `RUN_END` within a second
+of an abandonment is now ignored, the same way `_stopped_at` covers
+the race that outlives the function holding it.
+
+Two layers, deliberately: the race is fixed, and the watchdog
+catches it if that is wrong again.
+
+**Confirmed working** by the owner, 9 October 2026, on the sequence
+that caused it -- a wake word spoken into a turn that was already
+listening. Turns cycle and end on their own.
+
+Three claims of "fixed" were made today that were not: a persona
+change that passed three of three while the real bug sat untouched,
+and this one twice. **The pattern is claiming a fix from the absence
+of a failure.** A watchdog that has not fired, a search that returns
+an answer, a test that goes green -- none of them say which path was
+taken. Say what was measured, and say what was not.
 
 ## 12. Maintaining this file
 
