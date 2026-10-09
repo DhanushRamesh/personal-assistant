@@ -15719,6 +15719,61 @@ file.
 `satellite/sounds/` is a bind mount and mpv opens the file on each
 play, so a new sound is live the moment it is written. No restart.
 
+### The gate was cutting his words into pieces
+
+Owner: *"it wakes and I talk but it goes idle."*
+
+The name for it was wrong, and that is why it took three passes to
+find. Nothing was going idle early. Timed from the satellite's log,
+wake word to the end of speech:
+
+	wake->speech   speech lasted   transcript
+	     1.41s          3.39s      (nothing)
+	     1.47s          4.29s      (nothing)
+	     1.73s          2.11s      (nothing)
+	     1.15s          1.79s      "How much that takes What is the text?"
+	     2.18s          1.67s      "Hello?"
+
+Three and four seconds is a turn that ran its full length and ended
+properly. Deepgram's own log agrees that it was handed the audio --
+*"4.5s of audio arrived over 4.5s: (nothing)"*. The microphone was
+open the whole time the owner was talking. What arrived at the other
+end had no words in it.
+
+`AUDIO_GATE_RMS`. It replaces with digital silence anything below the
+line, and at 300 the line was running through the middle of his
+speech. Home Assistant's voice detector still finds speech in the
+fragments, which is why the turn looked normal from every angle
+except the transcript -- and why "(nothing)" reads from outside as
+going idle.
+
+The gate was written for the office, where it is the only thing that
+makes a turn end at all: that room scores as speech in 88% of frames
+to the pipeline's own detector while being near silent. An earbud has
+no room in it -- ambient is a median chunk of **1** -- so there is
+nothing there for the gate to remove, and the only signal it can
+reach is the owner, who speaks quietly into an earbud because that is
+what an earbud is for.
+
+So it is now `number.laptop_lva_mic_gate`, set by the profile like
+everything else: **0 on earbuds, 400 in the office, 700 at home.**
+
+It was the last microphone setting still read once from the
+environment at startup, and it had been flagged as that for two days
+without the consequence being obvious. The pattern is now complete
+enough to state as a rule: **a microphone setting is a property of
+the microphone, never of the installation.** Gain, suppression, both
+wake thresholds, the reopening window and now the gate each looked
+like something chosen once for a machine, and each turned out to be
+wrong the moment the machine was listening through something else.
+If a new one is added, it is an entity on the first day.
+
+Not persisted to the preferences file, deliberately. The profile
+sets it on every change and again when Home Assistant starts, so a
+stored value could only ever be overwritten -- and one kept from a
+room the owner has since walked out of is worse than none.
+`AUDIO_GATE_RMS` stays as the fallback.
+
 ## 12. Maintaining this file
 
 When the owner states a preference, makes a decision, or corrects something,
