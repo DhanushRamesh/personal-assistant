@@ -42,3 +42,31 @@ func TestNowGetsMidnightAndNoonRight(t *testing.T) {
 		t.Errorf("noon read as %q", noon)
 	}
 }
+
+// TestTheClockSaysItBeatsTheConversation : A long conversation
+// accumulates times the assistant once said, each right when it said
+// it, and they sit nearer the end of the window than this line does.
+//
+// Measured in a chat of 638 messages: one answer went out seventeen
+// minutes slow and every answer after it copied the one before and
+// added a minute, one per question, while two hours went past. Asked
+// whether it was sure, it said "that is what I was told" -- and it
+// had been told the right time.
+func TestTheClockSaysItBeatsTheConversation(t *testing.T) {
+	ist := time.FixedZone("IST", 5*3600+1800)
+	said := conversation.Now(time.Date(2026, 10, 9, 15, 48, 0, 0, ist))
+
+	for _, want := range []string{
+		"3:48 pm on Friday 9 October 2026",
+		"IST+05:30",
+		// The three things that stop the drift, each of which the
+		// old wording left to be inferred.
+		"only clock you have",
+		"stale",
+		"never carry one forward",
+	} {
+		if !strings.Contains(said, want) {
+			t.Errorf("the clock line never says %q:\n  %s", want, said)
+		}
+	}
+}

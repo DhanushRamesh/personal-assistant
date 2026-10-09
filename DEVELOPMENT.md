@@ -15524,6 +15524,46 @@ is not in the room. The only one that still cannot follow is the
 gate, because it is read once from the environment at startup.
 
 
+### A sequence is not a clock
+
+Owner: *"the time is wrong whenever the AI says it."*
+
+Every clock in the house was right -- the laptop, the Home Assistant
+container, its timezone, MySQL, the server's own configured zone --
+and the line the model is given was right too, checked by rendering
+it: *"The time where the person is: 3:48 pm on Friday 9 October 2026
+(IST+05:30)."*
+
+The conversation is what was wrong.
+
+	13:57 IST   "The time is 1:40 pm"    seventeen minutes slow
+	14:46 IST   "The time is 1:41 pm"
+	14:58 IST   "The time is 1:42 pm"
+	15:05 IST   "The time is 1:43 pm. That is what I was told."
+	15:42 IST   "The time is 1:47 pm"
+
+Four minutes of reported time across two hours of real time -- one
+minute per question asked, not per minute passed. One answer went
+out seventeen minutes slow and every answer after it copied the one
+before and added a minute. A chat of six hundred and thirty-eight
+messages, with its own wrong answers nearer the end of the window
+than the clock at the top of it, and the model continued the
+sequence it could see rather than reading the line it was given.
+
+Asked directly whether it was sure, it said *"that is what I was
+told"*, and separately *"I have not been given a tool to check the
+actual current time"* -- believing both, and wrong about both.
+
+The line says more now: that it is the only clock, that times said
+earlier in the conversation were right when they were said and are
+stale, and that one is never to be carried forward by adding to it.
+It had been left to be inferred that a clock beats a pattern, and in
+a window full of the pattern it was not inferred.
+
+What this does not fix is the chat it happened in, where the
+sequence is still visible. A new conversation starts clean.
+
+
 ## 12. Maintaining this file
 
 When the owner states a preference, makes a decision, or corrects something,
