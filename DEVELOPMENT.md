@@ -15316,6 +15316,63 @@ changing. The same lesson as the switch itself: a thing that has to
 survive a restart must be driven by *arriving*, not only by changing.
 
 
+### A microphone that can be changed without stopping the satellite
+
+Owner, on earbuds: *"we can have a mode like bluetooth on in Home
+Assistant -- a toggle."*
+
+The obstacle was not Bluetooth. The satellite reads one PulseAudio
+source for its whole life, and PulseAudio cannot re-point a loaded
+module -- so a source built on a device is married to that device.
+Changing it meant unloading `module-echo-cancel`, which destroys
+`voice_only`, which is twenty-five seconds with no wake word every
+time an earbud goes in or comes out. A toggle that costs that is not
+a toggle anybody throws.
+
+So nothing is built on the device any more:
+
+	microphone -> module-loopback -> null sink "mic_in" -> mic_in.monitor
+	                   the only thing that moves                |
+	                                                            v
+	                                              module-echo-cancel
+	                                                            |
+	                                                            v
+	                                                      voice_only -> satellite
+
+A null sink in the middle never goes away. Swapping the microphone is
+unloading one loopback and loading another, and the monitor of a null
+sink does not notice.
+
+Measured under the running satellite, laptop microphone to the
+monitor's: 938 blocks a minute throughout, `listened=938`,
+`unattached=0`, and the level changing from 433 to 1244. It never
+missed a block. One second of quiet while the loopback rebuilds,
+against twenty-five for a restart.
+
+Output needed none of this. `AUDIO_OUTPUT_DEVICE` is deliberately
+unset so mpv plays to the default sink, and moving the default sink
+moves the assistant's voice with it.
+
+`audio-source` owns the chain and `watch-earbuds` carries the toggle
+across the container wall, because Home Assistant is in a container
+and PulseAudio is not -- the same gap `satellite-resume` closes, in
+the same way. The watcher acts only when the toggle and the
+microphone disagree: running the swap again costs a second of quiet,
+and a watcher paying that every five seconds would be worse than
+none.
+
+It does not turn the toggle off when a headset drops out. That would
+move the microphone back at every lost second; the setting is held
+and the headset waited for.
+
+What none of this fixes is the profile. A headset cannot offer a
+microphone and good audio at once, and the satellite holds the
+microphone open always -- so earbuds sit in call quality for as long
+as they are chosen. The toggle makes switching free. It does not make
+wearing them all day pleasant, and that is the thing to decide with
+earbuds in rather than from here.
+
+
 ## 12. Maintaining this file
 
 When the owner states a preference, makes a decision, or corrects something,
