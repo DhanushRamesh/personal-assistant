@@ -15089,6 +15089,55 @@ most likely to need stopping, because nobody asked for it: the
 person who wants it to stop is the person who did not want it open.
 
 
+### A room the gate cannot close on
+
+Owner, from the office: *"it's listening even though I don't talk."*
+
+It was, and had been for a minute when he said so:
+
+	08:30:10  Continued conversation started
+	08:30:11  STT_VAD_START   -- one second after the mic opened
+	08:31:10  still listening
+
+Twelve seconds of that room, measured through the satellite's own
+processor at the settings it was running:
+
+	raw rms 365, peak 7380; after gain 15 and suppression High, rms 602
+
+	 10ms chunk levels     50th   118     90th    735     99th  2556
+	                       75th   297     95th   1155     max   5841
+
+	above the audio gate of 400: 19.9% of chunks
+
+One chunk in five above the gate, and each one holds it open for a
+hundred and fifty milliseconds. Twenty per cent loud times fifteen
+chunks of hold is a gate that never closes, a detector that never
+sees silence, and a turn that cannot end.
+
+Raising the gate does not answer it. Closing on that room takes
+about 2600, which is above the owner speaking from across it. The
+room is the problem and no threshold separates them.
+
+Which window matters, and this is the part the numbers settle: the
+turns he started by saying the wake word ended in one or two
+seconds. The two that ran fifty-four and fifty-nine were both
+reopened windows -- the ones nobody asked for. A turn somebody began
+has somebody present for it, who speaks and then stops. A window
+that opens by itself into a room of other people talking has
+nothing in it that was ever going to end.
+
+So the reopened window has two ends now, and the second is the one
+that matters. `FOLLOW_UP_TIMEOUT` is cancelled when the detector
+says somebody started, which is right when it is right. `FOLLOW_UP_MAX`
+is cancelled by nothing but the turn ending, because whether the
+detector is right is exactly what cannot be relied on here. Fifteen
+seconds: longer than any follow-up anybody says, a quarter of what
+the room was costing.
+
+Owner chose the cap over switching the reopened window off, which is
+the harder of the two and the one that still works at home.
+
+
 ## 12. Maintaining this file
 
 When the owner states a preference, makes a decision, or corrects something,
