@@ -16356,6 +16356,77 @@ announcements seconds apart, and the engine deduplicates within a
 rule and not across them. One greeting that mentions both is what a
 person would say.
 
+### A filter for a browse, silently emptying a search
+
+Owner, from his own transcript: *"yesterday I asked do you know Demi
+Lovato. It said about Demi Lovato. But I literally hear Demi Lovato
+in Spotify. It should have said to me."*
+
+The first diagnosis was wrong and worth keeping for that reason.
+The persona rule about looking everywhere is scoped to *"a person, a
+place or anything of theirs"* -- things it could not know anyway --
+and a singer is something it can answer from training, so the
+explanation looked obvious: it never thought to check. Lines were
+added to the persona saying that knowing the answer is not a reason
+to skip the lookup, and three tries in a row then mentioned the
+song. It read like a fix.
+
+Then he sent the trace:
+
+	Called event_recent
+	  {"contains": "Demi Lovato", "days": 90}
+	event_recent ok · 18ms
+	  Nothing mentioning Demi Lovato was reported in the past 90 days.
+	  The kinds that do exist ... music.state (199) ...
+
+**It did look.** It reached for the right tool with the right
+arguments and was told she had never been mentioned, in a sentence
+that went on to list the very kind that mentioned her. The row was
+in the table while the sentence was being written -- *Cool for the
+Summer*, from his liked songs, the previous afternoon.
+
+`q.Omit = event.Churn` -- `location.fix`, `music.state`,
+`music.playing`, `music.paused` -- with an exception only when the
+caller names one of those **kinds**. A `contains` search carries no
+kind, so the exception never applied: **the one kind that holds
+artists and tracks was excluded from every search for an artist or
+a track.**
+
+It is the same shape as the bare "call" answered with "nothing of
+kind call today" above a list containing `call.received (13)`, which
+is recorded a few sections above this one. A filter written to keep
+a *browse* readable, applied to a *search*, where it does not narrow
+the answer but empties it.
+
+So a text search omits nothing now. The first attempt still held
+back the position readings, on the reasoning that nothing in a
+conversation wants a coordinate. Owner: *"a search should fetch
+whatever is in the record, even the tiniest one."* He is right, and
+it was the same mistake in a smaller size: a fix holds only a
+latitude and longitude **today**, and what goes in a payload is the
+sender's business. A phone that starts putting a street on its fixes
+would be found by nobody, and nothing would say so.
+
+#### Two lessons, and the second is the uncomfortable one
+
+**Naming a thing is asking for it**, as much as naming a kind. Every
+narrowing in this file should be asked which it is doing: making a
+broad answer readable, or deciding what a specific question is
+allowed to find.
+
+And: **the fix that worked was not the fix for the bug.** Three
+runs out of three mentioned the song after the persona change,
+which is exactly what a correct fix looks like from outside. It
+worked because the model sometimes asks by kind instead, and that
+path was never broken. Had the owner not sent the trace, a prompt
+change would have been credited with repairing a bug it never
+touched -- and the bug would have gone on silently emptying every
+other search. *A green result is not evidence until you know which
+path it took.*
+
+The persona lines stay. They are about saying his fact first rather
+than second, which is a real thing and separate from this.
+
 ## 12. Maintaining this file
 
 When the owner states a preference, makes a decision, or corrects something,

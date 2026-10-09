@@ -588,3 +588,53 @@ func (o *oneEvent) Recent(_ context.Context, _ string, q event.Query) ([]event.E
 func (o *oneEvent) Kinds(context.Context, string) ([]event.Kind, error) {
 	return []event.Kind{{Kind: o.e.Kind, Count: 1}}, nil
 }
+
+// TestASearchReachesMusic : naming a thing is asking for it.
+//
+// The churn list keeps position readings and tracks out of a browse,
+// because a window long enough to be interesting is otherwise nothing
+// but those. Applied to a text search it emptied the search: asked for
+// "Demi Lovato" with no kind, the tool answered that nothing
+// mentioning her had been reported, in a sentence that went on to list
+// music.state among the kinds that do exist -- while the row sat in
+// the table.
+func TestASearchReachesMusic(t *testing.T) {
+	s := store(t,
+		at(t, 15, 44, "music.state", "Demi Lovato"),
+		at(t, 16, 0, "call.missed", "Amma"))
+
+	got := ask(t, s, `{"contains":"Demi Lovato","days":90}`)
+	if !strings.Contains(got.Content, "Demi Lovato") {
+		t.Errorf("a search for a named thing should reach music:\n%s", got.Content)
+	}
+
+	// And a browse with no name is still spared the churn.
+	got = ask(t, s, `{"days":90}`)
+	if strings.Contains(got.Content, "Demi Lovato") {
+		t.Errorf("an unasked browse should still be spared the tracks:\n%s", got.Content)
+	}
+	if !strings.Contains(got.Content, "Amma") {
+		t.Errorf("and should still show everything else:\n%s", got.Content)
+	}
+}
+
+// TestASearchHoldsNothingBack : owner, on position readings being
+// kept out of a search -- *"a search should fetch whatever is in the
+// record, even the tiniest one."* What a payload holds is the
+// sender's business: a phone that starts putting a street on its
+// fixes must be findable the day it does, without anything here
+// changing.
+func TestASearchHoldsNothingBack(t *testing.T) {
+	s := store(t, at(t, 12, 0, "location.fix", "near Muthu Supermarket"))
+
+	got := ask(t, s, `{"contains":"Muthu","days":90}`)
+	if !strings.Contains(got.Content, "Muthu") {
+		t.Errorf("a search should reach even the working material:\n%s", got.Content)
+	}
+
+	// Still spared when nobody asked for it by name.
+	got = ask(t, s, `{"days":90}`)
+	if strings.Contains(got.Content, "Muthu") {
+		t.Errorf("an unasked browse is still spared the fixes:\n%s", got.Content)
+	}
+}

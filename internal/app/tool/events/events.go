@@ -248,8 +248,12 @@ func recent(reader Reader, clock Clock) tool.Tool {
 				"contains": {
 					Type: "string",
 					Description: "Only events mentioning this somewhere in their details: a network " +
-						"name, a place, a person. Use it when the question is about a particular " +
-						"thing rather than a particular kind.",
+						"name, a place, a person, a song, a band, an app -- anything with a name. " +
+						"Use it when the question is about a particular thing rather than a " +
+						"particular kind. This includes a name you already know about from the " +
+						"world: asked whether you know a singer you can describe perfectly well " +
+						"without looking, their own devices may still have been playing that " +
+						"singer yesterday, and that is the half of the answer only this can give.",
 				},
 				"limit": {
 					Type: "integer",
@@ -339,6 +343,56 @@ func recent(reader Reader, clock Clock) tool.Tool {
 			q.Omit = event.Churn
 			if event.Working(kind) && kind != event.Fixed && kind != event.Fixed+"." {
 				q.Omit = []string{event.Fixed}
+			}
+			// Naming a thing is asking for it, the same as naming a
+			// kind.
+			//
+			// The omission above is about being handed churn
+			// unasked: a window long enough to be interesting is
+			// otherwise nothing but position readings and tracks,
+			// and the few kinds worth seeing fall off the end of
+			// the limit. A text search has the opposite problem --
+			// it is already narrowed to one named thing, and
+			// almost everything that carries a name is in music.
+			//
+			// Measured 9 October 2026, from the owner's own
+			// transcript. Asked whether it knew a singer, it
+			// reached for the right tool with the right arguments
+			// -- `contains: "Demi Lovato", days: 90` -- and was
+			// told nothing mentioning her had been reported, in a
+			// sentence that went on to list music.state (199)
+			// among the kinds that do exist. He had played her the
+			// previous afternoon and the row was in the table
+			// while the sentence was being written.
+			//
+			// The same shape as the bare "call" that was answered
+			// with "nothing of kind call today" above a list
+			// containing call.received (13). A filter meant to
+			// keep a browse readable, silently emptying a search.
+			//
+			// Nothing is held back from a search, including the
+			// position readings.
+			//
+			// They were kept out at first, on the reasoning that
+			// nothing in a conversation wants a coordinate and
+			// nobody searches for one by name. Owner: *"a search
+			// should fetch whatever is in the record, even the
+			// tiniest one."*
+			//
+			// He is right, and the reasoning was the same mistake
+			// in a smaller size. It is true that a fix holds only
+			// a latitude and a longitude **today** -- and what is
+			// in a payload is the sender's business, not this
+			// file's. A phone that starts putting a street on its
+			// fixes would be found by nobody, and nothing would
+			// say so: the search would go on answering that there
+			// was no mention, which is the failure this whole
+			// change is about.
+			//
+			// The limit is the only bound a search needs. Somebody
+			// who names a thing has already narrowed it.
+			if q.Contains != "" {
+				q.Omit = nil
 			}
 
 			q.Limit = args.Limit
