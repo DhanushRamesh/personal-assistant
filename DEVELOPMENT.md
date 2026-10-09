@@ -14936,6 +14936,61 @@ Off was a step too far, and measuring one signal instead of two is
 how I took it.
 
 
+### A window with no end of its own
+
+Owner: *"when continuous conversation is set, it should wait 5 sec
+and if no word comes it should go to idle."*
+
+It never did. The microphone opened after the chime and stayed open
+until Home Assistant's own segmenter gave up at forty-five seconds,
+so an answer nobody followed left the room being listened to for the
+best part of a minute -- and every cough in it was a turn. Part of
+what reads as *going idle too fast* was the opposite: it was still
+listening, and spending the window on noise.
+
+Five seconds, counted from the moment the mic actually opens rather
+than from the answer ending, because the chime is the thing that
+says it is their turn and the clock should not run before it.
+Cancelled the moment the detector says somebody is speaking, and on
+RUN_END, on an error and on a stop, so a timer can never fire into a
+turn that is already over.
+
+It sends `start=False`, which is what the stop word sends. Home
+Assistant is holding a turn open and waiting on audio, and closing
+the microphone without saying so would leave it waiting out its own
+forty-five anyway.
+
+`FOLLOW_UP_TIMEOUT` in the environment, like the switch beside it and
+for the same reason: the state object is upstream's and this is not,
+and adding a field there would make a third patched file of a thing
+that needs two.
+
+### The file that is edited is not the file that is mounted
+
+The restart was clean, the satellite came back healthy, and the
+change was not running. `build/` is where patchwork rediffs from;
+`patched/` is what the container mounts. Editing one and restarting
+proves nothing about the other.
+
+There is a comment in the compose file about exactly this, written on
+6 October: the mount said `./build` while the running container had
+`./patched`, they drifted twenty-two lines apart, and the wrong path
+cost nothing until somebody recreated it. The trap caught the next
+person to walk past it.
+
+And `restart-satellite` stops and starts, which does not re-read
+`.env`. A new environment variable needs `docker compose up -d`.
+
+So the check that matters is not *did it restart* but *is the new
+thing in the container*:
+
+	docker exec linux-voice-assistant sh -c \
+	  'grep -c _follow_up_seconds /app/linux_voice_assistant/satellite.py; printenv FOLLOW_UP_TIMEOUT'
+
+Nought and nothing the first time. Four and five after
+`patched/` was brought level and the container recreated.
+
+
 ## 12. Maintaining this file
 
 When the owner states a preference, makes a decision, or corrects something,
