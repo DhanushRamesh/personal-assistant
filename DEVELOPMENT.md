@@ -16963,6 +16963,114 @@ kept so it is not repeated has to be able to stop being true.** That
 is worth remembering as a question to ask of anything new that
 remembers: what makes this expire?
 
+### He can ring people, and asks first every time
+
+Owner, 10 October 2026: *"we can set an alarm right -- likewise,
+there should be an option to call a person -- for that it should have
+the contacts list on my phone."* Asked whether every call should be
+put to him first, or only one on a name that was merely close:
+**"confirm always."**
+
+#### The server does not get the address book
+
+The ask contained its own answer -- *it should have the contacts
+list* -- and that is the one part not built. What goes to the phone
+is a **name**. The phone looks the name up in its own contacts and
+dials.
+
+Three reasons, in order of weight:
+
+1. **It is the only safeguard there is.** A server that will dial
+   digits it was handed can be made to ring anybody by one misheard
+   sentence. One that can only pass a name can only reach somebody
+   already in the phone.
+2. **It is the same way round as everywhere else here.** *The owner
+   names the place and the server stores the name*; the sender
+   resolves its own names and the server holds no lookup table. An
+   imported address book would be the first table of other people's
+   telephone numbers on a machine with no use for them, and would
+   need keeping in sync for ever.
+3. **It would bury what he actually uses.** Five hundred contacts
+   against the ten people he has really called.
+
+And the server is not blind without it. Every call the phone reports
+names who it was with, so it already knows the list worth matching a
+misheard name against:
+
+	Alekhya Chintada 16   Amma 13   Kliffy 6   Megatron 3
+	Vel Kumara 2   Gunalan 2   Ramesh 2   Muthu Selvi 1 ...
+
+That list is short enough to read out, costs nothing to keep in step,
+and is exactly the set of people a mangled name is likely to be one
+of.
+
+**It is not a gate.** Somebody never called before may still be a
+contact on the phone, so a name that matches nobody is still rung
+once he has said yes -- it is only asked about differently. Nothing
+in the tool ever concludes that a person does not exist, for the
+usual reason: a name out of speech-to-text that came out wrong looks
+exactly like a name that is not in the list.
+
+#### Confirm always, and why the voice channel is open at all
+
+Anything that cannot be undone is normally kept off the voice list,
+because a misheard sentence is the whole authorisation. A call is
+exactly that kind of thing -- and being able to say *"call Amma"* is
+the entire feature, so the gate is moved rather than removed: the
+first call never dials. It comes back with the name it would ring
+and the question to put, and only a second call carrying
+`confirmed` places anything.
+
+A name that merely sounds close is stricter still: it is sent back
+for confirmation even when `confirmed` was passed, since the thing
+needing agreement is *which person*, and the model agreeing with
+itself is not that. **Kliffy** has already arrived from Deepgram as
+*Cliffy* and as *Clifford*.
+
+A telephone number is refused outright at both ends -- in the tool,
+with an answer that tells the model to ask whose number it is and
+ring them by name, and again in `calling.Body`, which is the last
+place before the wire.
+
+#### Two tools, which is what makes the list real
+
+`call_people` lists, `call_place` writes, both in domain `calling`.
+That is not symmetry for its own sake: **a write is refused until its
+own domain has been read in the same turn**, so the names in front of
+the model when it chooses one are read from events rather than
+remembered from a conversation an hour ago. The machinery already
+existed; the call tools get it by being shaped like everything else.
+
+#### Getting there is the errand queue's job
+
+`errand.CallPlace`, a hand beside the two alarm ones, its own secret
+path on the phone (`[homeassistant] call_url`), and `Phone.Ring`
+checking that the answer really came from the phone -- a captive
+portal's cheerful 200 would otherwise read as a call that was placed.
+
+Two differences from an alarm, both deliberate:
+
+- **It expires after two minutes.** Somebody who asked to ring his
+  mother and whose phone was unreachable for ten wants to hear that
+  it did not happen, not to have it dial while he is in a meeting.
+- **A failure is spoken.** `Sender.Told` fired only for `alarm.set`;
+  it now fires for a call too, and more loudly, because he has
+  already been told it is ringing and has stopped thinking about it.
+
+With no `call_url` configured the tools are not registered at all. A
+model holding a `call_place` that cannot work will say it is ringing
+somebody and then explain why it could not, which is two sentences
+worse than not having it.
+
+#### The phone half is his
+
+A third Tasker profile on port 1821, matching the call path, reading
+one line of body as a name, and answering `phone-call-ok` once it has
+dialled. Not `jarvis-call`: the assistant's name is configuration and
+was FRIDAY before it was Jarvis, and a word on the wire that has to
+be changed on the phone when he renames the assistant is a trap. The
+two alarm tokens predate that rule and are not the example to copy.
+
 ## 12. Maintaining this file
 
 When the owner states a preference, makes a decision, or corrects something,

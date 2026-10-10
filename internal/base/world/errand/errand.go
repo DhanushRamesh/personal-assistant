@@ -35,6 +35,24 @@ const (
 	AlarmSet Kind = "alarm.set"
 	// AlarmClear : Take one off it.
 	AlarmClear Kind = "alarm.clear"
+	// CallPlace : Ring somebody from the person's own phone.
+	//
+	// Owner: *"we can set an alarm right -- likewise there should be
+	// an option to call a person."*
+	//
+	// It carries a **name** and never a number, which is the whole of
+	// the design. The phone holds the contacts and resolves the name
+	// against them; the server never has the address book.
+	//
+	// That is the same way round as everything else here -- *the
+	// owner names the place, the server stores the name* -- and it
+	// was already true of calls: every name the server knows for a
+	// person came from the phone reporting a call, and those are
+	// exactly the people worth ringing. An imported address book of
+	// five hundred entries would bury the eight he actually calls,
+	// need keeping in sync, and put somebody else's telephone
+	// numbers on a server that has no use for them.
+	CallPlace Kind = "call.place"
 )
 
 // State : Where an errand is in its life.

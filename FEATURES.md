@@ -46,7 +46,7 @@ flowchart TB
     CORE -- "an answer" --> HA
 
     UNASKED["Speaking unasked<br/>section 3"]
-    ALARMS["Errands for the phone<br/>a row, a sender, retried<br/>alarms over the tailnet"]
+    ALARMS["Errands for the phone<br/>a row, a sender, retried<br/>alarms and calls over the tailnet"]
 
     DB --> UNASKED
     UNASKED --> HA
@@ -76,8 +76,15 @@ flowchart LR
     CORE --- RULE["Rules<br/>add, list, cancel"]
     CORE --- SIT["Situations<br/>find"]
     CORE --- LEAVE["Leaving<br/>due"]
+    CORE --- CALLP["Calling<br/>people, place<br/>only with call_url set"]
     CORE --- MISC["Other<br/>coming_settled, coming_due, tool_describe"]
 ```
+
+**Two of those are conditional.** `call_people` and `call_place`
+are registered only when `[homeassistant] call_url` gives them
+somewhere to ring, which makes 58 without it and 60 with. A tool
+that cannot work is not offered: a model holding one will say it is
+ringing somebody and then explain why it could not.
 
 **Where to look first.** Anything about this person's own life is
 answered from the calendar, tasks, reminders, events or memory —
@@ -246,6 +253,33 @@ sender says so — that is the only thing that knows.
 **Alarms can be turned off** with `[assistant] alarms`, which is
 true by default. Off is silent; *no phone configured* is a fault
 and is said.
+
+### Ringing somebody
+
+*"Call Amma."* The phone dials, not the laptop.
+
+**It goes by name, never a number.** Jarvis has no address book: the
+name travels to the phone and the phone looks it up in its own
+contacts. So a contact saved this morning works without an import,
+nobody else's telephone numbers sit on this server, and the only
+people reachable are the ones already in the phone. A number given
+out loud is refused and he is asked whose it is.
+
+**He knows who to offer** from the calls the phone has reported —
+every one names who it was with — so a name that came out of
+speech-to-text wrong is matched against the people really called.
+Somebody never called before is still rung; the list is for matching,
+not for gatekeeping.
+
+**Nothing is ever dialled without being asked first.** The owner's
+rule, in his words: *confirm always*. The first call comes back with
+the name and the question; only an answered yes places it. A name
+that merely sounds close is put to him even then — the thing needing
+agreement is *which person*.
+
+**It expires after two minutes.** A call that connects ten minutes
+late, in a meeting, is worse than one that never went — so if the
+phone could not be reached, he is told that instead.
 
 ---
 

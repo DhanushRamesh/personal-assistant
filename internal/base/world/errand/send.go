@@ -212,12 +212,26 @@ func (s *Sender) settle(ctx context.Context, e Errand, state State, why string, 
 }
 
 // tell : Says that something never got there.
+//
+// Not every kind. A cleared alarm that never cleared is worth
+// nothing to say, where the two here are both a thing the person
+// believes happened and would otherwise find out by being let down.
 func (s *Sender) tell(ctx context.Context, e Errand) {
-	if s.Told == nil || e.Kind != AlarmSet {
+	if s.Told == nil {
 		return
 	}
-	s.Told(ctx, e.UserID, "I could not set the alarm on your phone, sir. "+
-		"I have stopped trying; it will need setting by hand.")
+	switch e.Kind {
+	case AlarmSet:
+		s.Told(ctx, e.UserID, "I could not set the alarm on your phone, sir. "+
+			"I have stopped trying; it will need setting by hand.")
+	case CallPlace:
+		// Louder than the alarm's, because the person has already
+		// been told it is ringing and has stopped thinking about
+		// it. Nothing is retried after this: a call that connects
+		// ten minutes late is worse than one that never went.
+		s.Told(ctx, e.UserID, "I could not reach your phone to place that call, sir. "+
+			"It has not been dialled, and I have stopped trying.")
+	}
 }
 
 // tries : How many attempts are worth making.

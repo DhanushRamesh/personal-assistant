@@ -29,6 +29,7 @@ import (
 	"personal-assistant/internal/app/runner"
 	"personal-assistant/internal/app/tool"
 	calendartool "personal-assistant/internal/app/tool/calendar"
+	callingtool "personal-assistant/internal/app/tool/calling"
 	comingtool "personal-assistant/internal/app/tool/coming"
 	"personal-assistant/internal/app/tool/conversations"
 	eventstool "personal-assistant/internal/app/tool/events"
@@ -60,6 +61,7 @@ import (
 	"personal-assistant/internal/base/world/alarm"
 	"personal-assistant/internal/base/world/announce"
 	"personal-assistant/internal/base/world/announce/hass"
+	"personal-assistant/internal/base/world/calling"
 	"personal-assistant/internal/base/world/errand"
 	errandmysql "personal-assistant/internal/base/world/errand/mysql"
 	"personal-assistant/internal/base/world/event"
@@ -289,6 +291,18 @@ func run() error {
 	if phone := phoneAlarm(cfg, logger.Logger); phone != nil {
 		sending.Hands = alarmHands(phone)
 	}
+	// And a call, which goes to its own path on the same phone.
+	// Separate from the alarm because either may be configured
+	// without the other: a server with no alarm URL can still ring
+	// somebody, and one with no call URL still sets alarms.
+	// Nil when there is no address for it, and then the call tools
+	// are not offered at all: an assistant that cannot reach the
+	// phone should not have a way of saying it is ringing somebody.
+	var ringing *caller
+	if phone := phoneCall(cfg); phone != nil {
+		callHands(sending.Hands, *phone)
+		ringing = &caller{to: sending}
+	}
 	// Untyped nil when there is nowhere to ask, for the usual
 	// reason: the honest answer on a server with no address for
 	// the phone is that it cannot reach the phone at all, which is
@@ -384,6 +398,7 @@ func run() error {
 		eventstool.Tools(deviceEvents, eventstool.Clock{
 			Now: cfg.Assistant.Now, Location: cfg.Assistant.Location,
 		}),
+		callingTools(deviceEvents, ringing, cfg.Assistant.Now),
 		placestool.Tools(deviceEvents, placestool.Clock{
 			Now: cfg.Assistant.Now, Location: cfg.Assistant.Location,
 		}),
@@ -967,6 +982,73 @@ func alarmHands(phone alarm.Setter) errand.Hands {
 			return phone.Clear(ctx, a)
 		},
 	}
+}
+
+// callingTools : The call tools, or none when there is nowhere to
+// ring from.
+//
+// Nothing rather than tools that always fail. A model holding a
+// call_place that cannot work will say it is ringing somebody and
+// then explain why it could not, which is two sentences worse than
+// not having it.
+func callingTools(reader callingtool.Reader, ring *caller, now func() time.Time) []tool.Tool {
+	if ring == nil {
+		return nil
+	}
+	return callingtool.Tools(reader, ring, now)
+}
+
+// phoneCall : Where a call is placed, or nothing when there is no
+// address for it.
+func phoneCall(cfg config.Config) *calling.Phone {
+	where := strings.TrimSpace(cfg.HomeAssistant.CallURL.Reveal())
+	if where == "" {
+		return nil
+	}
+	return &calling.Phone{URL: where}
+}
+
+// callHands : How a call errand reaches the phone.
+//
+// Added to whatever is already there rather than replacing it, so
+// that alarms and calls do not have to be configured together.
+func callHands(hands errand.Hands, phone calling.Phone) {
+	hands[errand.CallPlace] = func(ctx context.Context, e errand.Errand) error {
+		var c calling.Call
+		if err := json.Unmarshal(e.Body, &c); err != nil {
+			return fmt.Errorf("that errand does not describe a call: %w", err)
+		}
+		return phone.Ring(ctx, c)
+	}
+}
+
+// caller : Asking for a call, without waiting on the phone.
+//
+// The same shape as the alarm queue and for the same reason: the
+// tool that asks is in the middle of answering somebody, and the
+// phone may be asleep on another network.
+type caller struct{ to *errand.Sender }
+
+// Ring : Writes down that somebody is to be called.
+func (c *caller) Ring(ctx context.Context, userID string, call calling.Call) error {
+	if c == nil || c.to == nil || userID == "" {
+		return fmt.Errorf("there is nowhere to ask for a call")
+	}
+	body, err := json.Marshal(call)
+	if err != nil {
+		return err
+	}
+	now := c.to.Now()
+	// Worth trying for a couple of minutes and no longer. Somebody
+	// who asked to ring their mother and whose phone was unreachable
+	// for ten wants to hear that it did not happen, not to have it
+	// dial while they are in a meeting.
+	made, err := errand.New(errandmysql.ID(), userID, errand.CallPlace,
+		"", body, now, now.Add(calling.Worth))
+	if err != nil {
+		return err
+	}
+	return c.to.Ask(ctx, made)
 }
 
 // unwrap : The alarm an errand carries.

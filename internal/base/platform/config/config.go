@@ -313,6 +313,17 @@ type HomeAssistant struct {
 	// apart without an extra action on the phone.
 	AlarmOffURL logging.Secret
 
+	// CallURL : Where the phone listens for a call to be placed,
+	// with its own secret path. Empty means the assistant cannot
+	// ring anybody, and says so.
+	//
+	// Its own path rather than a flag on the alarm's, because
+	// Tasker matches the path exactly and that is what tells them
+	// apart without another action on the phone. The secret matters
+	// more here than it does for an alarm: what is on the other end
+	// of this one dials.
+	CallURL logging.Secret
+
 	// MediaPlayer : The satellite's media player, such as
 	// media_player.laptop_lva_media_player. Used for what is said while a
 	// turn is still running, because that player is not the one the voice
@@ -618,6 +629,7 @@ func Load(path string, lookup Lookup) (Config, error) {
 			Notify:          l.list("homeassistant", "notify"),
 			AlarmURL:        l.secret("homeassistant", "alarm_url"),
 			AlarmOffURL:     l.secret("homeassistant", "alarm_off_url"),
+			CallURL:         l.secret("homeassistant", "call_url"),
 			MediaPlayer:     l.str("homeassistant", "media_player", ""),
 			TTSEngine:       l.str("homeassistant", "tts_engine", "tts.piper"),
 			TTSVoice:        l.str("homeassistant", "tts_voice", ""),
