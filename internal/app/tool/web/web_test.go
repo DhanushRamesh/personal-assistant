@@ -22,6 +22,10 @@ type searcher struct {
 	days  int
 	news  bool
 	read  []string
+	// asks : every search made, because one call from the model may
+	// now be two to the service -- a news search that finds almost
+	// nothing is asked again of the web at large.
+	asks []search.Ask
 }
 
 func (s *searcher) Where() string { return "test" }
@@ -34,6 +38,7 @@ func (s *searcher) Read(_ context.Context, urls []string) ([]search.Page, error)
 }
 func (s *searcher) Search(_ context.Context, ask search.Ask) ([]search.Result, error) {
 	s.query, s.limit, s.days, s.news = ask.Query, ask.Limit, ask.Days, ask.News
+	s.asks = append(s.asks, ask)
 	return s.found, s.err
 }
 
@@ -128,8 +133,51 @@ func TestFreshnessReachesTheService(t *testing.T) {
 	if s.days != 1 {
 		t.Errorf("days reached the service as %d, want 1", s.days)
 	}
-	if !s.news {
+	// The first call, not the last: a news search that finds nothing
+	// is now asked again without the filter, so the fake sees two.
+	if len(s.asks) == 0 || !s.asks[0].News {
 		t.Error("news did not reach the service")
+	}
+}
+
+// TestANewsSearchThatFindsNothingWidens : the news index is a narrow
+// one, and the argument that chooses it cannot be described well
+// enough to be got right every time.
+//
+// Asked who had been eliminated from Bigg Boss Tamil, the model set
+// news -- an elimination is plainly something that happened -- and
+// the answer is on entertainment sites no wire service indexes. It
+// reported that the search only returned the Telugu version. The
+// same query without the filter had the name, the date and the
+// prize.
+func TestANewsSearchThatFindsNothingWidens(t *testing.T) {
+	s := &searcher{}
+	ask(t, s, `{"query":"Bigg Boss Tamil elimination","days":7,"news":true}`)
+
+	if len(s.asks) != 2 {
+		t.Fatalf("a news search finding nothing should be asked again, got %d searches", len(s.asks))
+	}
+	if !s.asks[0].News {
+		t.Error("the first search should be the one the model asked for")
+	}
+	if s.asks[1].News {
+		t.Error("the second should be of the web at large")
+	}
+	if s.asks[1].Days != 7 || s.asks[1].Query != "Bigg Boss Tamil elimination" {
+		t.Errorf("only the filter should change: %+v", s.asks[1])
+	}
+}
+
+// TestANewsSearchThatWorksIsLeftAlone : widening costs a round trip
+// and a credit, and a search that answered does not need one.
+func TestANewsSearchThatWorksIsLeftAlone(t *testing.T) {
+	s := &searcher{found: []search.Result{
+		{Title: "a", URL: "https://a"}, {Title: "b", URL: "https://b"},
+		{Title: "c", URL: "https://c"},
+	}}
+	ask(t, s, `{"query":"election result","days":1,"news":true}`)
+	if len(s.asks) != 1 {
+		t.Errorf("a news search that found things should not be repeated, got %d", len(s.asks))
 	}
 }
 

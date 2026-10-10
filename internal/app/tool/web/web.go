@@ -32,9 +32,24 @@ const (
 	// Three, because reading is the dear act -- seconds each, and a
 	// credit each on the service that counts them -- and because an
 	// answer built from three sources is already better founded than
-	// most. Six thousand characters is perhaps a thousand words: the
-	// part of a page that answers something is almost always near
-	// the top, and the rest spends a turn nobody has.
+	// most.
+	//
+	// Six thousand characters is perhaps a thousand words, and which
+	// thousand matters more than how many. It used to be the first
+	// always, on the grounds that the part of a page which answers
+	// something is near the top. That holds for a page written about
+	// the question and not for a search result, which is the only
+	// kind there is here: asked for the population of Chennai from
+	// its Wikipedia article, the read came back with geography and
+	// the assistant said the page did not show it.
+	//
+	// So the caller may say what it is looking for and be sent the
+	// part around it. Without that it still gets the opening.
+	// Thin : How few news results mean the index was the wrong one.
+	//
+	// Three. One or two is a search that found the edge of
+	// something; three is a search that found it.
+	Thin    = 3
 	Pages   = 3
 	Longest = 6000
 )
@@ -190,6 +205,34 @@ func lookUp(searcher search.Searcher) tool.Tool {
 			if err != nil {
 				return tool.Broke("The search could not be done.", err)
 			}
+
+			// A news search that found almost nothing is asked again
+			// of the web at large, here rather than by the model.
+			//
+			// The news index is a narrow one and the argument that
+			// chooses it cannot be described well enough to be got
+			// right every time: asked who had been eliminated from
+			// Bigg Boss Tamil, the model set news because an
+			// elimination is plainly something that happened, and
+			// the answer is on entertainment sites and fan pages
+			// that no wire service indexes. It reported that the
+			// search only returned the Telugu version. The same
+			// query without the filter had the name, the date and
+			// the prize.
+			//
+			// Done in the tool because a round spent discovering
+			// this is a round the person waits through, and because
+			// the model has already been told twice -- in the
+			// argument and in keepLooking -- and did it anyway. A
+			// filter that narrows to nothing should widen itself.
+			if args.News && len(found) < Thin {
+				wider, again := searcher.Search(ctx, search.Ask{
+					Query: query, Limit: limit, Days: args.Days,
+				})
+				if again == nil && len(wider) > len(found) {
+					found = wider
+				}
+			}
 			return tool.OK(search.Describe(query, found))
 		},
 	}
@@ -223,15 +266,26 @@ func readPage(reader search.Reader) tool.Tool {
 						"One or two is usually right and three is the most that will be " +
 						"read; the rest are dropped.",
 				},
+				"looking_for": {
+					Type: "string",
+					Description: "A word or two you expect to find near the answer -- a " +
+						"name, a figure's label, the thing itself. A long page is cut, " +
+						"and this decides which part of it you are sent: without it you " +
+						"get the opening, which is the right part only when the page is " +
+						"about your question. Asked a city's population, say population.",
+				},
 			},
 		},
 		Examples: []tool.Example{
 			{Ask: "what does that article actually say",
 				Args: `{"urls":["https://example.com/a"],"saying":"reading it"}`},
+			{Ask: "how many people live in Chennai",
+				Args: `{"urls":["https://en.wikipedia.org/wiki/Chennai"],"looking_for":"population","saying":"reading the page for the figure"}`},
 		},
 		Run: func(ctx context.Context, in tool.Invocation) tool.Result {
 			var args struct {
-				URLs []string `json:"urls"`
+				URLs       []string `json:"urls"`
+				LookingFor string   `json:"looking_for"`
 			}
 			_ = json.Unmarshal(in.Args, &args)
 
@@ -261,7 +315,7 @@ func readPage(reader search.Reader) tool.Tool {
 			if err != nil {
 				return tool.Broke("That page could not be read.", err)
 			}
-			return tool.OK(search.Said(pages, Longest))
+			return tool.OK(search.Said(pages, Longest, args.LookingFor))
 		},
 	}
 }

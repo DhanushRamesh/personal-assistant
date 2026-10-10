@@ -74,6 +74,12 @@ type Page struct {
 	// Text : The readable part, with the navigation and the adverts
 	// taken out by whichever service read it.
 	Text string
+	// Wanted : What the reader was looking for on this page, if it
+	// said. Used only to choose which part of a long page to send.
+	//
+	// Not a filter and not a search: the page is sent whether or
+	// not this is found, and finding it only moves the window.
+	Wanted string
 	// Trouble : Why this one could not be read, when it could not.
 	// One page failing must not lose the others.
 	Trouble string
@@ -283,7 +289,57 @@ func Describe(query string, found []Result) string {
 // the budget on text nobody asked for and buries the part that
 // answered the question. Where it was cut is said, so the model
 // knows it is reading part of something rather than all of it.
-func Said(pages []Page, most int) string {
+// kept : The part of a page worth sending, when the whole is too
+// long.
+//
+// The first thousand words, until there is a reason to think the
+// answer is elsewhere -- and then the part around the reason.
+//
+// It used to be the first thousand words always, on the grounds
+// that the part of a page which answers something is almost always
+// near the top. That is true of a page written about the question
+// and false of a search result, which is the only kind there is
+// here. Asked for the population of Chennai from its Wikipedia
+// article on 10 October 2026, the read came back with a paragraph
+// of geography and the answer three sections further down, and the
+// assistant reported that the page did not show it.
+//
+// So where the caller said what it was looking for, the text is
+// searched for it and the window is taken from around the first
+// mention. Half before and half after, because a figure is usually
+// introduced by the sentence above it.
+func kept(text string, most int, wanted string) string {
+	runes := []rune(text)
+	cut := "\n[cut here: the page goes on, and this is part of it]"
+
+	wanted = strings.ToLower(strings.TrimSpace(wanted))
+	if wanted != "" {
+		if at := strings.Index(strings.ToLower(text), wanted); at >= 0 {
+			// Measured in runes, because the index is in bytes and
+			// a page of Tamil would cut mid-character.
+			at = len([]rune(text[:at]))
+			from := at - most/2
+			if from < 0 {
+				from = 0
+			}
+			to := from + most
+			if to > len(runes) {
+				to, from = len(runes), max(0, len(runes)-most)
+			}
+			out := string(runes[from:to])
+			if from > 0 {
+				out = "[the page starts earlier]\n" + out
+			}
+			if to < len(runes) {
+				out += cut
+			}
+			return out
+		}
+	}
+	return string(runes[:most]) + cut
+}
+
+func Said(pages []Page, most int, wanted ...string) string {
 	if len(pages) == 0 {
 		return "Nothing could be read."
 	}
@@ -312,8 +368,11 @@ func Said(pages []Page, most int) string {
 			continue
 		}
 		if len([]rune(text)) > most {
-			text = string([]rune(text)[:most]) +
-				"\n[cut here: the page goes on, and this is the first part of it]"
+			looking := p.Wanted
+			if looking == "" && len(wanted) > 0 {
+				looking = wanted[0]
+			}
+			text = kept(text, most, looking)
 		}
 		b.WriteString(text + "\n")
 	}
