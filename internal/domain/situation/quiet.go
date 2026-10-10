@@ -2,7 +2,6 @@ package situation
 
 import (
 	"sort"
-	"strconv"
 	"strings"
 	"time"
 
@@ -23,14 +22,20 @@ const (
 	// hours; what it never stops doing is reporting where it is.
 	// That is the heartbeat, and the watcher stopped omitting it
 	// for this check.
+	//
+	// Used twice, and the second use is what makes it safe on a
+	// device nobody measured: a silence this long only means
+	// something where the device had not already gone this quiet
+	// while it was working.
 	Silence = 45 * time.Minute
 
-	// Chatty : How many reports in the window make a device one
-	// whose silence means something.
+	// Chatty : How many reports in the window before a device's
+	// silence is evidence of anything.
 	//
 	// Something that reported once and stopped may simply have had
-	// one thing to say. This is for the devices that talk
-	// constantly, because only their silence is evidence.
+	// one thing to say. A floor and nothing more -- the test that
+	// does the work is [Quiet]'s, that the device was reporting
+	// steadily rather than merely often.
 	Chatty = 5
 )
 
@@ -51,9 +56,24 @@ const (
 // on reconnection, so by the time anybody reads the events they
 // look continuous -- the three hours of silence are only visible in
 // when each one arrived.
+//
+// "Reports constantly" is the device's own rhythm and not a count.
+// Counting was wrong on the laptop, which says one thing in its
+// life -- that it joined or left a network -- in pairs five seconds
+// apart. Six of those inside a minute cleared a threshold of five
+// and made its ordinary overnight quiet a fault: measured over
+// three days, twelve of its twenty-eight gaps were longer than
+// [Silence] and the ninetieth percentile was eight hours. So a
+// device qualifies by never having gone this quiet while it was
+// working, which is a question about that device and needs nothing
+// measured in advance.
 func Quiet(evs []event.Event, now time.Time) (Found, bool) {
-	heard := map[string]time.Time{}
-	said := map[string]int{}
+	heard := map[string][]time.Time{}
+	// The start of the evidence rather than the start of the window
+	// the caller meant, so this stays a function of what it was
+	// given. They are the same thing in practice: something reports
+	// within the first minutes of any window three hours wide.
+	from := time.Time{}
 	for _, e := range evs {
 		if e.Source == "" || e.ReceivedAt.IsZero() {
 			continue
@@ -62,13 +82,13 @@ func Quiet(evs []event.Event, now time.Time) (Found, bool) {
 		if e.Device != "" {
 			who = e.Device
 		}
-		said[who]++
-		if e.ReceivedAt.After(heard[who]) {
-			heard[who] = e.ReceivedAt
+		heard[who] = append(heard[who], e.ReceivedAt)
+		if from.IsZero() || e.ReceivedAt.Before(from) {
+			from = e.ReceivedAt
 		}
 	}
 
-	// Sorted, because a map is in no order and a check that names a
+	// Sorted, because a map is in no order and a check that named a
 	// different device on each pass would be announced twice.
 	devices := make([]string, 0, len(heard))
 	for who := range heard {
@@ -77,23 +97,50 @@ func Quiet(evs []event.Event, now time.Time) (Found, bool) {
 	sort.Strings(devices)
 
 	for _, who := range devices {
-		if said[who] < Chatty {
+		at := heard[who]
+		if len(at) < Chatty {
 			continue
 		}
-		gone := now.Sub(heard[who])
-		if gone < Silence {
+		sort.Slice(at, func(i, j int) bool { return at[i].Before(at[j]) })
+
+		last := at[len(at)-1]
+		if now.Sub(last) < Silence {
+			continue
+		}
+		if longest(from, at) >= Silence {
+			// It goes this quiet anyway. Nothing has gone wrong
+			// that this device's own week does not do.
 			continue
 		}
 		return Found{
-			// Keyed by the device and the hour it fell silent, so
-			// one outage is one thing said rather than one every
-			// time the window is looked at.
-			Key: "quiet:" + who + ":" + heard[who].UTC().Format("2006-01-02T15"),
-			Says: "I have not heard anything from " + named(who) + " for " +
-				lasted(gone) + ", sir. It usually reports every few minutes.",
+			// When it fell silent and not how long ago, so one
+			// outage is one sentence for as long as it lasts.
+			// Saying the minutes made a new sentence every run,
+			// and the engine's guard against repeating itself is
+			// the sentence.
+			Says: "I have not heard anything from " + named(who) + " since " +
+				last.In(now.Location()).Format("3:04 pm") +
+				", sir. It usually reports every few minutes.",
 		}, true
 	}
 	return Found{}, false
+}
+
+// longest : The longest a device went without a word while it was
+// still reporting.
+//
+// Counted from the start of the evidence, so a device that said
+// nothing for the first two hours of the window and then spoke in a
+// burst is a device that goes quiet for two hours.
+func longest(from time.Time, at []time.Time) time.Duration {
+	worst, prev := time.Duration(0), from
+	for _, t := range at {
+		if gap := t.Sub(prev); gap > worst {
+			worst = gap
+		}
+		prev = t
+	}
+	return worst
 }
 
 // named : A device as somebody would refer to it.
@@ -108,21 +155,4 @@ func named(who string) string {
 		return "your laptop"
 	}
 	return who
-}
-
-// lasted : A duration as somebody would say it, rounded to
-// something a person would actually use.
-func lasted(d time.Duration) string {
-	switch {
-	case d < 90*time.Minute:
-		return strconv.Itoa(int(d.Round(time.Minute).Minutes())) + " minutes"
-	case d < 24*time.Hour:
-		hours := int(d.Round(30 * time.Minute).Hours())
-		if hours <= 1 {
-			return "over an hour"
-		}
-		return strconv.Itoa(hours) + " hours"
-	default:
-		return "more than a day"
-	}
 }

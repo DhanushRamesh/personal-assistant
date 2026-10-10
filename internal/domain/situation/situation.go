@@ -28,13 +28,18 @@ import (
 	"personal-assistant/internal/base/world/event"
 )
 
-// Found : Something worth saying, and what makes it this thing
-// rather than another.
+// Found : Something worth saying.
+//
+// It held a key as well, for saying one thing once. Nothing ever
+// read it: the watcher that did was replaced by the rule engine,
+// which tells a rule what it said last time and compares sentences.
+// A key nothing reads is worse than no key, because its name says
+// repetition is handled.
+//
+// So the sentence is the identity. A check whose words change while
+// the situation does not has no guard at all, and that is a thing
+// to get right in the check rather than to patch around.
 type Found struct {
-	// Key : What this is, so it is said once. Two different
-	// situations never share one, and the same situation returning
-	// on the next tick always does.
-	Key string
 	// Says : The words, already a sentence.
 	Says string
 }
@@ -67,7 +72,6 @@ func Trying(evs []event.Event, now time.Time) (Found, bool) {
 			continue
 		}
 		return Found{
-			Key:  "trying:" + r.Who,
 			Says: r.Named() + " has tried to reach you more than once, sir, and has not got through.",
 		}, true
 	}

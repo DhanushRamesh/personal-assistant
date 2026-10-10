@@ -27,7 +27,7 @@ func (h held) Recent(context.Context, string, event.Query) ([]event.Event, error
 // found : A check that always finds the same thing.
 func found(says string) situation.Check {
 	return func([]event.Event, time.Time) (situation.Found, bool) {
-		return situation.Found{Key: says, Says: says}, true
+		return situation.Found{Says: says}, true
 	}
 }
 

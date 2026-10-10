@@ -17594,6 +17594,68 @@ Taste is by nature many distinct values. The ranking cannot surface
 it at any cap.
 
 
+### A phone's rhythm applied to a laptop
+
+Owner, on an announcement at half past midnight -- *"Your laptop has
+gone quiet, sir -- nothing reported in the last forty-eight
+minutes."* -- **"its unwanted statement."**
+
+The rule was his own, `a device has gone quiet`, every five minutes.
+The check behind it was right about the laptop having said nothing
+for forty-eight minutes and wrong about that meaning anything.
+
+Two faults, and neither was the threshold.
+
+**Which devices count.** `Chatty = 5` said a device whose silence is
+evidence is one that reported five times in the window. The laptop
+says exactly one thing in its life -- that it joined or left a
+network -- and says it in pairs five seconds apart. Six of those
+inside a minute cleared a threshold meant for a phone reporting its
+position every two minutes. Measured over three days: twenty-nine
+reports, a median gap of **0.8 minutes** and a ninetieth percentile
+of **8.8 hours**, with **twelve of its twenty-eight gaps longer than
+the forty-five-minute threshold**. Its ordinary night is a fault
+under that test, and would be most nights.
+
+`Silence` was measured on the phone and says so in its own comment.
+Nobody measured the laptop, and nobody should have to: the check now
+asks whether *this* device had already gone this quiet while it was
+working, which is a question about the evidence in hand. The same
+constant, used twice -- once as the silence that is wrong, once as
+the ordinary gap it must not already exceed. `Chatty` stays as a
+floor against a device that reported once.
+
+This is deliberately not a per-device table. A device that starts
+reporting steadily qualifies the moment it does, with nothing
+configured, and that is the whole point of measuring the device
+rather than naming it.
+
+**One outage, said five times.** On the evening of 8 October the
+same silence was announced at 21:58, 22:18, 22:28, 22:38 and 23:59
+-- *"forty-seven minutes"*, *"sixty-seven minutes"*, *"seventy-seven
+minutes"*, *"eighty-seven minutes"*, *"three hours"*.
+
+The engine already guards against this, and the guard was told the
+truth: a rule is shown what it said last time and asked to answer
+with silence if what it has now is the same news. The model was
+right to speak. **The input really was different every run**, because
+the check counted the minutes into its own sentence.
+
+`situation.Found` had a `Key` for exactly this -- the device and the
+hour it fell silent -- and **nothing has read it since the watcher
+that did was replaced by the rule engine**. A key named for saying
+one thing once, computed on every run, discarded on every run, while
+the thing it promised went unhandled. It is deleted. The sentence is
+the identity now, and the check says *when* the device fell silent
+rather than how long ago, so one outage is one sentence for as long
+as it lasts.
+
+The general form, and the one worth carrying: **a check whose words
+change while the situation does not has no guard at all.** Any
+duration, count or clock reading in a situation's sentence is a
+rule that will repeat itself.
+
+
 
 When the owner states a preference, makes a decision, or corrects something,
 **record it here** in the same turn. That is the point of the file: a fresh

@@ -43,8 +43,8 @@ func TestADeviceThatStopsReportingIsMentioned(t *testing.T) {
 	if !strings.Contains(got.Says, "your phone") {
 		t.Errorf("it read out the device identifier: %q", got.Says)
 	}
-	if !strings.Contains(got.Says, "hour") {
-		t.Errorf("it did not say how long: %q", got.Says)
+	if !strings.Contains(got.Says, "10:30 am") {
+		t.Errorf("it did not say when it fell silent: %q", got.Says)
 	}
 }
 
@@ -91,15 +91,62 @@ func TestItIsAboutBeingHeardFromNotAboutWhenThingsHappened(t *testing.T) {
 	}
 }
 
-// One outage is one thing said. The key holds the hour it fell
-// silent, so looking again five minutes later is the same
-// situation rather than a new one.
-func TestOneOutageIsOneThing(t *testing.T) {
+// One outage is one thing said.
+//
+// The engine stops a rule repeating itself by comparing what it
+// says now with what it said last time, so a sentence that counts
+// the minutes defeats the only guard there is. Live, that was five
+// announcements of one silence on the evening of 8 October, ten
+// minutes apart, each a longer number than the last.
+func TestOneOutageIsOneSentence(t *testing.T) {
 	evs := chatter("pixel-7", 3*time.Hour, 90*time.Minute)
 
 	first, _ := situation.Quiet(evs, midday)
-	later, _ := situation.Quiet(evs, midday.Add(5*time.Minute))
-	if first.Key != later.Key {
-		t.Errorf("the same outage got two keys: %q then %q", first.Key, later.Key)
+	later, _ := situation.Quiet(evs, midday.Add(10*time.Minute))
+	if first.Says != later.Says {
+		t.Errorf("the same outage was said twice in different words:\n%q\n%q",
+			first.Says, later.Says)
+	}
+}
+
+// The laptop says one thing in its life -- that it joined or left a
+// network -- and says it in pairs five seconds apart. Counting
+// reports, six of those inside a minute made it a device that
+// "reports constantly", and its ordinary quiet became a fault:
+// measured over three days, twelve of its twenty-eight gaps were
+// longer than the threshold.
+//
+// Live, 10 October: "Your laptop has gone quiet, sir -- nothing
+// reported in the last forty-eight minutes."
+func TestADeviceThatIsQuietForHoursAnywayIsNotAFault(t *testing.T) {
+	var evs []event.Event
+	// The phone talking throughout, which is what sets the window.
+	evs = append(evs, chatter("pixel-7", 3*time.Hour, 0)...)
+	// And the laptop changing network once, in a burst, two hours
+	// into it and nothing since.
+	for i := range 6 {
+		evs = append(evs, reporting("dhanush-12514",
+			time.Hour-time.Duration(i)*5*time.Second))
+	}
+
+	if got, ok := situation.Quiet(evs, midday); ok {
+		t.Errorf("a laptop that is quiet for hours most days was called a fault: %q",
+			got.Says)
+	}
+}
+
+// And the same device is still worth watching once it does report
+// steadily. Disqualifying it for ever would be the opposite
+// mistake: the laptop going silent mid-afternoon while it was
+// sending every few minutes is exactly the failure this is for.
+func TestTheSameDeviceCountsOnceItIsSteady(t *testing.T) {
+	evs := chatter("dhanush-12514", 3*time.Hour, 90*time.Minute)
+
+	got, ok := situation.Quiet(evs, midday)
+	if !ok {
+		t.Fatal("a laptop reporting every five minutes and then stopping went unmentioned")
+	}
+	if !strings.Contains(got.Says, "your laptop") {
+		t.Errorf("it read out the device identifier: %q", got.Says)
 	}
 }
