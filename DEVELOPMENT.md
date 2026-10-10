@@ -17348,10 +17348,20 @@ heads-up display, thin luminous lines on near-black, one accent.
 The requirements are in a shared document,
 [Jarvis Design System -- Requirements Spec](https://claude.ai/code/artifact/5ecf8635-3bf2-4fbb-a669-3e699239f18c),
 which lists its own open questions. Until they are answered, these hold
-as proposals rather than decisions: Flutter on Linux desktop (the
-recorded framework decision; Tauri was raised by a pasted plan and not
-chosen), cyan as the accent, and the existing web client in `client/`
-left on its own amber system.
+as proposals rather than decisions: cyan as the accent, and the existing
+web client in `client/` left on its own amber system.
+
+**The desktop client is Electron, in its own repository** at
+`workspace/personal-assistant-client`. Owner's decision, the same day,
+after the tradeoffs were laid out. This does not reverse the Flutter
+decision above, whose reason was one codebase for Android and the web;
+it does not reach a Linux-only shell whose core is a terminal emulator.
+What decided it was the terminals: five panes running full-screen
+programs such as Claude Code need xterm.js, the emulator inside VS
+Code, and node-pty. Tauri was rejected because on Linux it renders
+through WebKitGTK, whose WebGL and backdrop blur are the two things
+this design leans on. The costs, accepted: about 250 MB of memory, and
+`client/lib/api` is rewritten in TypeScript rather than reused.
 
 Two facts found while writing it, which constrain what comes after:
 
