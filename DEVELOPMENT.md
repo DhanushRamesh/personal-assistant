@@ -17291,6 +17291,52 @@ A question agreed about one person is still never spent on another,
 and an offer nobody has answered still rings nothing. Both tested.
 
 
+### He types badly and it does not matter
+
+Owner: *"you know how i prompt right .. lots of spelling mistake .. i
+type something but somehow you identify what i want .. that is how
+ill be typing on jarvis too .. so i want jarvis to do the right task
+.. right tools must be called"*
+
+Measured rather than assumed. `TestASentenceSurvivesItsSpelling`
+asks twenty-seven of his real sentences twice, once as typed and once
+spelt correctly, and compares the two answers.
+
+	27 of 27 survived their spelling; 0 cost by it,
+	0 wrong either way, 0 only right when mangled
+
+`cal amma` reached the phone and not the calendar. `remind me in to
+hours to take the washign out` set a hundred and twenty minutes. The
+four cases that should call nothing called nothing, which is the
+failure a tool-choice suite cannot see: a mangled sentence turning an
+answer into a search.
+
+#### Why the comparison is paired
+
+The one hundred and twenty-five cases in `cases` are all in textbook
+English, so nothing measured the input this person actually produces.
+Adding mangled cases alone would not have measured it either -- a
+failure would be indistinguishable from a tool description that was
+weak anyway.
+
+So each case carries its own tidy twin and only one outcome fails:
+**the tidy sentence right and the tangled one wrong.** Both wrong is
+logged and not failed, because the descriptions are `cases`' subject
+and failing here as well reports one fault in two places.
+
+#### What this does not cover
+
+A misspelling is recovered from the sentence around it -- "right
+tootls must be aclled" has only one word that fits. **A name has no
+such redundancy**: "call Alikya" is well formed, so nothing in the
+sentence contradicts it. That is what `heard.Likeness` and the
+confirm step are for, and this file does not test them.
+
+So the rule stands unchanged: guess when reading, ask when changing.
+The risk was never the wrong tool. It is the right tool and the wrong
+person.
+
+
 
 When the owner states a preference, makes a decision, or corrects something,
 **record it here** in the same turn. That is the point of the file: a fresh

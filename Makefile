@@ -113,6 +113,13 @@ test: ## Run the tests
 evals-greeting: ## Greet real arrivals sampled from the last four weeks (costs API calls)
 	@go test ./internal/domain/greet/evals/ -tags evals -count=1 -v -timeout 20m $(ARGS)
 
+.PHONY: evals-tangled
+evals-tangled: ## Ask whether a badly typed sentence still reaches the right tool (costs API calls)
+	@# Twice per case, as typed and spelt correctly, so the spelling
+	@# is the only thing the comparison measures.
+	@go test ./internal/app/tool/evals/ -tags evals -count=1 -v -timeout 20m \
+		-run TestASentenceSurvivesItsSpelling $(ARGS)
+
 .PHONY: evals
 evals: ## Ask a real model whether the tool descriptions work (costs API calls)
 	@# Longer than go test's own ten minutes. Eighty-two cases paced
