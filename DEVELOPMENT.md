@@ -18112,11 +18112,52 @@ passed `persona.Spoken` for the same reason: they measure tool choice
 against runs going back weeks, and silently re-shaping their prompt
 would have made the comparison meaningless.
 
-**Built and deliberately not deployed.** The desktop client renders a
-reply as `<p>{answer}</p>` with no markdown anywhere in it, so
-markdown would arrive as literal asterisks with the newlines
-collapsed by HTML -- worse than the wall it replaces. The server half
-is correct and waits for the client half.
+Held back at first, because the desktop client rendered a reply as
+`<p>{answer}</p>` and markdown would have arrived as literal
+asterisks with its newlines collapsed -- worse than the wall it
+replaces. The owner had already written the other half: `react-markdown`
+with `remark-gfm`, a `Markdown` component and its own stylesheet, with
+every element the server emits styled. Deployed once that was
+confirmed.
+
+#### A principle the model followed two times in three
+
+`make evals-shape` asks the real model the same question twice, once
+for the ear and once for the eye, and measures both. It found that
+the spoken half was not reliable:
+
+```
+"how should I think about backing up my photos", spoken
+   before the many-part rule   119 words
+   after it                    56, 59, 65, 66 ... and 111
+```
+
+The failures are not near the successes. The model either gives the
+answer or sets out the whole method, and *hearing takes time* did not
+decide which. A rule obeyed two times in three is a rule somebody
+hears broken once a day.
+
+So `briefly` adds a number -- four sentences as a ceiling, one or two
+usually right -- which models hold to far better than a principle.
+After it: **59, 71, 52**. In the reply rules rather than in `aloud`,
+because `Voice` uses `aloud` for the greeting, and a greeting worth
+hearing is sometimes four sentences of what happened while they were
+out.
+
+Two things the eval got wrong first, both worth keeping:
+
+- **A wall was measured in characters.** A Markdown paragraph is one
+  long line by definition, so every correctly formatted answer looked
+  like a wall. The rule in the prompt is *more than about three
+  sentences in a row*, and that is a count of sentences.
+- **Shape was demanded of every written answer.** The prompt asks for
+  a list when naming more than two things, not for markup in two
+  sentences, and the test failed a correct short answer about one run
+  in three. Owed only past eighty words now.
+
+And a cap the model straddles tests nothing but the weather, which is
+why `Heard` sits at 75: above where it now lands, far below the 119
+it came from.
 
 
 

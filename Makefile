@@ -118,6 +118,11 @@ evals-models: ## Ask which models this gateway will accept (costs API calls)
 	@go test ./internal/app/noticing/evals/ -tags evals -count=1 -v -timeout 10m \
 		-run TestWhichModelsThisGatewayTakes $(ARGS)
 
+.PHONY: evals-shape
+evals-shape: ## Ask a real model the same question for the ear and the eye (costs API calls)
+	@go test ./internal/domain/persona/evals/ -tags evals -count=1 -v -timeout 10m \
+		-run TestTheSameQuestionIsShapedForTheEarAndTheEye $(ARGS)
+
 .PHONY: evals-rhythm
 evals-rhythm: ## Print the counted half of the description from the real database (no API calls)
 	@go test ./internal/app/profile/evals/ -tags evals -count=1 -v -timeout 2m \

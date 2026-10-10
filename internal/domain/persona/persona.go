@@ -40,6 +40,26 @@ var aloud = prompt.Text(
 	"Hearing takes time and cannot be skimmed, so length costs them more here than anywhere else. Use the fewest words that carry the answer and then stop.",
 	"Plain, everyday words. Where a short common word will do, it is the right one, and a listener should never have to hold a sentence in their head to work out its shape.",
 	"Everything you leave out they can ask for. Everything you put in they have to sit through.",
+	"A question whose full answer has several parts still gets a short one out loud. Give the part that matters most and say there is more to it; never work through the parts one by one. Asked how to go about something, the answer is the one thing to do first, not the method.",
+)
+
+// briefly : A number, because the words were not enough on their own.
+//
+// Everything in [aloud] about hearing costing time is true and was
+// obeyed about two times in three. Measured across runs on "how
+// should I think about backing up my photos": 56, 59, 65, 66 and 111
+// words. The failures are not near the successes -- the model either
+// gives the answer or sets out the whole method -- and a rule it
+// follows most of the time is a rule somebody hears broken once a
+// day.
+//
+// So a count, which models hold to far better than a principle. It is
+// in the reply rules and not in [aloud], because [Voice] uses aloud
+// for the greeting, and a greeting worth hearing is sometimes four
+// sentences of what happened while they were out.
+var briefly = prompt.Text(
+	"Four sentences is the most a spoken answer should ever run to, and one or two is usually right.",
+	"That is a ceiling and not a target: most questions are finished well inside it, and reaching it means checking that every sentence is carrying something.",
 )
 
 // written : How it reads when the words are read rather than heard.
@@ -95,7 +115,7 @@ var replying = prompt.Text(
 // sounds. Only its reason for the punctuation is about the
 // microphone.
 var (
-	spokenRules  = prompt.Block(aloud, replying)
+	spokenRules  = prompt.Block(aloud, briefly, replying)
 	writtenRules = prompt.Block(written, replying)
 )
 
