@@ -303,6 +303,12 @@ func (h *Handler) usually(ctx context.Context, userID string) []Usual {
 	return out
 }
 
+// Only : What joins a rule's trigger to the conditions that gate it.
+//
+// A comma and a plain word, because this is read aloud as often as
+// it is read on a screen.
+const Only = ", only if "
+
 // described : One job as the listing shows it.
 func described(j job.Job) Rule {
 	out := Rule{
@@ -313,8 +319,23 @@ func described(j job.Job) Rule {
 	}
 	// The conditions, where there are any, shown as the first
 	// thing the rule does -- which is what they now are.
+	//
+	// And again on the summary line, which is the only part read
+	// at a glance. Owner, 10 October 2026, looking at the list for
+	// a rule he had asked for the day before: *"I can't see any
+	// rule listed for the screen unlock after 5 hrs and in night."*
+	// It was the fourth row. What it said was "when
+	// screen.unlocked arrives", because the line is built from the
+	// wake hooks alone -- so a rule that fires on perhaps one
+	// unlock in ten read as firing on all of them, and the half he
+	// would recognise it by was a tap away.
+	//
+	// Only here, never in the stored column: that string is parsed
+	// back for rules written in the older shape, and a suffix on
+	// it would be read as part of the trigger.
 	if when := j.When.Describe(); when != "nothing to check" {
 		out.Steps = append(out.Steps, Step{Do: "when", Says: when})
+		out.Schedule = strings.TrimSpace(j.Schedule + Only + when)
 	}
 	for _, a := range j.Perform {
 		out.Steps = append(out.Steps, Step{Do: a.Do, Says: says(a)})
