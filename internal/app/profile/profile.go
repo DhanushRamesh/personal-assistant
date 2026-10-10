@@ -423,7 +423,8 @@ func (b *Builder) rhythm(did []event.Event) string {
 		Rhythm(did, b.Where),
 		Quiet(did, b.Where),
 		Changed(did, b.Where, b.clock()),
-		Windows(did, b.Where, b.clock()))
+		Windows(did, b.Where, b.clock()),
+		Trending(did, b.Where, b.clock()))
 }
 
 // did : What their devices reported over the four weeks.

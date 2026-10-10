@@ -16731,6 +16731,57 @@ And one assertion was simply wrong about the code: it expected
 "today at 12am" where `oclock` renders **midnight**. The code was
 right and read better than the test that doubted it.
 
+### What is trending in their life
+
+Owner, after the three windows: *"there must be daily data -- what's
+different from yesterday -- and weekly, what's different from last
+week. Same for this month, last month, this year, last year, for
+every event type. I might be listening to a song now, same as
+yesterday, same last week and now too, so that's what's trending in
+my life."*
+
+A grid rather than a comparison. Four lengths of time, each against
+the one before it, over every kind and value:
+
+	today      vs yesterday
+	this week  vs last week
+	this month vs last month
+	this year  vs last year
+
+Each reports only what moved -- arrived, stopped, doubled, halved --
+and at most three per window, because three is what somebody holds
+and the fourth is read past. A steady habit is not a trend and is
+left out: the same amount of the same thing is the opposite of news.
+
+	this week: music.state "Demi Lovato" is new (18);
+	           music.state "Anirudh" has stopped (was 5).
+
+The months are twenty-eight days and the year is fifty-two weeks, so
+each window is a whole number of the one below. Calendar months of
+unequal length would make February look like a decline.
+
+#### A window with nothing behind it says nothing
+
+The rule that matters, and the reason this is honest on a young
+database: **a window is reported only where there is a whole one of
+itself before it.** Nine days of history cannot say anything about a
+month, and "new this month" would mean only that the server was
+switched on this month -- which is the shape of mistake that makes a
+description untrustworthy in the week it is first read.
+
+So as of 10 October 2026, on 8.6 days of events:
+
+	today        needs   2 days of history -> works now
+	this week    needs  14 -> in 5 days
+	this month   needs  56 -> in 47 days
+	this year    needs 728 -> in 719 days
+
+The whole grid is built and three quarters of it is silent. It
+fills itself in; nothing has to be changed for the week to start
+speaking next Wednesday. That is the right way round -- the
+alternative is a description that says a great deal in its first
+week and is wrong about all of it.
+
 ## 12. Maintaining this file
 
 When the owner states a preference, makes a decision, or corrects something,

@@ -406,6 +406,12 @@ if it is, it says nothing. The memory is kept while the thing is
 still true and forgotten when a check stops holding, so something
 that goes away and comes back is announced again.
 
+**What is trending.** Four lengths of time -- today, this week, this
+month, this year -- each against the one before it, over every kind
+and value, reporting only what arrived, stopped, doubled or halved.
+A window is reported only where a whole one of itself precedes it,
+so a young database stays quiet rather than calling everything new.
+
 **The same habit at three distances.** Where today or this week sits
 oddly against the four-week habit, the description says so --
 *"usually around 9pm, today at midnight"* -- and says nothing where
