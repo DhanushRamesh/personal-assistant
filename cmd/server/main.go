@@ -3049,7 +3049,11 @@ func writing(ask string, already []job.Ran, before string, usually string) strin
 	}
 
 	return prompt.Block(
-		prompt.Text("You are writing one sentence to be said out loud, now.", ask),
+		prompt.Text(
+			"You are deciding whether to interrupt somebody, and then, only if you are, writing the one sentence they will hear.",
+			"The deciding is the part that matters. Saying nothing is always available, costs them nothing, and is the right answer more often than not.",
+			ask,
+		),
 		ordinary,
 		// Nobody asked for this one, so nobody is listening when it
 		// starts. A reply is heard from its first word because
@@ -3073,10 +3077,52 @@ func writing(ask string, already []job.Ran, before string, usually string) strin
 			"Readings carry the time they arrived: one from yesterday does not say what is true now.",
 			"If what you were asked for is not there, answer with "+prompt.Silence+" rather than",
 			"the nearest thing that is."),
+		worthSaying,
 		prompt.Text("Answer with the sentence and nothing else.",
 			"If there is nothing worth saying, answer with "+prompt.Silence+"."),
 	)
 }
+
+// worthSaying : The question a rule has to put to itself before it
+// is allowed to speak.
+//
+// Owner: **"if the model is going to comment, or say something, it
+// should ask itself a question -- whether it is actually useful, or
+// does it make sense. Same goes for rule writing too."**
+//
+// The other half of the bars in noticing, which ask it of a rule
+// before the rule exists. This asks it of one firing, because a rule
+// that deserved to exist can still have nothing worth saying on a
+// Tuesday, and the two have to agree or the careful one is wasted.
+//
+// Both bars and not one, for the reason noticing.Purpose was split:
+// the test that keeps warnings scarce -- that a thing they can do
+// nothing about is not worth an interruption -- forbids every remark
+// there is. So the question asked here depends on what the rule is
+// for, and a rule written to remark is judged on being true and
+// particular instead. A single bar here would have quietly undone
+// the companion the day it was added.
+//
+// It needed saying out loud. Everything else in a write step is
+// about the sentence -- how to open it, what not to put first, what
+// the ordinary day is -- and a model told at length how to phrase
+// something will phrase something. Silence was one clause at the
+// very end against a prompt that assumed from its first word that
+// it was writing.
+//
+// Measured, that is what it did. `a device has gone quiet` spoke six
+// times in 529 runs, which sounds careful until the six are read:
+// five of them were one silence announced five times in two hours,
+// and the sixth was a laptop being quiet at half past midnight.
+// Every one passed a step whose last line offered silence.
+var worthSaying = prompt.Text(
+	"Before writing a word, put two questions to what is in front of you, and answer them honestly.",
+	"Does it make sense? A person hearing it should recognise a real thing that happened. A device describing itself is not a thing that happened, and a reading restated as though it were news is not one either.",
+	"Is it worth their attention? For a rule that exists to catch something, that means useful: hearing it now changes what they do, or something they would otherwise get wrong. A thing that is merely true, or that they can do nothing about, is a fact, and they did not ask for it.",
+	"Where instead the rule exists to remark on them, useful is the wrong test and is not asked. A remark earns its place by being true and particular to them. If it would fit anybody, or you are filling a silence, it has not earned it.",
+	"If either answer is no, say "+prompt.Silence+". Do not look for a smaller thing to say instead, and do not soften something into being worth saying -- the honest answer to a dull hour is nothing.",
+	"Do not weigh how long it is since you last spoke. An interruption nobody needed is not improved by being rare, and a thing worth saying is not spoiled by having said something an hour ago.",
+)
 
 // check : Reads a condition and stops the sequence unless it holds.
 //

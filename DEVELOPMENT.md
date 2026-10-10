@@ -17867,6 +17867,50 @@ to let them look alike. *A thing that can be switched off must say
 so when it is off.*
 
 
+### It has to ask itself before it speaks
+
+Owner: **"if the model is going to comment, or say something, it
+should ask itself a question -- whether it is actually useful, or
+does it make sense. Same goes for rule writing too."**
+
+Rule writing already asks it, and now asks it against the record of
+what every rule in force has done. The firing did not. A write step
+opened with *"You are writing one sentence to be said out loud,
+now"*, spent four paragraphs on how to phrase it, and offered
+silence in one clause at the very end.
+
+A model told at length how to word something will word something.
+Measured: `a device has gone quiet` spoke six times in 529 runs,
+which sounds careful until the six are read -- five were one silence
+announced five times in two hours, and the sixth was a laptop being
+quiet at half past midnight. **Every one of them passed a step whose
+last line offered silence.**
+
+So the step now opens by saying that the deciding is the job and the
+sentence is only what follows if the answer is yes, and `worthSaying`
+puts the two questions in the owner's own words before the answer
+format.
+
+**Two bars and not one, which is the part that needed care.** The
+first draft asked "is it useful?" of everything, and that would have
+undone the companion the day it shipped: *a thing they can do
+nothing about is not worth an interruption* is exactly what keeps
+warnings scarce, and it forbids every remark there is. It is the
+same conflict `noticing.Purpose` was split over, arriving a second
+time at the other end of the pipe.
+
+So the question depends on what the rule is for. A rule that exists
+to catch something is asked whether hearing it changes what they do.
+A rule that exists to remark is told that useful is the wrong test,
+and is asked instead whether it is true and particular to them --
+whether it would fit anybody, and whether it is filling a silence.
+
+One more line, because it is the failure this will have: *do not
+weigh how long it is since you last spoke.* An interruption nobody
+needed is not improved by being rare, and a thing worth saying is
+not spoiled by having said something an hour ago.
+
+
 
 When the owner states a preference, makes a decision, or corrects something,
 **record it here** in the same turn. That is the point of the file: a fresh
