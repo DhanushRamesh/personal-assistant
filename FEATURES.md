@@ -22,6 +22,7 @@ flowchart TB
         direction LR
         SAT["Voice<br/>satellite in the room"]
         WEB["Web client<br/>and HTTP API"]
+        DESK["Desktop client<br/>Electron, its own repo<br/>signs in so far"]
         PHONE["Phone<br/>Tasker"]
     end
 
@@ -33,6 +34,7 @@ flowchart TB
     PHONE -. "presence" .-> HA
     HA --> CORE
     WEB --> CORE
+    DESK --> CORE
 
     CORE["The core<br/>persona, memory, tool loop"]
     MODEL["Model<br/>PlatformAI"]

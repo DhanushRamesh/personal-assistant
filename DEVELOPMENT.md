@@ -17368,8 +17368,12 @@ Two facts found while writing it, which constrain what comes after:
 - **The laptop runs GNOME on Wayland**, so `wmctrl` and `xdotool`
   cannot place native windows. Placing Chrome and VS Code needs them
   launched under XWayland or a GNOME Shell extension.
-- **No endpoint returns `[assistant] name`.** A client that shows the
-  name has to be given it by the server first; it may not carry one.
+- **`GET /v1/about` returns `[assistant] name`, without a token.**
+  Added the same day for the desktop client's sign-in screen, which
+  shows the name before there is a token to present. The name is not a
+  secret -- the assistant says it aloud -- and it is the only thing the
+  endpoint says. Empty means the assistant has none, and a client then
+  shows none rather than one of its own.
 
 **The desktop client is to hold a WebSocket to the server.** Owner's
 direction, the same day: the client is a chat that should answer at

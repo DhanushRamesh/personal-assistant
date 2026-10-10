@@ -43,6 +43,7 @@ func TestNewAppliesDefaultRequestTimeout(t *testing.T) {
 func TestRouteTableIsComplete(t *testing.T) {
 	want := map[string]bool{
 		"GET /health":                           true,
+		"GET /v1/about":                         true,
 		"GET /ready":                            true,
 		"POST /v1/auth/login":                   true,
 		"GET /v1/me":                            true,

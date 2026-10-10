@@ -20,6 +20,7 @@ import (
 	"github.com/go-chi/chi/v5"
 	chimw "github.com/go-chi/chi/v5/middleware"
 
+	"personal-assistant/internal/app/api/about"
 	announcementsapi "personal-assistant/internal/app/api/announcements"
 	"personal-assistant/internal/app/api/assist"
 	"personal-assistant/internal/app/api/authn"
@@ -74,6 +75,9 @@ type (
 type Options struct {
 	// Logger : Receives request records and handler errors. Required.
 	Logger *slog.Logger
+	// AssistantName : [assistant] name, said to anyone who asks at
+	// /v1/about. Empty means the assistant has none.
+	AssistantName string
 	// DB : Checked by the readiness endpoint. Required.
 	DB Pinger
 	// Chats : Stores and retrieves chats. Required.
@@ -220,6 +224,7 @@ type Server struct {
 	router           chi.Router
 
 	health        *health.Handler
+	about         *about.Handler
 	authn         *authn.Handler
 	clients       *clients.Handler
 	conversations *conversations.Handler
@@ -252,6 +257,7 @@ func New(opts Options) *Server {
 		router:           chi.NewRouter(),
 
 		health:        health.New(opts.Logger, opts.DB),
+		about:         about.New(opts.AssistantName),
 		authn:         authn.New(opts.Logger, opts.Chats),
 		clients:       clients.New(opts.Logger, opts.Chats, opts.Models, opts.DefaultModel, opts.Persona),
 		conversations: conversations.New(opts.Logger, opts.Chats, opts.Messages),
@@ -302,9 +308,11 @@ func (s *Server) routes() {
 	s.router.Use(middleware.CrossOrigin(s.allowCrossOrigin))
 	s.router.Use(chimw.Timeout(s.requestTimeout))
 
-	// Open: probed by infrastructure, and the one call that issues a token.
+	// Open: probed by infrastructure, the one call that issues a token, and
+	// the name a sign-in screen shows before it has one.
 	s.health.Mount(s.router)
 	s.authn.Mount(s.router)
+	s.about.Mount(s.router)
 	// Google redirects a browser here, and a redirect carries no
 	// Authorization header. The state it arrives with is what stands in
 	// for one.

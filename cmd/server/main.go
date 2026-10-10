@@ -822,6 +822,7 @@ func run() error {
 
 	handler := api.New(api.Options{
 		Logger:        logger.Logger,
+		AssistantName: cfg.Assistant.Name,
 		DB:            db,
 		Arrivals:      running,
 		Chats:         chats,
