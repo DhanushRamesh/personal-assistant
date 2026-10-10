@@ -17936,6 +17936,81 @@ needed is not improved by being rare, and a thing worth saying is
 not spoiled by having said something an hour ago.
 
 
+### The gate was set above his voice
+
+Owner, while this was being explained to him: **"while I talk the
+listening gets cut off."**
+
+He had been asked twice over several days for one sentence at his
+usual distance, and this is what it was for.
+
+Eighteen seconds off `voice_only`, pushed through the satellite's own
+`AudioProcessor(15, 1)` -- the live settings, so the numbers are what
+`_gate` actually sees -- and judged frame by frame against WebRTC's
+own voice detector:
+
+| 10ms frames | median rms | 90th | peak |
+|---|---|---|---|
+| WebRTC says speech (146) | **156** | 1517 | 3046 |
+| WebRTC says nobody (1653) | 54 | 106 | 887 |
+
+**The distributions overlap.** The profile's 700 came from a
+measurement reading near silence at 190 and his speech at "1400 and
+above" -- but 1400 is the *peak* of speech across a room, and frame
+by frame his voice is nowhere near it. A line described in the
+config as having nothing near it was sitting above most of it.
+
+At 700 the gate silenced **78% of his speech frames**. Broken into
+utterances, the damage is visible directly:
+
+```
+longest silenced stretch INSIDE one utterance  (0.70s ends the turn)
+
+           gate   1.9s  8.0s  12.4s  14.7s   verdict
+        rms 700   0.43  0.86  0.00   0.66    CUTS OFF
+        rms 120   0.25  0.38  0.00   0.02    survives
+ voice hold 500   0.00  0.44  0.00   0.00    survives
+```
+
+**0.86 continuous seconds of one utterance replaced with zeros while
+he was still speaking.** The patched `vad.py` ends a command after
+`silence_seconds = 0.7`, so it ended his sentence for him. (The
+gate's own comment says "a quarter-second" and is stale by that
+much.)
+
+And no other line works. The sweep: 80 keeps 77% of his speech and
+leaks 19% of the room; 120 keeps 56% and leaks 8%; 700 keeps 22% and
+leaks none. Every value is wrong in one direction or the other,
+because there is no gap between the two distributions to put a line
+in.
+
+**The answer was already in the process.** `webrtc.py` has been
+asking `result.is_speech` on every ten milliseconds of this audio
+since 9 October, for the stop word, and `__main__.py` has been
+keeping `voice_until` from it. Only **2 of 1,653** non-speech frames
+here are loud enough to fool the gate; the voice detector separates
+what loudness cannot. Owner, when it was wired into the stop word:
+*"only the voice should be detected, not the sound."* The same
+sentence has now fixed a third thing.
+
+So the audio loop hands `_voice_until` to the satellite and `_gate`
+reads it. Loudness stays as the fallback for gain and suppression
+both off, where no processor exists and there is nothing to ask --
+a gate that did nothing in that configuration would be a gate that
+stopped working when somebody turned a dial.
+
+Done in two parts, at his direction: the profile dropped to 120
+live through Home Assistant, which needed no restart and took
+effect in seconds, and the patch written to be applied at the next
+restart he is willing to spend.
+
+**The general lesson, and it is the one this room keeps teaching.** A
+threshold is a claim that two things do not overlap. Before setting
+one, measure both sides of it -- not the peak of the thing you want
+to keep, which is how 700 was arrived at, but the distribution. Where
+they overlap, no number exists and the question itself is wrong.
+
+
 
 When the owner states a preference, makes a decision, or corrects something,
 **record it here** in the same turn. That is the point of the file: a fresh
