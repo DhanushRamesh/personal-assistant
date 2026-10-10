@@ -73,8 +73,9 @@ type Asker interface {
 }
 
 // Tools : Everything in this package.
-func Tools(reader Reader, ask Asker, now func() time.Time) []tool.Tool {
-	return []tool.Tool{people(reader, now), place(reader, ask, now)}
+func Tools(reader Reader, ask Asker, heard Heard, now func() time.Time) []tool.Tool {
+	asking := NewAsking(now)
+	return []tool.Tool{people(reader, now), place(reader, ask, heard, asking, now)}
 }
 
 // Person : Somebody the phone has had a call with.
@@ -124,7 +125,7 @@ func people(reader Reader, now func() time.Time) tool.Tool {
 }
 
 // place : Rings one of them.
-func place(reader Reader, ask Asker, now func() time.Time) tool.Tool {
+func place(reader Reader, ask Asker, heard Heard, asking *Asking, now func() time.Time) tool.Tool {
 	return tool.Tool{
 		Name:    "call_place",
 		Domain:  "calling",
@@ -149,28 +150,29 @@ func place(reader Reader, ask Asker, now func() time.Time) tool.Tool {
 						"Take it from call_people where one of those names is what was " +
 						"meant. Never a telephone number.",
 				},
-				"confirmed": {
-					Type: "boolean",
-					Description: "Only true once they have been asked, in so many words, " +
-						"whether to ring this person and have said yes. Leave it out " +
-						"otherwise: the call then comes back with the name and the " +
-						"question to put, and nothing is dialled.",
-					Default: false,
+				"confirm": {
+					Type: "string",
+					Description: "Leave this out on the first call. It comes back with the " +
+						"question to put to them, and nothing is dialled. Put that " +
+						"question to them, wait for their answer, and only if they say " +
+						"yes call this again with the same name and the word given " +
+						"back. It cannot be guessed or made up, and it is refused if " +
+						"they have not answered yet.",
 				},
 			},
 			Required: []string{"who"},
 		},
 		Examples: []tool.Example{
 			{Ask: "call Amma", Args: `{"who":"Amma","saying":"one moment"}`},
-			{Ask: "yes, ring her", Args: `{"who":"Amma","confirmed":true,"saying":"calling her now"}`},
+			{Ask: "yes, ring her", Args: `{"who":"Amma","confirm":"3f9a1c20b4d8","saying":"calling her now"}`},
 		},
 		Run: func(ctx context.Context, in tool.Invocation) tool.Result {
 			if in.Caller.UserID == "" {
 				return tool.Failed("This request did not come from a known person.")
 			}
 			var args struct {
-				Who       string `json:"who"`
-				Confirmed bool   `json:"confirmed"`
+				Who     string `json:"who"`
+				Confirm string `json:"confirm"`
 			}
 			if err := json.Unmarshal(in.Args, &args); err != nil {
 				return tool.Failed("Those arguments could not be read.")
@@ -186,44 +188,104 @@ func place(reader Reader, ask Asker, now func() time.Time) tool.Tool {
 						"is, and ring them by name.", said))
 			}
 
+			// Answering one already put to them.
+			if strings.TrimSpace(args.Confirm) != "" {
+				return redeem(ctx, ask, heard, asking, in.Caller.UserID,
+					strings.TrimSpace(args.Confirm), said)
+			}
+
 			found, err := Known(ctx, reader, in.Caller.UserID, when(now))
 			if err != nil {
 				return tool.Broke("Who there is to call could not be read.", err)
 			}
 			who, how := Match(said, found)
 
+			// Every road from here leads to the same place: a
+			// question, and a word that answers it. Nothing dials.
+			p := asking.Put(in.Caller.UserID, who, said)
 			switch how {
 			case Near:
 				// Heard rather than read, and near is not the same
-				// as right. Put before anything is dialled, which
-				// is the general rule for a change made on a name
-				// that was only close.
-				return tool.Confirm("person", said, who, "ringing them")
+				// as right, so what needs agreeing is which person.
+				return tool.Failed(fmt.Sprintf(
+					"Nothing has been dialled. They said %q and the nearest person the "+
+						"phone has had a call with is %q, which is not the same words. "+
+						"Ask whether that is who they mean, as a question they can "+
+						"answer yes or no. If they say yes, call this again with who "+
+						"%q and confirm %q.", said, who, who, p.Token))
 			case Stranger:
 				// Not refused. The phone's contacts are larger than
 				// the list of people called from it, and somebody
 				// rung for the first time is exactly the case where
 				// refusing would be wrong.
-				if !args.Confirmed {
-					return tool.Failed(strangerTo(said, found))
-				}
+				return tool.Failed(strangerTo(said, found, p.Token))
 			default:
-				if !args.Confirmed {
-					return tool.Failed(fmt.Sprintf(
-						"Nothing has been dialled yet. A call is always put to them first: "+
-							"ask whether to ring %s, as a question they can answer yes or "+
-							"no, and call this again with confirmed true if they say yes.",
-						who))
-				}
+				return tool.Failed(fmt.Sprintf(
+					"Nothing has been dialled yet. A call is always put to them first: "+
+						"ask whether to ring %s, as a question they can answer yes or "+
+						"no. If they say yes, call this again with who %q and confirm "+
+						"%q.", who, who, p.Token))
 			}
-
-			if err := ask.Ring(ctx, in.Caller.UserID, calling.Call{Who: who}); err != nil {
-				return tool.Broke("That call could not be asked for.", err)
-			}
-			return tool.OK(fmt.Sprintf("The phone has been asked to ring %s. Tell them so. "+
-				"It dials on the phone itself, so the call is there and not here.", who))
 		},
 	}
+}
+
+// redeem : A call that has been answered, or the reason it has not.
+//
+// The token proves the question was asked. It cannot prove it was
+// heard, and that is the half that was missing: a model can ask for
+// one and hand it straight back in the same breath, which is the
+// assistant agreeing with itself. So the person has to have said
+// something since.
+func redeem(ctx context.Context, ask Asker, heard Heard, asking *Asking,
+	userID, given, said string) tool.Result {
+	p, ok := asking.Take(userID)
+	if !ok {
+		return tool.Failed("Nothing has been dialled. No call has been put to them, so " +
+			"there is nothing for them to have agreed to. Ask first: call this again " +
+			"with just the name, and it will give you the question to put.")
+	}
+	if p.Token == "" || given != p.Token {
+		return tool.Failed("Nothing has been dialled. That is not the word this call came " +
+			"back with, and it cannot be guessed at. Call this again with just the name " +
+			"to be given the question to put to them.")
+	}
+	if asking.Stale(p) {
+		return tool.Failed(fmt.Sprintf(
+			"Nothing has been dialled. Ringing %s was put to them too long ago for an "+
+				"answer now to be about that. Ask again: call this with just the name.",
+			p.Who))
+	}
+	if !Answered(ctx, heard, userID, p) {
+		// Kept rather than spent. They are about to answer, and
+		// making the model ask again would have them hear the same
+		// question twice for no reason.
+		asking.Keep(userID, p)
+		return tool.Failed(fmt.Sprintf(
+			"Nothing has been dialled. They have not said anything since you were given "+
+				"this question, so nobody has agreed to it yet: asking and answering "+
+				"in the same breath is you agreeing with yourself. Put the question to "+
+				"them, let them answer, and call this again with confirm %q once they "+
+				"have. If they say no, let it go.", p.Token))
+	}
+	// Rung by what was asked about rather than by what this call
+	// carries, so a question answered about one person can never
+	// dial another.
+	// Either the name it asked about or the words they first used.
+	// What is rung is p.Who regardless; this only catches a model
+	// that has moved on to somebody else.
+	asked := calling.Tidy(said)
+	if said != "" && !strings.EqualFold(asked, p.Who) && !strings.EqualFold(asked, p.Said) {
+		return tool.Failed(fmt.Sprintf(
+			"Nothing has been dialled. What was put to them was ringing %s, and this "+
+				"names %s instead. Ask about %s on its own.", p.Who, said, said))
+	}
+
+	if err := ask.Ring(ctx, userID, calling.Call{Who: p.Who}); err != nil {
+		return tool.Broke("That call could not be asked for.", err)
+	}
+	return tool.OK(fmt.Sprintf("The phone has been asked to ring %s. Tell them so. "+
+		"It dials on the phone itself, so the call is there and not here.", p.Who))
 }
 
 // How : How well a name matched somebody known.
@@ -307,7 +369,7 @@ func fold(s string) string {
 
 // strangerTo : What to say when nobody known is anything like the
 // name that was heard.
-func strangerTo(said string, known []Person) string {
+func strangerTo(said string, known []Person, token string) string {
 	var b strings.Builder
 	fmt.Fprintf(&b, "Nothing has been dialled. Nobody the phone has had a call with is called "+
 		"%q, though that was heard rather than read and may have come out wrong. ", said)
@@ -315,11 +377,11 @@ func strangerTo(said string, known []Person) string {
 		b.WriteString("These are the people there have been calls with: " +
 			strings.Join(names(known), ", ") + ". ")
 		b.WriteString("If one of them is who was meant, ask whether that is the one, as a " +
-			"yes-or-no question, and call this again with their name and confirmed true. ")
+			"yes-or-no question, then call this again with just their name. ")
 	}
 	fmt.Fprintf(&b, "If %q really is who they want, that name may still be in the phone's own "+
-		"contacts: ask whether to ring them, and call this again with confirmed true if they "+
-		"say yes. Do not tell them there is no such person.", said)
+		"contacts: ask whether to ring them, and if they say yes call this again with that "+
+		"name and confirm %q. Do not tell them there is no such person.", said, token)
 	return b.String()
 }
 

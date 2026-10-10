@@ -398,7 +398,7 @@ func run() error {
 		eventstool.Tools(deviceEvents, eventstool.Clock{
 			Now: cfg.Assistant.Now, Location: cfg.Assistant.Location,
 		}),
-		callingTools(deviceEvents, ringing, cfg.Assistant.Now),
+		callingTools(deviceEvents, ringing, chats, cfg.Assistant.Now),
 		placestool.Tools(deviceEvents, placestool.Clock{
 			Now: cfg.Assistant.Now, Location: cfg.Assistant.Location,
 		}),
@@ -991,11 +991,12 @@ func alarmHands(phone alarm.Setter) errand.Hands {
 // call_place that cannot work will say it is ringing somebody and
 // then explain why it could not, which is two sentences worse than
 // not having it.
-func callingTools(reader callingtool.Reader, ring *caller, now func() time.Time) []tool.Tool {
+func callingTools(reader callingtool.Reader, ring *caller, heard callingtool.Heard,
+	now func() time.Time) []tool.Tool {
 	if ring == nil {
 		return nil
 	}
-	return callingtool.Tools(reader, ring, now)
+	return callingtool.Tools(reader, ring, heard, now)
 }
 
 // phoneCall : Where a call is placed, or nothing when there is no

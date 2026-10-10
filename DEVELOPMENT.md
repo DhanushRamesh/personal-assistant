@@ -17118,6 +17118,67 @@ no call was placed. The reply is Tasker's Quick Response, which
 answers before the task runs -- so as ever, a 200 proves the message
 arrived and nothing more.
 
+### Confirm always was a boolean he set himself
+
+Owner's own trace, 10 October 2026. The first `call_place` of a
+fresh conversation, nobody having been asked anything:
+
+	raw="[call_place {"who": "Alekhya Chintada", "confirmed": true}]"
+
+The rule was *confirm always*. What was built was an argument named
+`confirmed`, and the thing being asked to confirm was the thing
+filling it in. **A flag the model sets is not a confirmation**, and
+the only reason that call did not go straight out was the unrelated
+read-before-write refusal.
+
+#### The token is the easy half
+
+`call_place` with a name now dials nothing ever. It returns the
+question to put and a six-byte word made by the server, and only a
+second call carrying that word can ring anybody. That much is the
+same idea as *an identifier comes from the listing, never made up*,
+which the writes already rely on.
+
+#### The half that actually matters
+
+A token proves the question was **asked**. It cannot prove it was
+**heard** -- and a model can ask for one and hand it back in the
+same breath, which is the assistant agreeing with itself and exactly
+the bug in a new costume.
+
+So the server asks a different question: **has the person said
+anything since?** `SaidSince` already existed, returns only what the
+person themselves said, and the pending call records the moment it
+was handed over. No message after that moment means nobody has
+agreed to anything, whatever the arguments claim.
+
+	asked at T       the question is handed to the model
+	spoken at T+n    the model says it out loud
+	answered at T+m  they reply -- this is the only evidence
+	rung             only now
+
+It fails closed. A fault reading the messages reads as *not
+answered*: a question repeated is a nuisance, a stranger's phone
+ringing is not.
+
+Four other ways in are shut at the same time, each with a test: a
+made-up word, a word with no question behind it, a word answered
+about one person used to ring another -- it rings what it asked
+about, never what the second call carries -- and the same word used
+twice.
+
+#### What it costs
+
+Calling is now always two turns. That is what *confirm always* means
+and there is no version of it that is one turn, because one turn is
+precisely the case where nobody was asked.
+
+The pending question lives in memory and dies with a restart, which
+is the right way round: a question nobody can remember being asked
+should be asked again. It lasts three minutes, so a "yes" to
+something else at lunch cannot ring somebody asked about at
+breakfast.
+
 ## 12. Maintaining this file
 
 When the owner states a preference, makes a decision, or corrects something,

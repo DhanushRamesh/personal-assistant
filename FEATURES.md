@@ -272,10 +272,16 @@ Somebody never called before is still rung; the list is for matching,
 not for gatekeeping.
 
 **Nothing is ever dialled without being asked first.** The owner's
-rule, in his words: *confirm always*. The first call comes back with
-the name and the question; only an answered yes places it. A name
-that merely sounds close is put to him even then — the thing needing
-agreement is *which person*.
+rule, in his words: *confirm always*. The first call dials nothing at
+all — it comes back with the question and a word only the server
+could have made. The call is placed only when that word comes back
+*and* he has said something since it was issued, because a question
+asked and answered in the same breath is Jarvis agreeing with
+himself. So calling is always two turns.
+
+A name that merely sounds close is put to him even then — the thing
+needing agreement is *which person* — and agreeing to ring one person
+never rings another.
 
 **It expires after two minutes.** A call that connects ten minutes
 late, in a meeting, is worse than one that never went — so if the
