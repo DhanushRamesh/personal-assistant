@@ -30,6 +30,7 @@ import (
 	"personal-assistant/internal/app/api/events"
 	googleapi "personal-assistant/internal/app/api/google"
 	"personal-assistant/internal/app/api/health"
+	"personal-assistant/internal/app/api/live"
 	"personal-assistant/internal/app/api/memories"
 	"personal-assistant/internal/app/api/middleware"
 	"personal-assistant/internal/app/api/presence"
@@ -40,6 +41,7 @@ import (
 	speechapi "personal-assistant/internal/app/api/speech"
 	toolsapi "personal-assistant/internal/app/api/tools"
 	vocabularyapi "personal-assistant/internal/app/api/vocabulary"
+	livehub "personal-assistant/internal/app/live"
 	"personal-assistant/internal/app/tool"
 	"personal-assistant/internal/base/records/conversation"
 	"personal-assistant/internal/base/thinking/llm"
@@ -78,6 +80,9 @@ type Options struct {
 	// AssistantName : [assistant] name, said to anyone who asks at
 	// /v1/about. Empty means the assistant has none.
 	AssistantName string
+	// Live : What /v1/live tells connected clients. Optional; without it
+	// the endpoint answers 404.
+	Live *livehub.Hub
 	// DB : Checked by the readiness endpoint. Required.
 	DB Pinger
 	// Chats : Stores and retrieves chats. Required.
@@ -225,6 +230,7 @@ type Server struct {
 
 	health        *health.Handler
 	about         *about.Handler
+	live          *live.Handler
 	authn         *authn.Handler
 	clients       *clients.Handler
 	conversations *conversations.Handler
@@ -258,6 +264,7 @@ func New(opts Options) *Server {
 
 		health:        health.New(opts.Logger, opts.DB),
 		about:         about.New(opts.AssistantName),
+		live:          live.New(opts.Logger, opts.Live),
 		authn:         authn.New(opts.Logger, opts.Chats),
 		clients:       clients.New(opts.Logger, opts.Chats, opts.Models, opts.DefaultModel, opts.Persona),
 		conversations: conversations.New(opts.Logger, opts.Chats, opts.Messages),
@@ -306,7 +313,7 @@ func (s *Server) routes() {
 	// preflight cannot carry a token and would be refused before it was
 	// answered.
 	s.router.Use(middleware.CrossOrigin(s.allowCrossOrigin))
-	s.router.Use(chimw.Timeout(s.requestTimeout))
+	s.router.Use(middleware.TimeoutUnlessUpgrade(s.requestTimeout))
 
 	// Open: probed by infrastructure, the one call that issues a token, and
 	// the name a sign-in screen shows before it has one.
@@ -322,6 +329,7 @@ func (s *Server) routes() {
 	// once here rather than remembered by each module.
 	s.router.Group(func(r chi.Router) {
 		r.Use(s.authn.Require)
+		s.live.Mount(r)
 		s.clients.Mount(r)
 		s.conversations.Mount(r)
 		s.chats.Mount(r)

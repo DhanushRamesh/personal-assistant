@@ -8,6 +8,7 @@ import (
 	"net/http/httptest"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/go-chi/chi/v5"
 	chimw "github.com/go-chi/chi/v5/middleware"
@@ -176,5 +177,29 @@ func TestRecovererDoesNotLeakPanicToClient(t *testing.T) {
 
 	if strings.Contains(rec.Body.String(), "password") {
 		t.Errorf("panic detail leaked to the client: %s", rec.Body.String())
+	}
+}
+
+func TestTimeoutSparesAWebSocketUpgrade(t *testing.T) {
+	var cutShort bool
+	h := middleware.TimeoutUnlessUpgrade(20 * time.Millisecond)(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		select {
+		case <-r.Context().Done():
+			cutShort = true
+		case <-time.After(60 * time.Millisecond):
+		}
+	}))
+
+	upgrade := httptest.NewRequest(http.MethodGet, "/v1/live", nil)
+	upgrade.Header.Set("Connection", "Upgrade")
+	upgrade.Header.Set("Upgrade", "websocket")
+	h.ServeHTTP(httptest.NewRecorder(), upgrade)
+	if cutShort {
+		t.Fatal("an upgrade was cut short by the request timeout")
+	}
+
+	h.ServeHTTP(httptest.NewRecorder(), httptest.NewRequest(http.MethodGet, "/v1/me", nil))
+	if !cutShort {
+		t.Fatal("an ordinary request outlived the request timeout")
 	}
 }

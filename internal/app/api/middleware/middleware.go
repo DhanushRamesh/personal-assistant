@@ -10,6 +10,7 @@ import (
 	"log/slog"
 	"net/http"
 	"runtime/debug"
+	"strings"
 	"time"
 
 	chimw "github.com/go-chi/chi/v5/middleware"
@@ -106,4 +107,27 @@ func Recoverer(logger *slog.Logger) func(http.Handler) http.Handler {
 			next.ServeHTTP(w, r)
 		})
 	}
+}
+
+// TimeoutUnlessUpgrade : chi's Timeout for every request except a WebSocket
+// upgrade, which is meant to stay open: under Timeout its context would be
+// cancelled after d and the connection cut, however healthy.
+func TimeoutUnlessUpgrade(d time.Duration) func(http.Handler) http.Handler {
+	timeout := chimw.Timeout(d)
+	return func(next http.Handler) http.Handler {
+		limited := timeout(next)
+		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			if isUpgrade(r) {
+				next.ServeHTTP(w, r)
+				return
+			}
+			limited.ServeHTTP(w, r)
+		})
+	}
+}
+
+// isUpgrade : Whether r asks to become a WebSocket.
+func isUpgrade(r *http.Request) bool {
+	return strings.EqualFold(r.Header.Get("Upgrade"), "websocket") &&
+		strings.Contains(strings.ToLower(r.Header.Get("Connection")), "upgrade")
 }

@@ -17388,6 +17388,31 @@ this is new server work: an endpoint, authentication with the
 client's token, and a fan-out of announcements to connected clients.
 Not built.
 
+**Built, 11 October 2026: `GET /v1/live`.** A WebSocket behind the
+ordinary token check -- the client presents `Authorization: Bearer` on
+the upgrade, exactly as on any request. On connecting it is sent the
+latest event of each kind, then every event as it is published, as
+JSON lines `{"type":"satellite","state":"listening","at":…}`; it is
+pinged every 30 seconds and sends nothing yet. The first event kind is
+the voice satellite's state, for the desktop client's core: a watcher
+holds Home Assistant's own WebSocket open
+(`subscribe_entities` on `[homeassistant] satellite`), so a state
+arrives the moment Home Assistant has it rather than on a poll, and
+reports `unknown` whenever Home Assistant cannot be heard, retrying from
+one second to thirty. A client that falls 32 events behind is dropped
+and reconnects, so no client holds up another.
+
+- **`github.com/coder/websocket`** is the one new dependency: the
+  standard library has none, and this one is small, maintained,
+  context-aware and has no dependencies of its own. Both sides use it,
+  the endpoint and the Home Assistant watcher.
+- **Upgrades skip the request timeout.** chi's Timeout cancels a
+  request's context after `[server] request_timeout`, which would cut a
+  healthy live connection; `middleware.TimeoutUnlessUpgrade` applies it
+  to everything else.
+- The hub is in-process (`internal/app/live`), like the event bus:
+  nothing here needs more than one process.
+
 
 ### The bar that kept the rules scarce forbade every remark
 

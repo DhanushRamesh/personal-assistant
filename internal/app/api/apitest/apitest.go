@@ -22,6 +22,7 @@ import (
 	"net/http"
 	"net/http/httptest"
 	announcementsapi "personal-assistant/internal/app/api/announcements"
+	livehub "personal-assistant/internal/app/live"
 	"personal-assistant/internal/base/records/client"
 	"personal-assistant/internal/base/records/user"
 	"strings"
@@ -133,6 +134,10 @@ type Options struct {
 	// Announcements : Where what the server said unasked is noted down.
 	// Nil notes nothing.
 	Announcements presence.Announcements
+
+	// Live : What /v1/live tells connected clients. Nil leaves the
+	// endpoint answering 404.
+	Live *livehub.Hub
 }
 
 // Env : A server, its dependencies, and a client already logged in.
@@ -203,6 +208,7 @@ func NewWith(t *testing.T, opts Options) *Env {
 	e := &Env{
 		Server: api.New(api.Options{
 			Logger: logger.Logger,
+			Live:   opts.Live,
 			DB:     opts.DB,
 			Chats:  repo,
 			// The real catalogue, so a test that sets a client's

@@ -23,6 +23,7 @@ import (
 
 	"personal-assistant/internal/app/api"
 	"personal-assistant/internal/app/api/presence"
+	"personal-assistant/internal/app/live"
 	"personal-assistant/internal/app/noticing"
 	"personal-assistant/internal/app/pattern"
 	"personal-assistant/internal/app/profile"
@@ -836,9 +837,35 @@ func run() error {
 		slog.Duration("every", job.Tick),
 		slog.Duration("too late to bother", job.Stale))
 
+	// What connected clients are told as it happens: for now, the voice
+	// satellite's state, followed live from Home Assistant. Shares the
+	// reminder loop's context and wait group, so it stops with it.
+	liveHub := live.NewHub()
+	if watcher, err := hass.NewWatcher(hass.WatcherConfig{
+		URL:      cfg.HomeAssistant.URL,
+		Token:    cfg.HomeAssistant.Token,
+		Entities: []string{cfg.HomeAssistant.Satellite},
+		OnState: func(_, state string) {
+			liveHub.Publish(live.Event{Kind: live.SatelliteState, State: state, At: cfg.Assistant.Now()})
+		},
+		Logger: logger.Logger,
+	}); err == nil {
+		watching.Add(1)
+		go func() {
+			defer watching.Done()
+			logging.Surviving(remindCtx, logger.Logger, "satellite state", func() {
+				watcher.Run(remindCtx)
+			})
+		}()
+		logger.Info("following the satellite live", slog.String("satellite", cfg.HomeAssistant.Satellite))
+	} else if !errors.Is(err, hass.ErrNotConfigured) {
+		logger.Warn("cannot follow the satellite", slog.Any("error", err))
+	}
+
 	handler := api.New(api.Options{
 		Logger:        logger.Logger,
 		AssistantName: cfg.Assistant.Name,
+		Live:          liveHub,
 		DB:            db,
 		Arrivals:      running,
 		Chats:         chats,
