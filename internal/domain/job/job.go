@@ -175,7 +175,18 @@ type Job struct {
 	Last time.Time
 	// Why : What happened last run -- what went wrong, or which
 	// check stopped it. Empty when it simply ran.
+	//
+	// Overwritten on every run, which is why the reason a rule was
+	// written cannot live here. See [Job.Because].
 	Why string
+	// Because : Why this rule exists, which never changes.
+	//
+	// Empty for a rule the person asked for: they know why. Set on
+	// one the assistant wrote itself, where it is the whole of what
+	// makes the rule reviewable -- a rule nobody asked for has to
+	// be able to say what it is for, or the only thing to do with
+	// it is delete it.
+	Because string
 	// Quiet : When this rule may speak again, or the zero time when
 	// it may speak now.
 	//

@@ -189,6 +189,12 @@ type Rule struct {
 	// Why : What happened last run -- what went wrong, or which
 	// check stopped it. Empty when it simply ran.
 	Why string `json:"why,omitempty"`
+	// Because : Why the rule exists at all, for one the assistant
+	// wrote itself. Empty for a rule the person asked for.
+	//
+	// Apart from Why, which is overwritten on every run. A rule
+	// nobody asked for has to be able to say what it is for.
+	Because string `json:"because,omitempty"`
 	// Said : The sentence it last said, so that a rule which is
 	// running and silent is told from one that is not running.
 	Said string `json:"said,omitempty"`
@@ -314,7 +320,7 @@ func described(j job.Job) Rule {
 	out := Rule{
 		ID: j.ID, Name: j.Name, Kind: j.Kind,
 		Schedule: j.Schedule, Waits: job.Watches(j.Schedule),
-		State: string(j.State), Why: j.Why, Said: j.Said,
+		State: string(j.State), Why: j.Why, Because: j.Because, Said: j.Said,
 		Steps: make([]Step, 0, len(j.Perform)+1),
 	}
 	// The conditions, where there are any, shown as the first

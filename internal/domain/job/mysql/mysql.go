@@ -28,6 +28,7 @@ type row struct {
 	State     string     `gorm:"column:state"`
 	LastAt    *time.Time `gorm:"column:last_at"`
 	Why       string     `gorm:"column:why"`
+	Because   string     `gorm:"column:because"`
 	LastSaid  string     `gorm:"column:last_said"`
 	Keep      string     `gorm:"column:keep"`
 	Anywhere  bool       `gorm:"column:anywhere"`
@@ -73,7 +74,8 @@ func (s *Store) Keep(ctx context.Context, j job.Job) error {
 		ID: j.ID, UserID: j.UserID, Name: j.Name, Kind: j.Kind,
 		Schedule: j.Schedule, Steps: string(steps), State: string(j.State),
 		When: when, Perform: perform,
-		Why: j.Why, Keep: j.Keep, Cool: j.Cool, Anywhere: j.Anywhere,
+		Why: j.Why, Because: j.Because, Keep: j.Keep, Cool: j.Cool,
+		Anywhere:  j.Anywhere,
 		CreatedAt: now, UpdatedAt: now,
 	}
 	if !j.Next.IsZero() {
@@ -391,7 +393,8 @@ func assemble(r row) (job.Job, error) {
 	j := job.Job{
 		ID: r.ID, UserID: r.UserID, Name: r.Name, Kind: r.Kind,
 		Schedule: r.Schedule, Steps: steps, State: job.State(r.State),
-		Why: r.Why, Said: r.LastSaid, Keep: r.Keep, Cool: r.Cool, Anywhere: r.Anywhere,
+		Why: r.Why, Because: r.Because, Said: r.LastSaid, Keep: r.Keep,
+		Cool: r.Cool, Anywhere: r.Anywhere,
 		Resume: r.Resume, Made: r.CreatedAt.UTC(),
 	}
 	if err := shape(&j, r); err != nil {

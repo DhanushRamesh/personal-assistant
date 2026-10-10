@@ -50,3 +50,40 @@ func TestARuleWithNoConditionsIsUnchanged(t *testing.T) {
 		t.Errorf("an ungated rule now reads %q", got)
 	}
 }
+
+// TestWhyARuleExistsOutlivesWhatItDidLastTime : the two are separate
+// fields because they are separate facts.
+//
+// The reason a rule was written was kept in Why, which Ran overwrites
+// with the outcome of every single run -- so it survived exactly until
+// the first time the rule worked.
+func TestWhyARuleExistsOutlivesWhatItDidLastTime(t *testing.T) {
+	j := job.Job{
+		ID: "j1", Name: "the phone did not charge", Kind: "noticed",
+		Schedule: "when battery.level arrives", State: job.Active,
+		Why:     "the condition battery.level < 20 did not hold",
+		Because: "charged on 8 of 9 nights, and the two it did not were both days he ran flat by evening",
+	}
+	got := described(j)
+	if got.Because != j.Because {
+		t.Errorf("because = %q, want %q", got.Because, j.Because)
+	}
+	if got.Why != j.Why {
+		t.Errorf("why = %q, want %q", got.Why, j.Why)
+	}
+	if got.Kind != "noticed" {
+		t.Errorf("kind = %q, want the marker intact", got.Kind)
+	}
+}
+
+// TestARuleTheyAskedForExplainsNothing : because is empty for theirs,
+// and the field is dropped from the wire rather than sent blank.
+func TestARuleTheyAskedForExplainsNothing(t *testing.T) {
+	got := described(job.Job{
+		ID: "j2", Name: "wake me at seven", Kind: "rule",
+		Schedule: "at 07:00", State: job.Active,
+	})
+	if got.Because != "" {
+		t.Errorf("because = %q, want empty for a rule they asked for", got.Because)
+	}
+}

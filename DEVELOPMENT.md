@@ -17371,6 +17371,19 @@ Two facts found while writing it, which constrain what comes after:
 - **No endpoint returns `[assistant] name`.** A client that shows the
   name has to be given it by the server first; it may not carry one.
 
+**The desktop client is to hold a WebSocket to the server.** Owner's
+direction, the same day: the client is a chat that should answer at
+once and a place notifications are published to as they happen, and
+neither should wait on the client asking. This is the case section 2
+left open -- WebSocket "earns its place only if" something more than
+one answer has to travel -- and it is now met: an answer, progress,
+and announcements nobody asked for, over one connection, with the
+client's own prompts and cancels going the other way. Typed clients
+are pull-only today and there is no server-sent-events stream, so
+this is new server work: an endpoint, authentication with the
+client's token, and a fan-out of announcements to connected clients.
+Not built.
+
 
 ### The bar that kept the rules scarce forbade every remark
 
@@ -17453,6 +17466,52 @@ it was for.
 
 Retirement now reads every purpose, so a remark that has stopped
 earning its place can be taken back the same way.
+
+
+### A marker, and the reason it had nothing to mark
+
+Owner: *"there should be a marker .. which rule is created by AI for
+its purpose, and which is created by me."*
+
+The marker was already in the data -- `kind` is `rule`, `noticed` or
+`remarked`, and the API has always sent it. The page never drew it.
+It does now, on his rules only: a badge beside the name, named and
+not merely coloured, because colour alone is unreadable to anyone
+who cannot tell those two apart. **No badge means yours**, which is
+the ordinary case and the one that should be quiet.
+
+The label says what the rule is, `Noticed` or `Remarked`, and not
+who wrote it. The assistant's name is configuration and this page
+has never been told it.
+
+#### The field the marker pointed at was being destroyed
+
+A marker is only half of it. A rule nobody asked for has to say what
+it is for, or the only thing to do with it is delete it -- and that
+reason was being written into `Why`.
+
+`Store.Ran` overwrites `why` on **every single run** with the
+outcome of that run: a failed lookup, a check that withheld, nothing
+at all. So the reason a rule was written survived until the first
+time the rule worked, and then it was gone. Written three hours ago
+and already load-bearing in two places.
+
+Two different facts were in one column. Why it exists, which never
+changes, and what happened last time, which changes every run.
+Migration 52 separates them: `because` is set once and never
+written again.
+
+The allowance was reading the same column -- `HasPrefix(j.Why,
+Mark)` -- which would have handed him a fresh allowance the moment
+his last rule fired. It keys on `kind` alone now, and `Mark` is gone
+from `Purpose` with it.
+
+#### Unknown means theirs
+
+`RuleAuthor` maps anything it does not recognise to the person, not
+to the assistant. A rule wrongly marked as his invites somebody
+deleting their own work on the strength of a label, and the two
+deletions are not the same act.
 
 
 

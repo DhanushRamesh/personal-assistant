@@ -1100,6 +1100,24 @@ class Rules {
   );
 }
 
+/// RuleAuthor : Who a standing rule came from.
+///
+/// The server keeps it in the rule's kind, and the three are not the
+/// same thing to read in a list or the same thing to delete. Deleting
+/// one you asked for is changing your mind; deleting one he wrote is
+/// telling him he was wrong.
+enum RuleAuthor {
+  /// asked : The person asked for it, out loud or in writing.
+  asked,
+
+  /// noticed : He wrote it himself, from a pattern worth catching.
+  noticed,
+
+  /// remarked : He wrote it himself, to say something about them
+  /// rather than to catch anything.
+  remarked,
+}
+
 /// Rule : One standing rule, as the listing shows it.
 class Rule {
   const Rule({
@@ -1113,6 +1131,7 @@ class Rule {
     this.next,
     this.last,
     this.why = '',
+    this.because = '',
     this.said = '',
   });
 
@@ -1146,12 +1165,30 @@ class Rule {
   /// stopped it. Empty when it simply ran.
   final String why;
 
+  /// because : Why the rule exists at all, for one he wrote himself.
+  /// Empty for a rule the person asked for: they know why.
+  ///
+  /// Apart from why, which is overwritten every run.
+  final String because;
+
   /// said : The sentence it last said. What tells a rule that is running
   /// and finding nothing from one that is not running.
   final String said;
 
   /// active : Whether it is still going to run.
   bool get active => state == 'active';
+
+  /// author : Who wrote it. Anything unrecognised is the person's,
+  /// because a rule wrongly marked as his invites deleting somebody
+  /// else's work on the strength of a label.
+  RuleAuthor get author => switch (kind) {
+    'noticed' => RuleAuthor.noticed,
+    'remarked' => RuleAuthor.remarked,
+    _ => RuleAuthor.asked,
+  };
+
+  /// his : Whether he wrote it himself, of either purpose.
+  bool get his => author != RuleAuthor.asked;
 
   factory Rule.fromJson(Map<String, dynamic> json) => Rule(
     id: json['id'] as String? ?? '',
@@ -1167,6 +1204,7 @@ class Rule {
     next: DateTime.tryParse(json['next'] as String? ?? '')?.toLocal(),
     last: DateTime.tryParse(json['last'] as String? ?? '')?.toLocal(),
     why: json['why'] as String? ?? '',
+    because: json['because'] as String? ?? '',
     said: json['said'] as String? ?? '',
   );
 }

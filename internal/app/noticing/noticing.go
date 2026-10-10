@@ -70,8 +70,8 @@ const Rest = 6 * time.Hour
 type Purpose struct {
 	// Judge : What the model is told when deciding.
 	Judge string
-	// Kind, Mark : How a rule written for this purpose is known.
-	Kind, Mark string
+	// Kind : How a rule written for this purpose is known.
+	Kind string
 	// Most : How many of this kind he may write in a day.
 	Most int
 	// Rest : How long after writing one before another.
@@ -91,11 +91,11 @@ type Purpose struct {
 // fourth one lands as noise however good the first was.
 var (
 	Useful = Purpose{
-		Judge: judging, Kind: Kind, Mark: Mark,
+		Judge: judging, Kind: Kind,
 		Most: Most, Rest: Rest,
 	}
 	Companion = Purpose{
-		Judge: remarking, Kind: Remarked, Mark: RemarkedMark,
+		Judge: remarking, Kind: Remarked,
 		Most: 1, Rest: 7 * 24 * time.Hour, Grounded: true,
 	}
 )
@@ -107,7 +107,7 @@ func Purposes() []Purpose { return []Purpose{Useful, Companion} }
 // Mine : Whether a rule is one he wrote himself, of any purpose.
 func Mine(j job.Job) bool {
 	for _, p := range Purposes() {
-		if j.Kind == p.Kind || strings.HasPrefix(j.Why, p.Mark) {
+		if j.Kind == p.Kind {
 			return true
 		}
 	}
@@ -221,7 +221,11 @@ func Allowed(mine []job.Job, p Purpose, now time.Time) bool {
 		// cannot silence every remark, and a talkative week of
 		// remarks cannot keep a rule that matters from being
 		// written.
-		if !strings.HasPrefix(j.Why, p.Mark) && !strings.Contains(j.Kind, p.Kind) {
+		//
+		// Keyed on the kind alone. Why is overwritten on every
+		// run, so an allowance that read it would hand him a
+		// fresh one the moment his last rule fired.
+		if j.Kind != p.Kind {
 			continue
 		}
 		if j.Made.After(newest) {
@@ -254,8 +258,7 @@ const (
 	// apart from the person's: retiring every remark is a decision
 	// somebody might make in one go, and it should not take the
 	// rule watching their battery with it.
-	Remarked     = "remarked"
-	RemarkedMark = "remarked: "
+	Remarked = "remarked"
 )
 
 // Settled : How long one of his rules must have stood before it can
@@ -308,7 +311,7 @@ func (w Watcher) Retired(ctx context.Context, userID string, spoke []Spoke) (str
 		lines = append(lines, fmt.Sprintf(
 			"%s | %s | written %.0f days ago because %s | ran %d times, said something %d times",
 			s.Job.ID, s.Job.Name, now.Sub(s.Job.Made).Hours()/24,
-			unmarked(s.Job.Why), s.Ran, s.Said))
+			s.Job.Because, s.Ran, s.Said))
 	}
 	if len(lines) == 0 {
 		return "", "", nil

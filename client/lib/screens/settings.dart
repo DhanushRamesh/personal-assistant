@@ -264,7 +264,7 @@ class _ModuleTile extends StatelessWidget {
     final colors = context.colors;
     return InkWell(
       onTap: onTap,
-      borderRadius: BorderRadius.circular(AppRadius.sm),
+      borderRadius: BorderRadius.circular(AppRadius.xs),
       child: Container(
         padding: const EdgeInsets.symmetric(
           horizontal: AppSpacing.md,
@@ -272,7 +272,7 @@ class _ModuleTile extends StatelessWidget {
         ),
         decoration: BoxDecoration(
           color: selected ? colors.accentSoft : Colors.transparent,
-          borderRadius: BorderRadius.circular(AppRadius.sm),
+          borderRadius: BorderRadius.circular(AppRadius.xs),
         ),
         child: Row(
           children: [
@@ -936,6 +936,10 @@ class _RuleTileState extends State<_RuleTile> {
                               ),
                             ),
                           ),
+                          if (rule.his) ...[
+                            const SizedBox(width: AppSpacing.xs + 2),
+                            _WroteItHimself(author: rule.author, off: off),
+                          ],
                           const SizedBox(width: AppSpacing.sm),
                           Flexible(
                             child: Text(
@@ -994,6 +998,21 @@ class _RuleTileState extends State<_RuleTile> {
                         step.says.isEmpty
                             ? step.does
                             : '${step.does} — ${step.says}',
+                        style: context.text.caption.copyWith(
+                          color: colors.textSecondary,
+                        ),
+                      ),
+                    ),
+                  // Why it exists, for one nobody asked for. Above
+                  // what happened last time, because a rule the
+                  // person did not write is read for whether it
+                  // should be there at all before it is read for
+                  // whether it worked.
+                  if (rule.because.isNotEmpty)
+                    Padding(
+                      padding: const EdgeInsets.only(top: AppSpacing.xs),
+                      child: Text(
+                        'Written without being asked — ${rule.because}',
                         style: context.text.caption.copyWith(
                           color: colors.textSecondary,
                         ),
@@ -1101,6 +1120,54 @@ String _short(String did) => did.replaceAll(RegExp(r'\s+'), ' ').trim();
 /// waiting out its delay. That is the one state the page cannot show
 /// any other way: nothing has run, so the last run says nothing
 /// about it, and without this it reads as a rule sitting idle.
+/// _WroteItHimself : A marker on a rule the assistant wrote itself.
+///
+/// Owner: *"there should be a marker -- which rule is created by AI
+/// for its purpose, and which is created by me."*
+///
+/// Only on his. A badge on every row is a badge nobody reads, and
+/// the person's own rules are the ordinary case: the absence is the
+/// statement. Named rather than coloured alone, because colour by
+/// itself is unreadable to anyone who cannot tell these two apart.
+class _WroteItHimself extends StatelessWidget {
+  const _WroteItHimself({required this.author, required this.off});
+
+  final RuleAuthor author;
+  final bool off;
+
+  @override
+  Widget build(BuildContext context) {
+    final colors = context.colors;
+    // What it is, not who wrote it. The assistant's name is
+    // configuration and this page has never been told it.
+    final label = switch (author) {
+      RuleAuthor.remarked => 'Remarked',
+      _ => 'Noticed',
+    };
+    final tint = off ? colors.textMuted : colors.accent;
+
+    return Tooltip(
+      message: author == RuleAuthor.remarked
+          ? 'Written unasked, to say something about you'
+          : 'Written unasked, from a pattern worth catching',
+      child: Container(
+        padding: const EdgeInsets.symmetric(
+          horizontal: AppSpacing.xs + 2,
+          vertical: 1,
+        ),
+        decoration: BoxDecoration(
+          border: Border.all(color: tint.withValues(alpha: 0.5)),
+          borderRadius: BorderRadius.circular(AppRadius.xs),
+        ),
+        child: Text(
+          label,
+          style: context.text.caption.copyWith(color: tint, fontSize: 10),
+        ),
+      ),
+    );
+  }
+}
+
 String _lastly(Rule rule) {
   if (rule.waits && rule.next != null) {
     return 'Set off — runs at ${_clock(rule.next!)}';

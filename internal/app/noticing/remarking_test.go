@@ -103,8 +103,8 @@ func TestBothKindsAreHisToRetire(t *testing.T) {
 	for _, j := range []job.Job{
 		{Kind: noticing.Kind},
 		{Kind: noticing.Remarked},
-		{Why: noticing.Mark + "a pattern"},
-		{Why: noticing.RemarkedMark + "a pattern"},
+		{Kind: noticing.Kind},
+		{Kind: noticing.Remarked},
 	} {
 		if !noticing.Mine(j) {
 			t.Errorf("%+v should be one of his", j)

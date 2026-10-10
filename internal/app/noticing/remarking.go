@@ -74,13 +74,3 @@ func Grounded(acts []job.Act) bool {
 	}
 	return false
 }
-
-// unmarked : A reason with whichever purpose wrote it stripped off.
-func unmarked(why string) string {
-	for _, p := range Purposes() {
-		if strings.HasPrefix(why, p.Mark) {
-			return strings.TrimPrefix(why, p.Mark)
-		}
-	}
-	return why
-}

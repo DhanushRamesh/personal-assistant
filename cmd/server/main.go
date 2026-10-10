@@ -3423,7 +3423,11 @@ func wrote(
 	// Why he wrote it, kept on the rule itself. A rule nobody
 	// asked for has to be able to say what it is for, or the
 	// only thing to do with it is delete it.
-	made.Why = purpose.Mark + thought.Why
+	//
+	// In Because and not in Why: Why is overwritten with the
+	// outcome of every run, so a reason kept there survives until
+	// the first time the rule works.
+	made.Because = thought.Why
 	logger.InfoContext(ctx, "he wrote himself a rule",
 		slog.String("name", name), slog.String("purpose", purpose.Kind),
 		slog.String("because", thought.Why), slog.String("when", when.Describe()))
