@@ -17243,7 +17243,54 @@ goes a different way and is unaffected. Built anyway, because the
 alternative is guessing, and it will be known the first time a call
 is on.
 
-## 12. Maintaining this file
+### Shall I ring him back, sir?
+
+Owner, on the missed-call rule: *"it says you got a missed call
+right -- along with that I want, do you want me to call sir?"*
+
+The announcement should end with the offer. Saying it is the easy
+part; the hard part is that the yes must not be met with the same
+question again.
+
+#### Why the obvious version does not work
+
+A rule may only reach for tools that **do not write**, so a rule
+cannot call `call_place` -- and an announcement that merely says
+"shall I ring him?" leaves nothing on the server knowing a question
+was asked. The yes then arrives at `call_place`, which finds no
+pending call and does what it is built to do: asks.
+
+	Jarvis: Kliffy rang at two and you have not called back.
+	        Shall I ring him, sir?
+	You:    yes
+	Jarvis: Shall I ring Kliffy, sir?
+
+#### call_offer, and what the gate actually rests on
+
+`call_offer` is the asking half of `call_place` with the dialling
+taken out. It records that a question is going out and nothing else,
+which is why it does not write and why a rule may use it. It is
+given to the **write** step rather than run before it, because the
+step that decides who is outstanding is the only one that knows the
+name.
+
+And `call_place` now rings on a name alone when a question about
+that same person is already pending and they have spoken since.
+
+**That is not a loosening**, and it is worth being exact about why.
+The token never was the evidence. It proves a question was *asked*,
+which is the cheap half; what proves it was *answered* is that the
+person has said something since -- and that check is unchanged and
+still the only thing standing between a wish and a ringing phone.
+The token remains the ordinary way back and still pins which person
+was agreed to. It is simply no longer the only way, because
+insisting on it would have somebody who was just asked "shall I ring
+Kliffy?" asked it a second time.
+
+A question agreed about one person is still never spent on another,
+and an offer nobody has answered still rings nothing. Both tested.
+
+
 
 When the owner states a preference, makes a decision, or corrects something,
 **record it here** in the same turn. That is the point of the file: a fresh

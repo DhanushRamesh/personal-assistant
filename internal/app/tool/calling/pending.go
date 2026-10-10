@@ -99,6 +99,14 @@ func (a *Asking) Take(userID string) (Pending, bool) {
 	return p, ok
 }
 
+// Peek : The pending call for this person, left where it is.
+func (a *Asking) Peek(userID string) (Pending, bool) {
+	a.mu.Lock()
+	defer a.mu.Unlock()
+	p, ok := a.held[userID]
+	return p, ok
+}
+
 // Keep : Puts one back, for a refusal that should not cost the
 // question -- a token that arrived before the person had answered is
 // about to be answered, and throwing it away would mean asking twice.

@@ -76,7 +76,11 @@ type Asker interface {
 func Tools(reader Reader, ask Asker, heard Heard, change Changer,
 	now func() time.Time) []tool.Tool {
 	asking := NewAsking(now)
-	out := []tool.Tool{people(reader, now), place(reader, ask, heard, change, asking, now)}
+	out := []tool.Tool{
+		people(reader, now),
+		offer(reader, asking, now),
+		place(reader, ask, heard, change, asking, now),
+	}
 	// Nothing rather than tools that quietly do nothing. The phone
 	// listens for a mid-call change on its own path, and with no
 	// address for it a model told "on speaker" would say so and
@@ -221,6 +225,18 @@ func place(reader Reader, ask Asker, heard Heard, change Changer, asking *Asking
 			if strings.TrimSpace(args.Confirm) != "" {
 				return redeem(ctx, ask, change, heard, asking, in.Caller.UserID,
 					strings.TrimSpace(args.Confirm), said, args.Speaker, args.Mute)
+			}
+
+			// A question already put to them about this same
+			// person, which they have had the chance to answer.
+			// The word is the ordinary way back, but it is not the
+			// evidence -- their having spoken is -- and insisting
+			// on it would have somebody who was just asked
+			// "shall I ring Kliffy?" asked it again.
+			if p, ok := asking.Peek(in.Caller.UserID); ok && !asking.Stale(p) &&
+				about(said, p) && Answered(ctx, heard, in.Caller.UserID, p) {
+				return redeem(ctx, ask, change, heard, asking, in.Caller.UserID,
+					p.Token, said, args.Speaker, args.Mute)
 			}
 
 			found, err := Known(ctx, reader, in.Caller.UserID, when(now))
@@ -369,6 +385,16 @@ func ringing(ctx context.Context, change Changer, userID, who string,
 	default:
 		return said + " They will start the call muted."
 	}
+}
+
+// about : Whether a name is the one a pending question was about.
+//
+// Either the name it will ring or the words they first used, and
+// nothing looser: a question agreed about one person must not be
+// spent on another.
+func about(said string, p Pending) bool {
+	name := fold(said)
+	return name != "" && (name == fold(p.Who) || name == fold(p.Said))
 }
 
 // How : How well a name matched somebody known.

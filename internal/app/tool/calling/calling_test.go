@@ -86,12 +86,21 @@ func theRoom(t *testing.T, events []event.Event) (tool.Tool, tool.Tool, *rang, *
 	t.Helper()
 	ring := &rang{}
 	listening := &heard{}
-	tools := callingtool.Tools(reader{events: events}, ring, listening, ring,
-		func() time.Time { return now })
-	if len(tools) != 4 {
-		t.Fatalf("there are %d call tools", len(tools))
+	by := named(callingtool.Tools(reader{events: events}, ring, listening, ring,
+		func() time.Time { return now }))
+	if len(by) != 5 {
+		t.Fatalf("there are %d call tools", len(by))
 	}
-	return tools[0], tools[1], ring, listening
+	return by["call_people"], by["call_place"], ring, listening
+}
+
+// named : The tools by name, since their order is not a promise.
+func named(tools []tool.Tool) map[string]tool.Tool {
+	by := map[string]tool.Tool{}
+	for _, x := range tools {
+		by[x.Name] = x
+	}
+	return by
 }
 
 // token : The word a refusal hands back, so a test can answer with it.
@@ -364,12 +373,8 @@ func TestWithNoCallsOnRecordANameStillWorks(t *testing.T) {
 func theDial(t *testing.T) (map[string]tool.Tool, *rang) {
 	t.Helper()
 	ring := &rang{}
-	by := map[string]tool.Tool{}
-	for _, x := range callingtool.Tools(reader{}, ring, &heard{}, ring,
-		func() time.Time { return now }) {
-		by[x.Name] = x
-	}
-	return by, ring
+	return named(callingtool.Tools(reader{}, ring, &heard{}, ring,
+		func() time.Time { return now })), ring
 }
 
 func TestSpeakerGoesOnAndOff(t *testing.T) {
@@ -441,7 +446,7 @@ func TestWithNowhereToSendThemTheyDoNotExist(t *testing.T) {
 			t.Errorf("%s was offered with nowhere to send it", x.Name)
 		}
 	}
-	if len(tools) != 2 {
+	if len(tools) != 3 {
 		t.Errorf("there are %d call tools", len(tools))
 	}
 }
@@ -521,12 +526,8 @@ func TestSpeakerAskedWithTheYesIsTakenToo(t *testing.T) {
 func TestTheCallStillGoesWithNowhereToSendTheSpeaker(t *testing.T) {
 	ring := &rang{}
 	listening := &heard{}
-	var tools []tool.Tool
-	for _, x := range callingtool.Tools(reader{events: theWeek}, ring, listening, nil,
-		func() time.Time { return now }) {
-		tools = append(tools, x)
-	}
-	place := tools[1]
+	place := named(callingtool.Tools(reader{events: theWeek}, ring, listening, nil,
+		func() time.Time { return now }))["call_place"]
 
 	word := token(t, ask(t, place, `{"who":"Amma","speaker":true}`))
 	listening.answers("yes")
@@ -540,5 +541,82 @@ func TestTheCallStillGoesWithNowhereToSendTheSpeaker(t *testing.T) {
 	}
 	if !strings.Contains(got.Content, "cannot be done from here") {
 		t.Errorf("it did not say the speaker was beyond it:\n%s", got.Content)
+	}
+}
+
+// The owner's ask: the missed-call announcement offers, and a yes to
+// it rings. Without this he is asked the same question twice -- once
+// by the announcement and once by the tool.
+func TestAnOfferedCallRingsOnYesWithoutAskingAgain(t *testing.T) {
+	ring := &rang{}
+	listening := &heard{}
+	by := named(callingtool.Tools(reader{events: theWeek}, ring, listening, ring,
+		func() time.Time { return now }))
+
+	// A rule finds the missed call and offers.
+	armed := ask(t, by["call_offer"], `{"who":"Kliffy"}`)
+	if armed.Outcome == conversation.OutcomeFailed {
+		t.Fatalf("the offer could not be made: %s", armed.Content)
+	}
+	if len(ring.calls) != 0 {
+		t.Fatalf("offering dialled %+v", ring.calls)
+	}
+
+	listening.answers("yes, ring him")
+
+	// The yes, with the name and no word at all.
+	got := ask(t, by["call_place"], `{"who":"Kliffy"}`)
+	if got.Outcome == conversation.OutcomeFailed {
+		t.Fatalf("the yes was met with another question: %s", got.Content)
+	}
+	if len(ring.calls) != 1 || ring.calls[0].Who != "Kliffy" {
+		t.Fatalf("it rang %+v", ring.calls)
+	}
+}
+
+// Offering is not agreeing: until they answer, nothing rings.
+func TestAnOfferNobodyAnsweredRingsNothing(t *testing.T) {
+	ring := &rang{}
+	by := named(callingtool.Tools(reader{events: theWeek}, ring, &heard{}, ring,
+		func() time.Time { return now }))
+
+	ask(t, by["call_offer"], `{"who":"Kliffy"}`)
+	got := ask(t, by["call_place"], `{"who":"Kliffy"}`)
+	if got.Outcome != conversation.OutcomeFailed {
+		t.Errorf("it rang on an offer nobody answered: %s", got.Content)
+	}
+	if len(ring.calls) != 0 {
+		t.Fatalf("it dialled %+v", ring.calls)
+	}
+}
+
+// A question agreed about one person is never spent on another.
+func TestAnAnsweredOfferRingsOnlyWhoItNamed(t *testing.T) {
+	ring := &rang{}
+	listening := &heard{}
+	by := named(callingtool.Tools(reader{events: theWeek}, ring, listening, ring,
+		func() time.Time { return now }))
+
+	ask(t, by["call_offer"], `{"who":"Kliffy"}`)
+	listening.answers("yes")
+
+	got := ask(t, by["call_place"], `{"who":"Amma"}`)
+	if got.Outcome != conversation.OutcomeFailed {
+		t.Errorf("a yes about Kliffy rang Amma: %s", got.Content)
+	}
+	if len(ring.calls) != 0 {
+		t.Fatalf("it dialled %+v", ring.calls)
+	}
+}
+
+// A rule may use it, so it must not count as a write.
+func TestOfferingIsNotAWrite(t *testing.T) {
+	by := named(callingtool.Tools(reader{}, &rang{}, &heard{}, &rang{},
+		func() time.Time { return now }))
+	if by["call_offer"].Writes {
+		t.Error("call_offer writes, so no rule could ever offer a call")
+	}
+	if !by["call_place"].Writes {
+		t.Error("call_place no longer writes")
 	}
 }

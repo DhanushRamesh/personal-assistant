@@ -36,7 +36,7 @@ flowchart TB
 
     CORE["The core<br/>persona, memory, tool loop"]
     MODEL["Model<br/>PlatformAI"]
-    TOOLS["62 tools<br/>section 2"]
+    TOOLS["63 tools<br/>section 2"]
     DB[("MySQL<br/>reminders, memories, events,<br/>conversations, places, profile")]
 
     CORE <--> MODEL
@@ -57,7 +57,7 @@ flowchart TB
 
 ## 2. What it can do when asked
 
-62 tools, grouped by what they are about. The model picks; nothing
+63 tools, grouped by what they are about. The model picks; nothing
 here is keyword matched.
 
 ```mermaid
@@ -76,14 +76,14 @@ flowchart LR
     CORE --- RULE["Rules<br/>add, list, cancel"]
     CORE --- SIT["Situations<br/>find"]
     CORE --- LEAVE["Leaving<br/>due"]
-    CORE --- CALLP["Calling<br/>people, place,<br/>speaker, mute"]
+    CORE --- CALLP["Calling<br/>people, offer, place,<br/>speaker, mute"]
     CORE --- MISC["Other<br/>coming_settled, coming_due, tool_describe"]
 ```
 
 **Four of those are conditional.** `call_people` and `call_place`
 need `[homeassistant] call_url`; `call_speaker` and `call_mute` need
 `during_url`, which is a separate profile on the phone. Both are set,
-so 62 rather than 58. A tool that cannot work is not offered: a model
+so 63 rather than 58. A tool that cannot work is not offered: a model
 holding one will say it is on speaker and then explain why it is not.
 
 **Where to look first.** Anything about this person's own life is
@@ -264,6 +264,11 @@ contacts. So a contact saved this morning works without an import,
 nobody else's telephone numbers sit on this server, and the only
 people reachable are the ones already in the phone. A number given
 out loud is refused and he is asked whose it is.
+
+**He offers it himself.** When the missed-call rule finds somebody
+who rang and was never called back, it does not just report it — it
+ends with *"shall I ring him, sir?"* A yes rings them, with no second
+question, because the offer itself armed the call.
 
 **He knows who to offer** from the calls the phone has reported —
 every one names who it was with — so a name that came out of
