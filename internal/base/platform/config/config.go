@@ -414,6 +414,18 @@ type PlatformAI struct {
 	// two seconds before the fixed sentence is said instead, and a
 	// model that writes better greetings slowly writes none at all.
 	FastModel string
+	// SlowModel : A better model for the work nobody is waiting on.
+	//
+	// Empty means Model. The description of the person and the rules
+	// he writes for himself are both built on an hourly pass with no
+	// one in the room, and both are read back for weeks afterwards --
+	// a description is believed and a rule keeps firing. That is the
+	// opposite trade from the greeting, which has two seconds and is
+	// forgotten.
+	//
+	// Owner, 10 October 2026: *"for profiling and rule engine
+	// creation we can use claude-sonnet-5-5."*
+	SlowModel string
 	// Thinking : How much the model may reason before it answers, as
 	// the gateway's reasoning_effort: none, low, medium or high. Empty
 	// leaves it to the vendor, which is what it did before this
@@ -653,6 +665,7 @@ func Load(path string, lookup Lookup) (Config, error) {
 			Vendor:             l.str("platformai", "vendor", ""),
 			Model:              l.str("platformai", "model", ""),
 			FastModel:          l.str("platformai", "fast_model", ""),
+			SlowModel:          l.str("platformai", "slow_model", ""),
 			Thinking:           l.str("platformai", "reasoning_effort", ""),
 			Timeout:            l.duration("platformai", "timeout", 120*time.Second),
 			InsecureSkipVerify: l.boolean("platformai", "insecure_skip_verify", false),

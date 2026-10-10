@@ -406,6 +406,14 @@ if it is, it says nothing. The memory is kept while the thing is
 still true and forgotten when a check stops holding, so something
 that goes away and comes back is announced again.
 
+**He writes his own rules.** On the hourly pass, after the
+description is rewritten, he is shown what he knows and the rules he
+already keeps, and may ask for one rule in a sentence -- which goes
+to the same writer the tools use and is refused if it will not hold.
+One a day at most, six hours apart, kept as its own kind (`noticed`)
+with the reason on the rule. Almost always he asks for nothing,
+which is the point.
+
 **What is trending.** Four lengths of time -- today, this week, this
 month, this year -- each against the one before it, over every kind
 and value, reporting only what arrived, stopped, doubled or halved.

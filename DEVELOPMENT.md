@@ -16782,6 +16782,88 @@ speaking next Wednesday. That is the right way round -- the
 alternative is a description that says a great deal in its first
 week and is wrong about all of it.
 
+### He writes his own rules now
+
+Owner, on what the engine was always for: *"the main purpose of the
+rule engine is not for me to create rules. He should understand the
+pattern and create his own rules, so that next time a server event
+arrives the rule is triggered, then Jarvis is hit with a trigger and
+answers to me."*
+
+Both sides of that already worked and had for weeks. The engine
+wakes him when something happens; the description tells him what is
+ordinary and what has moved. What was missing was the middle:
+
+	events -> description -> trends -> [ nothing ] -> rule -> trigger -> he speaks
+
+All twenty-five rules existed because somebody asked for one out
+loud. `rules.Writer` was reachable only through a tool the model
+calls when the person says "remind me if". Nothing ever decided by
+itself that a thing was worth being told about.
+
+`internal/app/noticing` is that decision and nothing else. On the
+hourly pass, straight after the description is rewritten -- reading
+an hour-old description to decide what to watch for would be a pass
+spent on yesterday -- he is shown what he knows and the rules he
+already keeps, and either asks for one rule in a sentence or says
+there is nothing. The sentence goes to the same writer the tools
+use, which turns it into a rule or refuses it. **Nothing he asks for
+skips the validation anybody else's rule goes through.**
+
+#### Written to refuse
+
+The failure mode of this idea is not a bad rule, it is four hundred
+rules. A model asked hourly whether anything deserves a rule will
+find something, every hour, for ever.
+
+So the bar is in the instructions and the examples are of saying no.
+A rule is worth having only where the pattern is in the evidence
+with counts, has happened often enough to be a habit, has something
+that can go wrong, would change what they do, and is not already
+covered by a rule he keeps. Everything else is nothing.
+
+And three guards outside the prompt, because a prompt is a hope:
+
+**One a day, six hours apart**, counted from the rules themselves
+rather than a counter, so a restart does not hand him a fresh
+allowance. Checked *before* the model is asked, since a call made
+and then discarded is the allowance leaking money.
+
+**An unreadable answer writes nothing.** A missed rule costs one
+unremarked pattern; a misread one runs for ever.
+
+**And his rules are their own kind**, `noticed`, with why he wrote
+it kept on the rule. A rule nobody asked for has to be able to say
+what it is for, or the only thing to do with it is delete it --
+and deleting one of his is a different act from deleting one of
+theirs. One is changing your mind; the other is telling him he was
+wrong.
+
+#### A third model
+
+Owner, in the same breath: *"for profiling and rule engine creation
+we can use claude-sonnet-5-5."*
+
+There were two models and the split was about latency: `model` for
+answering, `fast_model` for the greeting, which has two seconds
+before a fixed sentence is said instead. Both of these passes are
+the opposite trade -- nobody is waiting, and what they produce is
+read back for weeks. A description is believed; a rule keeps firing.
+
+So `slow_model`, used by the description, the judge and the writer.
+Empty falls back to `model`, which is what they all did before.
+
+#### What to expect
+
+Nothing, for a while, and that is the design. He has nine days of
+data and three quarters of the trending grid is still silent. A pass
+today is reasoning from almost nothing, and the bar is set so that
+reasoning from almost nothing produces nothing.
+
+The first interesting pass is after the week window opens, five days
+from now. If he has written anything before then, the bar is too
+low.
+
 ## 12. Maintaining this file
 
 When the owner states a preference, makes a decision, or corrects something,

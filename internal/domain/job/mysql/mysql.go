@@ -392,7 +392,7 @@ func assemble(r row) (job.Job, error) {
 		ID: r.ID, UserID: r.UserID, Name: r.Name, Kind: r.Kind,
 		Schedule: r.Schedule, Steps: steps, State: job.State(r.State),
 		Why: r.Why, Said: r.LastSaid, Keep: r.Keep, Cool: r.Cool, Anywhere: r.Anywhere,
-		Resume: r.Resume,
+		Resume: r.Resume, Made: r.CreatedAt.UTC(),
 	}
 	if err := shape(&j, r); err != nil {
 		return job.Job{}, err

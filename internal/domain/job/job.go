@@ -228,6 +228,14 @@ type Job struct {
 	// would quietly become "wait five minutes and check nothing
 	// has changed".
 	Resume int
+	// Made : When the rule was written.
+	//
+	// The column has always been there and the struct has not,
+	// which was fine while every rule was asked for by somebody
+	// who remembered asking. A rule the assistant writes himself
+	// needs an allowance -- so many a day and no more -- and an
+	// allowance needs to know when the last one was written.
+	Made time.Time
 	// Said : The sentence this rule last said, so it does not say
 	// it again.
 	//

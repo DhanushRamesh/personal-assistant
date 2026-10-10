@@ -23,6 +23,7 @@ import (
 
 	"personal-assistant/internal/app/api"
 	"personal-assistant/internal/app/api/presence"
+	"personal-assistant/internal/app/noticing"
 	"personal-assistant/internal/app/pattern"
 	"personal-assistant/internal/app/profile"
 	"personal-assistant/internal/app/runner"
@@ -582,11 +583,19 @@ func run() error {
 				environment.PurposeProfile, ask)
 		},
 	}
+	// What he writes for himself, once the description is fresh.
+	//
+	// Declared here and filled in below, because the goroutine that
+	// uses it starts before the jobs store is built and a server that
+	// reordered its own startup to suit this would be the tail
+	// wagging the dog.
+	var thinkingUp func(context.Context, string)
+
 	watching.Add(1)
 	go func() {
 		defer watching.Done()
 		logging.Surviving(remindCtx, logger.Logger, "the daily description", func() {
-			describeDaily(remindCtx, chats, describing, cfg.Assistant.Now, logger.Logger)
+			describeDaily(remindCtx, chats, describing, thinkingUp, cfg.Assistant.Now, logger.Logger)
 		})
 	}()
 	logger.Info("describing the person", slog.Duration("every", profileEvery))
@@ -708,6 +717,25 @@ func run() error {
 	// reminders move last because they are the feature most used
 	// and a new engine is wrong in small ways for a week.
 	scheduled := jobmysql.New(db.DB)
+
+	// Nil where there is nothing to think with, which leaves him
+	// noticing nothing rather than failing at startup over a thing
+	// nobody asked for.
+	thinkingUp = noticed(scheduled, &profile.Reader{Memories: remembering.Store},
+		rules.Writer{
+			Ask: func(ctx context.Context, system, ask string) (string, error) {
+				return askAs(ctx, answerer, cfg.PlatformAI.Vendor,
+					cmp.Or(cfg.PlatformAI.SlowModel, cfg.PlatformAI.Model),
+					system, environment.PurposeRemark, ask)
+			},
+			Kinds: deviceEvents.Kinds,
+		},
+		func(ctx context.Context, system, ask string) (string, error) {
+			return askAs(ctx, answerer, cfg.PlatformAI.Vendor,
+				cmp.Or(cfg.PlatformAI.SlowModel, cfg.PlatformAI.Model),
+				system, environment.PurposeProfile, ask)
+		},
+		jobmysql.ID, cfg.Assistant.Now, cfg.Assistant.Location, logger.Logger)
 	// One reader, used by the conditions a rule checks and by the
 	// triggers it waits for. Two would be two answers to the same
 	// question.
@@ -1548,6 +1576,7 @@ func describeDaily(
 		Talkers(ctx context.Context, since time.Time) ([]string, error)
 	},
 	describing *profile.Builder,
+	noticed func(ctx context.Context, userID string),
 	now func() time.Time,
 	logger *slog.Logger,
 ) {
@@ -1576,6 +1605,16 @@ func describeDaily(
 			}
 			logger.Info("described them from what they said",
 				slog.String("user_id", userID))
+
+			// And, having just read what they are like, whether any
+			// of it is worth a rule of his own. Here rather than on
+			// a loop of its own because the description is what it
+			// reasons from, and reading a description written an
+			// hour ago to decide what to watch for is a pass spent
+			// on yesterday.
+			if noticed != nil {
+				noticed(pass, userID)
+			}
 		}
 		cancel()
 	}
@@ -2974,4 +3013,116 @@ func (d doing) where() *time.Location {
 		return time.UTC
 	}
 	return d.cfg.Assistant.Location
+}
+
+// everyRule : How many of his rules to read before deciding.
+//
+// All of them, in practice. He has twenty-five and the question he
+// is answering -- do I already watch for this -- is wrong if any are
+// left out.
+const everyRule = 500
+
+// noticed : The pass where he decides whether anything he has just
+// described is worth a rule of his own, and writes it if it is.
+//
+// Nil where there is nothing to think with or nowhere to keep the
+// answer. A server without a model should go on doing everything
+// else rather than failing at startup over a thing nobody asked for.
+//
+// Two models and a store, joined here because this is the only place
+// that has all three. The judge decides whether a pattern deserves a
+// rule and says so in one sentence; the writer -- the same one the
+// rule tools use -- turns that sentence into a rule and refuses it
+// if it cannot be made. Nothing he asks for skips the validation
+// anybody else's rule goes through.
+func noticed(
+	store *jobmysql.Store,
+	reader *profile.Reader,
+	writer rules.Writer,
+	judge noticing.Ask,
+	id func() string,
+	now func() time.Time,
+	where *time.Location,
+	logger *slog.Logger,
+) func(context.Context, string) {
+	if store == nil || judge == nil || writer.Ask == nil {
+		return nil
+	}
+	watcher := noticing.Watcher{
+		Ask: judge,
+		Describe: func(ctx context.Context, userID string) string {
+			said, err := reader.Profile(ctx, userID)
+			if err != nil {
+				return ""
+			}
+			return said
+		},
+		Holding: func(ctx context.Context, userID string) (string, int, error) {
+			mine, err := store.Mine(ctx, userID, "", everyRule, job.Active)
+			if err != nil {
+				return "", 0, err
+			}
+			var b strings.Builder
+			for _, j := range mine {
+				fmt.Fprintf(&b, "%s: %s\n", j.Name, j.Schedule)
+			}
+			return b.String(), len(mine), nil
+		},
+		Now: now,
+	}
+
+	return func(ctx context.Context, userID string) {
+		mine, err := store.Mine(ctx, userID, "", everyRule, job.Active)
+		if err != nil {
+			logger.WarnContext(ctx, "cannot read his own rules", slog.Any("error", err))
+			return
+		}
+		// Asked before the model is, because the allowance is the
+		// whole safeguard and a model call made and then thrown away
+		// is the allowance leaking money.
+		if !noticing.Allowed(mine, now()) {
+			return
+		}
+
+		thought, err := watcher.Wondered(ctx, userID)
+		if err != nil {
+			logger.WarnContext(ctx, "could not weigh up a rule", slog.Any("error", err))
+			return
+		}
+		if thought.Asked == "" {
+			return
+		}
+
+		var holding strings.Builder
+		for _, j := range mine {
+			fmt.Fprintf(&holding, "%s: %s\n", j.Name, j.Schedule)
+		}
+		when, acts, why := writer.Written(ctx, rules.Request{
+			UserID: userID, Asked: thought.Asked, Holding: holding.String(),
+		}, nil)
+		if why != "" {
+			logger.InfoContext(ctx, "he wanted a rule and could not write it",
+				slog.String("asked", thought.Asked), slog.String("why", why))
+			return
+		}
+
+		name := cmp.Or(thought.Name, thought.Asked)
+		made, err := job.Make(id(), userID, name, noticing.Kind, when, acts, now().In(where))
+		if err != nil {
+			logger.InfoContext(ctx, "the rule he wrote would not hold together",
+				slog.String("asked", thought.Asked), slog.Any("error", err))
+			return
+		}
+		// Why he wrote it, kept on the rule itself. A rule nobody
+		// asked for has to be able to say what it is for, or the
+		// only thing to do with it is delete it.
+		made.Why = noticing.Mark + thought.Why
+		if err := store.Keep(ctx, made); err != nil {
+			logger.WarnContext(ctx, "cannot keep the rule he wrote", slog.Any("error", err))
+			return
+		}
+		logger.InfoContext(ctx, "he wrote himself a rule",
+			slog.String("name", name), slog.String("because", thought.Why),
+			slog.String("when", when.Describe()))
+	}
 }
