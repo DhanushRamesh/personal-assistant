@@ -228,6 +228,16 @@ func (p Phone) Change(ctx context.Context, where string, d During) error {
 	return p.post(ctx, where, body, ExpectedDuring)
 }
 
+// Connecting : How long to leave the phone before changing anything
+// about a call it was asked to place in the same breath.
+//
+// A guess, and said so. The dialler has to be up before the speaker
+// means anything, and nothing here is told when that happens -- the
+// phone answers the request, not the call. Four seconds is long
+// enough for the dialler and short enough that somebody who said
+// "and put it on speaker" is not still waiting.
+const Connecting = 4 * time.Second
+
 // Soon : How long a mid-call change is worth making.
 //
 // Twenty seconds. Unlike a call, which is still worth placing a

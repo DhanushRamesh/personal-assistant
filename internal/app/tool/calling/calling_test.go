@@ -55,14 +55,16 @@ func (h *heard) answers(what string) {
 type rang struct {
 	calls   []calling.Call
 	changes []calling.During
+	waits   []time.Duration
 	fail    error
 }
 
-func (r *rang) Change(_ context.Context, _ string, d calling.During) error {
+func (r *rang) Change(_ context.Context, _ string, d calling.During, after time.Duration) error {
 	if r.fail != nil {
 		return r.fail
 	}
 	r.changes = append(r.changes, d)
+	r.waits = append(r.waits, after)
 	return nil
 }
 
@@ -441,5 +443,102 @@ func TestWithNowhereToSendThemTheyDoNotExist(t *testing.T) {
 	}
 	if len(tools) != 2 {
 		t.Errorf("there are %d call tools", len(tools))
+	}
+}
+
+// "Call Alekhya and put it on speakers" is one wish, not two, and
+// the question in between must not lose the second half.
+func TestSpeakerAskedWithTheCallSurvivesTheQuestion(t *testing.T) {
+	_, place, ring, listening := theRoom(t, theWeek)
+
+	asked := ask(t, place, `{"who":"Amma","speaker":true}`)
+	word := token(t, asked)
+	if len(ring.changes) != 0 {
+		t.Fatalf("it touched the speaker before anybody agreed: %+v", ring.changes)
+	}
+	listening.answers("yes")
+
+	// The yes carries only the name and the word.
+	got := ask(t, place, `{"who":"Amma","confirm":"`+word+`"}`)
+	if got.Outcome == conversation.OutcomeFailed {
+		t.Fatalf("it would not ring: %s", got.Content)
+	}
+	if len(ring.calls) != 1 {
+		t.Fatalf("it rang %+v", ring.calls)
+	}
+	if len(ring.changes) != 1 || ring.changes[0] != (calling.During{What: calling.Speaker, On: true}) {
+		t.Fatalf("the speaker was asked for as %+v", ring.changes)
+	}
+	// Behind the call rather than with it: the dialler has to get
+	// there first.
+	if ring.waits[0] <= 0 {
+		t.Errorf("the speaker was asked for with no wait at all")
+	}
+	if !strings.Contains(got.Content, "speaker") {
+		t.Errorf("it was not told to expect the speaker:\n%s", got.Content)
+	}
+}
+
+// Neither is wanted unless it was asked for.
+func TestACallIsNeitherOnSpeakerNorMutedByDefault(t *testing.T) {
+	_, place, ring, listening := theRoom(t, theWeek)
+	word := token(t, ask(t, place, `{"who":"Amma"}`))
+	listening.answers("yes")
+	ask(t, place, `{"who":"Amma","confirm":"`+word+`"}`)
+
+	if len(ring.changes) != 0 {
+		t.Errorf("a plain call touched %+v", ring.changes)
+	}
+}
+
+// Muting with the call is the microphone off, the same inversion as
+// the standalone tool.
+func TestStartingMutedTurnsTheMicrophoneOff(t *testing.T) {
+	_, place, ring, listening := theRoom(t, theWeek)
+	word := token(t, ask(t, place, `{"who":"Amma","mute":true}`))
+	listening.answers("yes")
+	ask(t, place, `{"who":"Amma","confirm":"`+word+`"}`)
+
+	if len(ring.changes) != 1 || ring.changes[0] != (calling.During{What: calling.Mic, On: false}) {
+		t.Fatalf("starting muted asked for %+v", ring.changes)
+	}
+}
+
+// Asked for with the yes rather than with the name, which is just as
+// natural a thing to say.
+func TestSpeakerAskedWithTheYesIsTakenToo(t *testing.T) {
+	_, place, ring, listening := theRoom(t, theWeek)
+	word := token(t, ask(t, place, `{"who":"Amma"}`))
+	listening.answers("yes, and on speaker")
+	ask(t, place, `{"who":"Amma","confirm":"`+word+`","speaker":true}`)
+
+	if len(ring.changes) != 1 || ring.changes[0].What != calling.Speaker {
+		t.Fatalf("it asked for %+v", ring.changes)
+	}
+}
+
+// With nowhere to send a mid-call change the call still goes.
+func TestTheCallStillGoesWithNowhereToSendTheSpeaker(t *testing.T) {
+	ring := &rang{}
+	listening := &heard{}
+	var tools []tool.Tool
+	for _, x := range callingtool.Tools(reader{events: theWeek}, ring, listening, nil,
+		func() time.Time { return now }) {
+		tools = append(tools, x)
+	}
+	place := tools[1]
+
+	word := token(t, ask(t, place, `{"who":"Amma","speaker":true}`))
+	listening.answers("yes")
+	got := ask(t, place, `{"who":"Amma","confirm":"`+word+`"}`)
+
+	if got.Outcome == conversation.OutcomeFailed {
+		t.Fatalf("the call was refused for want of a speaker: %s", got.Content)
+	}
+	if len(ring.calls) != 1 {
+		t.Fatalf("it rang %+v", ring.calls)
+	}
+	if !strings.Contains(got.Content, "cannot be done from here") {
+		t.Errorf("it did not say the speaker was beyond it:\n%s", got.Content)
 	}
 }

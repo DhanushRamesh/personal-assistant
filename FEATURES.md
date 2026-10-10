@@ -289,8 +289,14 @@ phone could not be reached, he is told that instead.
 
 ### Speaker and mute, mid-call
 
-*"Put it on speaker."* *"Mute me."* Both go straight through with no
-confirmation, and that is deliberate: each is undone by saying the
+*"Put it on speaker."* *"Mute me."* And *"call Alekhya and put it on
+speakers"* — that last is one wish rather than two, so placing a call
+takes **speaker** and **mute** alongside the name. Both are off unless
+asked for. They are sent a few seconds behind the call, because the
+dialler has to get there first and nothing here is told when a call
+connects.
+
+Both go straight through with no confirmation, and that is deliberate: each is undone by saying the
 opposite, and both are asked for while somebody else is on the line,
 where *"shall I, sir?"* out loud is worse than being wrong. They are
 silent for the same reason — anything Jarvis says here is said into

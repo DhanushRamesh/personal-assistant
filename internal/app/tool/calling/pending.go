@@ -32,6 +32,12 @@ type Pending struct {
 	// At : When the question was handed over. What the person has
 	// said since is measured from here.
 	At time.Time
+
+	// Speaker, Mute : What they asked for along with the call --
+	// "call Alekhya and put it on speakers" is one wish, not two,
+	// and it has to survive the question in between.
+	Speaker bool
+	Mute    bool
 }
 
 // Heard : What the person has said, so that an answer can be told from
@@ -67,8 +73,11 @@ func NewAsking(now func() time.Time) *Asking {
 
 // Put : Records that a call has been put to somebody, and gives the
 // token that answers it.
-func (a *Asking) Put(userID, who, said string) Pending {
-	p := Pending{Token: token(), Who: who, Said: said, At: a.clock()}
+func (a *Asking) Put(userID, who, said string, speaker, mute bool) Pending {
+	p := Pending{
+		Token: token(), Who: who, Said: said, At: a.clock(),
+		Speaker: speaker, Mute: mute,
+	}
 	a.mu.Lock()
 	defer a.mu.Unlock()
 	a.held[userID] = p

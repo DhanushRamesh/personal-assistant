@@ -17210,6 +17210,32 @@ that inversion.
 Twenty seconds rather than the call's two minutes. A call put on
 speaker after it has ended is nothing but confusing.
 
+#### And asked for with the call
+
+Owner: *"call_place should take args speaker and mute, by default
+they both are false."* Which is right, and the trace that started
+all of this was exactly that sentence -- *"call Alekhya and put it
+on speakers"* -- met with two separate thoughts.
+
+So `call_place` takes them, both false unless asked for, and they
+ride through the confirmation: the wish is recorded on the pending
+call and taken from either call, since *"and on speaker"* may come
+with the name or with the yes.
+
+**They go a few seconds behind the call**, not with it. The dialler
+has to be up before the speaker means anything, and nothing here is
+told when a call connects -- the phone answers the request, not the
+call. Four seconds, guessed, and on the server where it can be
+changed rather than on the phone where it cannot.
+
+That needed a nudge. The errand sender looks every thirty seconds,
+which is right for an alarm and far too slow here: the change would
+expire twenty seconds in, before the tick meant to carry it. So a
+delayed change wakes the sender when its moment comes.
+
+With no `during_url` the call still goes and he says the speaker
+is beyond him -- half of what they asked for beats none of it.
+
 **Speaker may well not work**, and Tasker says so itself: *"Google
 broke the Speakerphone API for third party apps like Tasker on
 Android 10 so on some devices this action might not work."* Muting

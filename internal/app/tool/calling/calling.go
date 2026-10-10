@@ -76,7 +76,7 @@ type Asker interface {
 func Tools(reader Reader, ask Asker, heard Heard, change Changer,
 	now func() time.Time) []tool.Tool {
 	asking := NewAsking(now)
-	out := []tool.Tool{people(reader, now), place(reader, ask, heard, asking, now)}
+	out := []tool.Tool{people(reader, now), place(reader, ask, heard, change, asking, now)}
 	// Nothing rather than tools that quietly do nothing. The phone
 	// listens for a mid-call change on its own path, and with no
 	// address for it a model told "on speaker" would say so and
@@ -134,7 +134,8 @@ func people(reader Reader, now func() time.Time) tool.Tool {
 }
 
 // place : Rings one of them.
-func place(reader Reader, ask Asker, heard Heard, asking *Asking, now func() time.Time) tool.Tool {
+func place(reader Reader, ask Asker, heard Heard, change Changer, asking *Asking,
+	now func() time.Time) tool.Tool {
 	return tool.Tool{
 		Name:    "call_place",
 		Domain:  "calling",
@@ -159,6 +160,21 @@ func place(reader Reader, ask Asker, heard Heard, asking *Asking, now func() tim
 						"Take it from call_people where one of those names is what was " +
 						"meant. Never a telephone number.",
 				},
+				"speaker": {
+					Type: "boolean",
+					Description: "True when they asked for the call to be on " +
+						"loudspeaker as well -- \"call Amma and put it on " +
+						"speaker\". It goes on a few seconds after the dialling " +
+						"starts. Leave it out otherwise.",
+					Default: false,
+				},
+				"mute": {
+					Type: "boolean",
+					Description: "True when they asked to start the call muted, so the " +
+						"other side cannot hear them until they say otherwise. " +
+						"Rare. Leave it out otherwise.",
+					Default: false,
+				},
 				"confirm": {
 					Type: "string",
 					Description: "Leave this out on the first call. It comes back with the " +
@@ -173,6 +189,8 @@ func place(reader Reader, ask Asker, heard Heard, asking *Asking, now func() tim
 		},
 		Examples: []tool.Example{
 			{Ask: "call Amma", Args: `{"who":"Amma","saying":"one moment"}`},
+			{Ask: "call Amma and put it on speaker",
+				Args: `{"who":"Amma","speaker":true,"saying":"one moment"}`},
 			{Ask: "yes, ring her", Args: `{"who":"Amma","confirm":"3f9a1c20b4d8","saying":"calling her now"}`},
 		},
 		Run: func(ctx context.Context, in tool.Invocation) tool.Result {
@@ -182,6 +200,8 @@ func place(reader Reader, ask Asker, heard Heard, asking *Asking, now func() tim
 			var args struct {
 				Who     string `json:"who"`
 				Confirm string `json:"confirm"`
+				Speaker bool   `json:"speaker"`
+				Mute    bool   `json:"mute"`
 			}
 			if err := json.Unmarshal(in.Args, &args); err != nil {
 				return tool.Failed("Those arguments could not be read.")
@@ -199,8 +219,8 @@ func place(reader Reader, ask Asker, heard Heard, asking *Asking, now func() tim
 
 			// Answering one already put to them.
 			if strings.TrimSpace(args.Confirm) != "" {
-				return redeem(ctx, ask, heard, asking, in.Caller.UserID,
-					strings.TrimSpace(args.Confirm), said)
+				return redeem(ctx, ask, change, heard, asking, in.Caller.UserID,
+					strings.TrimSpace(args.Confirm), said, args.Speaker, args.Mute)
 			}
 
 			found, err := Known(ctx, reader, in.Caller.UserID, when(now))
@@ -211,7 +231,7 @@ func place(reader Reader, ask Asker, heard Heard, asking *Asking, now func() tim
 
 			// Every road from here leads to the same place: a
 			// question, and a word that answers it. Nothing dials.
-			p := asking.Put(in.Caller.UserID, who, said)
+			p := asking.Put(in.Caller.UserID, who, said, args.Speaker, args.Mute)
 			switch how {
 			case Near:
 				// Heard rather than read, and near is not the same
@@ -246,8 +266,8 @@ func place(reader Reader, ask Asker, heard Heard, asking *Asking, now func() tim
 // one and hand it straight back in the same breath, which is the
 // assistant agreeing with itself. So the person has to have said
 // something since.
-func redeem(ctx context.Context, ask Asker, heard Heard, asking *Asking,
-	userID, given, said string) tool.Result {
+func redeem(ctx context.Context, ask Asker, change Changer, heard Heard, asking *Asking,
+	userID, given, said string, speaker, mute bool) tool.Result {
 	p, ok := asking.Take(userID)
 	if !ok {
 		return tool.Failed("Nothing has been dialled. No call has been put to them, so " +
@@ -293,8 +313,62 @@ func redeem(ctx context.Context, ask Asker, heard Heard, asking *Asking,
 	if err := ask.Ring(ctx, userID, calling.Call{Who: p.Who}); err != nil {
 		return tool.Broke("That call could not be asked for.", err)
 	}
-	return tool.OK(fmt.Sprintf("The phone has been asked to ring %s. Tell them so. "+
-		"It dials on the phone itself, so the call is there and not here.", p.Who))
+
+	// Asked for on either call, since "and put it on speaker" may
+	// come with the name or with the yes.
+	return tool.OK(ringing(ctx, change, userID, p.Who,
+		speaker || p.Speaker, mute || p.Mute))
+}
+
+// ringing : What to say about a call that is now being placed, and
+// whatever was asked for alongside it.
+//
+// The speaker and the microphone are asked for a few seconds behind
+// the call rather than with it. Nothing here learns when the call
+// connects -- the phone answers the request, not the call -- so the
+// wait is a guess, and it is made on the server where it can be
+// changed rather than on the phone where it cannot.
+func ringing(ctx context.Context, change Changer, userID, who string,
+	speaker, mute bool) string {
+	said := fmt.Sprintf("The phone has been asked to ring %s. Tell them so. "+
+		"It dials on the phone itself, so the call is there and not here.", who)
+	if !speaker && !mute {
+		return said
+	}
+	if change == nil {
+		// Said as a limit rather than as a gap in the equipment,
+		// and the call still goes: half of what they asked for is
+		// better than none of it.
+		return said + " They also wanted it on speaker or muted, and that cannot be " +
+			"done from here -- tell them they will have to reach over, in your own " +
+			"words, without naming any of this."
+	}
+
+	var trouble bool
+	if speaker {
+		if err := change.Change(ctx, userID,
+			calling.During{What: calling.Speaker, On: true}, calling.Connecting); err != nil {
+			trouble = true
+		}
+	}
+	if mute {
+		if err := change.Change(ctx, userID,
+			calling.During{What: calling.Mic, On: false}, calling.Connecting); err != nil {
+			trouble = true
+		}
+	}
+	if trouble {
+		return said + " What they wanted alongside it -- the speaker or the microphone " +
+			"-- could not be asked for. Say only that the call is going."
+	}
+	switch {
+	case speaker && mute:
+		return said + " It will go on speaker, muted, a moment after it starts."
+	case speaker:
+		return said + " It will go on speaker a moment after it starts."
+	default:
+		return said + " They will start the call muted."
+	}
 }
 
 // How : How well a name matched somebody known.

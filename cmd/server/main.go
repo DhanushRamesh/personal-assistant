@@ -1049,7 +1049,8 @@ func callHands(hands errand.Hands, phone calling.Phone, during string) {
 //
 // No dropping of what is already queued, unlike an alarm: two of
 // these in a row are two things wanted, not a correction.
-func (c *caller) Change(ctx context.Context, userID string, d calling.During) error {
+func (c *caller) Change(ctx context.Context, userID string, d calling.During,
+	after time.Duration) error {
 	if c == nil || c.to == nil || userID == "" {
 		return fmt.Errorf("there is nowhere to ask for that")
 	}
@@ -1057,15 +1058,26 @@ func (c *caller) Change(ctx context.Context, userID string, d calling.During) er
 	if err != nil {
 		return err
 	}
-	now := c.to.Now()
-	// Worth doing for twenty seconds. A call put on speaker after
-	// it has ended is nothing but confusing.
+	when := c.to.Now().Add(after)
+	// Worth doing for twenty seconds from the moment it is wanted.
+	// A call put on speaker after it has ended is nothing but
+	// confusing.
 	made, err := errand.New(errandmysql.ID(), userID, errand.CallDuring,
-		"", body, now, now.Add(calling.Soon))
+		"", body, when, when.Add(calling.Soon))
 	if err != nil {
 		return err
 	}
-	return c.to.Ask(ctx, made)
+	if err := c.to.Ask(ctx, made); err != nil {
+		return err
+	}
+	// Nudged when its moment comes. The sender looks every thirty
+	// seconds otherwise, which is fine for an alarm and far too
+	// slow for this -- the errand would expire before the tick
+	// that was meant to carry it.
+	if after > 0 {
+		time.AfterFunc(after, c.to.Wake)
+	}
+	return nil
 }
 
 // caller : Asking for a call, without waiting on the phone.

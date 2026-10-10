@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"time"
 
 	"personal-assistant/internal/app/tool"
 	"personal-assistant/internal/base/records/chat"
@@ -12,8 +13,14 @@ import (
 
 // Changer : What changes something about a call in progress.
 type Changer interface {
-	// Change : Writes down that the phone should do this.
-	Change(ctx context.Context, userID string, d calling.During) error
+	// Change : Writes down that the phone should do this, not
+	// before `after` has passed.
+	//
+	// Zero for a change asked for on its own, where the call is
+	// already up. A few seconds for one asked for in the same
+	// breath as the call, where the dialler has to get there
+	// first -- see [calling.Connecting].
+	Change(ctx context.Context, userID string, d calling.During, after time.Duration) error
 }
 
 // during : The two mid-call tools.
@@ -123,8 +130,10 @@ func changing(change Changer, what calling.What, said func(bool) string,
 		if len(flip) > 0 && flip[0] {
 			want = !on
 		}
+		// No delay: this was asked for on its own, so the call is
+		// already up.
 		if err := change.Change(ctx, in.Caller.UserID,
-			calling.During{What: what, On: want}); err != nil {
+			calling.During{What: what, On: want}, 0); err != nil {
 			return tool.Broke("That could not be asked of the phone.", err)
 		}
 		return tool.OK(fmt.Sprintf("%s Say nothing about it unless they ask: this was "+
