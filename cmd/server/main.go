@@ -612,20 +612,12 @@ func run() error {
 	}
 	// What he writes for himself, once the description is fresh.
 	//
-	// Declared here and filled in below, because the goroutine that
-	// uses it starts before the jobs store is built and a server that
-	// reordered its own startup to suit this would be the tail
-	// wagging the dog.
+	// Declared here and filled in below, where the jobs store it
+	// needs exists. The loop that uses it is started after that and
+	// not here: a goroutine started here reads this variable within
+	// microseconds, which is nil, and then skips the pass for the
+	// life of the server.
 	var thinkingUp func(context.Context, string)
-
-	watching.Add(1)
-	go func() {
-		defer watching.Done()
-		logging.Surviving(remindCtx, logger.Logger, "the daily description", func() {
-			describeDaily(remindCtx, chats, describing, thinkingUp, cfg.Assistant.Now, logger.Logger)
-		})
-	}()
-	logger.Info("describing the person", slog.Duration("every", profileEvery))
 
 	// The names they say, for speech recognition to expect. Read from
 	// the same week of messages, because a name is only worth the
@@ -763,6 +755,30 @@ func run() error {
 				system, environment.PurposeProfile, ask)
 		},
 		jobmysql.ID, cfg.Assistant.Now, cfg.Assistant.Location, logger.Logger)
+
+	// And now, with something to think with, the loop that rewrites
+	// the description and asks whether any of it is worth a rule.
+	//
+	// Here and not beside the other watchers, which is the whole of
+	// the fix: this ran for three days as a goroutine started a
+	// hundred lines earlier, taking thinkingUp as an argument before
+	// anything had assigned it. The pass was skipped silently on
+	// thirty-one of thirty-four descriptions, and ran on the three
+	// where the scheduler happened to let the setup get this far
+	// first.
+	//
+	// A nil function argument and a race in one line. Nothing about
+	// the rule writer was wrong, and every hour spent looking at the
+	// judge was spent on a model that was never called.
+	watching.Add(1)
+	go func() {
+		defer watching.Done()
+		logging.Surviving(remindCtx, logger.Logger, "the daily description", func() {
+			describeDaily(remindCtx, chats, describing, thinkingUp, cfg.Assistant.Now, logger.Logger)
+		})
+	}()
+	logger.Info("describing the person", slog.Duration("every", profileEvery))
+
 	// One reader, used by the conditions a rule checks and by the
 	// triggers it waits for. Two would be two answers to the same
 	// question.
@@ -1725,6 +1741,13 @@ func describeDaily(
 	now func() time.Time,
 	logger *slog.Logger,
 ) {
+	// Said once, at the top, because the alternative is what
+	// happened: a pass that is never going to run looks exactly
+	// like a pass with nothing to say.
+	if noticed == nil {
+		logger.Warn("the description will be rewritten but nothing will be noticed from it")
+	}
+
 	timer := time.NewTimer(profileFirst)
 	defer timer.Stop()
 

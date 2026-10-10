@@ -17807,6 +17807,66 @@ and the battery, which do genuinely co-occur. The nine lines of one
 battery falling are gone, and that was the part that was wrong.
 
 
+### The pass was never called
+
+Having fixed the ranking, I watched for the next hourly pass to see
+what the companion made of taste it could finally read. The
+description was rewritten. **Nothing followed it.** No judge call, no
+*nothing was worth a rule*, no warning -- the pass simply did not
+happen.
+
+Counted across the log: **34 descriptions written, 3 passes run.**
+
+```go
+var thinkingUp func(context.Context, string)   // line 619, nil
+
+watching.Add(1)
+go func() {
+    describeDaily(remindCtx, chats, describing, thinkingUp, ...)
+}()
+
+// ... 130 lines of setup ...
+
+thinkingUp = noticed(scheduled, ranLog, ...)   // line 751
+```
+
+The goroutine captures the *variable*, but it reads it the instant it
+starts, which is microseconds later and a hundred and thirty lines
+too early. `describeDaily` takes the nil, and `if noticed != nil`
+skips the pass for the life of the server.
+
+And it is a race, which is why it was not obvious: on three
+restarts out of thirty-four the scheduler let the setup reach line
+751 before the goroutine's first statement, and those are the three
+passes that ran. Same binary, same configuration, different
+behaviour per restart -- including twice in the same hour while this
+was being diagnosed.
+
+Everything found before this was real and none of it was the cause.
+The gateway was refusing `claude-sonnet-5-5`; the useful bar did
+forbid every remark; the judge was shown a list of names. All true,
+all fixed, and **on thirty-one evenings in thirty-four no model was
+ever asked anything.**
+
+The fix is to start the loop after the thing it needs exists. The
+comment that justified the old order -- *"the goroutine that uses it
+starts before the jobs store is built"* -- was describing the bug as
+though it were a constraint. Nothing needs that loop running in the
+first ten minutes; `profileFirst` is ten minutes.
+
+And `describeDaily` now says so at startup when it is handed nothing:
+
+```
+the description will be rewritten but nothing will be noticed from it
+```
+
+**The lesson is the same one as two sections above, in a third
+place.** A silent skip and a considered decision not to act are
+indistinguishable from outside, and the cheapest way to lose days is
+to let them look alike. *A thing that can be switched off must say
+so when it is off.*
+
+
 
 When the owner states a preference, makes a decision, or corrects something,
 **record it here** in the same turn. That is the point of the file: a fresh
