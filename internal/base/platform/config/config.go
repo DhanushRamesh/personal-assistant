@@ -324,6 +324,11 @@ type HomeAssistant struct {
 	// of this one dials.
 	CallURL logging.Secret
 
+	// DuringURL : Where the phone listens for a change to the call
+	// it is already on -- the speaker, the microphone -- with its
+	// own secret path. Empty means those cannot be asked for.
+	DuringURL logging.Secret
+
 	// MediaPlayer : The satellite's media player, such as
 	// media_player.laptop_lva_media_player. Used for what is said while a
 	// turn is still running, because that player is not the one the voice
@@ -630,6 +635,7 @@ func Load(path string, lookup Lookup) (Config, error) {
 			AlarmURL:        l.secret("homeassistant", "alarm_url"),
 			AlarmOffURL:     l.secret("homeassistant", "alarm_off_url"),
 			CallURL:         l.secret("homeassistant", "call_url"),
+			DuringURL:       l.secret("homeassistant", "during_url"),
 			MediaPlayer:     l.str("homeassistant", "media_player", ""),
 			TTSEngine:       l.str("homeassistant", "tts_engine", "tts.piper"),
 			TTSVoice:        l.str("homeassistant", "tts_voice", ""),

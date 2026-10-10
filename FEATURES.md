@@ -36,7 +36,7 @@ flowchart TB
 
     CORE["The core<br/>persona, memory, tool loop"]
     MODEL["Model<br/>PlatformAI"]
-    TOOLS["60 tools<br/>section 2"]
+    TOOLS["62 tools<br/>section 2"]
     DB[("MySQL<br/>reminders, memories, events,<br/>conversations, places, profile")]
 
     CORE <--> MODEL
@@ -57,7 +57,7 @@ flowchart TB
 
 ## 2. What it can do when asked
 
-60 tools, grouped by what they are about. The model picks; nothing
+62 tools, grouped by what they are about. The model picks; nothing
 here is keyword matched.
 
 ```mermaid
@@ -76,15 +76,15 @@ flowchart LR
     CORE --- RULE["Rules<br/>add, list, cancel"]
     CORE --- SIT["Situations<br/>find"]
     CORE --- LEAVE["Leaving<br/>due"]
-    CORE --- CALLP["Calling<br/>people, place<br/>only with call_url set"]
+    CORE --- CALLP["Calling<br/>people, place,<br/>speaker, mute"]
     CORE --- MISC["Other<br/>coming_settled, coming_due, tool_describe"]
 ```
 
-**Two of those are conditional.** `call_people` and `call_place`
-are registered only when `[homeassistant] call_url` gives them
-somewhere to ring — 58 without it, 60 with, and it is set. A tool
-that cannot work is not offered: a model holding one will say it is
-ringing somebody and then explain why it could not.
+**Four of those are conditional.** `call_people` and `call_place`
+need `[homeassistant] call_url`; `call_speaker` and `call_mute` need
+`during_url`, which is a separate profile on the phone. Both are set,
+so 62 rather than 58. A tool that cannot work is not offered: a model
+holding one will say it is on speaker and then explain why it is not.
 
 **Where to look first.** Anything about this person's own life is
 answered from the calendar, tasks, reminders, events or memory —
@@ -286,6 +286,23 @@ never rings another.
 **It expires after two minutes.** A call that connects ten minutes
 late, in a meeting, is worse than one that never went — so if the
 phone could not be reached, he is told that instead.
+
+### Speaker and mute, mid-call
+
+*"Put it on speaker."* *"Mute me."* Both go straight through with no
+confirmation, and that is deliberate: each is undone by saying the
+opposite, and both are asked for while somebody else is on the line,
+where *"shall I, sir?"* out loud is worse than being wrong. They are
+silent for the same reason — anything Jarvis says here is said into
+that call.
+
+These expire after twenty seconds rather than two minutes. A call put
+on speaker after it has ended is nothing but confusing.
+
+**Speaker may not work.** Google closed the speakerphone API to
+third-party apps in Android 10, and Tasker warns about it; muting
+uses a different route and is unaffected. Untested on a live call at
+the time of writing.
 
 ---
 

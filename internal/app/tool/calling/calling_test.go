@@ -53,8 +53,17 @@ func (h *heard) answers(what string) {
 
 // rang : What was asked for.
 type rang struct {
-	calls []calling.Call
-	fail  error
+	calls   []calling.Call
+	changes []calling.During
+	fail    error
+}
+
+func (r *rang) Change(_ context.Context, _ string, d calling.During) error {
+	if r.fail != nil {
+		return r.fail
+	}
+	r.changes = append(r.changes, d)
+	return nil
 }
 
 func (r *rang) Ring(_ context.Context, _ string, c calling.Call) error {
@@ -75,9 +84,9 @@ func theRoom(t *testing.T, events []event.Event) (tool.Tool, tool.Tool, *rang, *
 	t.Helper()
 	ring := &rang{}
 	listening := &heard{}
-	tools := callingtool.Tools(reader{events: events}, ring, listening,
+	tools := callingtool.Tools(reader{events: events}, ring, listening, ring,
 		func() time.Time { return now })
-	if len(tools) != 2 {
+	if len(tools) != 4 {
 		t.Fatalf("there are %d call tools", len(tools))
 	}
 	return tools[0], tools[1], ring, listening
@@ -346,5 +355,91 @@ func TestWithNoCallsOnRecordANameStillWorks(t *testing.T) {
 	}
 	if len(ring.calls) != 1 {
 		t.Fatalf("it rang %+v", ring.calls)
+	}
+}
+
+// theDial : The two mid-call tools, by name.
+func theDial(t *testing.T) (map[string]tool.Tool, *rang) {
+	t.Helper()
+	ring := &rang{}
+	by := map[string]tool.Tool{}
+	for _, x := range callingtool.Tools(reader{}, ring, &heard{}, ring,
+		func() time.Time { return now }) {
+		by[x.Name] = x
+	}
+	return by, ring
+}
+
+func TestSpeakerGoesOnAndOff(t *testing.T) {
+	by, ring := theDial(t)
+	if got := ask(t, by["call_speaker"], `{"on":true}`); got.Outcome == conversation.OutcomeFailed {
+		t.Fatalf("speaker on failed: %s", got.Content)
+	}
+	if got := ask(t, by["call_speaker"], `{"on":false}`); got.Outcome == conversation.OutcomeFailed {
+		t.Fatalf("speaker off failed: %s", got.Content)
+	}
+	want := []calling.During{
+		{What: calling.Speaker, On: true},
+		{What: calling.Speaker, On: false},
+	}
+	if len(ring.changes) != 2 || ring.changes[0] != want[0] || ring.changes[1] != want[1] {
+		t.Fatalf("the phone was asked for %+v", ring.changes)
+	}
+}
+
+// The one place the words and the switch run opposite: muting is the
+// microphone turned off.
+func TestMutingTurnsTheMicrophoneOff(t *testing.T) {
+	by, ring := theDial(t)
+	if got := ask(t, by["call_mute"], `{"on":true}`); got.Outcome == conversation.OutcomeFailed {
+		t.Fatalf("mute failed: %s", got.Content)
+	}
+	if len(ring.changes) != 1 || ring.changes[0] != (calling.During{What: calling.Mic, On: false}) {
+		t.Fatalf("muting asked for %+v", ring.changes)
+	}
+
+	if got := ask(t, by["call_mute"], `{"on":false}`); got.Outcome == conversation.OutcomeFailed {
+		t.Fatalf("unmute failed: %s", got.Content)
+	}
+	if ring.changes[1] != (calling.During{What: calling.Mic, On: true}) {
+		t.Fatalf("unmuting asked for %+v", ring.changes[1])
+	}
+}
+
+// Asked for far more often than undone, so a model that leaves the
+// argument out meant the obvious thing.
+func TestLeavingItOutMeansOn(t *testing.T) {
+	by, ring := theDial(t)
+	ask(t, by["call_speaker"], `{}`)
+	ask(t, by["call_mute"], `{}`)
+	if ring.changes[0] != (calling.During{What: calling.Speaker, On: true}) {
+		t.Errorf("a bare speaker call asked for %+v", ring.changes[0])
+	}
+	if ring.changes[1] != (calling.During{What: calling.Mic, On: false}) {
+		t.Errorf("a bare mute call asked for %+v", ring.changes[1])
+	}
+}
+
+// Said in the middle of somebody else's call, so anything spoken
+// here is spoken into it.
+func TestItIsToldToKeepQuietAboutIt(t *testing.T) {
+	by, _ := theDial(t)
+	got := ask(t, by["call_speaker"], `{"on":true}`)
+	if !strings.Contains(got.Content, "Say nothing about it unless they ask") {
+		t.Errorf("nothing told it to stay quiet:\n%s", got.Content)
+	}
+}
+
+// With nowhere to send one, they are not offered at all.
+func TestWithNowhereToSendThemTheyDoNotExist(t *testing.T) {
+	tools := callingtool.Tools(reader{}, &rang{}, &heard{}, nil,
+		func() time.Time { return now })
+	for _, x := range tools {
+		if x.Name == "call_speaker" || x.Name == "call_mute" {
+			t.Errorf("%s was offered with nowhere to send it", x.Name)
+		}
+	}
+	if len(tools) != 2 {
+		t.Errorf("there are %d call tools", len(tools))
 	}
 }

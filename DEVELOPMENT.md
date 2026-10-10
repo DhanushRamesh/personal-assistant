@@ -17179,6 +17179,44 @@ should be asked again. It lasts three minutes, so a "yes" to
 something else at lunch cannot ring somebody asked about at
 breakfast.
 
+### Speaker and mute take no confirmation
+
+Owner: *"can i command to put to speaker, mute myself, record it?"*
+
+Recording is not possible and was not built. Android 6 closed the
+call-recording API, Android 10 cut microphone access during a call,
+and the accessibility workaround everyone moved to was banned from
+Play in May 2022; only a pre-installed dialer can reach that audio.
+Tasker has a Record Audio action which simply would not get the call.
+
+The other two are built and **deliberately not confirmed**, which is
+the opposite of the decision one section above. The reason is the
+room rather than the risk: each is undone by saying the opposite, and
+both are asked for while somebody else is on the line, where *"shall
+I put that on speaker, sir?"* said out loud is worse than being
+wrong. They are silent for the same reason -- anything said here is
+said into that call, and the tool's own result tells the model so.
+
+One errand kind and one profile, not four. The body is two words --
+`speaker on`, `mic off` -- and the task is four actions each with one
+`If` on `%http_request_body`. Tested: each word runs exactly one
+action and the other three report `IfFail`.
+
+**Muting is the microphone off**, which is the one place the words
+and the switch run opposite. Inverted at the tool, so nothing
+downstream has to remember it, and there is a test whose whole job is
+that inversion.
+
+Twenty seconds rather than the call's two minutes. A call put on
+speaker after it has ended is nothing but confusing.
+
+**Speaker may well not work**, and Tasker says so itself: *"Google
+broke the Speakerphone API for third party apps like Tasker on
+Android 10 so on some devices this action might not work."* Muting
+goes a different way and is unaffected. Built anyway, because the
+alternative is guessing, and it will be known the first time a call
+is on.
+
 ## 12. Maintaining this file
 
 When the owner states a preference, makes a decision, or corrects something,

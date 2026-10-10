@@ -84,7 +84,12 @@ func (p Phone) Ring(ctx context.Context, c Call) error {
 	if err != nil {
 		return err
 	}
+	return p.post(ctx, p.URL, body, Expected)
+}
 
+// post : One request to the phone, and the one place that decides
+// whether it was really the phone that answered.
+func (p Phone) post(ctx context.Context, where, body, want string) error {
 	wait := p.Timeout
 	if wait <= 0 {
 		wait = DefaultTimeout
@@ -93,7 +98,7 @@ func (p Phone) Ring(ctx context.Context, c Call) error {
 	defer done()
 
 	req, err := http.NewRequestWithContext(asking, http.MethodPost,
-		strings.TrimSpace(p.URL), strings.NewReader(body))
+		strings.TrimSpace(where), strings.NewReader(body))
 	if err != nil {
 		return fmt.Errorf("calling: %w", err)
 	}
@@ -115,7 +120,7 @@ func (p Phone) Ring(ctx context.Context, c Call) error {
 	if err != nil {
 		return fmt.Errorf("calling: %w", err)
 	}
-	if strings.TrimSpace(string(said)) != Expected {
+	if strings.TrimSpace(string(said)) != want {
 		return fmt.Errorf("calling: something other than the phone answered")
 	}
 	return nil
@@ -173,3 +178,59 @@ func Digits(who string) bool {
 // phone was unreachable for ten wants to be told it did not happen,
 // not to have it dial while they are in a meeting.
 const Worth = 2 * time.Minute
+
+// What : Something about a call in progress that can be changed.
+type What string
+
+const (
+	// Speaker : The phone's loudspeaker.
+	Speaker What = "speaker"
+	// Mic : The person's own microphone, which muting turns off.
+	Mic What = "mic"
+)
+
+// During : One change to a call already in progress.
+type During struct {
+	// What : Which thing. Required.
+	What What
+	// On : Whether it should be on. Muting is Mic off, which is
+	// the one place the wording and the flag disagree -- said in
+	// the tool, not here.
+	On bool
+}
+
+// DuringBody : The change as the phone reads it -- two words, so a
+// profile can be read at a glance a year from now.
+func DuringBody(d During) (string, error) {
+	switch d.What {
+	case Speaker, Mic:
+	default:
+		return "", fmt.Errorf("calling: %q is not something that can be changed mid-call", d.What)
+	}
+	if d.On {
+		return string(d.What) + " on", nil
+	}
+	return string(d.What) + " off", nil
+}
+
+// ExpectedDuring : What the phone answers when it has made the change.
+const ExpectedDuring = "phone-during-ok"
+
+// Change : Asks the phone to change something about the call it is on.
+func (p Phone) Change(ctx context.Context, where string, d During) error {
+	if strings.TrimSpace(where) == "" {
+		return fmt.Errorf("calling: there is no address for the phone")
+	}
+	body, err := DuringBody(d)
+	if err != nil {
+		return err
+	}
+	return p.post(ctx, where, body, ExpectedDuring)
+}
+
+// Soon : How long a mid-call change is worth making.
+//
+// Twenty seconds. Unlike a call, which is still worth placing a
+// minute late, putting a call on speaker after the call has ended is
+// nothing but confusing.
+const Soon = 20 * time.Second

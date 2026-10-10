@@ -299,9 +299,17 @@ func run() error {
 	// are not offered at all: an assistant that cannot reach the
 	// phone should not have a way of saying it is ringing somebody.
 	var ringing *caller
+	// Untyped nil unless there is somewhere to send a mid-call
+	// change, for the usual reason: a typed nil satisfies the
+	// interface and then fails on every call.
+	var changing callingtool.Changer
 	if phone := phoneCall(cfg); phone != nil {
-		callHands(sending.Hands, *phone)
+		during := strings.TrimSpace(cfg.HomeAssistant.DuringURL.Reveal())
+		callHands(sending.Hands, *phone, during)
 		ringing = &caller{to: sending}
+		if during != "" {
+			changing = ringing
+		}
 	}
 	// Untyped nil when there is nowhere to ask, for the usual
 	// reason: the honest answer on a server with no address for
@@ -398,7 +406,7 @@ func run() error {
 		eventstool.Tools(deviceEvents, eventstool.Clock{
 			Now: cfg.Assistant.Now, Location: cfg.Assistant.Location,
 		}),
-		callingTools(deviceEvents, ringing, chats, cfg.Assistant.Now),
+		callingTools(deviceEvents, ringing, chats, changing, cfg.Assistant.Now),
 		placestool.Tools(deviceEvents, placestool.Clock{
 			Now: cfg.Assistant.Now, Location: cfg.Assistant.Location,
 		}),
@@ -992,11 +1000,11 @@ func alarmHands(phone alarm.Setter) errand.Hands {
 // then explain why it could not, which is two sentences worse than
 // not having it.
 func callingTools(reader callingtool.Reader, ring *caller, heard callingtool.Heard,
-	now func() time.Time) []tool.Tool {
+	change callingtool.Changer, now func() time.Time) []tool.Tool {
 	if ring == nil {
 		return nil
 	}
-	return callingtool.Tools(reader, ring, heard, now)
+	return callingtool.Tools(reader, ring, heard, change, now)
 }
 
 // phoneCall : Where a call is placed, or nothing when there is no
@@ -1013,7 +1021,7 @@ func phoneCall(cfg config.Config) *calling.Phone {
 //
 // Added to whatever is already there rather than replacing it, so
 // that alarms and calls do not have to be configured together.
-func callHands(hands errand.Hands, phone calling.Phone) {
+func callHands(hands errand.Hands, phone calling.Phone, during string) {
 	hands[errand.CallPlace] = func(ctx context.Context, e errand.Errand) error {
 		var c calling.Call
 		if err := json.Unmarshal(e.Body, &c); err != nil {
@@ -1021,6 +1029,43 @@ func callHands(hands errand.Hands, phone calling.Phone) {
 		}
 		return phone.Ring(ctx, c)
 	}
+	// Its own path, and only when there is one. Changing a call in
+	// progress is a different profile on the phone from starting
+	// one, and either may be configured without the other.
+	if during == "" {
+		return
+	}
+	hands[errand.CallDuring] = func(ctx context.Context, e errand.Errand) error {
+		var d calling.During
+		if err := json.Unmarshal(e.Body, &d); err != nil {
+			return fmt.Errorf("that errand does not describe a change to a call: %w", err)
+		}
+		return phone.Change(ctx, during, d)
+	}
+}
+
+// Change : Writes down that the phone should change something about
+// the call it is on.
+//
+// No dropping of what is already queued, unlike an alarm: two of
+// these in a row are two things wanted, not a correction.
+func (c *caller) Change(ctx context.Context, userID string, d calling.During) error {
+	if c == nil || c.to == nil || userID == "" {
+		return fmt.Errorf("there is nowhere to ask for that")
+	}
+	body, err := json.Marshal(d)
+	if err != nil {
+		return err
+	}
+	now := c.to.Now()
+	// Worth doing for twenty seconds. A call put on speaker after
+	// it has ended is nothing but confusing.
+	made, err := errand.New(errandmysql.ID(), userID, errand.CallDuring,
+		"", body, now, now.Add(calling.Soon))
+	if err != nil {
+		return err
+	}
+	return c.to.Ask(ctx, made)
 }
 
 // caller : Asking for a call, without waiting on the phone.

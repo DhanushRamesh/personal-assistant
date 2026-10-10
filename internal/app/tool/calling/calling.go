@@ -73,9 +73,18 @@ type Asker interface {
 }
 
 // Tools : Everything in this package.
-func Tools(reader Reader, ask Asker, heard Heard, now func() time.Time) []tool.Tool {
+func Tools(reader Reader, ask Asker, heard Heard, change Changer,
+	now func() time.Time) []tool.Tool {
 	asking := NewAsking(now)
-	return []tool.Tool{people(reader, now), place(reader, ask, heard, asking, now)}
+	out := []tool.Tool{people(reader, now), place(reader, ask, heard, asking, now)}
+	// Nothing rather than tools that quietly do nothing. The phone
+	// listens for a mid-call change on its own path, and with no
+	// address for it a model told "on speaker" would say so and
+	// nothing would happen -- which is worse than not being able to.
+	if change == nil {
+		return out
+	}
+	return append(out, during(change)...)
 }
 
 // Person : Somebody the phone has had a call with.

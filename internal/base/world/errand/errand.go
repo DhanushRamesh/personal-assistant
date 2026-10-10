@@ -53,6 +53,20 @@ const (
 	// need keeping in sync, and put somebody else's telephone
 	// numbers on a server that has no use for them.
 	CallPlace Kind = "call.place"
+	// CallDuring : Change something about a call already in
+	// progress -- the speaker, the microphone.
+	//
+	// Owner: *"can i command to put to speaker, mute myself?"*
+	//
+	// One kind rather than four, because what is being asked is
+	// always the same shape: a thing on the phone, and whether it
+	// should be on. The body carries which.
+	//
+	// No confirmation on these, unlike placing a call. Both are
+	// instantly reversible and both are asked for in the middle of
+	// a conversation with somebody else, where being asked "shall
+	// I?" out loud is worse than being wrong.
+	CallDuring Kind = "call.during"
 )
 
 // State : Where an errand is in its life.
