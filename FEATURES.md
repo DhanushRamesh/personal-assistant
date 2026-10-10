@@ -36,7 +36,7 @@ flowchart TB
 
     CORE["The core<br/>persona, memory, tool loop"]
     MODEL["Model<br/>PlatformAI"]
-    TOOLS["58 tools<br/>section 2"]
+    TOOLS["60 tools<br/>section 2"]
     DB[("MySQL<br/>reminders, memories, events,<br/>conversations, places, profile")]
 
     CORE <--> MODEL
@@ -57,7 +57,7 @@ flowchart TB
 
 ## 2. What it can do when asked
 
-58 tools, grouped by what they are about. The model picks; nothing
+60 tools, grouped by what they are about. The model picks; nothing
 here is keyword matched.
 
 ```mermaid
@@ -82,7 +82,7 @@ flowchart LR
 
 **Two of those are conditional.** `call_people` and `call_place`
 are registered only when `[homeassistant] call_url` gives them
-somewhere to ring, which makes 58 without it and 60 with. A tool
+somewhere to ring — 58 without it, 60 with, and it is set. A tool
 that cannot work is not offered: a model holding one will say it is
 ringing somebody and then explain why it could not.
 

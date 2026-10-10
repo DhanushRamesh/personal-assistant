@@ -17071,8 +17071,10 @@ was FRIDAY before it was Jarvis, and a word on the wire that has to
 be changed on the phone when he renames the assistant is a trap. The
 two alarm tokens predate that rule and are not the example to copy.
 
-The **task** is built and proven; the profile that triggers it is not
-yet, so nothing on the phone fires and `call_url` is still empty.
+Built and working, 10 October 2026. A third profile on port 1821
+matching `/c/<secret>`, answering `phone-call-ok`, running a task
+called `Jarvis Call`. The task reads `%http_request_body` directly,
+which is how `Jarvis Alarm` already does it.
 
 Resolving a name against the contacts turned out to have exactly one
 route in Tasker, and three that look right and are not. Worth writing
@@ -17091,7 +17093,7 @@ makes it short is putting the name in the **path** of the contacts
 filter URI, which removes every `String[]` argument:
 
 	cr   = CONTEXT.getContentResolver();
-	uri  = Uri.parse( content://com.android.contacts/data/phones/filter/%par1 );
+	uri  = Uri.parse( content://com.android.contacts/data/phones/filter/%http_request_body );
 	cur  = cr.query( uri, null, null, null, null );
 	%ok  = cur.moveToFirst();
 	%idx = cur.getColumnIndex( data1 );
@@ -17106,6 +17108,15 @@ finds "Alekhya Chintada" without the server having to.
 Tasker was granted `CALL_PHONE` and `READ_PHONE_NUMBERS` over adb.
 Without them the Call action will not even open for editing. Both are
 reversible with `pm revoke`.
+
+**A name nobody matches dials nothing, and that falls out of the
+shape rather than being checked for.** With no row, `getColumnIndex`
+and `getString` fail, the task stops at that action, and the Call
+never runs. Tested by posting a nonsense name: `phone-call-ok` came
+back, the log shows the task exiting with an error at action 6, and
+no call was placed. The reply is Tasker's Quick Response, which
+answers before the task runs -- so as ever, a 200 proves the message
+arrived and nothing more.
 
 ## 12. Maintaining this file
 
