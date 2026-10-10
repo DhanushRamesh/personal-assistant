@@ -414,6 +414,12 @@ One a day at most, six hours apart, kept as its own kind (`noticed`)
 with the reason on the rule. Almost always he asks for nothing,
 which is the point.
 
+**And memories can become wrong.** On the same pass, where a later
+memory plainly replaces an earlier one -- where they live, what
+something is called -- the older is set aside with the reason kept
+on the row, and stops reaching the model. Preferences are never
+superseded: liking a new song does not stop them liking the old one.
+
 **And retires them.** On the same pass, before writing another, he
 may take back one of his own -- only his, only after a week, only an
 id he was shown, and cancelled rather than deleted so the record

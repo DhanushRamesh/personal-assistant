@@ -37,12 +37,24 @@ type row struct {
 	Written    bool       `gorm:"column:written"`
 	CreatedAt  time.Time  `gorm:"column:created_at;autoCreateTime:false"`
 	UpdatedAt  time.Time  `gorm:"column:updated_at;autoUpdateTime:false"`
+	StaleAt    *time.Time `gorm:"column:stale_at"`
+	StaleWhy   string     `gorm:"column:stale_why"`
 	LastUsedAt *time.Time `gorm:"column:last_used_at"`
 	Uses       int        `gorm:"column:uses"`
 }
 
 // TableName : Names the table this row maps to.
 func (row) TableName() string { return "memories" }
+
+// when : A moment as the column holds it -- null while a memory
+// still stands, which is nearly all of them nearly always.
+func when(at time.Time) *time.Time {
+	if at.IsZero() {
+		return nil
+	}
+	utc := at.UTC()
+	return &utc
+}
 
 // toMemory : Converts a stored row back into a memory.
 func (r *row) toMemory() memory.Memory {
@@ -63,6 +75,9 @@ func (r *row) toMemory() memory.Memory {
 		at := r.LastUsedAt.UTC()
 		m.LastUsedAt = &at
 	}
+	if r.StaleAt != nil {
+		m.StaleAt, m.StaleWhy = r.StaleAt.UTC(), r.StaleWhy
+	}
 	return m
 }
 
@@ -76,6 +91,8 @@ func toRow(m *memory.Memory) *row {
 		Body:       m.Body,
 		Embedding:  toBytes(m.Embedding),
 		EmbedModel: m.EmbedModel,
+		StaleWhy:   m.StaleWhy,
+		StaleAt:    when(m.StaleAt),
 		Written:    m.Written,
 		CreatedAt:  m.CreatedAt,
 		UpdatedAt:  m.UpdatedAt,
@@ -189,11 +206,46 @@ func (s *Store) Forget(ctx context.Context, userID, id string) error {
 	return nil
 }
 
+// Stale : Marks a memory as no longer true, keeping the row.
+//
+// The whole point of the column: a memory superseded has to stop
+// reaching the model, and has to go on being readable by anybody
+// asking why he changed his mind. Every read that feeds a turn --
+// the standing tier, the keyword search and the vector search --
+// excludes these, and nothing else does.
+func (s *Store) Stale(ctx context.Context, userID, id, why string, at time.Time) error {
+	if s == nil || s.db == nil {
+		return fmt.Errorf("memory: there is nowhere to keep memories")
+	}
+	out := s.db.WithContext(ctx).Model(&row{}).
+		Where("id = ? AND user_id = ? AND stale_at IS NULL", id, userID).
+		Updates(map[string]any{
+			"stale_at":   at.UTC(),
+			"stale_why":  clipped(why, 500),
+			"updated_at": time.Now().UTC(),
+		})
+	if out.Error != nil {
+		return fmt.Errorf("memory: setting %s aside: %w", id, out.Error)
+	}
+	// Nought rows is already set aside, or never there, and is not a
+	// failure: the pass that asks for this runs hourly and asking
+	// twice about the same memory must not fail the pass.
+	return nil
+}
+
+// clipped : Text, cut to what the column holds.
+func clipped(s string, most int) string {
+	if len(s) <= most {
+		return s
+	}
+	return s[:most]
+}
+
 // All : Every memory in a tier, oldest first.
 func (s *Store) All(ctx context.Context, userID string, tier memory.Tier) ([]memory.Memory, error) {
 	var rows []row
 	err := s.db.WithContext(ctx).
-		Where("user_id = ? AND tier = ?", userID, string(tier)).
+		Where("user_id = ? AND tier = ? AND stale_at IS NULL", userID, string(tier)).
 		Order("created_at ASC, id ASC").
 		Find(&rows).Error
 	if err != nil {
@@ -272,7 +324,7 @@ func (s *Store) Matching(ctx context.Context, userID, question string, limit int
 
 	var rows []row
 	err := s.db.WithContext(ctx).
-		Where("user_id = ? AND MATCH(subject, body) AGAINST (? IN BOOLEAN MODE)", userID, terms).
+		Where("user_id = ? AND stale_at IS NULL AND MATCH(subject, body) AGAINST (? IN BOOLEAN MODE)", userID, terms).
 		Order(gorm.Expr("MATCH(subject, body) AGAINST (? IN BOOLEAN MODE) DESC", terms)).
 		Limit(limit).
 		Find(&rows).Error
@@ -319,7 +371,7 @@ func isWordRune(r rune) bool {
 func (s *Store) NearestTo(ctx context.Context, userID string, q embed.Vector, model string, limit int) ([]memory.Match, error) {
 	var rows []row
 	err := s.db.WithContext(ctx).
-		Where("user_id = ? AND embed_model = ? AND embedding IS NOT NULL", userID, model).
+		Where("user_id = ? AND embed_model = ? AND embedding IS NOT NULL AND stale_at IS NULL", userID, model).
 		Find(&rows).Error
 	if err != nil {
 		return nil, fmt.Errorf("memory: reading vectors: %w", err)

@@ -83,6 +83,15 @@ type Memory struct {
 	EmbedModel string
 	// Embedding : The vector for Text, or nil when it has not been embedded.
 	Embedding []float32
+	// StaleAt : When this stopped being true, or the zero time while
+	// it still stands.
+	//
+	// A memory superseded is kept and not deleted: asked why he no
+	// longer believes something, the answer should be in the row
+	// rather than gone with it.
+	StaleAt time.Time
+	// StaleWhy : What replaced it, or why it stopped being so.
+	StaleWhy string
 	// CreatedAt : When it was first stored.
 	CreatedAt time.Time
 	// UpdatedAt : When it was last changed.

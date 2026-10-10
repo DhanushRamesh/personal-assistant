@@ -16897,6 +16897,72 @@ The first interesting pass is after the week window opens, five days
 from now. If he has written anything before then, the bar is too
 low.
 
+### A memory can become wrong
+
+Owner, on the last of the three: *"old facts should be able to
+expire."*
+
+Twenty memories, none of which could ever stop being true. A fact
+kept in September was read into every turn in October with exactly
+the same weight as one written this morning, and a later memory had
+no way to say it had taken over.
+
+It is the same hole as a rule that cannot be retired and a sentence
+that outlived its occasion, **and it is the worst of the three**: a
+retired rule left standing fires when it should not, a stale
+sentence stays silent, and a wrong memory is read into every single
+answer.
+
+His own data showed it plainly. Four memories about music, two of
+them naming a favourite song:
+
+	09-30  Favorite song              Everybody Wants to Rule the World
+	10-07  Fireflies as favorite song Fireflies by Owl City
+	10-07  Humbug by Elfman           Likes the song Humbug
+	10-09  Vianney                    Likes the artist Vianney
+
+`memories.stale_at` and `stale_why`, set rather than deleted, the
+same as a cancelled rule: asked why he no longer believes something,
+the answer should be in the row rather than gone with it.
+
+**The part that matters is the reading, not the column.** Three
+queries feed a turn -- the standing tier, the keyword search and the
+vector search -- and all three now exclude a superseded memory.
+Nothing else does, so everything that lists or audits them still
+sees the lot.
+
+#### Written to leave things alone
+
+The judging prompt is the opposite of the rule-writing one. There
+the failure was four hundred rules; here it is throwing away
+something the person asked to keep.
+
+**A person is allowed to be more than one thing.** Most pairs that
+look contradictory are simply two facts: somebody can like two
+songs, know two people of the same name, and have two routines. So a
+memory is superseded only where a later one says something that
+cannot be true at the same time -- where they live, what something
+is called, an explicit correction -- and preferences are named as
+the case never to touch. Liking a new artist does not stop them
+liking the old one.
+
+The same three guards as the rules: only after a day, only one at a
+time, and only an id he was actually shown -- a model naming a
+memory it was not given has invented one, and acting on that would
+throw away something they asked to keep.
+
+#### The three are now one shape
+
+	Job.Said      outlived the occasion     fixed, the battery alerts
+	noticed rules outlived the pattern      retire, after a week
+	memories      outlived the truth        supersede, after a day
+
+Each was found separately, by the owner noticing something was
+wrong, and each turned out to be the same missing idea: **a thing
+kept so it is not repeated has to be able to stop being true.** That
+is worth remembering as a question to ask of anything new that
+remembers: what makes this expire?
+
 ## 12. Maintaining this file
 
 When the owner states a preference, makes a decision, or corrects something,

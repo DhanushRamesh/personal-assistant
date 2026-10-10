@@ -9,6 +9,7 @@ import (
 
 	"personal-assistant/internal/app/noticing"
 	"personal-assistant/internal/domain/job"
+	"personal-assistant/internal/domain/memory"
 )
 
 func watcher(answer string, err error) noticing.Watcher {
@@ -178,5 +179,77 @@ func TestOneHeWasShownIsRetired(t *testing.T) {
 	}
 	if why == "" {
 		t.Error("retiring one should say why")
+	}
+}
+
+// kept : one memory, with an age.
+func kept(id, subject, body string, ageDays int) memory.Memory {
+	return memory.Memory{ID: id, Subject: subject, Body: body,
+		CreatedAt: time.Now().Add(-time.Duration(ageDays) * 24 * time.Hour)}
+}
+
+// TestNothingHasBeenReplaced : a person is allowed to be more than
+// one thing, and most pairs that look contradictory are two facts.
+func TestNothingHasBeenReplaced(t *testing.T) {
+	id, _, err := watcher(`{"stands":"both are true"}`, nil).Superseded(
+		context.Background(), "u", []memory.Memory{
+			kept("mem_1", "Favourite song", "Everybody Wants to Rule the World", 10),
+			kept("mem_2", "Fireflies", "Fireflies by Owl City is a favourite", 3),
+		})
+	if err != nil || id != "" {
+		t.Errorf("it should have left them alone, got %q (%v)", id, err)
+	}
+}
+
+// TestTheOlderOneGoes : and where a thing can only have one value,
+// the earlier one is the one set aside.
+func TestTheOlderOneGoes(t *testing.T) {
+	id, why, _ := watcher(`{"supersede":"mem_1","because":"he has moved to Bangalore"}`, nil).
+		Superseded(context.Background(), "u", []memory.Memory{
+			kept("mem_1", "Location", "Lives in Chennai.", 30),
+			kept("mem_2", "Location", "Lives in Bangalore now.", 2),
+		})
+	if id != "mem_1" {
+		t.Fatalf("the older one should go, got %q", id)
+	}
+	if why == "" {
+		t.Error("setting one aside should say what replaced it")
+	}
+}
+
+// TestOneTooYoungIsNotReconsidered : written this morning and set
+// aside this afternoon is thrashing.
+func TestOneTooYoungIsNotReconsidered(t *testing.T) {
+	id, _, _ := watcher(`{"supersede":"mem_1","because":"no"}`, nil).Superseded(
+		context.Background(), "u", []memory.Memory{
+			kept("mem_1", "a", "a", 0),
+			kept("mem_2", "b", "b", 0),
+		})
+	if id != "" {
+		t.Errorf("a memory kept hours ago should not be up for it, got %q", id)
+	}
+}
+
+// TestOneAlreadySetAsideIsNotOffered : and is not shown again.
+func TestOneAlreadySetAsideIsNotOffered(t *testing.T) {
+	gone := kept("mem_1", "Location", "Lives in Chennai.", 30)
+	gone.StaleAt = time.Now().Add(-time.Hour)
+	id, _, _ := watcher(`{"supersede":"mem_1","because":"again"}`, nil).Superseded(
+		context.Background(), "u", []memory.Memory{gone, kept("mem_2", "b", "b", 5)})
+	if id != "" {
+		t.Errorf("one already set aside should not come back, got %q", id)
+	}
+}
+
+// TestAMemoryHeWasNotShown : the same guard as the rules. A model
+// naming one it was not given has invented it, and acting on that
+// would throw away something they asked to keep.
+func TestAMemoryHeWasNotShown(t *testing.T) {
+	id, _, _ := watcher(`{"supersede":"mem_999","because":"made up"}`, nil).Superseded(
+		context.Background(), "u", []memory.Memory{
+			kept("mem_1", "a", "a", 10), kept("mem_2", "b", "b", 10),
+		})
+	if id != "" {
+		t.Errorf("an id he was never shown should be refused, got %q", id)
 	}
 }

@@ -250,8 +250,12 @@ func run() error {
 	// What the assistant has been asked to remember. Without an embedding
 	// server it still works, matching words rather than meaning, which is
 	// worse than the alternative and much better than going blind.
+	// Held apart as well as handed over, because setting a memory
+	// aside is a thing only the store can do and the recall
+	// interface has no business learning about.
+	remembered := memorymysql.New(db)
 	remembering := &memory.Recall{
-		Store:      memorymysql.New(db),
+		Store:      remembered,
 		Transcript: memorymysql.NewTranscript(db),
 		Embedder:   embedder(cfg, logger.Logger),
 		Logger:     logger.Logger,
@@ -721,7 +725,7 @@ func run() error {
 	// Nil where there is nothing to think with, which leaves him
 	// noticing nothing rather than failing at startup over a thing
 	// nobody asked for.
-	thinkingUp = noticed(scheduled, ranLog, &profile.Reader{Memories: remembering.Store},
+	thinkingUp = noticed(scheduled, ranLog, remembered, &profile.Reader{Memories: remembering.Store},
 		rules.Writer{
 			Ask: func(ctx context.Context, system, ask string) (string, error) {
 				return askAs(ctx, answerer, cfg.PlatformAI.Vendor,
@@ -3074,6 +3078,53 @@ func retire(
 		slog.String("rule", id), slog.String("because", why))
 }
 
+// supersede : Whether a later memory has replaced an earlier one,
+// and the setting aside of it.
+//
+// Set aside and not deleted, the same as a retired rule: asked why
+// he no longer believes something, the answer should be in the row
+// rather than gone with it.
+func supersede(
+	ctx context.Context,
+	remembers *memorymysql.Store,
+	watcher noticing.Watcher,
+	userID string,
+	now func() time.Time,
+	logger *slog.Logger,
+) {
+	if remembers == nil {
+		return
+	}
+	// Both tiers. What reaches every turn and what is searched for
+	// are equally capable of being out of date, and a fact that has
+	// stopped being true has not stopped being wrong because it is
+	// only read sometimes.
+	var held []memory.Memory
+	for _, tier := range memory.Tiers() {
+		some, err := remembers.All(ctx, userID, tier)
+		if err != nil {
+			logger.WarnContext(ctx, "cannot read what he remembers", slog.Any("error", err))
+			return
+		}
+		held = append(held, some...)
+	}
+
+	id, why, err := watcher.Superseded(ctx, userID, held)
+	if err != nil {
+		logger.WarnContext(ctx, "could not weigh up a memory", slog.Any("error", err))
+		return
+	}
+	if id == "" {
+		return
+	}
+	if err := remembers.Stale(ctx, userID, id, why, now()); err != nil {
+		logger.WarnContext(ctx, "cannot set a memory aside", slog.Any("error", err))
+		return
+	}
+	logger.InfoContext(ctx, "a memory has been superseded",
+		slog.String("memory", id), slog.String("because", why))
+}
+
 // everyRule : How many of his rules to read before deciding.
 //
 // All of them, in practice. He has twenty-five and the question he
@@ -3097,6 +3148,7 @@ const everyRule = 500
 func noticed(
 	store *jobmysql.Store,
 	ran *jobmysql.Runs,
+	remembers *memorymysql.Store,
 	reader *profile.Reader,
 	writer rules.Writer,
 	judge noticing.Ask,
@@ -3143,6 +3195,11 @@ func noticed(
 		// deciding whether to write, so a dead one left standing is a
 		// reason to write nothing.
 		retire(ctx, store, ran, watcher, userID, mine, now, logger)
+
+		// And the same for what he has been asked to remember. A
+		// memory that outlived the truth is read into every answer,
+		// which makes it the worst of the three to leave standing.
+		supersede(ctx, remembers, watcher, userID, now, logger)
 		// Asked before the model is, because the allowance is the
 		// whole safeguard and a model call made and then thrown away
 		// is the allowance leaking money.
