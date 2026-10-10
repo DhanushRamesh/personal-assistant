@@ -113,6 +113,16 @@ test: ## Run the tests
 evals-greeting: ## Greet real arrivals sampled from the last four weeks (costs API calls)
 	@go test ./internal/domain/greet/evals/ -tags evals -count=1 -v -timeout 20m $(ARGS)
 
+.PHONY: evals-models
+evals-models: ## Ask which models this gateway will accept (costs API calls)
+	@go test ./internal/app/noticing/evals/ -tags evals -count=1 -v -timeout 10m \
+		-run TestWhichModelsThisGatewayTakes $(ARGS)
+
+.PHONY: evals-wondering
+evals-wondering: ## Ask the real judge what it would write, keeping nothing (costs API calls)
+	@go test ./internal/app/noticing/evals/ -tags evals -count=1 -v -timeout 10m \
+		-run TestWhatHeWouldWriteIfHeCould $(ARGS)
+
 .PHONY: evals-tangled
 evals-tangled: ## Ask whether a badly typed sentence still reaches the right tool (costs API calls)
 	@# Twice per case, as typed and spelt correctly, so the spelling

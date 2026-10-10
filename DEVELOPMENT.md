@@ -17515,6 +17515,82 @@ deletions are not the same act.
 
 
 
+### The judge was not refusing, it was failing
+
+Owner: *"the rule writing by AI must be done hourly too, so it can
+talk nice current stuffs too."*
+
+It already was hourly, and had been: `profileEvery = time.Hour`, with
+the rule pass run immediately after each description rebuild. It had
+written nothing anyway.
+
+`make evals-wondering` asks the real judge what it would write
+against the real description and keeps nothing -- no rule, no
+allowance spent, the writer never called. It exists because the pass
+is silent by design most hours, which makes a bar that works and a
+bar that can never be cleared look identical from outside.
+
+The first run returned in 1.9 seconds for two calls on a
+6,400-character prompt, which is too fast. The answer was:
+
+	The server would not accept that request.
+
+`slow_model = claude-sonnet-5-5` -- the model chosen for this work --
+is refused by this gateway with *"Model is not supported for the
+endpoint (HTTP 400)"*. Every judge call had failed for as long as it
+was set.
+
+#### Why nobody noticed for a day
+
+A gateway refusal arrives as a *message* of kind error, not as an
+error from `Run`. `Wondered` swallows an answer it cannot parse on
+purpose -- a missed rule costs one unremarked pattern and a misread
+one runs for ever -- so the refusal reached the pass as "nothing to
+say", which is also the correct answer most hours.
+
+Three things now make that legible:
+
+**`make evals-models`** asks which models the gateway takes, because
+it publishes no list. Measured 10 October 2026 -- accepted:
+`claude-sonnet-4-6`, `claude-opus-5-5`, `claude-opus-4-6`. Refused:
+`claude-sonnet-5-5`, `claude-haiku-5-5`, `claude-haiku-4-5`. The
+last of those is the model the `fast_model` comment was measured
+against on 2 October, so that measurement can no longer be acted on.
+
+**`slow_model` is `claude-opus-5-5`**, which is the nearest thing to
+what was asked for that this gateway will take.
+
+**The pass says when it has nothing.** `nothing was worth a rule`,
+with the purpose. Silence was the bug.
+
+#### And what it says now that it answers
+
+	noticed   {"nothing": "all observable patterns worth acting on
+	          are already covered by the 21 rules held"}
+	remarked  {"nothing": "no music or listening data was given"}
+
+The second is **true**, and it is the next thing in the way.
+
+#### Taste disperses, so the profile never sees it
+
+`howOften` ranks labels by count and keeps the top `Mostly` = 12. A
+label is kind plus value, so a kind with one value concentrates and a
+kind with many disperses.
+
+Measured over 28 days: 245 music events across **54 distinct
+artists**, the busiest being Daft Punk at 17. Twelfth place in the
+ranked list is `battery.level "34"` at 24. So music is 9.7% of
+everything the devices reported and gets **none** of the twelve
+lines, while `battery.level` -- one kind split into percentage
+buckets, each common because the phone reports continuously -- takes
+**nine of them**, to say something the prose half already says in one
+sentence.
+
+Taste is by nature many distinct values. The ranking cannot surface
+it at any cap.
+
+
+
 When the owner states a preference, makes a decision, or corrects something,
 **record it here** in the same turn. That is the point of the file: a fresh
 agent on a different machine should be able to read it and behave consistently

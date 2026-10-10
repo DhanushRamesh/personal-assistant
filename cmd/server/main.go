@@ -3387,6 +3387,13 @@ func wrote(
 		return nil
 	}
 	if thought.Asked == "" {
+		// Said out loud, because having nothing to say is the
+		// ordinary answer and a pass that fell over says nothing
+		// in exactly the same way. For five weeks a gateway
+		// refusing the configured model read from here as a
+		// quiet hour.
+		logger.InfoContext(ctx, "nothing was worth a rule",
+			slog.String("purpose", purpose.Kind))
 		return nil
 	}
 
