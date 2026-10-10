@@ -182,3 +182,92 @@ const (
 	Kind = "noticed"
 	Mark = "noticed: "
 )
+
+// Settled : How long one of his rules must have stood before it can
+// be reconsidered.
+//
+// A week. A rule written on Tuesday and retired on Wednesday is not
+// a companion changing his mind, it is a machine thrashing -- and
+// the thing it was written to catch may simply not have happened
+// yet. Anything rarer than weekly is exactly what a standing rule
+// is for.
+const Settled = 7 * 24 * time.Hour
+
+// Spoke : What one of his rules has actually said, for judging it.
+type Spoke struct {
+	// Job : The rule.
+	Job job.Job
+	// Ran, Said : How many times it ran, and how many of those it
+	// had something to say.
+	Ran, Said int
+}
+
+// Retired : Which of his own rules has stopped earning its place.
+//
+// Owner: *"he should create his own rules."* The other half of
+// writing one is being able to take it back. A rule he wrote from a
+// pattern that has since stopped should be retired by him and not
+// by somebody finding it in a list months later -- which is the
+// same gap as a memory that can never become wrong, in a third
+// place.
+//
+// Only his own, and only after a week. Rules the person asked for
+// are theirs to keep or drop, and he has no business tidying them
+// away.
+func (w Watcher) Retired(ctx context.Context, userID string, spoke []Spoke) (string, string, error) {
+	if w.Ask == nil || len(spoke) == 0 {
+		return "", "", nil
+	}
+	now := time.Now()
+	if w.Now != nil {
+		now = w.Now()
+	}
+
+	var lines []string
+	byID := map[string]bool{}
+	for _, s := range spoke {
+		if s.Job.Kind != Kind || now.Sub(s.Job.Made) < Settled {
+			continue
+		}
+		byID[s.Job.ID] = true
+		lines = append(lines, fmt.Sprintf(
+			"%s | %s | written %.0f days ago because %s | ran %d times, said something %d times",
+			s.Job.ID, s.Job.Name, now.Sub(s.Job.Made).Hours()/24,
+			strings.TrimPrefix(s.Job.Why, Mark), s.Ran, s.Said))
+	}
+	if len(lines) == 0 {
+		return "", "", nil
+	}
+
+	answer, err := w.Ask(ctx, retiring, prompt.Block(
+		prompt.Text("What you know about them now:"),
+		strings.TrimSpace(w.Describe(ctx, userID)),
+		prompt.Text("The rules you wrote yourself:"),
+		prompt.Lines(lines...),
+	))
+	if err != nil {
+		return "", "", err
+	}
+
+	answer = strings.TrimSpace(answer)
+	answer = strings.TrimPrefix(answer, "```json")
+	answer = strings.TrimPrefix(answer, "```")
+	answer = strings.TrimSuffix(answer, "```")
+	var out struct {
+		Keep   string `json:"keep"`
+		Retire string `json:"retire"`
+		Why    string `json:"because"`
+	}
+	if err := json.Unmarshal([]byte(strings.TrimSpace(answer)), &out); err != nil {
+		return "", "", nil
+	}
+	id := strings.TrimSpace(out.Retire)
+	// Only one of his own, and only one he was actually shown. A
+	// model that names a rule it was not given has made one up, and
+	// acting on that would let an unreadable answer delete
+	// somebody's reminder.
+	if id == "" || !byID[id] {
+		return "", "", nil
+	}
+	return id, strings.TrimSpace(out.Why), nil
+}

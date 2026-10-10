@@ -414,6 +414,12 @@ One a day at most, six hours apart, kept as its own kind (`noticed`)
 with the reason on the rule. Almost always he asks for nothing,
 which is the point.
 
+**And retires them.** On the same pass, before writing another, he
+may take back one of his own -- only his, only after a week, only an
+id he was shown, and cancelled rather than deleted so the record
+survives. A rule that has never fired is usually a rule for
+something rare, so the instruction is written to keep.
+
 **What is trending.** Four lengths of time -- today, this week, this
 month, this year -- each against the one before it, over every kind
 and value, reporting only what arrived, stopped, doubled or halved.

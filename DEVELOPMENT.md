@@ -16853,6 +16853,39 @@ read back for weeks. A description is believed; a rule keeps firing.
 So `slow_model`, used by the description, the judge and the writer.
 Empty falls back to `model`, which is what they all did before.
 
+#### And taking one back
+
+Writing a rule and being unable to retire it is the same hole as a
+memory that can never become wrong -- the third place it has turned
+up. So the pass does both, and takes one back before it writes
+another: the rules he keeps are what he is shown when deciding
+whether to write, so a dead one left standing is itself a reason to
+write nothing.
+
+The prompt for this one is written to **keep**, which is the mirror
+of the other and for the opposite reason. There the risk was four
+hundred rules; here it is tidying away the one that would have
+mattered next week. **A rule that has never fired is usually a rule
+for something rare, which is exactly what a standing rule is for**
+-- the phone failing to charge is worth hearing about precisely
+because it is unusual, and a month of silence is the rule working.
+
+Three guards again, and the last one matters most:
+
+**Only after a week.** Written Tuesday and retired Wednesday is not
+a companion changing his mind, it is thrashing, and the thing it
+watches may simply not have happened yet.
+
+**Only his own.** Rules the person asked for are theirs to keep or
+drop. He has no business tidying them away.
+
+**And only an id he was actually shown.** A model naming a rule it
+was not given has invented one, and acting on that would let an
+unreadable answer delete somebody's reminder.
+
+Cancelled rather than deleted, so that asked why he stopped saying
+something, the answer is in the table.
+
 #### What to expect
 
 Nothing, for a while, and that is the design. He has nine days of

@@ -721,7 +721,7 @@ func run() error {
 	// Nil where there is nothing to think with, which leaves him
 	// noticing nothing rather than failing at startup over a thing
 	// nobody asked for.
-	thinkingUp = noticed(scheduled, &profile.Reader{Memories: remembering.Store},
+	thinkingUp = noticed(scheduled, ranLog, &profile.Reader{Memories: remembering.Store},
 		rules.Writer{
 			Ask: func(ctx context.Context, system, ask string) (string, error) {
 				return askAs(ctx, answerer, cfg.PlatformAI.Vendor,
@@ -3015,6 +3015,65 @@ func (d doing) where() *time.Location {
 	return d.cfg.Assistant.Location
 }
 
+// retire : Whether one of his own rules has stopped earning its
+// place, and the taking of it back.
+//
+// Cancelled rather than deleted. A rule that stops is a thing that
+// happened and the record of it is worth more than the row: asked
+// why he is no longer saying something, the answer is in the table.
+func retire(
+	ctx context.Context,
+	store *jobmysql.Store,
+	ran *jobmysql.Runs,
+	watcher noticing.Watcher,
+	userID string,
+	mine []job.Job,
+	now func() time.Time,
+	logger *slog.Logger,
+) {
+	if ran == nil {
+		return
+	}
+	var spoke []noticing.Spoke
+	for _, j := range mine {
+		if j.Kind != noticing.Kind {
+			continue
+		}
+		records, err := ran.Of(ctx, j.ID, now().Add(-noticing.Settled*8), everyRule)
+		if err != nil {
+			logger.WarnContext(ctx, "cannot read what a rule has done",
+				slog.String("rule", j.ID), slog.Any("error", err))
+			continue
+		}
+		s := noticing.Spoke{Job: j, Ran: len(records)}
+		for _, r := range records {
+			if strings.TrimSpace(r.Said) != "" {
+				s.Said++
+			}
+		}
+		spoke = append(spoke, s)
+	}
+	if len(spoke) == 0 {
+		return
+	}
+
+	id, why, err := watcher.Retired(ctx, userID, spoke)
+	if err != nil {
+		logger.WarnContext(ctx, "could not weigh up retiring a rule", slog.Any("error", err))
+		return
+	}
+	if id == "" {
+		return
+	}
+	if err := store.Ran(ctx, id, time.Time{}, job.Cancelled,
+		noticing.Mark+"retired: "+why, "", now()); err != nil {
+		logger.WarnContext(ctx, "cannot retire the rule he wrote", slog.Any("error", err))
+		return
+	}
+	logger.InfoContext(ctx, "he retired a rule he had written",
+		slog.String("rule", id), slog.String("because", why))
+}
+
 // everyRule : How many of his rules to read before deciding.
 //
 // All of them, in practice. He has twenty-five and the question he
@@ -3037,6 +3096,7 @@ const everyRule = 500
 // anybody else's rule goes through.
 func noticed(
 	store *jobmysql.Store,
+	ran *jobmysql.Runs,
 	reader *profile.Reader,
 	writer rules.Writer,
 	judge noticing.Ask,
@@ -3077,6 +3137,12 @@ func noticed(
 			logger.WarnContext(ctx, "cannot read his own rules", slog.Any("error", err))
 			return
 		}
+
+		// Taking one back comes before writing another, and not only
+		// for tidiness: the rules he keeps are what he is shown when
+		// deciding whether to write, so a dead one left standing is a
+		// reason to write nothing.
+		retire(ctx, store, ran, watcher, userID, mine, now, logger)
 		// Asked before the model is, because the allowance is the
 		// whole safeguard and a model call made and then thrown away
 		// is the allowance leaking money.

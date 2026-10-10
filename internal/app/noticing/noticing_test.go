@@ -113,3 +113,70 @@ func TestTheAllowance(t *testing.T) {
 		t.Error("their rules are not his")
 	}
 }
+
+// his : one of his own rules, with what it has done.
+func his(id, name string, ageDays, ran, said int) noticing.Spoke {
+	return noticing.Spoke{
+		Job: job.Job{ID: id, Name: name, Kind: noticing.Kind,
+			Why:  noticing.Mark + "a pattern",
+			Made: time.Now().Add(-time.Duration(ageDays) * 24 * time.Hour)},
+		Ran: ran, Said: said,
+	}
+}
+
+// TestKeepingIsTheOrdinaryAnswer : the mirror of writing. There the
+// risk was too many rules; here it is tidying away the one that
+// would have mattered next week.
+func TestKeepingIsTheOrdinaryAnswer(t *testing.T) {
+	id, _, err := watcher(`{"keep":"they all still stand"}`, nil).
+		Retired(context.Background(), "u", []noticing.Spoke{his("job_1", "a", 30, 40, 0)})
+	if err != nil || id != "" {
+		t.Errorf("it should have kept them, got %q (%v)", id, err)
+	}
+}
+
+// TestARuleTooYoungIsNotReconsidered : written Tuesday and retired
+// Wednesday is not changing his mind, it is thrashing.
+func TestARuleTooYoungIsNotReconsidered(t *testing.T) {
+	id, _, _ := watcher(`{"retire":"job_1","because":"no"}`, nil).
+		Retired(context.Background(), "u", []noticing.Spoke{his("job_1", "a", 2, 0, 0)})
+	if id != "" {
+		t.Errorf("a two-day-old rule should not be up for retirement, got %q", id)
+	}
+}
+
+// TestTheirRulesAreNotHis : rules the person asked for are theirs to
+// keep or drop, and he has no business tidying them away.
+func TestTheirRulesAreNotHis(t *testing.T) {
+	theirs := noticing.Spoke{Job: job.Job{ID: "job_2", Kind: "rule",
+		Made: time.Now().Add(-90 * 24 * time.Hour)}}
+	id, _, _ := watcher(`{"retire":"job_2","because":"old"}`, nil).
+		Retired(context.Background(), "u", []noticing.Spoke{theirs})
+	if id != "" {
+		t.Errorf("he should not retire their rule, got %q", id)
+	}
+}
+
+// TestAnIdHeWasNotShown : a model naming a rule it was not given has
+// invented one, and acting on that would let a bad answer delete
+// somebody's reminder.
+func TestAnIdHeWasNotShown(t *testing.T) {
+	id, _, _ := watcher(`{"retire":"job_999","because":"made up"}`, nil).
+		Retired(context.Background(), "u", []noticing.Spoke{his("job_1", "a", 30, 10, 0)})
+	if id != "" {
+		t.Errorf("an id he was never shown should be refused, got %q", id)
+	}
+}
+
+// TestOneHeWasShownIsRetired : and when it is genuinely his, old
+// enough and named correctly, it goes.
+func TestOneHeWasShownIsRetired(t *testing.T) {
+	id, why, _ := watcher(`{"retire":"job_1","because":"he has stopped cycling"}`, nil).
+		Retired(context.Background(), "u", []noticing.Spoke{his("job_1", "the helmet", 30, 60, 0)})
+	if id != "job_1" {
+		t.Fatalf("it should have retired job_1, got %q", id)
+	}
+	if why == "" {
+		t.Error("retiring one should say why")
+	}
+}
