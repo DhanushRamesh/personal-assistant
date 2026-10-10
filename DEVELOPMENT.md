@@ -17062,7 +17062,7 @@ model holding a `call_place` that cannot work will say it is ringing
 somebody and then explain why it could not, which is two sentences
 worse than not having it.
 
-#### The phone half is his
+#### The phone half
 
 A third Tasker profile on port 1821, matching the call path, reading
 one line of body as a name, and answering `phone-call-ok` once it has
@@ -17070,6 +17070,42 @@ dialled. Not `jarvis-call`: the assistant's name is configuration and
 was FRIDAY before it was Jarvis, and a word on the wire that has to
 be changed on the phone when he renames the assistant is a trap. The
 two alarm tokens predate that rule and are not the example to copy.
+
+The **task** is built and proven; the profile that triggers it is not
+yet, so nothing on the phone fires and `call_url` is still empty.
+
+Resolving a name against the contacts turned out to have exactly one
+route in Tasker, and three that look right and are not. Worth writing
+down because every one of them was tried:
+
+	Call action         digits only -- given "Amma" it dialled 2662 (T9)
+	Contact Via App     resolves a contact, but only WhatsApp/Telegram
+	                    offer a call mimetype -- VoIP, not a phone call
+	Run Shell           runs as untrusted_app; `content query` returns
+	                    empty stdout, empty stderr and an OK result
+	JavaScript          Tasker 6 has no Java bridge: `android` is
+	                    undefined, so there is no ContentResolver
+
+What works is a chain of **Java Function** actions, and the trick that
+makes it short is putting the name in the **path** of the contacts
+filter URI, which removes every `String[]` argument:
+
+	cr   = CONTEXT.getContentResolver();
+	uri  = Uri.parse( content://com.android.contacts/data/phones/filter/%par1 );
+	cur  = cr.query( uri, null, null, null, null );
+	%ok  = cur.moveToFirst();
+	%idx = cur.getColumnIndex( data1 );
+	%num = cur.getString( %idx );
+	Call  Number %num, Auto Dial
+
+Measured: `.../filter/Amma` returned `+91 97899 66545`. That filter
+URI is the dialer's own search, across full name, first name and
+nickname, so **the phone does the near-matching too** -- "Alekhya"
+finds "Alekhya Chintada" without the server having to.
+
+Tasker was granted `CALL_PHONE` and `READ_PHONE_NUMBERS` over adb.
+Without them the Call action will not even open for editing. Both are
+reversible with `pm revoke`.
 
 ## 12. Maintaining this file
 
