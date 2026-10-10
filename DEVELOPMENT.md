@@ -17413,6 +17413,30 @@ and reconnects, so no client holds up another.
 - The hub is in-process (`internal/app/live`), like the event bus:
   nothing here needs more than one process.
 
+**The desktop client asks over the same connection.** Owner's direction,
+11 October 2026: the chat goes through the WebSocket. The client sends
+`{"type":"prompt","request":…,"conversation_id":…,"text":…}` and
+`{"type":"cancel","chat_id":…}`; for each prompt it is sent `chat` when
+accepted (its `request` echoed, with the chat and conversation ids),
+`progress` as it works, and `answer` when it ends, with the reason and,
+for a failure, the error code and detail -- or `refused`, with the reason
+in words, when it was never accepted. Pieces of an answer are not sent,
+as on `/api/chat` for anything but a voice turn.
+
+- **One way of asking, two ways in.** `internal/app/asking` holds the
+  five steps `/api/chat` used to do inline -- resolve the conversation,
+  supersede what is running in it, store the chat, subscribe to it,
+  submit it -- and both `/api/chat` and `/v1/live` call it, so neither
+  can drift. `/api/chat` keeps only what is Home Assistant's: its wire
+  format, its pieces of an answer, and cancelling when the caller hangs
+  up.
+- **A dropped connection does not cancel a typed chat.** A voice turn
+  whose caller has gone is stopped, because nobody will hear it; a typed
+  one runs on and its answer is in the conversation when the client
+  comes back.
+- A cancel is honoured only for a chat in one of the caller's own
+  conversations.
+
 
 ### The bar that kept the rules scarce forbade every remark
 

@@ -29,6 +29,7 @@ import (
 
 	"personal-assistant/internal/app/api/authn"
 	"personal-assistant/internal/app/api/httpx"
+	"personal-assistant/internal/app/asking"
 	"personal-assistant/internal/base/records/chat"
 	"personal-assistant/internal/base/world/events"
 )
@@ -193,7 +194,7 @@ type Handler struct {
 	httpx.Responder
 	repo   store.Repository
 	runner Runner
-	events Subscriber
+	asker  *asking.Service
 }
 
 // New : Builds the handler from the store, the runner that executes chats and
@@ -203,7 +204,7 @@ func New(logger *slog.Logger, repo store.Repository, runner Runner, bus Subscrib
 		Responder: httpx.Responder{Logger: logger},
 		repo:      repo,
 		runner:    runner,
-		events:    bus,
+		asker:     asking.New(logger, repo, runner, bus),
 	}
 }
 
@@ -274,71 +275,40 @@ func (h *Handler) Chat(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	// A named conversation is used when the caller knows one and it is
+	// theirs; anything else falls back to whichever this client is active
+	// in. The channel comes from the caller, not from this endpoint: this one
+	// speaks Ollama's wire format, and a format says nothing about how the
+	// words were produced.
 	caller := authn.Of(ctx)
-	// A named conversation is used when the caller knows one and it is theirs;
-	// anything else falls back to whichever this client is active in.
-	asked := req.ConversationID
-	if asked != "" && !h.ownedByCaller(ctx, caller, asked) {
+	started, err := h.asker.Ask(ctx, asking.Request{
+		UserID:               caller.User.ID,
+		ClientID:             caller.Client.ID,
+		Channel:              caller.Client.Channel,
+		Model:                caller.Client.Model,
+		ActiveConversationID: caller.Client.ActiveConversationID,
+		ConversationID:       req.ConversationID,
+		Prompt:               prompt,
+	})
+	switch {
+	case errors.Is(err, asking.ErrNoSuchConversation):
 		httpx.WriteError(ctx, w, http.StatusNotFound, "No such conversation.")
 		return
-	}
-	if asked == "" {
-		asked = caller.Client.ActiveConversationID
-	}
-	conversationID, err := chat.ActiveConversation(ctx, h.repo, caller.User.ID, caller.Client.ID, asked)
-	if err != nil {
-		h.Fail(ctx, w, "resolving conversation", err)
-		return
-	}
-
-	// From the caller, not from this endpoint. This one speaks Ollama's wire
-	// format, and a format says nothing about how the words were produced:
-	// anything able to speak it can call it, and one day something typed
-	// will.
-	// Speaking again means the previous answer is no longer wanted, and two
-	// cannot be listened to at once.
-	h.supersede(ctx, conversationID)
-
-	t, err := chat.New(conversationID, caller.Client.Channel, prompt)
-	switch {
-	case errors.Is(err, chat.ErrEmptyPrompt):
+	case errors.Is(err, asking.ErrEmptyPrompt):
 		httpx.WriteError(ctx, w, http.StatusBadRequest, "A question is required.")
 		return
-	case errors.Is(err, chat.ErrPromptTooLong):
+	case errors.Is(err, asking.ErrPromptTooLong):
 		httpx.WriteError(ctx, w, http.StatusBadRequest, "That question is too long.")
 		return
-	case err != nil:
-		h.Fail(ctx, w, "creating chat", err)
-		return
-	}
-
-	// Copied from the client rather than read back when the chat runs, so a
-	// chat recovered after a restart goes to the model it was accepted for.
-	t.Model = caller.Client.Model
-
-	// Which client asked. A tool that acts on the client itself, such as
-	// switching which conversation it talks in, has no other way to know
-	// which one to act on.
-	t.ClientID = caller.Client.ID
-
-	if err := h.repo.Create(ctx, t); err != nil {
-		h.Fail(ctx, w, "storing chat", err)
-		return
-	}
-
-	// Subscribed before the chat is submitted, so that an answer arriving
-	// immediately is heard rather than falling into the gap between the two.
-	live, unsubscribe := h.events.Subscribe(t.ID)
-	defer unsubscribe()
-
-	if err := h.runner.Submit(t); err != nil {
-		h.Logger.ErrorContext(ctx, "cannot submit chat", slog.Any("error", err))
-		if failErr := t.Fail("That could not be started."); failErr == nil {
-			_ = h.repo.Update(ctx, t)
-		}
+	case errors.Is(err, asking.ErrNotAccepting):
 		httpx.WriteError(ctx, w, http.StatusServiceUnavailable, "Not accepting work at the moment.")
 		return
+	case err != nil:
+		h.Fail(ctx, w, "asking", err)
+		return
 	}
+	defer started.Stop()
+	t, live := started.Chat, started.Events
 
 	h.Logger.InfoContext(ctx, "assist chat accepted", slog.String("chat_id", t.ID))
 
@@ -554,46 +524,4 @@ func lastQuestion(messages []Message) string {
 		}
 	}
 	return ""
-}
-
-// supersede : Stops whatever is still running in a conversation.
-//
-// Speaking again means the previous answer is no longer wanted, and two
-// cannot be listened to at once. A failure here is logged rather than
-// refused: the new prompt matters more than tidying the old one, and a chat
-// left running still reaches a terminal status on its own.
-func (h *Handler) supersede(ctx context.Context, conversationID string) {
-	unfinished, err := h.repo.Unfinished(ctx, conversationID)
-	if err != nil {
-		h.Logger.ErrorContext(ctx, "cannot find chats to supersede", slog.Any("error", err))
-		return
-	}
-
-	for _, id := range unfinished {
-		if h.runner.Cancel(id) {
-			h.Logger.InfoContext(ctx, "superseded by a new prompt", slog.String("chat_id", id))
-			continue
-		}
-		// Nothing is working on it, which happens to a chat left behind by a
-		// process that stopped. Stop it here instead.
-		t, err := h.repo.Get(ctx, id)
-		if err != nil || t.Status.IsTerminal() {
-			continue
-		}
-		if err := t.Cancel(); err == nil {
-			_ = h.repo.Update(ctx, t)
-		}
-	}
-}
-
-// ownedByCaller : Whether a conversation exists and belongs to the caller.
-//
-// A conversation that is somebody else's is answered as missing, as everywhere
-// else: saying it exists tells one user about another's.
-func (h *Handler) ownedByCaller(ctx context.Context, c *authn.Caller, conversationID string) bool {
-	if !chat.ValidConversationID(conversationID) {
-		return false
-	}
-	conversation, err := h.repo.GetConversation(ctx, conversationID)
-	return err == nil && conversation.UserID == c.User.ID
 }

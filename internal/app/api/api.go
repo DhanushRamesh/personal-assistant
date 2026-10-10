@@ -41,6 +41,7 @@ import (
 	speechapi "personal-assistant/internal/app/api/speech"
 	toolsapi "personal-assistant/internal/app/api/tools"
 	vocabularyapi "personal-assistant/internal/app/api/vocabulary"
+	"personal-assistant/internal/app/asking"
 	livehub "personal-assistant/internal/app/live"
 	"personal-assistant/internal/app/tool"
 	"personal-assistant/internal/base/records/conversation"
@@ -264,7 +265,7 @@ func New(opts Options) *Server {
 
 		health:        health.New(opts.Logger, opts.DB),
 		about:         about.New(opts.AssistantName),
-		live:          live.New(opts.Logger, opts.Live),
+		live:          live.New(opts.Logger, opts.Live, asking.New(opts.Logger, opts.Chats, opts.Runner, opts.Events), opts.Runner),
 		authn:         authn.New(opts.Logger, opts.Chats),
 		clients:       clients.New(opts.Logger, opts.Chats, opts.Models, opts.DefaultModel, opts.Persona),
 		conversations: conversations.New(opts.Logger, opts.Chats, opts.Messages),

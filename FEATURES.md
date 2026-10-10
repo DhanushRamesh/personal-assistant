@@ -22,7 +22,7 @@ flowchart TB
         direction LR
         SAT["Voice<br/>satellite in the room"]
         WEB["Web client<br/>and HTTP API"]
-        DESK["Desktop client<br/>Electron, its own repo<br/>signs in; /v1/live for<br/>the satellite's state"]
+        DESK["Desktop client<br/>Electron, its own repo<br/>/v1/live: the satellite's<br/>state, and chat both ways"]
         PHONE["Phone<br/>Tasker"]
     end
 

@@ -67,6 +67,80 @@ func TestLiveSendsTheLatestStateThenEachChange(t *testing.T) {
 	}
 }
 
+// dialLive : An authenticated live connection to a fresh server.
+func dialLive(t *testing.T) (*websocket.Conn, context.Context) {
+	t.Helper()
+	e := apitest.NewWith(t, apitest.Options{Live: live.NewHub()})
+	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	t.Cleanup(cancel)
+	c, _, err := websocket.Dial(ctx, liveURL(e.Live(t)), &websocket.DialOptions{
+		HTTPHeader: http.Header{"Authorization": {"Bearer " + e.Token}},
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { c.CloseNow() })
+	return c, ctx
+}
+
+type liveMessage struct {
+	Type           string `json:"type"`
+	Request        string `json:"request"`
+	ChatID         string `json:"chat_id"`
+	ConversationID string `json:"conversation_id"`
+	Text           string `json:"text"`
+	Reason         string `json:"reason"`
+	Message        string `json:"message"`
+}
+
+// until : Reads messages until one of the given type arrives.
+func until(t *testing.T, ctx context.Context, c *websocket.Conn, kind string) liveMessage {
+	t.Helper()
+	for {
+		var m liveMessage
+		if err := wsjson.Read(ctx, c, &m); err != nil {
+			t.Fatalf("waiting for %q: %v", kind, err)
+		}
+		if m.Type == kind {
+			return m
+		}
+	}
+}
+
+func TestLiveAnswersAPromptOnTheSameConnection(t *testing.T) {
+	c, ctx := dialLive(t)
+	if err := wsjson.Write(ctx, c, map[string]string{"type": "prompt", "request": "r1", "text": "Is the server healthy?"}); err != nil {
+		t.Fatal(err)
+	}
+	accepted := until(t, ctx, c, "chat")
+	if accepted.Request != "r1" || accepted.ChatID == "" || accepted.ConversationID == "" {
+		t.Fatalf("accepted = %+v; want the request echoed with the chat and conversation", accepted)
+	}
+	answer := until(t, ctx, c, "answer")
+	if answer.ChatID != accepted.ChatID || answer.Text == "" || answer.Reason != "stop" {
+		t.Fatalf("answer = %+v; want the finished answer for chat %s", answer, accepted.ChatID)
+	}
+}
+
+func TestLiveRefusesWhatCannotBeAsked(t *testing.T) {
+	c, ctx := dialLive(t)
+	for _, tc := range []struct {
+		prompt map[string]string
+		want   string
+	}{
+		{map[string]string{"type": "prompt", "request": "empty", "text": "   "}, "A question is required."},
+		{map[string]string{"type": "prompt", "request": "elsewhere", "text": "hi", "conversation_id": "conv_nobodys"}, "No such conversation."},
+	} {
+		if err := wsjson.Write(ctx, c, tc.prompt); err != nil {
+			t.Fatal(err)
+		}
+		got := until(t, ctx, c, "refused")
+		if got.Request != tc.prompt["request"] || got.Message != tc.want {
+			t.Errorf("refused = %+v; want %q for %s", got, tc.want, tc.prompt["request"])
+		}
+	}
+}
+
 func TestLiveIsAbsentWithoutAHub(t *testing.T) {
 	e := apitest.New(t)
 	if rec := e.Get(t, "/v1/live"); rec.Code != http.StatusNotFound {
