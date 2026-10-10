@@ -422,7 +422,8 @@ func (b *Builder) rhythm(did []event.Event) string {
 	return prompt.Block(
 		Rhythm(did, b.Where),
 		Quiet(did, b.Where),
-		Changed(did, b.Where, b.clock()))
+		Changed(did, b.Where, b.clock()),
+		Windows(did, b.Where, b.clock()))
 }
 
 // did : What their devices reported over the four weeks.

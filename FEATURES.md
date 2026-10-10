@@ -406,6 +406,11 @@ if it is, it says nothing. The memory is kept while the thing is
 still true and forgotten when a check stops holding, so something
 that goes away and comes back is announced again.
 
+**The same habit at three distances.** Where today or this week sits
+oddly against the four-week habit, the description says so --
+*"usually around 9pm, today at midnight"* -- and says nothing where
+the hour is ordinary. A habit with no usual hour is never late.
+
 **Patterns, for what the grammar cannot say.** A condition may ask
 a named shape instead of reading a source:
 

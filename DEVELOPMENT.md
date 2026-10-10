@@ -16680,6 +16680,57 @@ seconds-per-word, and anything far above 0.7 is silence somebody is
 paying for. No instrumentation needed; the bridge has been printing
 it all along.
 
+### The same habit at three distances
+
+Owner, after the description could not tell him he was up late:
+*"recent should count more than old."*
+
+Every habit in the description was worked out over four weeks flat,
+so a day three weeks ago counted exactly as much as yesterday.
+Somebody who starts coming home at eleven this week goes on being
+described as arriving at nine, and stays described that way until
+three old weeks have aged out. **The description was true of the
+month and wrong about tonight**, which is the only part anybody is
+actually asking about.
+
+So a habit is now counted three times over three lengths of time --
+all four weeks, the last seven days, and today -- and **only the
+differences are said**:
+
+	place.entered "home": usually around 9pm, today at midnight.
+	place.entered "home": usually around 9pm, but around 11pm this week.
+
+Three identical hours say nothing and are left out, which is what
+keeps it from becoming a nag. A habit with no usual hour is skipped
+entirely: somebody who does a thing at no particular time cannot do
+it late, and saying so would be noise.
+
+No new evidence is read. It is the same moments the rest of the
+description is built from, counted again over shorter windows.
+
+#### Two tests that passed while measuring nothing
+
+Worth recording because both were mine and both looked fine.
+
+The first used three days of baseline against five recent ones,
+which makes "usually" and "this week" **the same hour** -- so the
+function correctly produced nothing, and the test asserted only that
+the output did not contradict it. It passed by being vacuous. Fixed
+by giving it three weeks of September to drift away from.
+
+The second asserted `strings.Contains(got, "this week")` -- which
+the *header* contains. It would have passed with no habit line at
+all. Both now assert the sentence itself.
+
+The general form, and it is the third time today: **assert on the
+thing you are measuring, not on something that happens to appear
+near it.** A green test that cannot fail is worse than no test,
+because it is counted as evidence.
+
+And one assertion was simply wrong about the code: it expected
+"today at 12am" where `oclock` renders **midnight**. The code was
+right and read better than the test that doubted it.
+
 ## 12. Maintaining this file
 
 When the owner states a preference, makes a decision, or corrects something,
