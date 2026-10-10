@@ -124,7 +124,7 @@ func TestAStaleAnswerIsNotRepeated(t *testing.T) {
 	// recorded them: a voice turn, three recalled notes, three quoted
 	// exchanges. Without them this eval passed on every model and every
 	// version of the prompt, which made it worthless.
-	system := persona.Prompt(cfg.Assistant.Persona, cfg.Assistant.Name) +
+	system := persona.Prompt(cfg.Assistant.Persona, cfg.Assistant.Name, persona.Spoken) +
 		" " + conversation.Now(time.Now()) +
 		" " + conversation.Heard() +
 		" " + conversation.Whereabouts("conv_01M3D477HXQ4YNQX7BNXJZZCV0", "Reminders") +

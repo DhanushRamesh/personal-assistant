@@ -40,7 +40,7 @@ func TestTheDefaultExists(t *testing.T) {
 
 // The spoken rules come last, so a manner cannot talk its way past them.
 func TestTheSpokenRulesComeAfterTheManner(t *testing.T) {
-	prompt := persona.Prompt("jarvis", "Jarvis")
+	prompt := persona.Prompt("jarvis", "Jarvis", persona.Spoken)
 
 	manner := strings.Index(prompt, "butler")
 	rules := strings.Index(prompt, "read aloud")
@@ -56,7 +56,7 @@ func TestTheSpokenRulesComeAfterTheManner(t *testing.T) {
 // Assistant reads the last character to decide whether to keep listening.
 func TestEveryPersonaIsForbiddenToEndOnAQuestion(t *testing.T) {
 	for _, p := range persona.All() {
-		prompt := persona.Prompt(p.ID, "Jarvis")
+		prompt := persona.Prompt(p.ID, "Jarvis", persona.Spoken)
 		if !strings.Contains(prompt, "Never end a reply with a question") {
 			t.Errorf("%s may end a reply with a question", p.ID)
 		}
@@ -72,14 +72,14 @@ func TestThePromptUsesTheConfiguredName(t *testing.T) {
 		"Friday":  "You are Friday, a personal assistant.",
 		"  Ada  ": "You are Ada, a personal assistant.",
 	} {
-		if got := persona.Prompt("friday", name); !strings.HasPrefix(got, want) {
+		if got := persona.Prompt("friday", name, persona.Spoken); !strings.HasPrefix(got, want) {
 			t.Errorf("Prompt(friday, %q) = %q, want it to start %q", name, got, want)
 		}
 	}
 
 	// Nameless is a working assistant, not a broken one: it simply never
 	// says what it is called.
-	if got := persona.Prompt("jarvis", ""); !strings.HasPrefix(got, "You are a personal assistant.") {
+	if got := persona.Prompt("jarvis", "", persona.Spoken); !strings.HasPrefix(got, "You are a personal assistant.") {
 		t.Errorf("an unnamed assistant reads as %q", got)
 	}
 }
@@ -87,7 +87,7 @@ func TestThePromptUsesTheConfiguredName(t *testing.T) {
 // Whatever the manner, the instructions that keep a reply speakable survive.
 func TestEveryPromptStaysSpeakable(t *testing.T) {
 	for _, p := range persona.All() {
-		prompt := persona.Prompt(p.ID, "Jarvis")
+		prompt := persona.Prompt(p.ID, "Jarvis", persona.Spoken)
 		for _, must := range []string{"read aloud", "Do not use markdown"} {
 			if !strings.Contains(prompt, must) {
 				t.Errorf("%s lost %q", p.ID, must)
@@ -101,7 +101,7 @@ func TestEveryPromptStaysSpeakable(t *testing.T) {
 // changed. A manner may name a character it is told never to mention, which
 // is the opposite of hardcoding one.
 func TestNoAssistantNameIsHardcoded(t *testing.T) {
-	plain := persona.Prompt(persona.Default, "")
+	plain := persona.Prompt(persona.Default, "", persona.Spoken)
 	for _, forbidden := range []string{"FRIDAY", "Friday", "JARVIS", "Jarvis"} {
 		if strings.Contains(plain, forbidden) {
 			t.Errorf("%q is hardcoded in %q", forbidden, plain)
@@ -117,8 +117,8 @@ func TestAnUnknownPersonaAnswersPlainly(t *testing.T) {
 		t.Fatal("alfred should not be in the registry")
 	}
 
-	unknown := persona.Prompt("alfred", "Jarvis")
-	plain := persona.Prompt(persona.Default, "Jarvis")
+	unknown := persona.Prompt("alfred", "Jarvis", persona.Spoken)
+	plain := persona.Prompt(persona.Default, "Jarvis", persona.Spoken)
 	if unknown != plain {
 		t.Errorf("an unknown persona gives %q, want the plain prompt", unknown)
 	}
@@ -149,7 +149,7 @@ func TestTheCharactersAreHeldToTheirManner(t *testing.T) {
 // that milk had been added and called nothing.
 func TestEveryPersonaIsToldItActsOnlyThroughTools(t *testing.T) {
 	for _, p := range persona.All() {
-		got := persona.Prompt(p.ID, "Jarvis")
+		got := persona.Prompt(p.ID, "Jarvis", persona.Spoken)
 
 		for _, want := range []string{
 			"You act only through the tools you are given",
@@ -166,7 +166,7 @@ func TestEveryPersonaIsToldItActsOnlyThroughTools(t *testing.T) {
 // A refusal can be worked around; a false success cannot even be noticed.
 // The prompt says which is worse, because the model has to choose.
 func TestItIsToldWhichFailureIsWorse(t *testing.T) {
-	got := persona.Prompt(persona.Default, "Jarvis")
+	got := persona.Prompt(persona.Default, "Jarvis", persona.Spoken)
 
 	if !strings.Contains(got, "always better than saying you have when you have not") {
 		t.Errorf("the prompt does not say which way to err:\n%s", got)
@@ -223,6 +223,82 @@ func TestWhatEachPersonaCallsThem(t *testing.T) {
 	for _, unknown := range []string{"", "nobody", "SIR", "jarvis "} {
 		if got := persona.AddressFor(unknown); got != "" {
 			t.Errorf("AddressFor(%q) = %q, want nothing", unknown, got)
+		}
+	}
+}
+
+// TestASpokenReplyAndAWrittenOneAreShapedDifferently : owner, on a
+// hundred and twenty words of unbroken prose on a screen --
+// *"when I chat I read fast, but when Jarvis speaks it should speak
+// less, because hearing takes time."*
+//
+// The brevity in every manner here is the price of being listened to.
+// Charging it to somebody reading was costing the shape of the answer
+// and buying nothing.
+func TestASpokenReplyAndAWrittenOneAreShapedDifferently(t *testing.T) {
+	spoken := persona.Prompt("jarvis", "Jarvis", persona.Spoken)
+	written := persona.Prompt("jarvis", "Jarvis", persona.Written)
+
+	if !strings.Contains(spoken, "Do not use markdown") {
+		t.Error("a reply that will be read aloud was not told to avoid markdown")
+	}
+	if !strings.Contains(spoken, "Hearing takes time") {
+		t.Error("nothing tells it why brevity costs more out loud")
+	}
+
+	if strings.Contains(written, "Do not use markdown") {
+		t.Errorf("a reply that will be read on a screen was told to avoid markdown:\n%s", written)
+	}
+	if !strings.Contains(written, "Use markdown") {
+		t.Error("a written reply was not told to shape the answer")
+	}
+	if !strings.Contains(written, "Never a wall of prose") {
+		t.Error("nothing forbids the wall of prose this was written for")
+	}
+}
+
+// TestTheMannersSentenceLimitIsLiftedInWriting : "Keep to one to four
+// sentences" is in every manner, and a manner is tone and bearing.
+// A sentence count is not bearing, it is a rule about being heard --
+// so in writing the rules after it have to say so out loud, since
+// they cannot reach into the manner to remove it.
+func TestTheMannersSentenceLimitIsLiftedInWriting(t *testing.T) {
+	for _, p := range persona.All() {
+		if p.Manner == "" {
+			continue
+		}
+		written := persona.Prompt(p.ID, "Jarvis", persona.Written)
+		if !strings.Contains(written, "does not apply here") {
+			t.Errorf("%s: the manner caps the length and nothing lifts it in writing", p.ID)
+		}
+	}
+}
+
+// TestTheMannerIsTheSameEitherWay : only the shape of the reply
+// changes. Somebody who addresses them as sir out loud and not in
+// writing is two assistants.
+func TestTheMannerIsTheSameEitherWay(t *testing.T) {
+	for _, p := range persona.All() {
+		if p.Manner == "" {
+			continue
+		}
+		for _, how := range []persona.Reading{persona.Spoken, persona.Written} {
+			if got := persona.Prompt(p.ID, "Jarvis", how); !strings.Contains(got, p.Manner) {
+				t.Errorf("%s: the manner is missing when the reply is %v", p.ID, how)
+			}
+		}
+	}
+}
+
+// TestNeitherEndsOnAQuestion : the rule against finishing with an
+// offer of further help belongs to both. Its reason for avoiding the
+// punctuation is the microphone; its reason for existing is that an
+// answer followed by "anything else?" is an answer that will not stop.
+func TestNeitherEndsOnAQuestion(t *testing.T) {
+	for _, how := range []persona.Reading{persona.Spoken, persona.Written} {
+		got := persona.Prompt("jarvis", "Jarvis", how)
+		if !strings.Contains(got, "Never end a reply with a question") {
+			t.Errorf("a reply that is %v may end by offering further help", how)
 		}
 	}
 }

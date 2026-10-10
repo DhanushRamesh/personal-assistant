@@ -2,7 +2,8 @@
 // over the moment they happen, and asks over without waiting for a reply.
 //
 // Server to client: every event the hub publishes (the satellite's state),
-// and for each prompt the client sent, "chat" when it is accepted, "progress"
+// the notices meant for the caller (a conversation of theirs changed,
+// whichever client asked in it), and for each prompt the client sent, "chat" when it is accepted, "progress"
 // as it works, and "answer" when it ends -- or "refused" when it was never
 // accepted. Client to server: "prompt" and "cancel".
 package live
@@ -143,6 +144,9 @@ func (h *Handler) Live(w http.ResponseWriter, r *http.Request) {
 			if !ok {
 				c.Close(websocket.StatusTryAgainLater, "fell behind")
 				return
+			}
+			if caller == nil || !e.For(caller.User.ID) {
+				continue
 			}
 			if err := send(ctx, c, e); err != nil {
 				return

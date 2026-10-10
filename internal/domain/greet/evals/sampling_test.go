@@ -693,7 +693,7 @@ func provider(t *testing.T, cfg config.Config, quiet *slog.Logger) *platformai.E
 		TokenURL: cfg.PlatformAI.TokenURL, ChatURL: cfg.PlatformAI.ChatURL,
 		Scope: cfg.PlatformAI.Scope, RedirectURI: cfg.PlatformAI.RedirectURI,
 		Vendor: cfg.PlatformAI.Vendor, Model: cfg.PlatformAI.Model,
-		SystemPrompt: persona.Prompt(cfg.Assistant.Persona, cfg.Assistant.Name),
+		SystemPrompt: persona.Prompt(cfg.Assistant.Persona, cfg.Assistant.Name, persona.Spoken),
 		Thinking:     cfg.PlatformAI.Thinking, Timeout: cfg.PlatformAI.Timeout,
 	}, quiet)
 	if err != nil {

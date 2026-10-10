@@ -17437,6 +17437,31 @@ as on `/api/chat` for anything but a voice turn.
 - A cancel is honoured only for a chat in one of the caller's own
   conversations.
 
+**A conversation that changes is announced, whoever asked in it.**
+Owner, 11 October 2026: a question asked by voice reached the database,
+but the desktop client showing that conversation did not move -- with
+the WebSocket open, it should update by itself. The runner now tells the
+hub whenever a conversation has something new in it: a turn starting, a
+turn ending (answered, failed or stopped), and a title given. The hub
+sends `{"type":"conversation","conversation_id":…}` to that
+conversation's owner only, and the client fetches the list and, if it is
+showing that conversation, the conversation again.
+
+- **The runner is where it is said**, not either way of asking: every
+  chat passes through it -- voice, typed, the chats API, one recovered
+  after a restart -- and the title is given there too.
+- **A notice is not a state.** The satellite's state is remembered and
+  sent first to a client that connects, and an unchanged one is not sent
+  again; a notice is neither -- two alike are two things that happened,
+  and one from before a client connected is nothing it needs. Each
+  carries its user, kept off the wire, and a connection is sent only its
+  own caller's.
+- Scale: three notices a turn (start, end, title once), each one
+  conversation read to find its owner. A client fetching again after each
+  folds a burst into at most two fetches.
+- Not yet announced: what was said unasked, which is written to the
+  conversation outside the runner.
+
 
 ### The bar that kept the rules scarce forbade every remark
 
@@ -18033,6 +18058,65 @@ threshold is a claim that two things do not overlap. Before setting
 one, measure both sides of it -- not the peak of the thing you want
 to keep, which is how 700 was arrived at, but the distribution. Where
 they overlap, no number exists and the question itself is wrong.
+
+
+### Brevity is the price of being listened to
+
+Owner, on a screenshot of two replies, each a single paragraph of
+running prose: **"Jarvis talks too much. In voice it should say only
+a few words, easy English, on point. In text it can give a large
+response, but formatted well, markdown, easily graspable. It does not
+have to follow the few-words persona there -- when I chat I read
+fast, but when Jarvis speaks it should speak less, because hearing
+takes time."**
+
+Asked what it could do, it answered with a hundred and twenty words
+in one paragraph: a list of fifteen separate abilities with no list
+anywhere in it.
+
+Every manner in `persona` carries a length rule -- *"Keep to one to
+four sentences unless more is asked for"* -- and `aloud` carried
+*"Do not use markdown, headings, bullet points or code blocks"*.
+Both were applied to every reply on every channel. **Both are rules
+about being heard**, and charging them to somebody reading a screen
+bought nothing and cost the shape of the answer.
+
+A listener cannot skim, cannot glance at the end, and cannot go back:
+every word costs them a second whether or not it carried anything. A
+reader takes a long answer at their own speed and skips what they
+already know. So the two are now separate blocks, chosen by the
+channel:
+
+- `aloud` gains the reason and goes further -- fewest words that
+  carry the answer, plain everyday words, *everything you leave out
+  they can ask for, everything you put in they have to sit through*.
+- `written` is new: markdown, used to make the answer graspable at a
+  glance, with *never a wall of prose* and more than three sentences
+  in a row named as one.
+
+`Prompt` takes a third argument, `persona.Reading`, and the order
+inside it does the rest: identity, manner, then these rules last, so
+`written` can lift the manner's sentence limit explicitly. It is a
+named type rather than a bool because the call sites are a long way
+from the declaration and `Prompt(id, name, true)` says nothing.
+
+Only the shape changes. A test pins that the manner itself is
+identical either way -- somebody who says *sir* out loud and not in
+writing is two assistants -- and another that neither may end on an
+offer of further help, since that rule is about answers and not about
+microphones.
+
+The default for a caller that supplies no prompt stays **spoken**, so
+nothing that relied on it changes behaviour, and the evals were all
+passed `persona.Spoken` for the same reason: they measure tool choice
+against runs going back weeks, and silently re-shaping their prompt
+would have made the comparison meaningless.
+
+**Built and deliberately not deployed.** The desktop client renders a
+reply as `<p>{answer}</p>` with no markdown anywhere in it, so
+markdown would arrive as literal asterisks with the newlines
+collapsed by HTML -- worse than the wall it replaces. The server half
+is correct and waits for the client half.
 
 
 

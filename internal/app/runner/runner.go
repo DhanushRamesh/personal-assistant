@@ -86,6 +86,10 @@ type Options struct {
 	// listening to it. Optional; without one a chat still runs and is still
 	// recorded, but nothing hears it until it is read back.
 	Publisher Publisher
+	// Changes : Told when a conversation has something new in it: a turn
+	// started or ended, or a title given. Optional; without it a client
+	// sees a turn asked elsewhere only when it next fetches.
+	Changes Changes
 	// ChatTimeout : How long a chat may run. Zero selects
 	// DefaultChatTimeout.
 	ChatTimeout time.Duration
@@ -157,6 +161,7 @@ type Runner struct {
 	publishing      Publishing
 	environment     environment.Environment
 	publisher       Publisher
+	changes         Changes
 	logger          *slog.Logger
 	chatTimeout     time.Duration
 	historyLimits   conversation.Limits
@@ -237,6 +242,7 @@ func New(opts Options) (*Runner, error) {
 		publishing:      opts.Publish,
 		environment:     opts.Environment,
 		publisher:       opts.Publisher,
+		changes:         opts.Changes,
 		logger:          opts.Logger,
 		chatTimeout:     opts.ChatTimeout,
 		historyLimits:   opts.HistoryLimits,
@@ -366,8 +372,20 @@ func (r *Runner) Shutdown(ctx context.Context) error {
 //
 // Read afresh rather than stamped onto the chat when it was accepted, so a
 // manner chosen in the settings takes effect on the next prompt.
-func (r *Runner) prompt() string {
-	return persona.Prompt(r.personaID(), r.assistantName)
+//
+// The channel decides the shape of the reply. Everything in the manner
+// about keeping to a few sentences is the price of being listened to,
+// and a reader is not paying it.
+func (r *Runner) prompt(how persona.Reading) string {
+	return persona.Prompt(r.personaID(), r.assistantName, how)
+}
+
+// reading : Whether this chat's reply will be heard or read.
+func reading(t *chat.Chat) persona.Reading {
+	if t != nil && t.Channel == chat.ChannelVoice {
+		return persona.Spoken
+	}
+	return persona.Written
 }
 
 // personaID : The manner in use, or the default when none is set.
@@ -386,7 +404,7 @@ func (r *Runner) personaID() string {
 // doing, and remembering having switched somewhere is not the same as being
 // there.
 func (r *Runner) promptFor(ctx context.Context, t *chat.Chat) (string, []remind.Reminder) {
-	standing := r.prompt() + " " + conversation.Now(r.now()) + r.heard(t)
+	standing := r.prompt(reading(t)) + " " + conversation.Now(r.now()) + r.heard(t)
 
 	// The conversation is read once: it carries both where the assistant is
 	// and whose memories these are.

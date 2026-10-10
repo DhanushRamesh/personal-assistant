@@ -4,7 +4,9 @@
 // One hub per process. Sources publish events into it; each connected
 // client subscribes and is sent the latest event of every kind first, so
 // a client that has just connected knows where things stand without
-// waiting for the next change.
+// waiting for the next change. Notices are the other sort of event: they
+// say that something happened, are sent once and are not remembered, and
+// may be meant for one user only.
 package live
 
 import (
@@ -20,11 +22,24 @@ type Kind string
 // cannot be heard.
 const SatelliteState Kind = "satellite"
 
+// ConversationChanged : A notice that a conversation has something new in
+// it -- a turn started or ended, or a new title -- whichever client asked.
+const ConversationChanged Kind = "conversation"
+
 // Event : One thing a client is told.
 type Event struct {
-	Kind  Kind      `json:"type"`
-	State string    `json:"state,omitempty"`
-	At    time.Time `json:"at"`
+	Kind  Kind   `json:"type"`
+	State string `json:"state,omitempty"`
+	// ConversationID : The conversation a notice is about.
+	ConversationID string    `json:"conversation_id,omitempty"`
+	At             time.Time `json:"at"`
+	// UserID : Who a notice is for. Empty is everyone.
+	UserID string `json:"-"`
+}
+
+// For : Whether a subscriber signed in as userID is to be sent the event.
+func (e Event) For(userID string) bool {
+	return e.UserID == "" || e.UserID == userID
 }
 
 // buffer : How many events a subscriber may fall behind by before it is
@@ -55,6 +70,26 @@ func (h *Hub) Publish(e Event) {
 		return
 	}
 	h.latest[e.Kind] = e
+	h.fanOut(e)
+}
+
+// Notify : Sends a notice to every subscriber, without remembering it or
+// comparing it with the last: two alike are two things that happened.
+func (h *Hub) Notify(e Event) {
+	h.mu.Lock()
+	defer h.mu.Unlock()
+	h.fanOut(e)
+}
+
+// ConversationsChanged : Tells userID's clients that a conversation of
+// theirs has something new in it.
+func (h *Hub) ConversationsChanged(userID, conversationID string) {
+	h.Notify(Event{Kind: ConversationChanged, ConversationID: conversationID, UserID: userID, At: time.Now().UTC()})
+}
+
+// fanOut : Sends e to every subscriber, dropping any that has fallen
+// behind. The caller holds the lock.
+func (h *Hub) fanOut(e Event) {
 	for ch := range h.subs {
 		select {
 		case ch <- e:

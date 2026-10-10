@@ -83,3 +83,33 @@ func TestStoppingClosesTheChannel(t *testing.T) {
 		t.Fatal("still subscribed after stop")
 	}
 }
+
+func TestANoticeIsSentEveryTimeAndNotRemembered(t *testing.T) {
+	h := NewHub()
+	events, stop := h.Subscribe()
+	defer stop()
+	h.ConversationsChanged("u1", "c1")
+	h.ConversationsChanged("u1", "c1")
+	for i := 0; i < 2; i++ {
+		if e := <-events; e.Kind != ConversationChanged || e.ConversationID != "c1" {
+			t.Fatalf("notice %d = %+v, want a change to c1", i, e)
+		}
+	}
+	late, stopLate := h.Subscribe()
+	defer stopLate()
+	select {
+	case e := <-late:
+		t.Fatalf("a later subscriber was sent %+v, want nothing", e)
+	default:
+	}
+}
+
+func TestANoticeIsForItsUserOnly(t *testing.T) {
+	notice := Event{Kind: ConversationChanged, UserID: "u1"}
+	if !notice.For("u1") || notice.For("u2") {
+		t.Error("a notice for u1 must reach u1 and nobody else")
+	}
+	if !event("idle").For("u2") {
+		t.Error("an event with no user must reach everyone")
+	}
+}

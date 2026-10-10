@@ -77,6 +77,7 @@ func (r *Runner) title(ctx context.Context, t *chat.Chat) {
 		slog.String("conversation_id", t.ConversationID), slog.String("title", name))
 
 	r.noteTitle(ctx, t, name)
+	r.changed(ctx, t.ConversationID)
 	r.publishTitle(ctx, t, c, name)
 	r.announceTitle(ctx, t, name)
 }

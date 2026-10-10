@@ -125,7 +125,7 @@ func setup(t *testing.T) (*platformai.Environment, string) {
 		t.Fatalf("platformai.New: %v", err)
 	}
 
-	return env, persona.Prompt(cfg.Assistant.Persona, cfg.Assistant.Name)
+	return env, persona.Prompt(cfg.Assistant.Persona, cfg.Assistant.Name, persona.Spoken)
 }
 
 // pressure : A transcript block like the one recall actually builds.

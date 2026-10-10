@@ -29,6 +29,7 @@ func (r *Runner) execute(ctx, lifeCtx context.Context, t *chat.Chat) {
 		// Stopped before it ever started. It never ran, so no deadline can
 		// have passed, and nothing has been said beside it.
 		r.finishStopped(ctx, t, nil, nil)
+		r.changed(ctx, t.ConversationID)
 		return
 	}
 
@@ -44,12 +45,14 @@ func (r *Runner) execute(ctx, lifeCtx context.Context, t *chat.Chat) {
 		return
 	}
 	r.logger.InfoContext(ctx, "chat started")
+	r.changed(ctx, t.ConversationID)
 
 	// Composed once. It reads the database and searches memory, and every
 	// hop of the tool loop must be given the same one.
 	systemPrompt, missed := r.promptFor(ctx, t)
 
 	r.consume(runCtx, ctx, t, systemPrompt)
+	r.changed(ctx, t.ConversationID)
 
 	// Once there is an answer, not before. Marking them while composing
 	// the prompt spent the one telling on turns that then failed.

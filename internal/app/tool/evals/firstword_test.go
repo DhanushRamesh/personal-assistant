@@ -87,7 +87,7 @@ func harness(t *testing.T) (*platformai.Environment, []environment.ToolSpec, con
 		TokenURL: cfg.PlatformAI.TokenURL, ChatURL: cfg.PlatformAI.ChatURL,
 		Scope: cfg.PlatformAI.Scope, RedirectURI: cfg.PlatformAI.RedirectURI,
 		Vendor: cfg.PlatformAI.Vendor, Model: cfg.PlatformAI.Model,
-		SystemPrompt: persona.Prompt(cfg.Assistant.Persona, cfg.Assistant.Name),
+		SystemPrompt: persona.Prompt(cfg.Assistant.Persona, cfg.Assistant.Name, persona.Spoken),
 		Timeout:      90 * time.Second,
 	}, slog.New(slog.NewTextHandler(io.Discard, nil)))
 	if err != nil {

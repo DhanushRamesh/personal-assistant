@@ -478,6 +478,10 @@ func run() error {
 		Clients: func(ctx context.Context, userID string) ([]string, error) { return subscribers(ctx, chats, userID) },
 	}
 
+	// What connected clients are told as it happens: the satellite's state
+	// (below), and every change to a conversation, from the runner.
+	liveHub := live.NewHub()
+
 	chatRunner, err := runner.New(runner.Options{
 		Repository:    chats,
 		Messages:      chats,
@@ -486,6 +490,7 @@ func run() error {
 		Environment:   answerer,
 		Logger:        logger.Logger,
 		Publisher:     bus,
+		Changes:       liveHub,
 		HistoryLimits: historyLimits(cfg, logger.Logger),
 		AssistantName: cfg.Assistant.Name,
 		Persona:       manner,
@@ -837,10 +842,9 @@ func run() error {
 		slog.Duration("every", job.Tick),
 		slog.Duration("too late to bother", job.Stale))
 
-	// What connected clients are told as it happens: for now, the voice
+	// What connected clients are told as it happens: the voice
 	// satellite's state, followed live from Home Assistant. Shares the
 	// reminder loop's context and wait group, so it stops with it.
-	liveHub := live.NewHub()
 	if watcher, err := hass.NewWatcher(hass.WatcherConfig{
 		URL:      cfg.HomeAssistant.URL,
 		Token:    cfg.HomeAssistant.Token,
@@ -926,17 +930,22 @@ func buildProvider(cfg config.Config, logger *slog.Logger) (environment.Environm
 	switch cfg.Provider.Name {
 	case config.ProviderPlatformAI:
 		return platformai.New(platformai.Config{
-			ClientID:           cfg.PlatformAI.ClientID,
-			ClientSecret:       cfg.PlatformAI.ClientSecret,
-			RefreshToken:       cfg.PlatformAI.RefreshToken,
-			PortalID:           cfg.PlatformAI.PortalID,
-			TokenURL:           cfg.PlatformAI.TokenURL,
-			ChatURL:            cfg.PlatformAI.ChatURL,
-			Scope:              cfg.PlatformAI.Scope,
-			RedirectURI:        cfg.PlatformAI.RedirectURI,
-			Vendor:             cfg.PlatformAI.Vendor,
-			Model:              cfg.PlatformAI.Model,
-			SystemPrompt:       persona.Prompt(cfg.Assistant.Persona, cfg.Assistant.Name),
+			ClientID:     cfg.PlatformAI.ClientID,
+			ClientSecret: cfg.PlatformAI.ClientSecret,
+			RefreshToken: cfg.PlatformAI.RefreshToken,
+			PortalID:     cfg.PlatformAI.PortalID,
+			TokenURL:     cfg.PlatformAI.TokenURL,
+			ChatURL:      cfg.PlatformAI.ChatURL,
+			Scope:        cfg.PlatformAI.Scope,
+			RedirectURI:  cfg.PlatformAI.RedirectURI,
+			Vendor:       cfg.PlatformAI.Vendor,
+			Model:        cfg.PlatformAI.Model,
+			// The fallback for a caller that gives no prompt of its
+			// own, which the runner never is -- it builds one per
+			// chat and knows whether the reply will be heard.
+			// Spoken, so that anything still relying on this
+			// default gets exactly what it got before.
+			SystemPrompt:       persona.Prompt(cfg.Assistant.Persona, cfg.Assistant.Name, persona.Spoken),
 			Thinking:           cfg.PlatformAI.Thinking,
 			Timeout:            cfg.PlatformAI.Timeout,
 			InsecureSkipVerify: cfg.PlatformAI.InsecureSkipVerify,

@@ -25,10 +25,48 @@ import (
 // this that is true of everything the assistant says. What follows it
 // is about replying to somebody who asked, and a greeting at a door is
 // not that.
+//
+// Owner, 11 October 2026: **"when I chat I read fast, but when Jarvis
+// speaks it should speak less, because hearing takes time."** That is
+// the whole reason this and [written] are two blocks. A listener
+// cannot skim, cannot glance at the end, and cannot go back -- every
+// word costs them a second of their life whether or not it carried
+// anything. A reader can take a long answer in at their own speed and
+// skip what they already know.
 var aloud = prompt.Text(
 	"Your replies are read aloud, so answer in plain spoken sentences.",
 	"Do not use markdown, headings, bullet points or code blocks.",
 	"Be brief and direct: say the answer first, then only the detail that matters.",
+	"Hearing takes time and cannot be skimmed, so length costs them more here than anywhere else. Use the fewest words that carry the answer and then stop.",
+	"Plain, everyday words. Where a short common word will do, it is the right one, and a listener should never have to hold a sentence in their head to work out its shape.",
+	"Everything you leave out they can ask for. Everything you put in they have to sit through.",
+)
+
+// written : How it reads when the words are read rather than heard.
+//
+// The mirror of [aloud], and the reason both exist. Everything above
+// about brevity is a rule about hearing, and it was being applied to
+// a screen -- where it bought nothing and cost the shape of the
+// answer. Asked what it could do, the assistant replied with a
+// hundred and twenty words in one paragraph of running prose: a list
+// of fifteen separate abilities with no list anywhere in it.
+//
+// Owner: **"when asked in text it can give a large response, but
+// formatted well, markdown, in an easily graspable way. It does not
+// have to follow the few-words persona here."**
+//
+// So the manner's own sentence limits are lifted here deliberately.
+// The order in [Prompt] is identity, manner, then these rules, and
+// these contradict the manner where they disagree -- which is exactly
+// what this block is for.
+var written = prompt.Text(
+	"This reply will be read on a screen rather than spoken, which changes what a good answer looks like.",
+	"Any limit on sentences or length in your manner above is a rule about being listened to. It does not apply here: a reader takes an answer at their own speed and skips what they already know.",
+	"So answer as fully as the question deserves, and give the shape of the answer rather than a paragraph to be read through.",
+	"Use markdown, and use it to make the answer graspable at a glance: headings where there are parts, a bulleted or numbered list wherever you are naming more than two things, bold for the words that carry the meaning, tables for anything with the same few facts about several things, and code formatting for anything to be typed or copied exactly.",
+	"Never a wall of prose. More than about three sentences in a row is a wall, and a list written as a sentence is the commonest way one appears.",
+	"Plain, everyday words still. Length is allowed here; difficulty is not, and a long answer in hard words is worse than a short one.",
+	"Your manner is unchanged. You are the same person writing as speaking -- how you address them, what you find worth remarking on, and your willingness to say the unwelcome thing are all the same. Only the shape of the reply is different.",
 )
 
 // replying : How a reply ends, which is not how everything ends.
@@ -48,8 +86,18 @@ var replying = prompt.Text(
 	"The third is offering to write down something arranged; it is described below.",
 )
 
-// spokenRules : Both, for the assistant answering somebody.
-var spokenRules = prompt.Block(aloud, replying)
+// spokenRules, writtenRules : Both, for the assistant answering
+// somebody, in each of the two ways it can be read.
+//
+// replying is in both. Not ending on a question is not a rule about
+// speech: it exists because an answer followed by "is there anything
+// else" is an answer that will not stop, which reads as badly as it
+// sounds. Only its reason for the punctuation is about the
+// microphone.
+var (
+	spokenRules  = prompt.Block(aloud, replying)
+	writtenRules = prompt.Block(written, replying)
+)
 
 // listing : What to do with a list a tool hands back.
 //
@@ -494,16 +542,32 @@ func Addressed(sentence, address, already string) string {
 // All : Every persona, in the order they are offered.
 func All() []Persona { return append([]Persona(nil), registry...) }
 
-// Prompt : What the model is told, for a persona and the name the assistant
-// answers to.
+// Spoken, Written : Which of the two a reply is going to be.
 //
-// The order is identity, then manner, then the spoken rules, so that the
-// rules are the last thing read and the persona cannot talk its way past
-// them. An unknown identifier falls back to no manner rather than to an
-// error: an assistant that answers plainly is a working assistant, and one
-// that refuses to start because a word in a settings row is unrecognised is
-// not.
-func Prompt(id, name string) string {
+// A named type rather than a bare bool, because the two call sites
+// are a hundred lines apart from each other and from here, and
+// Prompt(id, name, true) at the far end of that says nothing at all.
+type Reading bool
+
+const (
+	Spoken  Reading = true
+	Written Reading = false
+)
+
+// Prompt : What the model is told, for a persona, the name the assistant
+// answers to, and whether this reply will be heard or read.
+//
+// The order is identity, then manner, then the rules for how it will be
+// taken in, so that those are the last thing read and the persona cannot
+// talk its way past them. An unknown identifier falls back to no manner
+// rather than to an error: an assistant that answers plainly is a working
+// assistant, and one that refuses to start because a word in a settings row
+// is unrecognised is not.
+//
+// The third argument is not a style preference. Brevity is the price of
+// being listened to, and charging it to somebody reading a screen is how
+// a list of fifteen abilities came out as one paragraph of prose.
+func Prompt(id, name string, how Reading) string {
 	var b strings.Builder
 
 	name = strings.TrimSpace(name)
@@ -524,7 +588,11 @@ func Prompt(id, name string) string {
 	// anything to do with a date -- was the closing sentence of a wall.
 	// Being told a thing once, visibly, beats being told it fourth in a
 	// run-on.
-	b.WriteString(prompt.Block(spokenRules, answering, following, listing, honesty, naming, keeping, noticing, timekeeping))
+	shape := writtenRules
+	if how == Spoken {
+		shape = spokenRules
+	}
+	b.WriteString(prompt.Block(shape, answering, following, listing, honesty, naming, keeping, noticing, timekeeping))
 	return b.String()
 }
 

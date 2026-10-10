@@ -78,7 +78,7 @@ func TestItAsksHowAHeardNameIsSpelt(t *testing.T) {
 	}
 
 	// A spoken turn, composed as the runner composes one.
-	system := persona.Prompt(cfg.Assistant.Persona, cfg.Assistant.Name) +
+	system := persona.Prompt(cfg.Assistant.Persona, cfg.Assistant.Name, persona.Spoken) +
 		" " + conversation.Now(time.Now()) +
 		" " + conversation.Heard()
 
@@ -127,7 +127,7 @@ func TestTypedIsNotAskedToSpell(t *testing.T) {
 	}
 
 	// No Heard(): this is what a typed turn is given.
-	system := persona.Prompt(cfg.Assistant.Persona, cfg.Assistant.Name) +
+	system := persona.Prompt(cfg.Assistant.Persona, cfg.Assistant.Name, persona.Spoken) +
 		" " + conversation.Now(time.Now())
 
 	answer := strings.ToLower(say(t, env, system, "who directed the film Thondimuthalum"))

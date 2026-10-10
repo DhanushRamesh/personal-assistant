@@ -70,7 +70,7 @@ func TestAMissedReminderIsPassedOn(t *testing.T) {
 	// The blocks a real turn carries. Without them this passed while the
 	// same wording failed in use: the miss was crowded out by memories
 	// and old exchanges, which is the shape of every actual prompt.
-	system := persona.Prompt(cfg.Assistant.Persona, cfg.Assistant.Name) +
+	system := persona.Prompt(cfg.Assistant.Persona, cfg.Assistant.Name, persona.Spoken) +
 		" " + conversation.Now(time.Now()) +
 		" " + conversation.Whereabouts("conv_01M3D477HXQ4YNQX7BNXJZZCV0", "Evening") +
 		"\n\n" + memory.Standing([]memory.Memory{

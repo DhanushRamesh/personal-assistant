@@ -205,7 +205,7 @@ func manner(t *testing.T) string {
 	if err != nil {
 		t.Fatalf("config: %v", err)
 	}
-	return persona.Prompt(cfg.Assistant.Persona, cfg.Assistant.Name)
+	return persona.Prompt(cfg.Assistant.Persona, cfg.Assistant.Name, persona.Spoken)
 }
 
 // provider : The real environment, or a skip when none is configured.

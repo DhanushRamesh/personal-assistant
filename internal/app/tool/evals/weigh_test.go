@@ -77,7 +77,7 @@ func TestWhatThePromptWeighs(t *testing.T) {
 		}
 	}
 	slices.SortFunc(all, func(a, b weighed) int { return b.size - a.size })
-	system := persona.Prompt("", "Jarvis")
+	system := persona.Prompt("", "Jarvis", persona.Spoken)
 
 	fmt.Printf("\n  tools offered        %d\n", len(offered))
 	fmt.Printf("  all tool specs       %d bytes  (~%d tokens)\n", schema, schema/4)
