@@ -3340,52 +3340,92 @@ func noticed(
 		// memory that outlived the truth is read into every answer,
 		// which makes it the worst of the three to leave standing.
 		supersede(ctx, remembers, watcher, userID, now, logger)
-		// Asked before the model is, because the allowance is the
-		// whole safeguard and a model call made and then thrown away
-		// is the allowance leaking money.
-		if !noticing.Allowed(mine, now()) {
-			return
+		// Each purpose in turn, each against its own allowance. A
+		// week spent on useful rules does not silence the remarks
+		// and a talkative week of remarks does not crowd out a rule
+		// that matters.
+		for _, purpose := range noticing.Purposes() {
+			// Asked before the model is, because the allowance is
+			// the whole safeguard and a model call made and then
+			// thrown away is the allowance leaking money.
+			if !noticing.Allowed(mine, purpose, now()) {
+				continue
+			}
+			if made := wrote(ctx, watcher, writer, purpose, userID, mine,
+				id, now, where, logger); made != nil {
+				if err := store.Keep(ctx, *made); err != nil {
+					logger.WarnContext(ctx, "cannot keep the rule he wrote",
+						slog.Any("error", err))
+					continue
+				}
+				mine = append(mine, *made)
+			}
 		}
-
-		thought, err := watcher.Wondered(ctx, userID)
-		if err != nil {
-			logger.WarnContext(ctx, "could not weigh up a rule", slog.Any("error", err))
-			return
-		}
-		if thought.Asked == "" {
-			return
-		}
-
-		var holding strings.Builder
-		for _, j := range mine {
-			fmt.Fprintf(&holding, "%s: %s\n", j.Name, j.Schedule)
-		}
-		when, acts, why := writer.Written(ctx, rules.Request{
-			UserID: userID, Asked: thought.Asked, Holding: holding.String(),
-		}, nil)
-		if why != "" {
-			logger.InfoContext(ctx, "he wanted a rule and could not write it",
-				slog.String("asked", thought.Asked), slog.String("why", why))
-			return
-		}
-
-		name := cmp.Or(thought.Name, thought.Asked)
-		made, err := job.Make(id(), userID, name, noticing.Kind, when, acts, now().In(where))
-		if err != nil {
-			logger.InfoContext(ctx, "the rule he wrote would not hold together",
-				slog.String("asked", thought.Asked), slog.Any("error", err))
-			return
-		}
-		// Why he wrote it, kept on the rule itself. A rule nobody
-		// asked for has to be able to say what it is for, or the
-		// only thing to do with it is delete it.
-		made.Why = noticing.Mark + thought.Why
-		if err := store.Keep(ctx, made); err != nil {
-			logger.WarnContext(ctx, "cannot keep the rule he wrote", slog.Any("error", err))
-			return
-		}
-		logger.InfoContext(ctx, "he wrote himself a rule",
-			slog.String("name", name), slog.String("because", thought.Why),
-			slog.String("when", when.Describe()))
 	}
+}
+
+// wrote : One purpose's pass, from judging to a rule ready to keep.
+//
+// Nil where there was nothing worth writing, which is the ordinary
+// answer and not a failure.
+func wrote(
+	ctx context.Context,
+	watcher noticing.Watcher,
+	writer rules.Writer,
+	purpose noticing.Purpose,
+	userID string,
+	mine []job.Job,
+	id func() string,
+	now func() time.Time,
+	where *time.Location,
+	logger *slog.Logger,
+) *job.Job {
+	thought, err := watcher.Wondered(ctx, userID, purpose)
+	if err != nil {
+		logger.WarnContext(ctx, "could not weigh up a rule",
+			slog.String("purpose", purpose.Kind), slog.Any("error", err))
+		return nil
+	}
+	if thought.Asked == "" {
+		return nil
+	}
+
+	var holding strings.Builder
+	for _, j := range mine {
+		fmt.Fprintf(&holding, "%s: %s\n", j.Name, j.Schedule)
+	}
+	when, acts, why := writer.Written(ctx, rules.Request{
+		UserID: userID, Asked: thought.Asked, Holding: holding.String(),
+	}, nil)
+	if why != "" {
+		logger.InfoContext(ctx, "he wanted a rule and could not write it",
+			slog.String("asked", thought.Asked), slog.String("why", why))
+		return nil
+	}
+
+	// A rule that speaks without reading anything says the same
+	// sentence for months. Refused here rather than asked for in
+	// the prompt, because it is the difference between remarking
+	// and reciting.
+	if purpose.Grounded && !noticing.Grounded(acts) {
+		logger.InfoContext(ctx, "the remark he wrote reads nothing first",
+			slog.String("asked", thought.Asked))
+		return nil
+	}
+
+	name := cmp.Or(thought.Name, thought.Asked)
+	made, err := job.Make(id(), userID, name, purpose.Kind, when, acts, now().In(where))
+	if err != nil {
+		logger.InfoContext(ctx, "the rule he wrote would not hold together",
+			slog.String("asked", thought.Asked), slog.Any("error", err))
+		return nil
+	}
+	// Why he wrote it, kept on the rule itself. A rule nobody
+	// asked for has to be able to say what it is for, or the
+	// only thing to do with it is delete it.
+	made.Why = purpose.Mark + thought.Why
+	logger.InfoContext(ctx, "he wrote himself a rule",
+		slog.String("name", name), slog.String("purpose", purpose.Kind),
+		slog.String("because", thought.Why), slog.String("when", when.Describe()))
+	return &made
 }

@@ -17336,6 +17336,114 @@ So the rule stands unchanged: guess when reading, ask when changing.
 The risk was never the wrong tool. It is the right tool and the wrong
 person.
 
+## A desktop workspace client, and a design system before it
+
+Owner's decision, 10 October 2026: a second client is to be built, a
+desktop workspace for the Linux laptop -- terminals in a grid, saved
+workspaces that open Chrome and VS Code, the conversation, and
+notifications pushed from the server. **The design system comes
+first**, before any screen, and it is to be **Jarvis style**: a
+heads-up display, thin luminous lines on near-black, one accent.
+
+The requirements are in a shared document,
+[Jarvis Design System -- Requirements Spec](https://claude.ai/code/artifact/5ecf8635-3bf2-4fbb-a669-3e699239f18c),
+which lists its own open questions. Until they are answered, these hold
+as proposals rather than decisions: Flutter on Linux desktop (the
+recorded framework decision; Tauri was raised by a pasted plan and not
+chosen), cyan as the accent, and the existing web client in `client/`
+left on its own amber system.
+
+Two facts found while writing it, which constrain what comes after:
+
+- **The laptop runs GNOME on Wayland**, so `wmctrl` and `xdotool`
+  cannot place native windows. Placing Chrome and VS Code needs them
+  launched under XWayland or a GNOME Shell extension.
+- **No endpoint returns `[assistant] name`.** A client that shows the
+  name has to be given it by the server first; it may not carry one.
+
+
+### The bar that kept the rules scarce forbade every remark
+
+Owner: *"there must be a next AI pass .. its only purpose make Jarvis
+talk to me, not only as reminder but also like companion ..
+commenting on my taste .. and the only way is to create rules, coz
+only then the server will intimate Jarvis .. so the model should
+create rules based on the purpose, and the response by Jarvis should
+be made based on the facts."*
+
+The pass he was asking for already existed. `internal/app/noticing`
+has read the description hourly since 9 October and written **zero
+rules**: twenty-five in `jobs`, every one of kind `rule`, none
+`noticed`.
+
+Not a bug. Three lines in `judging.go` forbid exactly what he now
+wants:
+
+	Something can go wrong with it, or be missed
+	Hearing it would change what they do. A remark they can do
+	  nothing with is not worth an interruption.
+	Say nothing where the pattern is merely interesting
+
+A remark on somebody's taste **is** a remark they can do nothing
+with, and it **is** merely interesting. The bar written to prevent
+four hundred rules also forbids every companion rule there could
+be. So the work was a second purpose, not a second pass.
+
+#### Two bars, one mechanism
+
+`Purpose` carries the judge prompt, the kind, the allowance and
+whether the rule must read before it speaks. `Useful` is what was
+there. `Companion` writes kind `remarked`.
+
+The allowances are **separate**, so a week of useful rules cannot
+silence every remark and a talkative week of remarks cannot crowd
+out a rule that matters.
+
+And the companion rests **a week**, not six hours. The asymmetry is
+not caution about cost. A rule catching the phone failing to charge
+may fire weekly and be welcome every time, because each firing is a
+different fact. A companion remarking on the same person's taste
+weekly is a machine performing attention, and the fourth one lands
+as noise however good the first was.
+
+#### What the companion is judged on instead
+
+Not usefulness, which it cannot have. **Truth and specificity.**
+
+The failure of a companion is not volume, it is flattery. A remark
+assembled from something generically true about people reads as
+attention and is not, and one wrong remark costs more than ten
+unsaid ones: a person told something false about themselves stops
+believing the true ones. So the bar refuses compliments outright --
+praise from a machine is worth nothing to anybody -- refuses
+guesses at what they feel or why they did something, and refuses
+anything that would fit somebody else.
+
+#### Grounded in code, not in the prompt
+
+His second sentence was the important one. A remark written when the
+rule is made and recited unchanged for months is a fortune cookie:
+true in October, asserted with the same confidence in March.
+
+So a companion rule must reach the facts at the moment it fires, and
+that is checked in `Grounded(acts)` rather than asked for in the
+prompt -- a lookup of its own, or a write that may call for one.
+A rule that would speak without reading is refused before it is
+kept. The material is there: 217 `music.state` in thirty days,
+carrying track, artist and playlist.
+
+#### Why this is not the watchers that were deleted
+
+On 5 October `notice.Often` and `notice.Novel` went, with the
+decision that nothing is said unless a sender says so. This is not
+that, and the difference is the whole of why it is safe: a rule is
+standing, named, carries the reason it was written, and can be
+retired. A per-event guess is none of those, and could not say what
+it was for.
+
+Retirement now reads every purpose, so a remark that has stopped
+earning its place can be taken back the same way.
+
 
 
 When the owner states a preference, makes a decision, or corrects something,

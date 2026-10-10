@@ -54,6 +54,66 @@ const Most = 1
 // spent in the first two minutes after a restart.
 const Rest = 6 * time.Hour
 
+// Purpose : What one pass of the watcher is looking for.
+//
+// Two rules can both be worth having for opposite reasons. One
+// catches something going wrong and is judged on whether hearing it
+// would change what they do. The other says something about them
+// and is judged on whether it is true and worth hearing, which is a
+// different question and cannot share a bar with the first: the
+// test that keeps the useful ones scarce -- that a remark they can
+// do nothing with is not worth an interruption -- forbids every
+// remark there is.
+//
+// So the bar, the kind and the allowance all belong to the purpose,
+// and the machinery around them does not change.
+type Purpose struct {
+	// Judge : What the model is told when deciding.
+	Judge string
+	// Kind, Mark : How a rule written for this purpose is known.
+	Kind, Mark string
+	// Most : How many of this kind he may write in a day.
+	Most int
+	// Rest : How long after writing one before another.
+	Rest time.Duration
+	// Grounded : Whether a rule of this kind must read something
+	// before it speaks.
+	Grounded bool
+}
+
+// Useful, Companion : The two things he watches for.
+//
+// Companion is rarer by a wide margin and the reason is not
+// caution about cost. A rule that catches the phone failing to
+// charge may fire weekly and be welcome every time, because each
+// firing is a different fact. A companion remarking on the same
+// person's taste weekly is a machine performing attention, and the
+// fourth one lands as noise however good the first was.
+var (
+	Useful = Purpose{
+		Judge: judging, Kind: Kind, Mark: Mark,
+		Most: Most, Rest: Rest,
+	}
+	Companion = Purpose{
+		Judge: remarking, Kind: Remarked, Mark: RemarkedMark,
+		Most: 1, Rest: 7 * 24 * time.Hour, Grounded: true,
+	}
+)
+
+// Purposes : Every purpose, for the passes that treat his rules
+// alike -- retiring them, listing them, counting what he holds.
+func Purposes() []Purpose { return []Purpose{Useful, Companion} }
+
+// Mine : Whether a rule is one he wrote himself, of any purpose.
+func Mine(j job.Job) bool {
+	for _, p := range Purposes() {
+		if j.Kind == p.Kind || strings.HasPrefix(j.Why, p.Mark) {
+			return true
+		}
+	}
+	return false
+}
+
 // Watcher : What decides whether a pattern is worth a rule.
 type Watcher struct {
 	// Ask : The model that judges. Nil writes nothing, which is
@@ -83,7 +143,7 @@ type Thought struct {
 // Empty Asked is the ordinary answer and is not a failure. Most
 // hours contain nothing worth being woken for, and a pass that felt
 // obliged to produce something would be the whole problem.
-func (w Watcher) Wondered(ctx context.Context, userID string) (Thought, error) {
+func (w Watcher) Wondered(ctx context.Context, userID string, p Purpose) (Thought, error) {
 	if w.Ask == nil || w.Describe == nil {
 		return Thought{}, nil
 	}
@@ -102,7 +162,7 @@ func (w Watcher) Wondered(ctx context.Context, userID string) (Thought, error) {
 		}
 	}
 
-	answer, err := w.Ask(ctx, judging, prompt.Block(
+	answer, err := w.Ask(ctx, p.Judge, prompt.Block(
 		prompt.Text(fmt.Sprintf("What you know about them (%d rules already kept):", count)),
 		known,
 		prompt.Text("The rules you already keep:"),
@@ -153,10 +213,15 @@ func read(answer string) (Thought, error) {
 //
 // Taken from the rules themselves rather than from a counter, so a
 // restart does not hand him a fresh allowance.
-func Allowed(mine []job.Job, now time.Time) bool {
+func Allowed(mine []job.Job, p Purpose, now time.Time) bool {
 	today, newest := 0, time.Time{}
 	for _, j := range mine {
-		if !strings.HasPrefix(j.Why, Mark) && !strings.Contains(j.Kind, Kind) {
+		// This purpose's own, and nobody else's. The two
+		// allowances are separate so that a week of useful rules
+		// cannot silence every remark, and a talkative week of
+		// remarks cannot keep a rule that matters from being
+		// written.
+		if !strings.HasPrefix(j.Why, p.Mark) && !strings.Contains(j.Kind, p.Kind) {
 			continue
 		}
 		if j.Made.After(newest) {
@@ -166,10 +231,10 @@ func Allowed(mine []job.Job, now time.Time) bool {
 			today++
 		}
 	}
-	if today >= Most {
+	if today >= p.Most {
 		return false
 	}
-	return newest.IsZero() || now.Sub(newest) >= Rest
+	return newest.IsZero() || now.Sub(newest) >= p.Rest
 }
 
 // Kind, Mark : How a rule he wrote himself is known for what it is.
@@ -181,6 +246,16 @@ func Allowed(mine []job.Job, now time.Time) bool {
 const (
 	Kind = "noticed"
 	Mark = "noticed: "
+
+	// Remarked, RemarkedMark : The same, for a rule written to say
+	// something about them rather than to catch something.
+	//
+	// Apart from the useful ones for the same reason those are
+	// apart from the person's: retiring every remark is a decision
+	// somebody might make in one go, and it should not take the
+	// rule watching their battery with it.
+	Remarked     = "remarked"
+	RemarkedMark = "remarked: "
 )
 
 // Settled : How long one of his rules must have stood before it can
@@ -226,14 +301,14 @@ func (w Watcher) Retired(ctx context.Context, userID string, spoke []Spoke) (str
 	var lines []string
 	byID := map[string]bool{}
 	for _, s := range spoke {
-		if s.Job.Kind != Kind || now.Sub(s.Job.Made) < Settled {
+		if !Mine(s.Job) || now.Sub(s.Job.Made) < Settled {
 			continue
 		}
 		byID[s.Job.ID] = true
 		lines = append(lines, fmt.Sprintf(
 			"%s | %s | written %.0f days ago because %s | ran %d times, said something %d times",
 			s.Job.ID, s.Job.Name, now.Sub(s.Job.Made).Hours()/24,
-			strings.TrimPrefix(s.Job.Why, Mark), s.Ran, s.Said))
+			unmarked(s.Job.Why), s.Ran, s.Said))
 	}
 	if len(lines) == 0 {
 		return "", "", nil
