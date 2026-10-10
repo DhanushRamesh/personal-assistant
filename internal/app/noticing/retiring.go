@@ -13,6 +13,8 @@ import "personal-assistant/internal/base/thinking/prompt"
 var retiring = prompt.Lines(
 	"These are rules you wrote yourself, from patterns you noticed. Decide whether any has stopped being worth keeping.",
 	"",
+	"The rules they asked for are shown first, with what each has done. They are context and nothing else: you may not retire one, and naming one is not an answer. They are there because whether one of yours still earns its place depends on what else is already watching.",
+	"",
 	"Almost always the answer is keep them all. Reply exactly this:",
 	`  {"keep": "why they all still earn their place"}`,
 	"",

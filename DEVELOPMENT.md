@@ -17656,6 +17656,75 @@ duration, count or clock reading in a situation's sentence is a
 rule that will repeat itself.
 
 
+### The judge was shown a list of names
+
+Owner, in the same breath: **"the model should look at the current
+rules and how useful they are, and create useful rules. It has to
+question itself -- is that rule useful?"**
+
+It could not. `Holding` handed the judge one line per rule --
+`name: schedule` -- and nothing about what any of them had done.
+It was deciding what to add with no way to tell a rule that works
+from a rule that has never once spoken.
+
+The record was there the whole time, in `runs`. Measured on 10
+October across twenty-five rules:
+
+| | |
+|---|---|
+| runs | **2,487** |
+| things said | **18** |
+| rules that ran and never spoke | **8 of 16** |
+
+`somebody has been trying` had run **1,317 times** and said nothing.
+`a device has gone quiet` had run **529 times** and spoken **6**, of
+which five were one silence announced five times.
+
+So `noticing.Standing` renders every rule in force with its record --
+schedule, who wrote it, ran, said, and the last thing it said -- and
+both passes read the same list. The judging prompt now has to hold
+the rule it is about to write against it: *what will this rule's two
+numbers be in a month, and would they be worth the interruptions?*
+
+**Without ids.** The list read while deciding what to *add* carries
+no identifiers, so nothing on it can be named. A judge that could
+name a rule there is a judge that could be talked into naming one
+for deletion, and the two decisions are deliberately different
+prompts.
+
+**Retiring now sees everything and may still only take back its
+own.** That stands: rules the person asked for are theirs to keep or
+drop. But it is shown theirs as context without ids, because whether
+one of his own still earns its place is a question about everything
+that is watching -- a rule of his gone quiet because one of theirs
+now covers the same occasion reads as dead only when both are in
+view.
+
+Two things fixed in passing. `retire` filtered on
+`j.Kind != noticing.Kind`, which silently excluded every
+`remarked` rule from ever being reconsidered; it uses
+`noticing.Mine` now. And the record is read once per pass and handed
+to both, rather than each reading the table for itself.
+
+**Live, 11 October, two minutes apart.** The last run on the old
+binary spent a model call and had the model suppress the repeat:
+
+```
+why: there was nothing new to say
+steps: [tool situation_find ran 1ms, write stopped 2358ms]
+```
+
+The first on the new one never got past the first step:
+
+```
+why: situation_find found nothing
+steps: [tool situation_find stopped 2ms]
+```
+
+A check that refuses is cheaper than a model that declines, and it
+is the only one of the two that is reliable.
+
+
 
 When the owner states a preference, makes a decision, or corrects something,
 **record it here** in the same turn. That is the point of the file: a fresh

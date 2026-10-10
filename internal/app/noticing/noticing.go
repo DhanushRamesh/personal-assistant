@@ -28,6 +28,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"strconv"
 	"strings"
 	"time"
 
@@ -122,8 +123,6 @@ type Watcher struct {
 	// Describe : What he knows about the person -- the standing
 	// description, rhythms and trends.
 	Describe func(ctx context.Context, userID string) string
-	// Holding : The rules he already keeps, as he would read them.
-	Holding func(ctx context.Context, userID string) (string, int, error)
 	// Now : The clock. Nil is time.Now.
 	Now func() time.Time
 }
@@ -143,7 +142,7 @@ type Thought struct {
 // Empty Asked is the ordinary answer and is not a failure. Most
 // hours contain nothing worth being woken for, and a pass that felt
 // obliged to produce something would be the whole problem.
-func (w Watcher) Wondered(ctx context.Context, userID string, p Purpose) (Thought, error) {
+func (w Watcher) Wondered(ctx context.Context, userID string, p Purpose, held []Spoke) (Thought, error) {
 	if w.Ask == nil || w.Describe == nil {
 		return Thought{}, nil
 	}
@@ -154,19 +153,11 @@ func (w Watcher) Wondered(ctx context.Context, userID string, p Purpose) (Though
 		return Thought{}, nil
 	}
 
-	holding, count, err := "", 0, error(nil)
-	if w.Holding != nil {
-		holding, count, err = w.Holding(ctx, userID)
-		if err != nil {
-			return Thought{}, err
-		}
-	}
-
 	answer, err := w.Ask(ctx, p.Judge, prompt.Block(
-		prompt.Text(fmt.Sprintf("What you know about them (%d rules already kept):", count)),
+		prompt.Text(fmt.Sprintf("What you know about them (%d rules already in force):", len(held))),
 		known,
-		prompt.Text("The rules you already keep:"),
-		holding,
+		prompt.Text("The rules already in force, and what each has actually done:"),
+		Standing(held),
 	))
 	if err != nil {
 		return Thought{}, err
@@ -271,13 +262,53 @@ const (
 // is for.
 const Settled = 7 * 24 * time.Hour
 
-// Spoke : What one of his rules has actually said, for judging it.
+// Spoke : What a rule has actually done, for judging it.
+//
+// Every rule in force and not only his own. Deciding whether to add
+// one while blind to how the existing ones have turned out is the
+// state this was written out of: twenty-five rules, 2,487 runs and
+// eighteen things said between them, with eight rules that had
+// never once spoken -- and the judge was shown a list of names.
 type Spoke struct {
 	// Job : The rule.
 	Job job.Job
 	// Ran, Said : How many times it ran, and how many of those it
 	// had something to say.
 	Ran, Said int
+}
+
+// Standing : The rules in force as the judge reads them, each with
+// its record.
+//
+// Owner: **"the model should look at the current rules and how
+// useful they are, and create useful rules. It has to question
+// itself -- is that rule useful?"** A rule that has run five hundred
+// times and spoken six is not an abstract risk he has to be warned
+// about; it is on this list, in numbers, next to whatever it last
+// said.
+//
+// Without ids, deliberately. This is the list read while deciding
+// what to add, and a judge that could name a rule here is a judge
+// that could be talked into naming one for deletion. Taking one back
+// is [Watcher.Retired], which is shown ids only for his own.
+func Standing(held []Spoke) string {
+	if len(held) == 0 {
+		return ""
+	}
+	lines := make([]string, 0, len(held))
+	for _, s := range held {
+		whose := "they asked for this"
+		if Mine(s.Job) {
+			whose = "you wrote this yourself"
+		}
+		line := fmt.Sprintf("%s | %s | %s | ran %d times, said something %d times",
+			s.Job.Name, s.Job.Schedule, whose, s.Ran, s.Said)
+		if said := strings.TrimSpace(s.Job.Said); said != "" {
+			line += " | last said: " + strconv.Quote(said)
+		}
+		lines = append(lines, line)
+	}
+	return prompt.Lines(lines...)
 }
 
 // Retired : Which of his own rules has stopped earning its place.
@@ -289,11 +320,17 @@ type Spoke struct {
 // same gap as a memory that can never become wrong, in a third
 // place.
 //
-// Only his own, and only after a week. Rules the person asked for
-// are theirs to keep or drop, and he has no business tidying them
-// away.
-func (w Watcher) Retired(ctx context.Context, userID string, spoke []Spoke) (string, string, error) {
-	if w.Ask == nil || len(spoke) == 0 {
+// Only his own may go, and only after a week. Rules the person asked
+// for are theirs to keep or drop, and he has no business tidying
+// them away -- but he is shown them, because whether one of his own
+// still earns its place is a question about the whole list. A rule
+// of his that has gone quiet because one of theirs now covers the
+// same occasion reads as a dead rule only when both are in view.
+//
+// Theirs shown without ids, so that the only rules he can name are
+// the ones he is allowed to take back.
+func (w Watcher) Retired(ctx context.Context, userID string, held []Spoke) (string, string, error) {
+	if w.Ask == nil || len(held) == 0 {
 		return "", "", nil
 	}
 	now := time.Now()
@@ -301,27 +338,34 @@ func (w Watcher) Retired(ctx context.Context, userID string, spoke []Spoke) (str
 		now = w.Now()
 	}
 
-	var lines []string
+	var own []string
+	var theirs []Spoke
 	byID := map[string]bool{}
-	for _, s := range spoke {
-		if !Mine(s.Job) || now.Sub(s.Job.Made) < Settled {
+	for _, s := range held {
+		if !Mine(s.Job) {
+			theirs = append(theirs, s)
+			continue
+		}
+		if now.Sub(s.Job.Made) < Settled {
 			continue
 		}
 		byID[s.Job.ID] = true
-		lines = append(lines, fmt.Sprintf(
+		own = append(own, fmt.Sprintf(
 			"%s | %s | written %.0f days ago because %s | ran %d times, said something %d times",
 			s.Job.ID, s.Job.Name, now.Sub(s.Job.Made).Hours()/24,
 			s.Job.Because, s.Ran, s.Said))
 	}
-	if len(lines) == 0 {
+	if len(own) == 0 {
 		return "", "", nil
 	}
 
 	answer, err := w.Ask(ctx, retiring, prompt.Block(
+		prompt.Text("The rules they asked for, which are theirs and not yours to retire:"),
+		Standing(theirs),
 		prompt.Text("What you know about them now:"),
 		strings.TrimSpace(w.Describe(ctx, userID)),
-		prompt.Text("The rules you wrote yourself:"),
-		prompt.Lines(lines...),
+		prompt.Text("The rules you wrote yourself, which are the only ones you may retire:"),
+		prompt.Lines(own...),
 	))
 	if err != nil {
 		return "", "", err

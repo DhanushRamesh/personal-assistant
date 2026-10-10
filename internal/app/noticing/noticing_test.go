@@ -18,7 +18,6 @@ func watcher(answer string, err error) noticing.Watcher {
 		Describe: func(_ context.Context, _ string) string {
 			return "He charged the phone on 8 of 9 nights."
 		},
-		Holding: func(_ context.Context, _ string) (string, int, error) { return "none", 0, nil },
 	}
 }
 
@@ -27,7 +26,7 @@ func watcher(answer string, err error) noticing.Watcher {
 // would be the whole problem.
 func TestNothingIsTheOrdinaryAnswer(t *testing.T) {
 	got, err := watcher(`{"nothing": "nothing has moved"}`, nil).
-		Wondered(context.Background(), "u", noticing.Useful)
+		Wondered(context.Background(), "u", noticing.Useful, nil)
 	if err != nil {
 		t.Fatalf("wondering: %v", err)
 	}
@@ -40,7 +39,7 @@ func TestNothingIsTheOrdinaryAnswer(t *testing.T) {
 // sentence somebody else can turn into a rule.
 func TestSomethingWorthHaving(t *testing.T) {
 	got, err := watcher(`{"rule":"tell me if the phone has not charged overnight","name":"the phone did not charge","because":"8 of 9 nights"}`, nil).
-		Wondered(context.Background(), "u", noticing.Useful)
+		Wondered(context.Background(), "u", noticing.Useful, nil)
 	if err != nil {
 		t.Fatalf("wondering: %v", err)
 	}
@@ -57,7 +56,7 @@ func TestSomethingWorthHaving(t *testing.T) {
 // runs for ever.
 func TestAnswerThatCannotBeReadWritesNothing(t *testing.T) {
 	for _, answer := range []string{"I think you should...", "", "{oh dear"} {
-		got, err := watcher(answer, nil).Wondered(context.Background(), "u", noticing.Useful)
+		got, err := watcher(answer, nil).Wondered(context.Background(), "u", noticing.Useful, nil)
 		if err != nil || got.Asked != "" {
 			t.Errorf("%q should have written nothing, got %+v (%v)", answer, got, err)
 		}
@@ -68,7 +67,7 @@ func TestAnswerThatCannotBeReadWritesNothing(t *testing.T) {
 // JSON, and refusing it would be refusing the commonest right answer.
 func TestFencedJSONIsRead(t *testing.T) {
 	got, _ := watcher("```json\n{\"rule\":\"say when the laptop is unplugged all day\",\"name\":\"n\",\"because\":\"b\"}\n```", nil).
-		Wondered(context.Background(), "u", noticing.Useful)
+		Wondered(context.Background(), "u", noticing.Useful, nil)
 	if !strings.Contains(got.Asked, "unplugged") {
 		t.Errorf("fenced JSON should be read: %q", got.Asked)
 	}
@@ -79,7 +78,7 @@ func TestFencedJSONIsRead(t *testing.T) {
 func TestNothingKnownMeansNoRule(t *testing.T) {
 	w := watcher(`{"rule":"anything","name":"n","because":"b"}`, nil)
 	w.Describe = func(context.Context, string) string { return "   " }
-	got, _ := w.Wondered(context.Background(), "u", noticing.Useful)
+	got, _ := w.Wondered(context.Background(), "u", noticing.Useful, nil)
 	if got.Asked != "" {
 		t.Errorf("with nothing known it should write nothing, got %q", got.Asked)
 	}
@@ -88,7 +87,7 @@ func TestNothingKnownMeansNoRule(t *testing.T) {
 // TestAModelThatFailsIsReported : unlike an unreadable answer, a
 // broken model is a fault and is said so.
 func TestAModelThatFailsIsReported(t *testing.T) {
-	if _, err := watcher("", errors.New("no model")).Wondered(context.Background(), "u", noticing.Useful); err == nil {
+	if _, err := watcher("", errors.New("no model")).Wondered(context.Background(), "u", noticing.Useful, nil); err == nil {
 		t.Error("a failing model should be reported")
 	}
 }
@@ -251,5 +250,100 @@ func TestAMemoryHeWasNotShown(t *testing.T) {
 		})
 	if id != "" {
 		t.Errorf("an id he was never shown should be refused, got %q", id)
+	}
+}
+
+// TestWhatEveryRuleHasDoneIsShown : owner, on a rule that announced
+// the laptop's ordinary night -- *"the model should look at the
+// current rules and how useful they are... it has to question
+// itself -- is that rule useful?"*
+//
+// It cannot ask that of a list of names. The record is the answer:
+// ran so many times, spoke so few, and this is what it last said.
+func TestWhatEveryRuleHasDoneIsShown(t *testing.T) {
+	theirs := noticing.Spoke{
+		Job: job.Job{ID: "job_2", Name: "a device has gone quiet",
+			Kind: "rule", Schedule: "every 5m",
+			Said: "Your laptop has gone quiet, sir."},
+		Ran: 529, Said: 6,
+	}
+
+	var asked string
+	w := noticing.Watcher{
+		Ask: func(_ context.Context, _, ask string) (string, error) {
+			asked = ask
+			return `{"nothing":"no"}`, nil
+		},
+		Describe: func(context.Context, string) string { return "He charged it on 8 of 9 nights." },
+	}
+	if _, err := w.Wondered(context.Background(), "u", noticing.Useful,
+		[]noticing.Spoke{theirs, his("job_1", "the helmet is still on", 30, 3, 0)}); err != nil {
+		t.Fatal(err)
+	}
+
+	for _, want := range []string{
+		"a device has gone quiet", "every 5m",
+		"ran 529 times", "said something 6 times",
+		"Your laptop has gone quiet",
+		"they asked for this", "you wrote this yourself",
+	} {
+		if !strings.Contains(asked, want) {
+			t.Errorf("the judge was not shown %q:\n%s", want, asked)
+		}
+	}
+}
+
+// TestTheJudgeIsGivenNoIDs : the list read while deciding what to
+// add carries no ids, so nothing on it can be named. Taking a rule
+// back is a different pass with a different prompt, and it is shown
+// ids only for his own.
+func TestTheJudgeIsGivenNoIDs(t *testing.T) {
+	var asked string
+	w := noticing.Watcher{
+		Ask: func(_ context.Context, _, ask string) (string, error) {
+			asked = ask
+			return `{"nothing":"no"}`, nil
+		},
+		Describe: func(context.Context, string) string { return "He charged it on 8 of 9 nights." },
+	}
+	if _, err := w.Wondered(context.Background(), "u", noticing.Useful,
+		[]noticing.Spoke{his("job_1", "the helmet is still on", 30, 3, 0)}); err != nil {
+		t.Fatal(err)
+	}
+	if strings.Contains(asked, "job_1") {
+		t.Errorf("the judge deciding what to add was handed a rule's id:\n%s", asked)
+	}
+}
+
+// TestTheirRulesAreContextWhenRetiring : he may not retire one of
+// theirs, but he is shown them. Whether one of his own still earns
+// its place is a question about everything that is watching.
+func TestTheirRulesAreContextWhenRetiring(t *testing.T) {
+	theirs := noticing.Spoke{
+		Job: job.Job{ID: "job_2", Name: "battery at 20", Kind: "rule",
+			Made: time.Now().Add(-90 * 24 * time.Hour)},
+		Ran: 3, Said: 1,
+	}
+
+	var asked string
+	w := noticing.Watcher{
+		Ask: func(_ context.Context, _, ask string) (string, error) {
+			asked = ask
+			return `{"keep":"all of them"}`, nil
+		},
+		Describe: func(context.Context, string) string { return "He charged it on 8 of 9 nights." },
+	}
+	if _, _, err := w.Retired(context.Background(), "u",
+		[]noticing.Spoke{theirs, his("job_1", "the helmet is still on", 30, 3, 0)}); err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(asked, "battery at 20") {
+		t.Errorf("their rules were not shown as context:\n%s", asked)
+	}
+	if strings.Contains(asked, "job_2") {
+		t.Errorf("he was handed the id of a rule he may not retire:\n%s", asked)
+	}
+	if !strings.Contains(asked, "job_1") {
+		t.Errorf("he was not given the id of his own rule:\n%s", asked)
 	}
 }

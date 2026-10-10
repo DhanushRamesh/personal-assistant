@@ -31,9 +31,9 @@ import (
 	"personal-assistant/internal/base/platform/storage"
 	"personal-assistant/internal/base/thinking/environment"
 	"personal-assistant/internal/base/thinking/environment/platformai"
+	"personal-assistant/internal/domain/job"
 	jobmysql "personal-assistant/internal/domain/job/mysql"
 	memorymysql "personal-assistant/internal/domain/memory/mysql"
-	"personal-assistant/internal/domain/job"
 )
 
 // everyRule : Enough rules to be the whole list for anybody.
@@ -63,8 +63,8 @@ func TestWhatHeWouldWriteIfHeCould(t *testing.T) {
 		RefreshToken: cfg.PlatformAI.RefreshToken, PortalID: cfg.PlatformAI.PortalID,
 		TokenURL: cfg.PlatformAI.TokenURL, ChatURL: cfg.PlatformAI.ChatURL,
 		Scope: cfg.PlatformAI.Scope, RedirectURI: cfg.PlatformAI.RedirectURI,
-		Vendor: cfg.PlatformAI.Vendor,
-		Model:  cmp(cfg.PlatformAI.SlowModel, cfg.PlatformAI.Model),
+		Vendor:  cfg.PlatformAI.Vendor,
+		Model:   cmp(cfg.PlatformAI.SlowModel, cfg.PlatformAI.Model),
 		Timeout: 3 * time.Minute,
 		// Loud, unlike the database's. The gateway's own reason for
 		// a refusal is logged here and sanitised before it reaches
@@ -92,24 +92,41 @@ func TestWhatHeWouldWriteIfHeCould(t *testing.T) {
 	if err != nil {
 		t.Fatalf("reading his rules: %v", err)
 	}
-	var held, remarks, notices int
+	// The same record the server builds, because what the judge is
+	// shown is the thing under test. A list of names reads as a
+	// perfectly reasonable prompt right up until you notice it
+	// cannot answer the question being asked of it.
+	runs := jobmysql.NewRuns(db.DB)
+	var held []noticing.Spoke
+	var remarks, notices int
 	for _, j := range mine {
-		held++
 		switch j.Kind {
 		case noticing.Remarked:
 			remarks++
 		case noticing.Kind:
 			notices++
 		}
+		records, err := runs.Of(ctx, j.ID, time.Now().Add(-noticing.Settled*8), everyRule)
+		if err != nil {
+			t.Fatalf("reading what %s has done: %v", j.Name, err)
+		}
+		s := noticing.Spoke{Job: j, Ran: len(records)}
+		for _, r := range records {
+			if strings.TrimSpace(r.Said) != "" {
+				s.Said++
+			}
+		}
+		held = append(held, s)
 	}
 	t.Logf("%d rules held: %d asked for, %d noticed, %d remarked",
-		held, held-notices-remarks, notices, remarks)
+		len(held), len(held)-notices-remarks, notices, remarks)
 	t.Logf("the description is %d characters", len(known))
 	// EVAL_SHOW=1 prints the description the judge is reasoning
 	// from. A refusal that says there was no pattern is only
 	// readable against what it was actually given.
 	if os.Getenv("EVAL_SHOW") == "1" {
 		t.Logf("what it was given:\n%s", known)
+		t.Logf("the rules in force, as it reads them:\n%s", noticing.Standing(held))
 	}
 
 	// The raw answer as well as the thought. Wondered swallows an
@@ -128,14 +145,7 @@ func TestWhatHeWouldWriteIfHeCould(t *testing.T) {
 			return out, err
 		},
 		Describe: func(context.Context, string) string { return known },
-		Holding: func(context.Context, string) (string, int, error) {
-			var b strings.Builder
-			for _, j := range mine {
-				b.WriteString(j.Name + ": " + j.Schedule + "\n")
-			}
-			return b.String(), len(mine), nil
-		},
-		Now: time.Now,
+		Now:      time.Now,
 	}
 
 	for _, purpose := range noticing.Purposes() {
@@ -143,7 +153,7 @@ func TestWhatHeWouldWriteIfHeCould(t *testing.T) {
 		// read here is what the bar lets through, and a pass that
 		// skipped the model because it wrote something on Tuesday
 		// would print nothing and prove nothing.
-		thought, err := watcher.Wondered(ctx, userID, purpose)
+		thought, err := watcher.Wondered(ctx, userID, purpose, held)
 		if err != nil {
 			t.Errorf("%s: could not weigh one up: %v", purpose.Kind, err)
 			continue
@@ -172,8 +182,8 @@ func asked(ctx context.Context, env *platformai.Environment, cfg config.Config,
 	system, ask string) (string, error) {
 	stream, err := env.Run(ctx, environment.Request{
 		Prompt: ask, Purpose: environment.PurposeProfile,
-		Vendor: cfg.PlatformAI.Vendor,
-		Model:  cmp(cfg.PlatformAI.SlowModel, cfg.PlatformAI.Model),
+		Vendor:       cfg.PlatformAI.Vendor,
+		Model:        cmp(cfg.PlatformAI.SlowModel, cfg.PlatformAI.Model),
 		SystemPrompt: system,
 	})
 	if err != nil {

@@ -3160,6 +3160,46 @@ func (d doing) where() *time.Location {
 	return d.cfg.Assistant.Location
 }
 
+// done : What every rule in force has actually done.
+//
+// Every rule and not only his own, because the question the owner
+// put is about the list as a whole: *"the model should look at the
+// current rules and how useful they are... it has to question
+// itself -- is that rule useful?"* A judge shown names cannot ask
+// that, and a judge shown only its own rules cannot either, since
+// it has written none.
+//
+// A rule whose record cannot be read is listed without one rather
+// than dropped. Not knowing what it has done is no reason to let
+// the judge believe it is not there.
+func done(
+	ctx context.Context,
+	ran *jobmysql.Runs,
+	mine []job.Job,
+	now func() time.Time,
+	logger *slog.Logger,
+) []noticing.Spoke {
+	held := make([]noticing.Spoke, 0, len(mine))
+	for _, j := range mine {
+		s := noticing.Spoke{Job: j}
+		if ran != nil {
+			records, err := ran.Of(ctx, j.ID, now().Add(-noticing.Settled*8), everyRule)
+			if err != nil {
+				logger.WarnContext(ctx, "cannot read what a rule has done",
+					slog.String("rule", j.ID), slog.Any("error", err))
+			}
+			s.Ran = len(records)
+			for _, r := range records {
+				if strings.TrimSpace(r.Said) != "" {
+					s.Said++
+				}
+			}
+		}
+		held = append(held, s)
+	}
+	return held
+}
+
 // retire : Whether one of his own rules has stopped earning its
 // place, and the taking of it back.
 //
@@ -3169,40 +3209,16 @@ func (d doing) where() *time.Location {
 func retire(
 	ctx context.Context,
 	store *jobmysql.Store,
-	ran *jobmysql.Runs,
 	watcher noticing.Watcher,
 	userID string,
-	mine []job.Job,
+	held []noticing.Spoke,
 	now func() time.Time,
 	logger *slog.Logger,
 ) {
-	if ran == nil {
+	if len(held) == 0 {
 		return
 	}
-	var spoke []noticing.Spoke
-	for _, j := range mine {
-		if j.Kind != noticing.Kind {
-			continue
-		}
-		records, err := ran.Of(ctx, j.ID, now().Add(-noticing.Settled*8), everyRule)
-		if err != nil {
-			logger.WarnContext(ctx, "cannot read what a rule has done",
-				slog.String("rule", j.ID), slog.Any("error", err))
-			continue
-		}
-		s := noticing.Spoke{Job: j, Ran: len(records)}
-		for _, r := range records {
-			if strings.TrimSpace(r.Said) != "" {
-				s.Said++
-			}
-		}
-		spoke = append(spoke, s)
-	}
-	if len(spoke) == 0 {
-		return
-	}
-
-	id, why, err := watcher.Retired(ctx, userID, spoke)
+	id, why, err := watcher.Retired(ctx, userID, held)
 	if err != nil {
 		logger.WarnContext(ctx, "could not weigh up retiring a rule", slog.Any("error", err))
 		return
@@ -3310,17 +3326,6 @@ func noticed(
 			}
 			return said
 		},
-		Holding: func(ctx context.Context, userID string) (string, int, error) {
-			mine, err := store.Mine(ctx, userID, "", everyRule, job.Active)
-			if err != nil {
-				return "", 0, err
-			}
-			var b strings.Builder
-			for _, j := range mine {
-				fmt.Fprintf(&b, "%s: %s\n", j.Name, j.Schedule)
-			}
-			return b.String(), len(mine), nil
-		},
 		Now: now,
 	}
 
@@ -3331,11 +3336,17 @@ func noticed(
 			return
 		}
 
+		// What every rule in force has actually done, read once and
+		// used by both passes. Owner: *"the model should look at the
+		// current rules and how useful they are, and create useful
+		// rules."* Before this, both passes saw names.
+		held := done(ctx, ran, mine, now, logger)
+
 		// Taking one back comes before writing another, and not only
 		// for tidiness: the rules he keeps are what he is shown when
 		// deciding whether to write, so a dead one left standing is a
 		// reason to write nothing.
-		retire(ctx, store, ran, watcher, userID, mine, now, logger)
+		retire(ctx, store, watcher, userID, held, now, logger)
 
 		// And the same for what he has been asked to remember. A
 		// memory that outlived the truth is read into every answer,
@@ -3352,7 +3363,7 @@ func noticed(
 			if !noticing.Allowed(mine, purpose, now()) {
 				continue
 			}
-			if made := wrote(ctx, watcher, writer, purpose, userID, mine,
+			if made := wrote(ctx, watcher, writer, purpose, userID, mine, held,
 				id, now, where, logger); made != nil {
 				if err := store.Keep(ctx, *made); err != nil {
 					logger.WarnContext(ctx, "cannot keep the rule he wrote",
@@ -3376,12 +3387,13 @@ func wrote(
 	purpose noticing.Purpose,
 	userID string,
 	mine []job.Job,
+	held []noticing.Spoke,
 	id func() string,
 	now func() time.Time,
 	where *time.Location,
 	logger *slog.Logger,
 ) *job.Job {
-	thought, err := watcher.Wondered(ctx, userID, purpose)
+	thought, err := watcher.Wondered(ctx, userID, purpose, held)
 	if err != nil {
 		logger.WarnContext(ctx, "could not weigh up a rule",
 			slog.String("purpose", purpose.Kind), slog.Any("error", err))
