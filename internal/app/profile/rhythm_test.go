@@ -61,15 +61,15 @@ func TestWhatTheyDoMostComesFirst(t *testing.T) {
 
 	got := profile.Rhythm(events, india())
 
-	office := strings.Index(got, `place.entered "office"`)
-	gym := strings.Index(got, `place.entered "gym"`)
+	office := strings.Index(got, `"office" (3)`)
+	gym := strings.Index(got, `"gym" (1)`)
 	if office < 0 || gym < 0 {
 		t.Fatalf("a place is missing:\n%s", got)
 	}
 	if office > gym {
 		t.Errorf("the thing done three times is listed below the thing done once:\n%s", got)
 	}
-	for _, want := range []string{"3 times", "on 3 of 3 days", "usually around 10am"} {
+	for _, want := range []string{"2 different", "on 3 of 3 days", "usually around 10am"} {
 		if !strings.Contains(got, want) {
 			t.Errorf("want %q in it:\n%s", want, got)
 		}
@@ -330,7 +330,7 @@ func TestAPayloadWithMoreThanAValueStillCountsAsOneThing(t *testing.T) {
 	}
 	got := profile.Rhythm(evs, utc)
 
-	if !strings.Contains(got, `call.received "Amit": 6 times`) {
+	if !strings.Contains(got, `call.received: 6 times`) || !strings.Contains(got, `always "Amit"`) {
 		t.Errorf("six calls from one person should be one line:\n%s", got)
 	}
 	if strings.Contains(got, "seconds=") {
@@ -448,5 +448,92 @@ func TestTwoAgreeingIsNotAnHour(t *testing.T) {
 	got := profile.Rhythm(events, india())
 	if !strings.Contains(got, "at no particular hour") {
 		t.Errorf("an hour was read off two observations:\n%s", got)
+	}
+}
+
+// TestTasteSurvivesABusySensor : the fault this ranking was rewritten
+// for. Measured over four weeks of the owner's own events: 1,230
+// battery readings across a hundred percentages took eight of the
+// twelve lines, and 97 listens across fifty-four artists took none.
+//
+// It is arithmetic and not judgement. A kind with one value puts its
+// whole count on one line; a kind with many spreads it across all of
+// them, so the widest thing about somebody is the first to vanish. No
+// cap could have fixed it -- raising it buys more percentages before
+// it buys an artist.
+func TestTasteSurvivesABusySensor(t *testing.T) {
+	utc := time.UTC
+	var evs []event.Event
+	at := time.Date(2026, 9, 10, 8, 0, 0, 0, utc)
+
+	// A phone reporting its battery all month, never the same
+	// percentage twice in a row.
+	for i := range 600 {
+		evs = append(evs, happened("battery.level", itoa(5+i%96),
+			at.Add(time.Duration(i)*3*time.Hour)))
+	}
+	// And music, spread thin across many artists, as taste is.
+	for i := range 54 {
+		for n := 0; n <= i%4; n++ {
+			evs = append(evs, happened("music.state", "artist "+itoa(i),
+				at.Add(time.Duration(i*4+n)*5*time.Hour)))
+		}
+	}
+
+	got := profile.Rhythm(evs, utc)
+
+	if !strings.Contains(got, "music.state") {
+		t.Errorf("fifty-four artists did not reach the description at all:\n%s", got)
+	}
+	if !strings.Contains(got, "54 different") {
+		t.Errorf("it did not say how wide the taste was:\n%s", got)
+	}
+	if !strings.Contains(got, `"artist 3" (4)`) {
+		t.Errorf("the artists they listen to most were not named:\n%s", got)
+	}
+
+	// And the battery is one line about a battery, with no
+	// percentage pretending to be a thing somebody does.
+	if strings.Contains(got, `battery.level "`) {
+		t.Errorf("a percentage was counted as a thing they do:\n%s", got)
+	}
+	if !strings.Contains(got, "readings from 5 to 100") {
+		t.Errorf("the readings were not given as a range:\n%s", got)
+	}
+}
+
+// TestOneBatteryFallingIsNotAPattern : the same fault in the other
+// section. Nine of twelve lines under "things that happen together"
+// were one battery discharging, written out as "battery.level 38,
+// then battery.level 37" and eleven near-identical others.
+func TestOneBatteryFallingIsNotAPattern(t *testing.T) {
+	utc := time.UTC
+	var evs []event.Event
+	at := time.Date(2026, 9, 10, 8, 0, 0, 0, utc)
+	for i := range 200 {
+		evs = append(evs, happened("battery.level", itoa(80-i%40),
+			at.Add(time.Duration(i)*20*time.Minute)))
+	}
+
+	if got := profile.Rhythm(evs, utc); strings.Contains(got, ", then battery.level") {
+		t.Errorf("a battery going down was reported as a habit:\n%s", got)
+	}
+}
+
+// TestANumberIsOnlyFoldedWhereEveryValueIsOne : per kind and never
+// per value. A call from a number nobody has named parses as a number
+// perfectly well, and it is still a different caller from Amma.
+func TestANumberIsOnlyFoldedWhereEveryValueIsOne(t *testing.T) {
+	utc := time.UTC
+	at := time.Date(2026, 9, 10, 9, 0, 0, 0, utc)
+	evs := []event.Event{
+		happened("call.received", "Amma", at),
+		happened("call.received", "Amma", at.Add(24*time.Hour)),
+		happened("call.received", "+916746580844", at.Add(48*time.Hour)),
+	}
+
+	got := profile.Rhythm(evs, utc)
+	if !strings.Contains(got, "2 different") {
+		t.Errorf("an unnamed caller was folded into the named one:\n%s", got)
 	}
 }

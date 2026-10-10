@@ -17725,6 +17725,88 @@ A check that refuses is cheaper than a model that declines, and it
 is the only one of the two that is reliable.
 
 
+### The ranking hid everything about the person
+
+Owner: **"fix the taste ranking."**
+
+`howOften` ranked *labels* -- the kind and the value together -- and
+cut at twelve. Measured over the owner's own four weeks:
+
+| | moments | distinct values | lines it got |
+|---|---|---|---|
+| `battery.level` | **1,230** | 100 percentages | **8 of 12** |
+| `music.state` | 97 | **54 artists** | **0** |
+| `call.received` | 24 | 10 people | **0** |
+
+It is arithmetic, not judgement. A kind with one value puts its whole
+count on one line; a kind with many spreads it across all of them. So
+the widest thing about somebody is always the first to disappear, and
+**no cap could have fixed it** -- raising twelve to twenty buys eight
+more battery percentages before it buys a single artist.
+
+The same fault, worse, in the section underneath. Nine of the twelve
+lines of *things that happen together* were one battery discharging:
+*"battery.level 38, then battery.level 37"*, *"battery.level 45, then
+battery.level 47"*, and nine more of the same.
+
+**Two changes, and the first is the deeper one.**
+
+A value that is a number is a measurement and not a thing that
+happened, so it is no part of what the moment *is*. `moment.label`
+folds such a kind to its kind alone. The owner's own decision already
+says this -- *a varying number is never `value`* -- and this cannot
+rely on senders honouring it.
+
+Judged **per kind and never per value**. One call came in from a
+number nobody had named, and `+916746580844` parses as a number
+perfectly well; it stays a caller of its own because the other values
+that kind has seen are people with names. A kind is a reading only
+when every value it has ever carried is a number. On the live data
+that selects `battery.level` and nothing else.
+
+Then the kind is the line, and the values sit inside it. A kind is
+something a device reports -- a short list that grows a few times a
+year -- where labels grow with every new artist. So the cap moved
+from twelve labels to twenty kinds, with the five most frequent
+values named inside each and the total beside them, because five of
+fifty-four must not read as five of five.
+
+A single value is kept rather than dropped as part of what the kind
+is: somebody whose calls all come from one person is the most worth
+knowing thing that kind has to say. The cost is that a sender naming
+nothing says `always "unknown"`, which is true and is about the
+sender.
+
+**What the same four weeks produce now**, top of the list rather than
+absent from it:
+
+```
+- music.state: 97 times, on 7 of 11 days; 54 different, most often
+  "Daft Punk" (9), "Anirudh Ravichander" (5), "Jason Recht" (4)...
+- battery.level: 73 times, on 8 of 11 days; readings from 2 to 99
+- call.received: 24 times, on 9 of 11 days; 9 different, most often
+  "Amma" (7), "Alekhya Chintada" (6)...
+- bluetooth.connected: 12 times, often around 8pm; always "bike helmet"
+```
+
+`battery.level` fell from 1,230 moments to 73 without a single event
+being dropped: with the percentage out of the label, a phone
+reporting every few minutes collapses under the two-hour rule that
+was already there and always should have applied to it.
+
+**`make evals-rhythm`** prints that block from the real database and
+calls no model. It exists because a made-up fixture cannot find this
+class of fault: the old ranking passed every test it had, each built
+from a handful of events by hand. The fault only appears at the ratio
+real devices report at -- one sensor talking a thousand times against
+a person listening a hundred -- and that ratio is in the database and
+nowhere else.
+
+Left alone: *things that happen together* is still led by the screen
+and the battery, which do genuinely co-occur. The nine lines of one
+battery falling are gone, and that was the part that was wrong.
+
+
 
 When the owner states a preference, makes a decision, or corrects something,
 **record it here** in the same turn. That is the point of the file: a fresh

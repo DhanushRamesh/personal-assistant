@@ -118,6 +118,11 @@ evals-models: ## Ask which models this gateway will accept (costs API calls)
 	@go test ./internal/app/noticing/evals/ -tags evals -count=1 -v -timeout 10m \
 		-run TestWhichModelsThisGatewayTakes $(ARGS)
 
+.PHONY: evals-rhythm
+evals-rhythm: ## Print the counted half of the description from the real database (no API calls)
+	@go test ./internal/app/profile/evals/ -tags evals -count=1 -v -timeout 2m \
+		-run TestWhatTheCountedHalfSays $(ARGS)
+
 .PHONY: evals-wondering
 evals-wondering: ## Ask the real judge what it would write, keeping nothing (costs API calls)
 	@go test ./internal/app/noticing/evals/ -tags evals -count=1 -v -timeout 10m \

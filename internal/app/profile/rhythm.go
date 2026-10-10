@@ -55,6 +55,23 @@ const Fewest = 2
 // crowd out everything else.
 const Mostly = 12
 
+// Kinds : The most sorts of thing listed in the counted half.
+//
+// Twenty where a list of labels had twelve, because the two lists do
+// not grow the same way. Labels grow with every new artist, every
+// caller and every battery percentage, so a cap on them is a cap on
+// how much of somebody fits. Kinds grow only when a device starts
+// reporting something it has never reported before, which is a
+// handful of times a year.
+const Kinds = 20
+
+// Each : The most values shown within one kind.
+//
+// Enough to show a leaning without becoming the flat list this
+// replaced. The count of how many there were in all is given beside
+// them, so five of fifty-four does not read as five of five.
+const Each = 5
+
 // Arrived, Left : The ends of a visit, as the kinds a phone reports
 // them under.
 //
@@ -343,14 +360,49 @@ type moment struct {
 	kind  string
 	value string
 	at    time.Time
+	// reading : Its value is a measurement rather than what the
+	// thing is, so the value does not say which thing happened.
+	reading bool
 }
 
 // label : The thing itself, however it is named.
+//
+// A reading is its kind alone. The owner's decision that a varying
+// number is never a value is right and this cannot rely on it:
+// battery.level arrives with a percentage in the value, and counting
+// kind-and-value made a phone discharging into a hundred separate
+// things somebody does. Eight of the twelve lines here were battery
+// percentages and nine of the twelve in [whatFollows] were one
+// battery falling, stated as "battery.level 38, then battery.level
+// 37" and eleven near-identical others.
 func (m moment) label() string {
-	if m.value == "" {
+	if m.value == "" || m.reading {
 		return m.kind
 	}
 	return m.kind + " " + strconv.Quote(m.value)
+}
+
+// readings : The kinds whose every value is a number.
+//
+// Per kind and never per value, which is the difference between
+// folding a battery percentage and losing a caller. One call came
+// in from a number nobody had named, and "+916746580844" parses as
+// a number perfectly well; it stays a thing of its own because the
+// other callers that kind has seen are people with names.
+func readings(all []moment) map[string]bool {
+	num := map[string]bool{}
+	for _, m := range all {
+		if m.value == "" {
+			continue
+		}
+		if _, seen := num[m.kind]; !seen {
+			num[m.kind] = true
+		}
+		if _, err := strconv.ParseFloat(m.value, 64); err != nil {
+			num[m.kind] = false
+		}
+	}
+	return num
 }
 
 // shown : The same, as it should be read.
@@ -360,7 +412,7 @@ func (m moment) label() string {
 // and a description that is read before every answer has no business
 // carrying somebody's telephone number about with it.
 func (m moment) shown() string {
-	if m.value == "" {
+	if m.value == "" || m.reading {
 		return m.kind
 	}
 	return m.kind + " " + strconv.Quote(event.Readable(m.value))
@@ -372,6 +424,10 @@ func collapsed(events []event.Event, where *time.Location) []moment {
 	in := make([]moment, 0, len(events))
 	for _, e := range events {
 		in = append(in, moment{kind: e.Kind, value: valueOf(e.Payload), at: e.OccurredAt})
+	}
+	is := readings(in)
+	for i := range in {
+		in[i].reading = is[in[i].kind]
 	}
 	sort.Slice(in, func(i, j int) bool { return in[i].at.Before(in[j].at) })
 
@@ -388,45 +444,127 @@ func collapsed(events []event.Event, where *time.Location) []moment {
 	return out
 }
 
-// howOften : What they do, most often first.
+// howOften : What they do, most often first -- by sort of thing,
+// with what it was about underneath.
+//
+// It ranked labels, where a label is the kind and the value
+// together, and cut at twelve. That hid everything about the person
+// and kept everything about the hardware, for a reason that is
+// arithmetic rather than judgement: a kind with one value
+// concentrates all its count on one line and a kind with many
+// disperses across all of them. Measured over four weeks, with the
+// cut at twelve:
+//
+//   - battery.level: 1,230 moments over a hundred percentages,
+//     every one of them between nineteen and twenty, taking eight
+//     of the twelve lines to say a phone charges and discharges.
+//   - music.state: 97 moments over fifty-four artists, the busiest
+//     of them nine. Not one line.
+//   - call.received: 24 moments over ten people -- Amma seven,
+//     Alekhya six. Not one line.
+//
+// Taste is by nature many distinct values, and so is who somebody
+// rings. No cap could have surfaced either, because raising it buys
+// more battery percentages before it buys an artist.
+//
+// So the kind is the line and the values sit inside it. A kind is
+// something a device reports, which is a short and slow-growing
+// list; the values under it are where a person is.
 func howOften(moments []moment, where *time.Location, days int) string {
 	type tally struct {
-		shown string
-		times int
-		days  map[string]bool
-		when  []time.Time
+		reading bool
+		times   int
+		days    map[string]bool
+		when    []time.Time
+		values  map[string]int
+		order   []string
+		numbers []float64
 	}
 	by := map[string]*tally{}
 	order := []string{}
 	for _, m := range moments {
-		key := m.label()
-		t, seen := by[key]
+		t, seen := by[m.kind]
 		if !seen {
-			t = &tally{shown: m.shown(), days: map[string]bool{}}
-			by[key], order = t, append(order, key)
+			t = &tally{reading: m.reading, days: map[string]bool{}, values: map[string]int{}}
+			by[m.kind], order = t, append(order, m.kind)
 		}
 		t.times++
 		t.days[m.at.In(where).Format("2006-01-02")] = true
 		t.when = append(t.when, m.at)
+
+		switch {
+		case m.value == "":
+		case m.reading:
+			if n, err := strconv.ParseFloat(m.value, 64); err == nil {
+				t.numbers = append(t.numbers, n)
+			}
+		default:
+			// As it should be read and not as it is counted: a
+			// description carried into every answer has no
+			// business holding somebody's telephone number.
+			said := event.Readable(m.value)
+			if _, had := t.values[said]; !had {
+				t.order = append(t.order, said)
+			}
+			t.values[said]++
+		}
 	}
 
 	sort.SliceStable(order, func(i, j int) bool { return by[order[i]].times > by[order[j]].times })
 
 	lines := make([]string, 0, len(order))
-	for _, key := range order {
-		if len(lines) == Mostly {
+	for _, kind := range order {
+		if len(lines) == Kinds {
 			break
 		}
-		t := by[key]
+		t := by[kind]
 		line := fmt.Sprintf("- %s: %d %s, on %d of %d %s",
-			t.shown, t.times, plural("time", t.times), len(t.days), days, plural("day", days))
+			kind, t.times, plural("time", t.times), len(t.days), days, plural("day", days))
 		if at := aroundWhen(t.when, where); at != "" {
 			line += ", " + at
 		}
+		switch {
+		case t.reading && len(t.numbers) > 0:
+			sort.Float64s(t.numbers)
+			line += fmt.Sprintf("; readings from %s to %s",
+				figure(t.numbers[0]), figure(t.numbers[len(t.numbers)-1]))
+		case len(t.order) == 1:
+			// Kept rather than left off as part of what the kind
+			// is. A person whose calls all come from one person
+			// is the single most worth knowing thing that kind
+			// has to say, and a kind whose sender names nothing
+			// says `always "unknown"`, which is true and is
+			// about the sender.
+			line += "; always " + strconv.Quote(t.order[0])
+		case len(t.order) > 1:
+			sort.SliceStable(t.order, func(i, j int) bool {
+				return t.values[t.order[i]] > t.values[t.order[j]]
+			})
+			most := t.order
+			if len(most) > Each {
+				most = most[:Each]
+			}
+			named := make([]string, 0, len(most))
+			for _, v := range most {
+				named = append(named, fmt.Sprintf("%s (%d)", strconv.Quote(v), t.values[v]))
+			}
+			line += fmt.Sprintf("; %d different, most often %s",
+				len(t.order), strings.Join(named, ", "))
+		}
 		lines = append(lines, line)
 	}
-	return prompt.Lines(append([]string{"How often, most to least:"}, lines...)...)
+	return prompt.Block(
+		prompt.Lines(append([]string{"How often, most to least:"}, lines...)...),
+		prompt.Text(
+			"The number after each is how many times, and the ones named inside a kind are the most frequent of however many there were -- five of fifty-four artists is what they listen to most, not everything they listen to.",
+			"A kind whose value is a measurement is given as a range instead, because which reading it was does not say what happened.",
+		),
+	)
 }
+
+// figure : A number as it was reported, without a decimal point it
+// did not have.
+func figure(f float64) string { return strconv.FormatFloat(f, 'g', -1, 64) }
 
 // whatFollows : What tends to come shortly after what.
 //
