@@ -12,9 +12,29 @@ import (
 // Registry : Every tool the assistant has.
 //
 // The zero value is empty and usable.
+// Elsewhere : Where to look when a tool has looked for a name in its
+// own domain and found nothing.
+//
+// An interface rather than the search itself, so that this package
+// keeps reaching nothing: a registry that imported every store would
+// be the thing the layering exists to prevent.
+type Elsewhere interface {
+	// Instead : What to add to the result, or empty for nothing worth
+	// adding. Never an error: this runs on a turn that has already
+	// not found what it wanted, and failing here would take away a
+	// useful answer to replace it with none.
+	Instead(ctx context.Context, userID, named, except string) string
+}
+
 type Registry struct {
 	tools map[string]Tool
 	order []string
+
+	// Elsewhere : Looked in when a tool could not find a name in its
+	// own domain. Nil leaves every result exactly as its tool wrote
+	// it, which is what every test that does not care about this
+	// gets.
+	Elsewhere Elsewhere
 }
 
 // NewRegistry : A registry holding the given tools, or the first reason one
@@ -184,5 +204,22 @@ func (r *Registry) Call(ctx context.Context, name string, in Invocation) Result 
 			"is not there on the strength of it.", name, err))
 	}
 
-	return t.Run(ctx, in)
+	out := t.Run(ctx, in)
+
+	// Looked by name, found nothing, and there are other places a
+	// thing by that name could be kept. Done here because the
+	// registry is the only thing that can: a tool reaches its own
+	// store and nothing else, by design.
+	//
+	// Appended rather than replacing. The tool is right about its own
+	// domain and usually said something useful while being right, and
+	// this is the rest of the sentence rather than an argument with
+	// it.
+	if out.Looking != nil && r.Elsewhere != nil {
+		if more := r.Elsewhere.Instead(ctx, in.Caller.UserID,
+			out.Looking.For, out.Looking.Kind); more != "" {
+			out.Content = strings.TrimSpace(out.Content + " " + more)
+		}
+	}
+	return out
 }

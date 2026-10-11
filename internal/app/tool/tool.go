@@ -198,6 +198,20 @@ type Result struct {
 	// again for not having fetched it itself.
 	Read []string
 
+	// Looking : What was named and not found, so the server can look
+	// where this tool cannot.
+	//
+	// A name does not say which domain it belongs to. "Stop the water
+	// alarm" is a reminder here, while alarm is the word for a thing
+	// on the phone and drink water is a rule that could have written
+	// it. The tool is right that there is no such reminder and that
+	// is not an answer to the question.
+	//
+	// Set by [WhichOne] and [WhichOfThese], which are already the two
+	// places a tool admits it looked by name and came up short. Read
+	// by the registry, which has every store; nothing here does.
+	Looking *Looking
+
 	// Reveal : Tools to describe in full from the next round on.
 	//
 	// Set by tool_describe, and by the runner when the model called a
@@ -212,6 +226,15 @@ type Result struct {
 	// means the model has to guess the arguments, never that it cannot
 	// try.
 	Reveal []string
+}
+
+// Looking : A name that was searched for, and where it was searched.
+type Looking struct {
+	// For : The name, as the person gave it.
+	For string
+	// Kind : The singular of what has already been looked through, so
+	// the same ground is not covered twice.
+	Kind string
 }
 
 // OK : A result that worked.
@@ -245,6 +268,21 @@ func Broke(saying string, err error) Result {
 	if err != nil {
 		r.Detail = err.Error()
 	}
+	return r
+}
+
+// Looked : Records that this result comes from looking for a name and
+// not finding it, so the server can look where this tool cannot.
+//
+// Only on the not-found path. A tool that found several things in its
+// own domain is not ambiguous across domains -- it knows exactly what
+// sort of thing was meant and only not which one -- so [WhichOfThese]
+// does not set it.
+func (r Result) Looked(kind, said string) Result {
+	if strings.TrimSpace(said) == "" {
+		return r
+	}
+	r.Looking = &Looking{For: said, Kind: kind}
 	return r
 }
 

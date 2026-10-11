@@ -23,7 +23,7 @@ import (
 func WhichOne(kind, said string, candidates []string) Result {
 	if len(candidates) == 0 {
 		return Failed(fmt.Sprintf("There are no %ss at all yet, so there is none called %q.",
-			kind, said))
+			kind, said)).Looked(kind, said)
 	}
 
 	var b strings.Builder
@@ -34,7 +34,7 @@ func WhichOne(kind, said string, candidates []string) Result {
 	b.WriteString("Ask which was meant. Name the one likeliest to be it and put it as a question " +
 		"they can answer yes or no, then act on what they say. Do not tell them there is no such " +
 		kind + ", and do not pick one on their behalf.")
-	return Failed(b.String())
+	return Failed(b.String()).Looked(kind, said)
 }
 
 // WhichOfThese : What a tool returns when several things are equally near

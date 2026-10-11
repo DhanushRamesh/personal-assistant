@@ -123,6 +123,10 @@ evals-shape: ## Ask a real model the same question for the ear and the eye (cost
 	@go test ./internal/domain/persona/evals/ -tags evals -count=1 -v -timeout 10m \
 		-run TestTheSameQuestionIsShapedForTheEarAndTheEye $(ARGS)
 
+.PHONY: evals-naming
+evals-naming: ## Search his real reminders, rules and memories by name (no API calls)
+	@go test ./internal/app/elsewhere/evals/ -tags evals -count=1 -v -timeout 3m $(ARGS)
+
 .PHONY: evals-clock
 evals-clock: ## Ask the time against a history full of stale times (costs API calls)
 	@go test ./internal/base/records/conversation/evals/ -tags evals -count=1 -v -timeout 10m \

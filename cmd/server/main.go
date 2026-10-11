@@ -23,6 +23,7 @@ import (
 
 	"personal-assistant/internal/app/api"
 	"personal-assistant/internal/app/api/presence"
+	"personal-assistant/internal/app/elsewhere"
 	"personal-assistant/internal/app/live"
 	"personal-assistant/internal/app/noticing"
 	"personal-assistant/internal/app/pattern"
@@ -438,6 +439,32 @@ func run() error {
 		return err
 	}
 	registry = tools
+
+	// Where to look when a tool has looked for a name in its own
+	// domain and found nothing.
+	//
+	// A name does not say which domain it belongs to. Owner: "stop
+	// the water alarm ... it should figure out and come to a
+	// conclusion that it is an alarm kept to drink water at 11:45."
+	// Alarm is the word for a thing on the phone, the thing itself
+	// is a reminder, and a rule could have written it.
+	//
+	// Set after the registry rather than built into it, because the
+	// sources are domains and the registry is the one thing that
+	// must not import them. Only the local stores are here: a
+	// reminder, a rule and a memory are rows in MySQL and answer in
+	// single figures of milliseconds. Tasks and the diary go to
+	// Google, which is what [elsewhere.Budget] is for.
+	tools.Elsewhere = elsewhere.Search{
+		Sources: []elsewhere.Source{
+			elsewhere.Reminders(reminderStore, cfg.Assistant.Location),
+			elsewhere.Rules(jobmysql.New(db.DB), rules.Kind, cfg.Assistant.Location),
+			elsewhere.Tasks(listsOf(googleLink), cfg.Assistant.Location),
+			elsewhere.Diary(diaryOf(googleLink, cfg), cfg.Assistant.Now, cfg.Assistant.Location),
+			elsewhere.Remembered(remembering.Store),
+		},
+		Logger: logger.Logger,
+	}
 	manner := persona.NewSetting(startingPersona(context.Background(), chats, cfg, logger.Logger))
 
 	// Added after the rest, because it describes them and so has to be

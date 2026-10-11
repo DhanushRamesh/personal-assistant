@@ -18307,3 +18307,75 @@ Two habits keep it honest. Take the tool list from the server's own
 `tools registered` line rather than from grep, which picks up
 fixtures out of test files. And count rather than estimate: the
 first draft of the map said 51 tools when there were 52.
+
+
+### A name does not say which domain it is in
+
+Owner: *"i usually talk n few words .. like stop the water alarm .. it
+should figure out and shlud come t a coinciustion that its a alarm kept
+to drinkwayer at 11:45 liek taht..so when something is ambigous..it
+shoud derive woth the exixtsing data if mine..my calkender, tasks,
+remonders, phone larams, contacts , events , rules and also its memory
+..if noithing is related it shoud do web serach."*
+
+The thing he is asking for is not a bigger prompt. *Alarm* is the word
+for something on the phone, the thing itself is a reminder, and a rule
+could have written it. The model has to choose a tool before it can
+look, and choosing wrongly produces *"there is no such reminder"* --
+true of reminders and not an answer to the question.
+
+`internal/app/elsewhere` runs after a tool has looked by name and come
+up empty, and never before. On a turn that worked it costs nothing.
+
+**It searches the domain that just failed, too.** That looks like
+repeating the work and is not. Every tool matches a name the way
+`heard.Best` does: exactly, or one inside the other, or by edit
+distance. Measured against his own reminders, **"water alarm" scores
+0.10 against "Drink water"** and is found by none of the three. What
+those two share is a word, which is the question this asks and nothing
+else does. So the reminder tool is right that no reminder is *called*
+that, and the reminder he means is still a reminder.
+
+Against his real database, `make evals-naming`:
+
+	"water alarm"    -> Drink water, 11:45 am Monday 12 October (live)
+	                    Water the plants, 7 October (over)
+	                    Fill up water bottle, 6 October (over)
+	"good morning"   -> Good morning (exact name)
+	                    Morning routine, a memory
+	"qwerty nonsense"-> nothing
+
+Three things had to be decided by looking at that output rather than
+by thinking about it first:
+
+**One candidate per name.** A repeating reminder leaves a row behind
+every time it fires, so his database holds three called "Drink water".
+Offering three identical names as a choice is worse than offering
+none.
+
+**A live one leads where nothing else separates them.** "Water alarm"
+is equally unlike all three water reminders by edit distance. What
+tells them apart is that two are over and one goes off at 11:45
+tomorrow, and somebody saying *stop it* means the one with a future.
+An exact name still wins over a live one: *"that is the one, and it
+already went off"* is a good answer.
+
+**Several is a proposal, not a list.** He asked for a conclusion, so
+the likeliest is put as a yes-or-no and the rest are held back for a
+no. Reading three names out is the opposite of what he asked for.
+
+Where it finds nothing it adds two things and contradicts nothing. The
+tool that ran has already said it found nothing, in better words and
+about its own domain. What is added is that **an alarm set on his own
+phone cannot be read back** -- the one place a thing can be and not be
+found -- and that the web is not the next place to look. The web is
+for the world, never for his own life.
+
+Only the local stores are wired in by default: a reminder, a rule and a
+memory are rows in MySQL. Tasks and the diary go to Google, which is
+what `elsewhere.Budget` is for -- a source that hangs costs the answer
+nothing, and a source that fails is logged and left out. Measured on
+his own chats, one further round trip to the model costs **3,452 ms**
+against an average of 2.25 rounds a turn, and asking him which he meant
+costs a whole turn of about six seconds. The local search answers in
+single figures of milliseconds, in parallel.
