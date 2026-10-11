@@ -18379,3 +18379,57 @@ his own chats, one further round trip to the model costs **3,452 ms**
 against an average of 2.25 rounds a turn, and asking him which he meant
 costs a whole turn of about six seconds. The local search answers in
 single figures of milliseconds, in parallel.
+
+
+### A banned word, because the principle was already there
+
+Owner, with a screenshot: *"why it says tool tool tool..is this how a
+companion talk?"*
+
+Two answers in it. The first, describing itself: *"You can rely on me
+to use the tools I have to do what you ask."* The second, in reply to
+*"Okay, there it is. Thank you."*:
+
+> I understand, sir. I have read the lists. Your message contains no
+> question or request that requires a tool, so no tool needs calling.
+
+He said thank you and was handed a status report.
+
+The persona already forbade this, three times over and in three
+different ways: *say nothing at all about tools*, *never recite what
+you cannot do*, *never describe the tools you have*, *nobody asked for
+an inventory*. Every one of them true, and present, and ignored.
+
+What was missing was not another sentence. `honesty`'s version is
+scoped to declining -- *"never describe your own machinery while
+declining"* -- and neither of these was a decline: one was a summary
+of its own abilities and the other was a pleasantry. The rule had a
+shape the failures fell outside of.
+
+So it becomes a word rather than a principle. `machinery` says the
+word **tool** never appears in anything said to him, nor the name of
+one, under any circumstances. This is the second time in one evening
+the same thing settled an argument: measured on brevity, the
+principle held two times in three and a count held every time. A
+principle has to be weighed against the sentence being written; a
+banned word does not.
+
+The second half of it is not about vocabulary. Nothing anywhere
+covered **reporting a deliberation that came to nothing**, because
+nobody had imagined one -- asked to do nothing, it explained at length
+that nothing needed doing. So: never report what was called, not
+called, or not needed; never offer *I have read, checked, looked up*
+as though it were the answer; and a pleasantry is answered in a
+sentence and stopped.
+
+`make evals-machinery` greps for the word across eight questions
+written to invite it, in both readings. It was run against the manner
+with the new block **unwired** first, because two evals written
+earlier the same evening passed against the broken code and proved
+nothing:
+
+	without machinery   spoken 7 of 8   written 7 of 8
+	with it             spoken 8 of 8   written 8 of 8
+
+The leak it caught unwired is the owner's complaint word for word:
+*"The tools I have this turn are the only honest answer to that."*
