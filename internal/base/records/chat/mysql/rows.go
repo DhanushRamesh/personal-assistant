@@ -36,6 +36,7 @@ type chatRow struct {
 	StartedAt      *time.Time `gorm:"column:started_at"`
 	AnswerBeganAt  *time.Time `gorm:"column:answer_began_at"`
 	FinishedAt     *time.Time `gorm:"column:finished_at"`
+	Calls          *string    `gorm:"column:calls"`
 }
 
 // TableName : Names the table this row maps to.
@@ -170,6 +171,7 @@ func toRow(t *chat.Chat) *chatRow {
 		StartedAt:      t.StartedAt,
 		AnswerBeganAt:  t.AnswerBeganAt,
 		FinishedAt:     t.FinishedAt,
+		Calls:          fromCalls(t.Calls),
 	}
 }
 
@@ -193,6 +195,7 @@ func (r *chatRow) toChat() *chat.Chat {
 		StartedAt:      utc(r.StartedAt),
 		AnswerBeganAt:  utc(r.AnswerBeganAt),
 		FinishedAt:     utc(r.FinishedAt),
+		Calls:          toCalls(r.Calls),
 	}
 }
 
@@ -276,4 +279,31 @@ func toRecalled(raw *string) *chat.Recalled {
 		return nil
 	}
 	return &out
+}
+
+// fromCalls : The requests made to the model, as the JSON column holds them.
+func fromCalls(calls []chat.Call) *string {
+	if len(calls) == 0 {
+		return nil
+	}
+	raw, err := json.Marshal(calls)
+	if err != nil {
+		// As fromRecalled: losing the timeline is not worth losing the chat.
+		return nil
+	}
+	out := string(raw)
+	return &out
+}
+
+// toCalls : What the JSON column holds, as calls. Unreadable JSON is
+// treated as none recorded.
+func toCalls(raw *string) []chat.Call {
+	if raw == nil || *raw == "" {
+		return nil
+	}
+	var out []chat.Call
+	if err := json.Unmarshal([]byte(*raw), &out); err != nil {
+		return nil
+	}
+	return out
 }

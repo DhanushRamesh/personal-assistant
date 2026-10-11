@@ -114,17 +114,21 @@ func (r *Runner) consume(runCtx, ctx context.Context, t *chat.Chat, systemPrompt
 	// unless it has been accepted. See ahead.
 	var waiting, accepted <-chan environment.Message
 	var stopWaiting, stopAccepted context.CancelFunc
+	// Which of the chat's calls each of them is, for its timeline.
+	waitingCall, acceptedCall := -1, -1
 	drop := func() {
 		if stopWaiting != nil {
 			stopWaiting()
 		}
-		waiting, stopWaiting = nil, nil
+		t.Ended(waitingCall, chat.CallUnused, time.Now())
+		waiting, stopWaiting, waitingCall = nil, nil, -1
 	}
 	defer func() {
 		drop()
 		if stopAccepted != nil {
 			stopAccepted()
 		}
+		t.Ended(acceptedCall, chat.CallUnused, time.Now())
 	}()
 
 	// Whether the model has asked for any tool this turn, and whether
@@ -216,13 +220,14 @@ func (r *Runner) consume(runCtx, ctx context.Context, t *chat.Chat, systemPrompt
 		// The round begun early, if the one before it turned out to
 		// need it. Taken as though it had just been asked for.
 		stream, err := accepted, error(nil)
-		spent := stopAccepted
-		accepted, stopAccepted = nil, nil
+		spent, call := stopAccepted, acceptedCall
+		accepted, stopAccepted, acceptedCall = nil, nil, -1
 		// Anything begun early and not accepted is stale: the round
 		// beside it called a tool, so the history it was asked
 		// against no longer exists.
 		drop()
 		if stream == nil {
+			call = t.Asking(time.Now(), false)
 			stream, err = r.environment.Run(runCtx, environment.Request{
 				Prompt:  prompt,
 				History: turns,
@@ -235,6 +240,7 @@ func (r *Runner) consume(runCtx, ctx context.Context, t *chat.Chat, systemPrompt
 			})
 		}
 		if err != nil {
+			t.Ended(call, chat.CallFailed, time.Now())
 			r.logger.ErrorContext(ctx, "environment would not start", slog.Any("error", err))
 			r.finishWith(ctx, t, aloud, func() error {
 				// The cause is kept, not only logged. Asked afterwards
@@ -253,9 +259,9 @@ func (r *Runner) consume(runCtx, ctx context.Context, t *chat.Chat, systemPrompt
 		// after it is begun now.
 		sendable := returnable(reached, pressed, nudged, wrote, tools)
 		if sendable {
-			waiting, stopWaiting = r.ahead(runCtx, t, window, turns, prompt, asking, tools)
+			waiting, stopWaiting, waitingCall = r.ahead(runCtx, t, window, turns, prompt, asking, tools)
 		}
-		final := r.drain(ctx, t, stream, aloud, &spoke, !sendable, nil)
+		final := r.drain(ctx, t, stream, call, aloud, &spoke, !sendable, nil)
 		if spent != nil {
 			// Finished with. This only lets its context go.
 			spent()
@@ -306,8 +312,8 @@ func (r *Runner) consume(runCtx, ctx context.Context, t *chat.Chat, systemPrompt
 				pressed = true
 				// Begun while this answer was still being written, if
 				// it was. This is the only place it is right to use.
-				accepted, stopAccepted = waiting, stopWaiting
-				waiting, stopWaiting = nil, nil
+				accepted, stopAccepted, acceptedCall = waiting, stopWaiting, waitingCall
+				waiting, stopWaiting, waitingCall = nil, nil, -1
 				turns = append(turns, asUserTurn(prompt)...)
 				prompt = lookFirst
 				continue
@@ -519,6 +525,9 @@ func (r *Runner) drain(
 	ctx context.Context,
 	t *chat.Chat,
 	stream <-chan environment.Message,
+	// call : Which of the chat's calls the stream answers, stamped as it
+	// is heard and when it ends.
+	call int,
 	aloud *speech,
 	spoke *bool,
 	// speak : Whether this round's pieces may reach the person. A
@@ -537,6 +546,7 @@ func (r *Runner) drain(
 	// earns its place.
 	saidThisRound := false
 	for msg := range stream {
+		t.Heard(call, time.Now())
 		switch msg.Kind {
 		case environment.KindUpdate:
 			r.announce(t.ID, msg)
@@ -578,12 +588,26 @@ func (r *Runner) drain(
 		case environment.KindFinal, environment.KindError, environment.KindToolCalls:
 			m := msg
 			final = &m
+			t.Ended(call, callEnd(msg.Kind), time.Now())
 		default:
 			r.logger.WarnContext(ctx, "environment sent an unknown message kind",
 				slog.String("kind", string(msg.Kind)))
 		}
 	}
+	t.Ended(call, chat.CallStopped, time.Now())
 	return final
+}
+
+// callEnd : How a call ended, from the message that ended it.
+func callEnd(kind environment.Kind) chat.CallEnd {
+	switch kind {
+	case environment.KindToolCalls:
+		return chat.CallTools
+	case environment.KindError:
+		return chat.CallFailed
+	default:
+		return chat.CallAnswered
+	}
 }
 
 // history : Records the question and returns what was said before it.
@@ -939,8 +963,9 @@ func (r *Runner) ahead(
 	turns []environment.Turn,
 	prompt, asking string,
 	tools []environment.ToolSpec,
-) (<-chan environment.Message, context.CancelFunc) {
+) (<-chan environment.Message, context.CancelFunc, int) {
 	ctx, cancel := context.WithCancel(runCtx)
+	call := t.Asking(time.Now(), true)
 	stream, err := r.environment.Run(ctx, environment.Request{
 		Prompt:  lookFirst,
 		History: append(append([]environment.Turn{}, turns...), asUserTurn(prompt)...),
@@ -956,7 +981,8 @@ func (r *Runner) ahead(
 		// moment later and reports the failure then, in the one place
 		// that knows how to fail a chat properly.
 		cancel()
-		return nil, nil
+		t.Ended(call, chat.CallFailed, time.Now())
+		return nil, nil, -1
 	}
-	return stream, cancel
+	return stream, cancel, call
 }

@@ -209,3 +209,47 @@ func TestATurnThatStreamedNothingSaysNothing(t *testing.T) {
 		}
 	}
 }
+
+// TestTheTimelineSaysWhenTheModelWasAsked : The owner wanted the timeline
+// to show "when the first api call went, when the network responded".
+// The tools were there and the model was not, so the gaps between the
+// tools -- usually the model -- went unexplained.
+func TestTheTimelineSaysWhenTheModelWasAsked(t *testing.T) {
+	started := time.Date(2026, 10, 11, 12, 0, 0, 0, time.UTC)
+	ms := func(n int) time.Time { return started.Add(time.Duration(n) * time.Millisecond) }
+	ptr := func(v time.Time) *time.Time { return &v }
+	done := ms(3000)
+
+	tk := &chat.Chat{
+		ID: "chat_x", ConversationID: "conv_x", Status: chat.StatusCompleted, StartedAt: &started, FinishedAt: &done,
+		Calls: []chat.Call{
+			{AskedAt: ms(50), HeardAt: ptr(ms(700)), DoneAt: ptr(ms(900)), Ended: chat.CallTools},
+			{AskedAt: ms(1000), HeardAt: ptr(ms(1600)), DoneAt: ptr(ms(2900)), Ended: chat.CallAnswered},
+		},
+	}
+	out := views.OfTimeline(tk, []conversation.Message{
+		conversation.Said("conv_x", "what is on", ms(10)),
+		conversation.CalledTools("conv_x", []conversation.ToolCall{{ID: "1", Name: "calendar_list"}}, ms(900)),
+		conversation.ToolsReturned("conv_x", []conversation.ToolResult{{ID: "1", Name: "calendar_list", Outcome: conversation.OutcomeOK}}, ms(990)),
+		conversation.Answered("conv_x", "Dentist at four.", ms(2950)),
+	})
+
+	var kinds []string
+	for _, s := range out.Steps {
+		kinds = append(kinds, s.Kind)
+	}
+	want := []string{
+		views.StepAsked, views.StepModelAsked, views.StepModelReplied, views.StepToolCall, views.StepToolResult,
+		views.StepModelAsked, views.StepModelReplied, views.StepAnswered,
+	}
+	if strings.Join(kinds, ",") != strings.Join(want, ",") {
+		t.Fatalf("steps are\n %v\nwant\n %v", kinds, want)
+	}
+	first := out.Steps[2]
+	if first.OffsetMS == nil || *first.OffsetMS != 900 || first.TookMS != 850 || first.FirstMS == nil || *first.FirstMS != 650 {
+		t.Errorf("the first reply is at %v, took %d, first heard after %v; want 900, 850, 650", first.OffsetMS, first.TookMS, first.FirstMS)
+	}
+	if first.Outcome != string(chat.CallTools) {
+		t.Errorf("the first reply ended %q, want tools", first.Outcome)
+	}
+}

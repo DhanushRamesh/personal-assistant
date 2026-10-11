@@ -71,6 +71,7 @@ func New() *Repository {
 // a pointer, as a real repository's callers cannot.
 func copyChat(t *chat.Chat) *chat.Chat {
 	c := *t
+	c.Calls = append([]chat.Call(nil), t.Calls...)
 	return &c
 }
 

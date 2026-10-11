@@ -2597,6 +2597,43 @@ did the person wait, and where in the turn did the waiting end -- and
 collapsing them into one would make the timeline disagree with itself.
 
 
+## When the model was asked, and when it replied
+
+Owner, 11 October 2026, asking for an info box under each reply on the
+desktop: *"when the first api call went... when the network responded...
+whats the tool result"*, with each moment shown as how far into the work it
+happened, not the time of day.
+
+The timeline had the tools and nothing about the model. Each gap between
+two tools, usually the longest wait in the turn, was the model, and nothing
+recorded when a request went out or came back.
+
+**`chats.calls`, a JSON column (migration 00053).** It holds one entry per
+request to the model:
+- when it went out
+- when the first thing came back
+- when it ended, and how: `answered`, `tools`, `failed`, `stopped`, or
+  `unused` for a round begun ahead in case it was needed
+
+It is JSON rather than a table, as `recalled` is: a handful of entries a
+turn, read with the chat, never queried alone. It is stamped on the chat
+as the turn runs and written by the ordinary `Update` at the end, so it
+costs no write of its own. It is null for every turn before this.
+
+**Stamped by the runner, not the provider.** `Chat.Asking` is called where
+`environment.Run` is called, in `consume` and in `ahead`. `drain` stamps
+`Heard` on the first message and `Ended` on the terminal one. A round begun
+ahead and dropped is marked `unused`, so it does not look unanswered.
+
+**Two steps per call in `/v1/chats/{id}/steps`:**
+- `model_asked`
+- `model_replied`, with `first_ms` (time to first byte) and `took_ms`
+
+They are merged among the message steps by time. The question and what was
+read before it stay first, as before. A reply goes ahead of a message
+written at the same moment, because the message is what the reply
+produced.
+
 ## Turning the aside off did not stop it being recited
 
 Owner, after four questions re-run as an audit: the narration was

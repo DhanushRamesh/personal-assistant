@@ -129,6 +129,10 @@ type Chat struct {
 	// FinishedAt : When the chat reached a terminal status, or nil if it has
 	// not.
 	FinishedAt *time.Time
+
+	// Calls : Every request made to the model for the answer, in the order
+	// they went out.
+	Calls []Call
 }
 
 // Channel : How a prompt reached the server.

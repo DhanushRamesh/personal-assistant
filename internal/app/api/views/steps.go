@@ -1,6 +1,7 @@
 package views
 
 import (
+	"sort"
 	"time"
 
 	"personal-assistant/internal/base/records/chat"
@@ -15,6 +16,11 @@ const (
 	StepRecalled = "recalled"
 	// StepReadFirst : A listing read before the question, unasked.
 	StepReadFirst = "read_first"
+	// StepModelAsked : A request to the model went out.
+	StepModelAsked = "model_asked"
+	// StepModelReplied : The model's reply to it ended: with the answer,
+	// asking for tools, failing, or unused because it was begun early.
+	StepModelReplied = "model_replied"
 	// StepToolCall : A tool the model asked for.
 	StepToolCall = "tool_call"
 	// StepToolResult : What that tool returned.
@@ -70,6 +76,12 @@ type Step struct {
 	Recalled *chat.Recalled `json:"recalled,omitempty"`
 	// ByWords : Whether memory matched wording rather than meaning.
 	ByWords bool `json:"by_words,omitempty"`
+	// FirstMS : How long the model took to send anything back, for
+	// model_replied.
+	FirstMS *int64 `json:"first_ms,omitempty"`
+	// Early : Whether the request was begun before the one in front of it
+	// had finished, for model_asked and model_replied.
+	Early bool `json:"early,omitempty"`
 }
 
 // OfTimeline : The timeline of one chat, from the chat and what it wrote.
@@ -113,7 +125,7 @@ func OfTimeline(t *chat.Chat, wrote []conversation.Message) Timeline {
 				Outcome: string(conversation.OutcomeOK),
 			}
 			if t.StartedAt != nil {
-				step.At = t.StartedAt
+				step.At, step.OffsetMS = at(*t.StartedAt)
 			}
 			out.Steps = append(out.Steps, step)
 		}
@@ -129,7 +141,7 @@ func OfTimeline(t *chat.Chat, wrote []conversation.Message) Timeline {
 			ByWords:  t.Recalled.ByWords,
 		}
 		if t.StartedAt != nil {
-			step.At = t.StartedAt
+			step.At, step.OffsetMS = at(*t.StartedAt)
 		}
 		out.Steps = append(out.Steps, step)
 	}
@@ -184,5 +196,57 @@ func OfTimeline(t *chat.Chat, wrote []conversation.Message) Timeline {
 		}
 	}
 
+	out.Steps = withCalls(out.Steps, t.Calls, at)
+	return out
+}
+
+// lead : Whether a step belongs ahead of everything timed: the question
+// and what was read before it.
+func lead(kind string) bool {
+	return kind == StepAsked || kind == StepReadFirst || kind == StepRecalled
+}
+
+// withCalls : The steps with the requests made to the model placed among
+// them by time. The question and what was read before it stay first, as
+// OfTimeline puts them.
+func withCalls(steps []Step, calls []chat.Call, at func(time.Time) (*time.Time, *int64)) []Step {
+	if len(calls) == 0 {
+		return steps
+	}
+	var timed []Step
+	for _, c := range calls {
+		when, offset := at(c.AskedAt)
+		timed = append(timed, Step{Kind: StepModelAsked, At: when, OffsetMS: offset, Early: c.Early})
+		if c.DoneAt == nil {
+			continue
+		}
+		reply := Step{Kind: StepModelReplied, Outcome: string(c.Ended), Early: c.Early,
+			TookMS: c.DoneAt.Sub(c.AskedAt).Milliseconds()}
+		reply.At, reply.OffsetMS = at(*c.DoneAt)
+		if c.HeardAt != nil {
+			first := c.HeardAt.Sub(c.AskedAt).Milliseconds()
+			reply.FirstMS = &first
+		}
+		timed = append(timed, reply)
+	}
+
+	n := 0
+	for n < len(steps) && lead(steps[n].Kind) {
+		n++
+	}
+	out := append([]Step{}, steps[:n]...)
+	rest := steps[n:]
+	// Merged in order: a message written at the same moment as a reply
+	// is what that reply produced, so the reply goes first.
+	sort.SliceStable(timed, func(i, j int) bool { return timed[i].At.Before(*timed[j].At) })
+	for len(rest) > 0 || len(timed) > 0 {
+		if len(timed) > 0 && (len(rest) == 0 || rest[0].At == nil || !timed[0].At.After(*rest[0].At)) {
+			out = append(out, timed[0])
+			timed = timed[1:]
+			continue
+		}
+		out = append(out, rest[0])
+		rest = rest[1:]
+	}
 	return out
 }
