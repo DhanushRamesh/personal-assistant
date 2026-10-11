@@ -36,3 +36,16 @@ func Now(at time.Time) string {
 		"never read one back, and never carry one forward by adding to it. " +
 		"Work out anything they say about time from this, and never guess the date."
 }
+
+// Acknowledged : The assistant's half of the pair [Now] is given in.
+//
+// The clock is handed over as a turn rather than a line in the system
+// prompt, because that is the only position measured to beat the times
+// already in a long conversation. A turn in the person's voice with no
+// reply reads as something they said and left hanging, and gets
+// answered instead of the question, so it is closed here.
+//
+// No honorific and no name: the manner is configuration and this is
+// not the place it is decided.
+const Acknowledged = "Understood. That is the clock I will use, " +
+	"and not any time said earlier in this conversation."

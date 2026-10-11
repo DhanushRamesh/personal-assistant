@@ -10,6 +10,7 @@ import (
 	"personal-assistant/internal/app/runner"
 	"personal-assistant/internal/base/records/chat"
 	chatmemory "personal-assistant/internal/base/records/chat/memory"
+	"personal-assistant/internal/base/records/conversation"
 	"personal-assistant/internal/base/thinking/embed"
 	"personal-assistant/internal/base/world/events"
 	"personal-assistant/internal/domain/memory"
@@ -380,14 +381,33 @@ func TestEveryMessageSaysWhichChatWroteIt(t *testing.T) {
 
 // The assistant is told the time on every turn. It cannot know it, and
 // nothing about a reminder or a date works until it does.
+//
+// Told after the history rather than in the system prompt: a long
+// conversation is full of times it said itself, and from the system
+// prompt it read one of those back instead. Measured, and the position
+// is the whole of the fix, so this checks the position too.
 func TestThePromptCarriesTheTime(t *testing.T) {
 	p := &recordingProvider{}
 	h := withMemories(t, p, nil)
 
 	h.ask(t, "what day is it")
 
-	if !strings.Contains(p.systemPrompt(), "The time where the person is") {
-		t.Errorf("the prompt does not say what time it is:\n%s", p.systemPrompt())
+	if strings.Contains(p.systemPrompt(), "The time where the person is") {
+		t.Errorf("the time is back in the system prompt, where it loses to the history:\n%s",
+			p.systemPrompt())
+	}
+
+	seen := p.history()
+	if len(seen) < 2 {
+		t.Fatalf("the model saw %d turns, want the clock among them", len(seen))
+	}
+	last := seen[len(seen)-2:]
+	if !strings.Contains(last[0].Text, "The time where the person is") {
+		t.Errorf("the model was not told the time; the last turns were %q and %q",
+			last[0].Text, last[1].Text)
+	}
+	if last[1].Text != conversation.Acknowledged {
+		t.Errorf("the clock was left unanswered, which reads as a question: %q", last[1].Text)
 	}
 }
 

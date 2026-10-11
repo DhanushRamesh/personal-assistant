@@ -15604,6 +15604,65 @@ a window full of the pattern it was not inferred.
 What this does not fix is the chat it happened in, where the
 sequence is still visible. A new conversation starts clean.
 
+### Wording was not enough; position was
+
+Owner, two days later: *"also i saw tha its saying the outdated time
+when i ask check it."*
+
+It was, and worse than before. From his own messages on 11 October
+2026, each answer against the real clock:
+
+	12:07 pm   "12:07 pm"     right
+	12:22 pm   "12:22 pm"     right
+	 5:08 pm   "12:39 pm"     four and a half hours stale
+	 5:29 pm   "12:56 pm"     four and a half hours stale
+	 7:43 pm   "6:41 pm"      an hour stale
+
+Not the one-minute drift above. Whole hours, read straight off lines
+it had written itself earlier in the same conversation -- which by
+then held 140 messages spanning sixteen hours, from 4:09 am to 8:00
+pm. The wording added in October is all still there and all still
+true, and it lost anyway.
+
+The first guess was that the clock sat too early in the system
+prompt, with five blocks of timestamped history after it. Moving it
+to the end of the system prompt was **measured and was worse**: 0 of
+4 right against 3 of 4 for leaving it where it was. Position
+mattered, but not that position -- both are still before the
+conversation itself, which is where the stale times live.
+
+An eval was written to settle it, and the first two versions of the
+eval proved nothing. Four invented turns in a recalled block: both
+orders answered correctly, four times out of four. Forty invented
+turns over an hour, as real history: both orders correct again.
+Invented history is too tidy to fail on. Reading his actual
+conversation out of the database reproduced it on the first run.
+
+	clock first, in the system prompt      0-3 of 4 right
+	clock last, in the system prompt       0-1 of 4 right
+	clock after the history, as a turn     4 of 4, three runs
+
+So the clock is handed over as a pair of turns at the end of the
+history, immediately before the question, rather than as a line in
+the system prompt. The wording did not change at all. Only where it
+sits relative to the times it has to beat.
+
+A pair, not a single turn: an unanswered turn in the person's voice
+reads as something they said and left hanging, and gets answered
+instead of the question. The assistant's half is
+`conversation.Acknowledged`, which carries no honorific and no name,
+because the manner is configuration and this is not where it is
+decided.
+
+This sits awkwardly beside a rule that predates it -- timestamps are
+deliberately kept off the wire, because per-message times made the
+model echo them back into its answers. The distinction held to is
+that one labelled clock, given once, at the end, is a clock; a time
+on every message is a pattern.
+
+`make evals-clock` reads his longest real conversation and asks the
+time four ways in each position.
+
 
 ### Two sounds three milliseconds apart
 
@@ -17473,6 +17532,29 @@ as on `/api/chat` for anything but a voice turn.
   comes back.
 - A cancel is honoured only for a chat in one of the caller's own
   conversations.
+
+**The desktop client is to be an MCP server the assistant uses.** Owner's
+objective, 11 October 2026: *"we will be creating MCP for this machine
+client and will be integrating with Jarvis -- it's an objective."* The
+laptop's terminals, apps and spaces, which the client already holds, are
+to become tools the assistant can call. A goal, not yet designed or
+begun.
+
+**Satellite pairing per client, designed and deferred.** Owner, 11 October
+2026: *"design the satellite pairing per client, so a client can have both
+typed and voice... a client should send whether that request is by voice or
+typed"*, then *"remember it, we'll develop later"*. The fixed channel
+conflates how a prompt was asked, how its answer is delivered, and whether
+a screen can confirm. Proposed: each client declares what it can do at
+sign-in (`screen`, `speaker`), the ceiling; each prompt says how it was
+asked (`input: voice|typed`), defaulting to the client's, since Home
+Assistant's Ollama-shaped request carries only the model and the messages.
+A client may be paired with a satellite; the server watches every
+satellite and gives a voice prompt to the one processing at that moment,
+or treats it as unpaired voice when that is unclear. A paired client's
+core follows its satellite, shows its voice turns, and takes their
+confirmations on its screen. Open: the split itself, attribution by
+timing, and confirmations on the paired screen. Not begun.
 
 **A conversation that changes is announced, whoever asked in it.**
 Owner, 11 October 2026: a question asked by voice reached the database,

@@ -97,8 +97,15 @@ func TestHistoryCarriesBothSpeakers(t *testing.T) {
 	first := e.CreateIn(t, "", "List three programming languages.", "?wait=5s")
 	e.CreateIn(t, first.ConversationID, "No, make it four.", "?wait=5s")
 
+	// Without the clock pair every turn ends with, which is not what
+	// this is about. See Runner.clock.
+	sent := recorder.LastHistory()
+	if len(sent) >= 2 {
+		sent = sent[:len(sent)-2]
+	}
+
 	var roles []environment.Role
-	for _, turn := range recorder.LastHistory() {
+	for _, turn := range sent {
 		roles = append(roles, turn.Role)
 		if strings.HasPrefix(turn.Text, "[") {
 			t.Errorf("turn %q was decorated before sending: %s", turn.Role, turn.Text)

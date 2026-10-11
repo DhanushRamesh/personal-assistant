@@ -404,7 +404,7 @@ func (r *Runner) personaID() string {
 // doing, and remembering having switched somewhere is not the same as being
 // there.
 func (r *Runner) promptFor(ctx context.Context, t *chat.Chat) (string, []remind.Reminder) {
-	standing := r.prompt(reading(t)) + " " + conversation.Now(r.now()) + r.heard(t)
+	standing := r.prompt(reading(t)) + r.heard(t)
 
 	// The conversation is read once: it carries both where the assistant is
 	// and whose memories these are.
@@ -688,4 +688,15 @@ func (r *Runner) cancelReason(id string) (string, bool) {
 		return "", false
 	}
 	return at.reason, true
+}
+
+// clock : The time, as the last thing said before the question.
+//
+// Given as a pair of turns rather than a line in the system prompt.
+// See the measurement where it is appended, in execute.go.
+func (r *Runner) clock() []environment.Turn {
+	return []environment.Turn{
+		{Role: environment.RoleUser, Text: conversation.Now(r.now())},
+		{Role: environment.RoleAssistant, Text: conversation.Acknowledged},
+	}
 }

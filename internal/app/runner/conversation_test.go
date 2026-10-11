@@ -77,10 +77,16 @@ func TestTheEarlierExchangeReachesTheModel(t *testing.T) {
 	second := h.submit(t, "No, make it four.")
 	h.await(t, second.ID, chat.StatusCompleted, chat.StatusFailed)
 
+	// The last two are the clock and its acknowledgement, which every
+	// turn carries after the history. See Runner.clock.
 	seen := recorder.history()
-	if len(seen) != 2 {
-		t.Fatalf("model saw %d turns, want the question and the answer", len(seen))
+	if len(seen) != 4 {
+		t.Fatalf("model saw %d turns, want the question, the answer and the clock", len(seen))
 	}
+	if !strings.Contains(seen[2].Text, "The time where the person is") {
+		t.Errorf("the clock is not the last thing before the question: %q", seen[2].Text)
+	}
+	seen = seen[:2]
 	if seen[0].Role != environment.RoleUser || !strings.Contains(seen[0].Text, "List three") {
 		t.Errorf("first turn = %q by %q", seen[0].Text, seen[0].Role)
 	}
