@@ -119,6 +119,9 @@ func (r *Runner) consume(runCtx, ctx context.Context, t *chat.Chat, systemPrompt
 	// Whether the model has already been sent back once for giving up
 	// on a change it was asked to make.
 	var nudged bool
+	// Whether the answer has already been sent back for naming its
+	// machinery, so it is asked once and not in a circle.
+	var plainly bool
 
 	// A round begun before the one in front of it had finished, and
 	// the one that has been accepted for the next turn of the loop.
@@ -356,6 +359,34 @@ func (r *Runner) consume(runCtx, ctx context.Context, t *chat.Chat, systemPrompt
 				continue
 			}
 
+			// Named its own machinery, so it is asked once to say
+			// it as a person would.
+			//
+			// persona.machinery forbids the word outright and the
+			// manner has forbidden it in three other ways since it
+			// was written. Measured: the ban went live on 11
+			// October at 23:25 and on the 12th at 22:27 he was
+			// told "There is no tool I have that controls whether
+			// you shower", with the rule in the running binary.
+			//
+			// The eval that passed it asked the model with no
+			// tools offered. A real turn carries sixty of them and
+			// the model is deep in thinking about them, which is
+			// exactly when it reaches for the word. An instruction
+			// has to beat that; a check afterwards does not have
+			// to.
+			//
+			// One round, the same way an abandoned change is sent
+			// back above, and only on the answers that need it.
+			if !plainly && persona.NamesMachinery(final.Text) && len(tools) > 0 {
+				r.logger.InfoContext(ctx, "the answer named its own machinery",
+					slog.String("said", first(final.Text, 90)))
+				plainly = true
+				turns = append(turns, asUserTurn(prompt)...)
+				prompt = sayItPlainly
+				continue
+			}
+
 			address := persona.AddressFor(r.personaID())
 			answer := tool.Ensure(final.Text, address, tool.Merged(owed))
 			// A turn that reached for a write and never landed one
@@ -490,6 +521,27 @@ const lookFirst = "Before that answer goes out: you did not use any tool this tu
 	"that is a claim to check against both lists rather than against what you remember -- " +
 	"the tools change, and what you could not do last week you may be able to do now. " +
 	"If a tool fits, use it. If none does, say the same thing again and it will be sent as it is."
+
+// sayItPlainly : What the model is told when it named its machinery.
+//
+// Not a reminder of the rule. It has the rule and broke it. This
+// says what to write instead, which is the thing it was missing.
+const sayItPlainly = "Before that answer goes out: it names your own machinery, which they " +
+	"never hear about. Say the same thing as a limit of your own -- \"I am afraid I cannot " +
+	"do that, sir\" -- and then give them whatever of their question you can answer. " +
+	"The word \"tool\" must not appear, nor the name of one, nor what you do and do not " +
+	"have. If what they asked is something you can simply answer yourself -- an opinion, " +
+	"a meaning, a sum, what you make of something -- then answer it and say nothing about " +
+	"what you cannot do."
+
+// first : The opening of a string, for a log line.
+func first(s string, n int) string {
+	s = strings.TrimSpace(s)
+	if len(s) <= n {
+		return s
+	}
+	return s[:n] + "..."
+}
 
 // finishIt : What the model is told when it gave up on a change.
 //
