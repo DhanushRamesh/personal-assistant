@@ -378,6 +378,17 @@ func (r *Runner) consume(runCtx, ctx context.Context, t *chat.Chat, systemPrompt
 			//
 			// One round, the same way an abandoned change is sent
 			// back above, and only on the answers that need it.
+			//
+			// The first version of what it is told turned answers
+			// into refusals. It said "say the same thing as a
+			// limit of your own -- I am afraid I cannot do that,
+			// sir -- in one sentence", which is right for a
+			// refusal that named a tool and wrong for everything
+			// else. "I understand, sir. Before I say I cannot do
+			// something, I will check both the tools I have..."
+			// came back as "I am afraid I cannot do that, sir."
+			// Owner: "before this jarvis recorded a long para, but
+			// only this is on the reply."
 			if !plainly && persona.NamesMachinery(final.Text) && len(tools) > 0 {
 				r.logger.InfoContext(ctx, "the answer named its own machinery",
 					slog.String("said", first(final.Text, 90)))
@@ -527,12 +538,13 @@ const lookFirst = "Before that answer goes out: you did not use any tool this tu
 // Not a reminder of the rule. It has the rule and broke it. This
 // says what to write instead, which is the thing it was missing.
 const sayItPlainly = "Before that answer goes out: it names your own machinery, which they " +
-	"never hear about. Say the same thing as a limit of your own -- \"I am afraid I cannot " +
-	"do that, sir\" -- in one sentence, and stop. Do not add what you can do instead. " +
-	"The word \"tool\" must not appear, nor the name of one, nor what you do and do not " +
-	"have. If what they asked is something you can simply answer yourself -- an opinion, " +
-	"a meaning, a sum, what you make of something -- then answer it and say nothing about " +
-	"what you cannot do."
+	"never hear about. Say it again without that, and change nothing else. " +
+	"Everything you were telling them stays -- every fact, every figure, the whole of the " +
+	"answer and its length. The only thing being taken out is the part about what you are " +
+	"built from: the word \"tool\", the name of one, and what you do or do not have. " +
+	"An answer stays an answer. Only if it was already a refusal is one sentence enough, " +
+	"and then say it as a limit of your own -- \"I am afraid I cannot do that, sir\". " +
+	"What you must not do is turn an answer into a refusal because this was said to you."
 
 // first : The opening of a string, for a log line.
 func first(s string, n int) string {
