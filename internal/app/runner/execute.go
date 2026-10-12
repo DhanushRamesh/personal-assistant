@@ -351,8 +351,19 @@ func (r *Runner) consume(runCtx, ctx context.Context, t *chat.Chat, systemPrompt
 			// say the same thing again. What it cannot do is never
 			// look.
 			if !reached && !pressed && len(tools) > 0 {
+				// What was thrown away, which nothing recorded.
+				//
+				// Owner, having heard something before the answer:
+				// "before saying it, it said 'I cannot answer'."
+				// The turn's own log had the aside a tool says while
+				// it runs, and the answer this discards, and no way
+				// to tell which of the two reached him -- its text
+				// was gone and the two moments were a tenth of a
+				// second apart.
 				r.logger.InfoContext(ctx, "an answer was sent back to look at the tools",
-					slog.Bool("already_running", waiting != nil))
+					slog.Bool("already_running", waiting != nil),
+					slog.Bool("spoken", published),
+					slog.String("thrown_away", first(final.Text, 120)))
 				pressed = true
 				// Begun while this answer was still being written, if
 				// it was. This is the only place it is right to use.
