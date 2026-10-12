@@ -528,7 +528,7 @@ const lookFirst = "Before that answer goes out: you did not use any tool this tu
 // says what to write instead, which is the thing it was missing.
 const sayItPlainly = "Before that answer goes out: it names your own machinery, which they " +
 	"never hear about. Say the same thing as a limit of your own -- \"I am afraid I cannot " +
-	"do that, sir\" -- and then give them whatever of their question you can answer. " +
+	"do that, sir\" -- in one sentence, and stop. Do not add what you can do instead. " +
 	"The word \"tool\" must not appear, nor the name of one, nor what you do and do not " +
 	"have. If what they asked is something you can simply answer yourself -- an opinion, " +
 	"a meaning, a sum, what you make of something -- then answer it and say nothing about " +

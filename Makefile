@@ -132,6 +132,11 @@ evals-remarking: ## What a rule says when it speaks, against its own words (cost
 	@go test ./internal/app/noticing/evals/ -tags evals -count=1 -v -timeout 10m \
 		-run TestAMorningRemarkGreetsAndSaysHowLong $(ARGS)
 
+.PHONY: evals-refusing
+evals-refusing: ## Ask how long a refusal runs (costs API calls)
+	@go test ./internal/domain/persona/evals/ -tags evals -count=1 -v -timeout 10m \
+		-run TestARefusalIsOneSentence $(ARGS)
+
 .PHONY: evals-machinery
 evals-machinery: ## Check the word "tool" never reaches the person (costs API calls)
 	@go test ./internal/domain/persona/evals/ -tags evals -count=1 -v -timeout 10m \
