@@ -122,6 +122,24 @@ func (r *Runner) consume(runCtx, ctx context.Context, t *chat.Chat, systemPrompt
 	// Whether the answer has already been sent back for naming its
 	// machinery, so it is asked once and not in a circle.
 	var plainly bool
+	// Whether any of the answer has already reached them.
+	//
+	// returnable enumerates the reasons a round may still be sent
+	// back, and a round that cannot be is read aloud as it arrives.
+	// The machinery check added a reason it did not know about, so
+	// an answer was spoken and then sent away to be written again --
+	// and the owner heard one answer and read another. His words:
+	// "I got the response as 'I am afraid..' but before that jarvis
+	// was speaking."
+	//
+	// The warning was already in drain, two lines from where this
+	// broke it: "what a listener has heard cannot be unheard."
+	//
+	// So the check now applies only where it can still change what
+	// they get. On a round already spoken the word reaches them,
+	// which is what happened before the check existed, and is better
+	// than hearing one answer and reading a different one.
+	var published bool
 
 	// A round begun before the one in front of it had finished, and
 	// the one that has been accepted for the next turn of the loop.
@@ -281,6 +299,12 @@ func (r *Runner) consume(runCtx, ctx context.Context, t *chat.Chat, systemPrompt
 		if sendable {
 			waiting, stopWaiting, waitingCall = r.ahead(runCtx, t, window, turns, prompt, asking, tools)
 		}
+		// Whether any of this turn's answer has already reached
+		// them. A round read aloud cannot be taken back, so nothing
+		// after this point may send it away to be rewritten.
+		if !sendable {
+			published = true
+		}
 		final := r.drain(ctx, t, stream, call, aloud, &spoke, !sendable, nil)
 		if spent != nil {
 			// Finished with. This only lets its context go.
@@ -389,7 +413,7 @@ func (r *Runner) consume(runCtx, ctx context.Context, t *chat.Chat, systemPrompt
 			// came back as "I am afraid I cannot do that, sir."
 			// Owner: "before this jarvis recorded a long para, but
 			// only this is on the reply."
-			if !plainly && persona.NamesMachinery(final.Text) && len(tools) > 0 {
+			if !plainly && !published && persona.NamesMachinery(final.Text) && len(tools) > 0 {
 				r.logger.InfoContext(ctx, "the answer named its own machinery",
 					slog.String("said", first(final.Text, 90)))
 				plainly = true
