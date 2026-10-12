@@ -10,6 +10,7 @@ import (
 	"log/slog"
 	"net/http"
 	"os"
+	"os/exec"
 	"os/signal"
 	"personal-assistant/internal/base/records/client"
 	"personal-assistant/internal/base/records/store"
@@ -120,6 +121,9 @@ const embeddingCatchUpLimit = 500
 // should start answering rather than finish the backlog. What is left is
 // picked up after each turn and at the next restart.
 const transcriptCatchUpLimit = 2000
+
+// started : When this process began, for the dashboard's health reading.
+var started = time.Now()
 
 func main() {
 	if len(os.Args) > 2 && os.Args[1] == "createuser" {
@@ -896,6 +900,8 @@ func run() error {
 	handler := api.New(api.Options{
 		Logger:        logger.Logger,
 		AssistantName: cfg.Assistant.Name,
+		StartedAt:     started,
+		Restarts:      supervisorRestarts,
 		Live:          liveHub,
 		DB:            db,
 		Arrivals:      running,
@@ -1327,6 +1333,32 @@ func (a asking) Name(ctx context.Context, lat, lon float64) (event.Place, error)
 // an interface and then fail on every call with a nil pointer, so the
 // nil is returned untyped and the greeting is simply about what has
 // happened instead.
+// supervisorRestarts : How many times systemd has restarted this server's
+// unit since it was last started by hand -- the number `make status`
+// shows. The unit is read from the process's own cgroup, so it is whatever
+// unit this is running under; outside systemd there is none to ask.
+func supervisorRestarts(ctx context.Context) (int, bool) {
+	cgroup, err := os.ReadFile("/proc/self/cgroup")
+	if err != nil {
+		return 0, false
+	}
+	var unit string
+	for _, part := range strings.Split(strings.TrimSpace(string(cgroup)), "/") {
+		if strings.HasSuffix(part, ".service") {
+			unit = part
+		}
+	}
+	if unit == "" {
+		return 0, false
+	}
+	out, err := exec.CommandContext(ctx, "systemctl", "--user", "show", "-p", "NRestarts", "--value", unit).Output()
+	if err != nil {
+		return 0, false
+	}
+	n, err := strconv.Atoi(strings.TrimSpace(string(out)))
+	return n, err == nil
+}
+
 func greetingDiary(link *google.Link, cfg config.Config) presence.Diary {
 	if link == nil {
 		return nil
@@ -3118,18 +3150,10 @@ func writing(ask string, already []job.Ran, before string, usually string) strin
 			ask,
 		),
 		ordinary,
-		// Nobody asked for this one, so nobody is listening when it
-		// starts. A reply is heard from its first word because
-		// somebody is waiting for it; an announcement arrives at
-		// somebody in the middle of something else, and the first
-		// few words are spent getting their attention rather than
-		// carrying anything.
-		prompt.Text(
-			"This will be said to somebody who is not listening yet, and is not expecting it.",
-			"So the thing that matters must not be the first thing in the sentence: whatever a person misses while they look up should be words they can afford to miss.",
-			"Lead with what is happening in general, then the particular. Not \"twenty-four percent, sir\" but \"your battery is getting low, sir -- twenty-four percent\".",
-			"A word is already being said in front of this to get their attention, so do not open with one of your own and do not address them at the start. Address them once, later in the sentence, if your manner calls for it at all.",
-		),
+		// Moved to internal/app/noticing, where the eval that
+		// measures it can see the same words. See its doc comment
+		// for the morning it swallowed a greeting.
+		noticing.Interrupting,
 		what,
 		again,
 		// A rule asking for the battery every minute was handed a

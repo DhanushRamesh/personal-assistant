@@ -127,6 +127,11 @@ evals-shape: ## Ask a real model the same question for the ear and the eye (cost
 evals-naming: ## Search his real reminders, rules and memories by name (no API calls)
 	@go test ./internal/app/elsewhere/evals/ -tags evals -count=1 -v -timeout 3m $(ARGS)
 
+.PHONY: evals-remarking
+evals-remarking: ## What a rule says when it speaks, against its own words (costs API calls)
+	@go test ./internal/app/noticing/evals/ -tags evals -count=1 -v -timeout 10m \
+		-run TestAMorningRemarkGreetsAndSaysHowLong $(ARGS)
+
 .PHONY: evals-machinery
 evals-machinery: ## Check the word "tool" never reaches the person (costs API calls)
 	@go test ./internal/domain/persona/evals/ -tags evals -count=1 -v -timeout 10m \
