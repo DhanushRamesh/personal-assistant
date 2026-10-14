@@ -140,6 +140,11 @@ func (r *Runner) consume(runCtx, ctx context.Context, t *chat.Chat, systemPrompt
 	// which is what happened before the check existed, and is better
 	// than hearing one answer and reading a different one.
 	var published bool
+	// Whether the answer has already been sent back for running
+	// long. Once, because a model that cannot say it in two
+	// sentences will not find them on the third attempt either,
+	// and every attempt is a second they are waiting.
+	var shortened bool
 
 	// A round begun before the one in front of it had finished, and
 	// the one that has been accepted for the next turn of the loop.
@@ -371,6 +376,28 @@ func (r *Runner) consume(runCtx, ctx context.Context, t *chat.Chat, systemPrompt
 				waiting, stopWaiting, waitingCall = nil, nil, -1
 				turns = append(turns, asUserTurn(prompt)...)
 				prompt = lookFirst
+				// Carried into this send-back rather than waited
+				// for. The round after it is the one that gets
+				// spoken, and by then nothing can be taken back,
+				// so the only moment to ask for the length is on
+				// the way in.
+				//
+				// After the line above and not before it: written
+				// before, it was overwritten three lines later and
+				// never reached the model at all, which read from
+				// the log as the model ignoring it twice.
+				//
+				// It cannot reach a round that was already running
+				// when the send-back was decided. Those are started
+				// in parallel to save the wait, and what they were
+				// started with is what they answer.
+				if accepted == nil && persona.TooLong(final.Text, reading(t)) {
+					r.logger.InfoContext(ctx, "the spoken answer ran long",
+						slog.Int("sentences", persona.Sentences(final.Text)),
+						slog.String("said", first(final.Text, 90)))
+					prompt += " " + alsoShorter
+					shortened = true
+				}
 				continue
 			}
 			// Asked to change something, changed nothing, and now
@@ -424,6 +451,21 @@ func (r *Runner) consume(runCtx, ctx context.Context, t *chat.Chat, systemPrompt
 			// came back as "I am afraid I cannot do that, sir."
 			// Owner: "before this jarvis recorded a long para, but
 			// only this is on the reply."
+			// Longer than a spoken answer may be, sent back once to
+			// be said again. The rule is in the manner and the
+			// manner did not hold it -- see [persona.Aloud] -- and
+			// an answer already read aloud cannot be taken back,
+			// which is what published guards.
+			if !shortened && !published && persona.TooLong(final.Text, reading(t)) {
+				r.logger.InfoContext(ctx, "the spoken answer ran long",
+					slog.Int("sentences", persona.Sentences(final.Text)),
+					slog.String("said", first(final.Text, 90)))
+				shortened = true
+				turns = append(turns, asUserTurn(prompt)...)
+				prompt = sayItShorter
+				continue
+			}
+
 			if !plainly && !published && persona.NamesMachinery(final.Text) && len(tools) > 0 {
 				r.logger.InfoContext(ctx, "the answer named its own machinery",
 					slog.String("said", first(final.Text, 90)))
@@ -434,7 +476,18 @@ func (r *Runner) consume(runCtx, ctx context.Context, t *chat.Chat, systemPrompt
 			}
 
 			address := persona.AddressFor(r.personaID())
-			answer := tool.Ensure(final.Text, address, tool.Merged(owed))
+			answer := final.Text
+			// The opening that says what kind of question it was,
+			// taken off rather than sent back. It is always the
+			// first thing said, the answer underneath it is sound,
+			// and a round trip to remove a sentence is a round trip
+			// nobody is waiting through.
+			if shorter, took := persona.Triaged(answer); took {
+				r.logger.InfoContext(ctx, "the answer began by classifying the question",
+					slog.String("removed", first(answer[:len(answer)-len(shorter)], 90)))
+				answer = shorter
+			}
+			answer = tool.Ensure(answer, address, tool.Merged(owed))
 			// A turn that reached for a write and never landed one
 			// may not end as though it had. The model has been seen
 			// to describe the change it was refused.
@@ -580,6 +633,36 @@ const sayItPlainly = "Before that answer goes out: it names your own machinery, 
 	"An answer stays an answer. Only if it was already a refusal is one sentence enough, " +
 	"and then say it as a limit of your own -- \"I am afraid I cannot do that, sir\". " +
 	"What you must not do is turn an answer into a refusal because this was said to you."
+
+// sayItShorter : What the model is told when a spoken answer ran long.
+//
+// Written to cut rather than to summarise. Told only to be shorter, a
+// model rewrites the answer into something vaguer and drops the
+// figure that was the point of it; told what to keep, it drops the
+// scaffolding instead.
+const sayItShorter = "Before that answer goes out: they are listening to it, and it is longer " +
+	"than it may be. Say it again in one sentence, or two where the second carries " +
+	"something the first could not. " +
+	"Keep the answer. The fact they asked for stays, with its figure if it had one, and " +
+	"in your own voice as before. " +
+	"What goes is everything around it: the sentence that restates their question, the one " +
+	"that sets up the answer, the background they did not ask for, the examples, and the " +
+	"summary at the end of what you have just said. " +
+	"Do not make it vaguer to make it shorter -- a shorter answer that no longer says the " +
+	"thing is worse than the long one."
+
+// alsoShorter : Added to another send-back when the answer it is
+// replacing also ran long.
+//
+// The length check cannot stand on its own for these turns. A round
+// that has been sent back once is no longer recallable, so the answer
+// that follows it is streamed and spoken as it is written -- and by
+// the time its sentences can be counted they have been heard. The
+// only moment to ask is on the way in to the round that will speak.
+const alsoShorter = "And it ran long for something they are listening to. Whatever you come " +
+	"back with, say it in one sentence, or two where the second carries something the " +
+	"first could not. Keep the fact and its figure; drop the sentence that restates " +
+	"their question, the background they did not ask for, and the summary at the end."
 
 // first : The opening of a string, for a log line.
 func first(s string, n int) string {

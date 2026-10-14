@@ -19531,3 +19531,47 @@ written "Looking at your sleep data from last night" -- the second
 narrating a lookup it cannot do, which is its own fault and not the
 answer he was after. For anything that needs his own life in it,
 speaking to it is the test; this is for how a sentence lands.
+
+### What is spoken has already gone
+
+He showed a spoken answer that opened by classifying his question and
+then ran to six sentences, with the ban on the first and the count on
+the second both verbatim in the running binary.
+
+Three things were tried against it, and the third found the wall.
+
+**The ban did not hold.** `persona.Triaged` takes the opening off
+afterwards instead -- the reason the machinery check exists, in its own
+words: *an instruction has to win an argument against everything else
+in the prompt; a check afterwards does not have to win anything.* The
+prompt it was losing against is 20,710 characters, behind 36,000
+tokens of conversation.
+
+**The count did not hold either**, so it became a send-back. That did
+not fire, and the first reason was mine: `prompt = lookFirst` three
+lines below where it was set, so the instruction was overwritten and
+never reached the model. From the log that read as the model ignoring
+it twice.
+
+**And fixing that found the wall.** The round after a send-back is
+started in parallel before the send-back is decided -- `ahead`, which
+exists because the send-back is right about one turn in four and the
+other three were costing three to five seconds. What a round already
+running was started with is what it answers, so nothing decided after
+it can reach it.
+
+Underneath both: **a voice answer is streamed as it is written.**
+Anything done to it afterwards reaches what is stored and never what
+was heard. Proved on one turn, the strip having fired:
+
+	STORED:  Backups serve one purpose: to let you recover from loss.
+	SPOKEN:  This is a question about how to think about something...
+
+So the screen is fixed and the ear is not, and no check placed after
+the answer can fix the ear. The only thing that would is not streaming
+the first round of a spoken turn -- holding it, reading it, and then
+speaking it. Measured on a real turn, that costs **0.54 seconds**:
+speech began at 4.091s into a turn that finished at 4.627s.
+
+Not done, because it is a change to how every spoken answer is
+delivered and the person it is for should choose it.
