@@ -19265,3 +19265,55 @@ not have.
 
 The writer built for his own `rule_add` had the field all along, with a
 comment explaining why. The two were never the same.
+
+### Three faults in one pass, and a rule that did not survive them
+
+The first evening of the pass going and looking found all three at
+once, which is what the log was for.
+
+**It wrote a rule.** The `remarked` pass, at 19:48 --
+
+	{"rule": "when music starts playing, look at what artist is
+	  playing and how many times that artist has appeared in the past
+	  seven days versus the four weeks before; if this week's count is
+	  four or more and the earlier count is near zero, say something
+	  about it",
+	 "name": "new artist this week",
+	 "because": "Owl City appeared 4 times this week and not at all in
+	  the three weeks before"}
+
+**And the server went down storing it.** `allowed` calls the lookup for
+every act that names a tool, and the path the assistant writes its own
+rules by passed `nil`. That could not show before: reaching the call
+needs a rule to have been written, and none ever had. Both of the
+morning's fixes cleared the way, the first rule arrived, and the pass
+panicked inside the daily description's goroutine. The rule went with
+it -- twenty-five rules in the table afterwards, all his, exactly as
+before.
+
+The lookup is threaded through now, the same one the rule tool has
+always passed, and `allowed` no longer calls what it was handed without
+checking. Only acts that actually name a tool are refused for a missing
+one: a rule that says words looks nothing up and it is none of its
+business.
+
+**And the `noticed` pass ran out of reply.**
+
+	platform ai call failed: the reply was empty
+	  (387 events, finished "maxtokens", 3000 words written)
+
+Not the reasoning budget, which is already held down to low effort for
+this purpose for exactly this reason. Three thousand words *written*:
+it transcribed the readings back, day by day with their times, before
+concluding, and was cut off before it concluded. The counting was done
+and nothing came out of it.
+
+So it is told the cap is the whole reply, not to copy out what the
+tools told it, and that the counts belong in `because` rather than in
+a table. A line or two of working is fine; the morning-departure table
+that worked at 17:26 is what failed at 19:48, and the difference was
+only how much there was to list.
+
+The log is what made all three visible in one evening. None of them
+would have shown otherwise: a panic in a recovered goroutine, an empty
+reply, and a rule nobody ever saw.

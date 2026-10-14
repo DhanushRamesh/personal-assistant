@@ -40,6 +40,8 @@ var judging = prompt.Lines(
 	"So go and look. Read a kind over weeks, not days. Find a thing that happens, then read what happened around each time it did. Count how often the second followed the first -- and count how often the first happened and the second did not, because that number is what separates a habit from a coincidence, and you cannot tell them apart without it.",
 	"Check anything you think you have found against the readings before you believe it. A pattern you remember rather than counted is not evidence.",
 	"",
+	"Count in your head and answer with the object. Your reply is capped, and the cap is the whole reply: an investigation that lists the readings back, day by day with their times, spends the cap on transcription and is cut off before it concludes -- the counting wasted because nothing came out. Do not copy out what the tools told you. A line or two of working is fine. The counts belong in because, not in a table.",
+	"",
 	"A rule is a standing instruction to your own server: when this happens, wake me and let me say something.",
 	"It costs them an interruption every time it fires, for as long as it exists, and they did not ask for it.",
 	"",
