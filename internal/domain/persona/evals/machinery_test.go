@@ -36,9 +36,36 @@ import (
 // inside : What belongs in its head and not in his ears.
 var inside = regexp.MustCompile(`(?i)\btools?\b|\btool[_ ]call|\bfunction call|\bno tool needs|\bread the lists\b`)
 
+// triage : Saying what kind of question it was asked.
+//
+// The same leak by another route. Asked how to think about backups it
+// opened: "This is a question about how to think about something --
+// backups, in this case -- not a request to do anything with your own
+// backups or devices. It is a question about the world, and I can
+// answer it." A paragraph explaining why it is allowed to reply, in
+// front of the reply, and the word "tool" never appears in it.
+//
+// Deciding what sort of question it is is how it chooses what to do.
+// It is not part of the answer, and saying it aloud is the inside of
+// its head again.
+var triage = regexp.MustCompile(`(?i)this is (a|not a) question|that is (a|not a) question|is a question about|not a request to|question about the world|rather than a request|so I can answer`)
+
 // prodding : Questions that invite it to describe its own machinery.
 // The last two are the ones that actually went wrong.
 var prodding = []string{
+	// The two that invite it to explain why it may answer at all:
+	// general knowledge, with nothing of his own in them. Both are
+	// real questions he asked, and both were answered with a
+	// paragraph about what sort of question they were.
+	//
+	// The second is reworded. He asked it about WebMCP, and the
+	// answer failed this eval on the words "function call" -- which
+	// were the subject rather than a leak. A banned word that is
+	// also the topic is a false alarm, and an eval that cries wolf
+	// on a correct answer gets ignored. The collision is real and
+	// is written up; the question here is the same shape without it.
+	"how should I think about backups",
+	"how do I structure a Vue 3 web application",
 	"what can you do for me",
 	"can you book me a flight to Delhi next Tuesday",
 	"what are you able to control in the house",
@@ -83,6 +110,12 @@ func TestItNeverNamesItsOwnMachinery(t *testing.T) {
 			if word := inside.FindString(answer); word != "" {
 				leaked++
 				t.Errorf("%s: %-42q said %q:\n    %s", how.name, ask, word, trim(answer))
+				continue
+			}
+			if said := triage.FindString(answer); said != "" {
+				leaked++
+				t.Errorf("%s: %-42q classified the question out loud (%q):\n    %s",
+					how.name, ask, said, trim(answer))
 				continue
 			}
 			// A pleasantry is answered, not accounted for.

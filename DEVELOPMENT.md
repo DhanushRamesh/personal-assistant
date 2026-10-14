@@ -19416,3 +19416,49 @@ The shared `sentences` counter was counting every full stop, which
 made "four and a half hours" two sentences and "9 a.m." three. It now
 counts a stop followed by a space, which is how a listener hears them.
 Both the refusal eval and this one use it.
+
+### A paragraph explaining why it is allowed to reply
+
+Asked how to think about backups, it opened:
+
+	This is a question about how to think about something -- backups,
+	in this case -- not a request to do anything with your own backups
+	or devices. It is a question about the world, and I can answer it.
+
+Then it answered, well. The leak is the first paragraph: it is the
+triage reciting itself. The persona distinguishes a question about the
+world from a question about his own life so that it knows whether to
+go and look, and the model said that decision out loud before acting
+on it.
+
+It is the machinery leak by another route, and the word "tool" never
+appears in it. Two of 852 answers over a week, both the same day, both
+on general knowledge with nothing of his own in them -- which is when
+it feels it has to justify answering at all.
+
+So the ban is concrete rather than principled, as the last one had to
+be: never say what kind of question you were asked. Not that it is
+about the world, not that it is not about them, not that it is a
+question rather than a request, not that it is one you can answer.
+Deciding that is how it chooses what to do and is not part of the
+answer. Begin with the answer.
+
+`evals-machinery` now checks for it in both readings, with his two
+real questions added to the eight that already invite the older leak.
+Ten of ten spoken and ten of ten written.
+
+#### A banned word that is also the subject
+
+The first run of that eval failed on *"how do I add WebMCP to a Vue 3
+web application"* -- for the words **function call**, which were the
+topic and not a leak.
+
+The rule bans the vocabulary absolutely, deliberately, because a rule
+the model has to weigh is one it breaks once a day. The cost is that
+when he asks about MCP, tool calling or function calling, the
+assistant is forbidden the words of the subject he is asking about.
+
+Nothing is changed for it today and the eval question was reworded
+rather than the rule weakened, because an eval that cries wolf on a
+correct answer stops being read. But it is a real conflict and it will
+come up again the next time he asks about the thing he is building.
