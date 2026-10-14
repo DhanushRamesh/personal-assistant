@@ -19575,3 +19575,54 @@ speech began at 4.091s into a turn that finished at 4.627s.
 
 Not done, because it is a change to how every spoken answer is
 delivered and the person it is for should choose it.
+
+### A spoken answer is held whole
+
+He asked for it once the price was known: *"yes do it."*
+
+The price was not what it had been quoted at. One turn gave 0.54
+seconds; across 725 the head start streaming bought was a **median of
+0.14 seconds** -- nothing -- but 54 of them were over two seconds and
+the worst was **17.95**, speaking at 7.3s of a turn that ran to 25.2.
+Home Assistant ends a turn at thirty. Eighteen seconds of silence is
+not what he agreed to.
+
+So the hold is capped. `runner.Holding` is 2.5 seconds: an answer that
+finishes inside it is read before anybody hears it, and one that does
+not is let go and spoken from there exactly as before. That is the
+93% for nothing and no silence for the rest.
+
+What it buys, on the two answers that prompted it:
+
+	Syria     4 sentences  ->  2 sentences, 25 words
+	backups  11 sentences  ->  1 sentence,  31 words
+
+And the leak he reported the same night, which was not an aside at
+all. The satellite had been handed:
+
+	TTS_START text='I need to search for this, sir.Jailer 2 is releasing to...'
+
+Two pieces run together: the model's first-round narration and then
+the real answer. Held, the first round never leaves, and the same
+question afterwards gave only *"Coolie released on 14 August 2025,
+sir, so it is not releasing this week."*
+
+#### Two of my own faults on the way
+
+The cap was **event-driven** at first -- the clock was only read when
+the next piece arrived. The answer that most needs releasing is the one
+that writes a clause and then thinks for twenty seconds, and it has no
+next piece to carry the check. It is a timer now.
+
+Restructuring the loop to hold that timer left
+`t.Ended(call, chat.CallStopped)` after it, unreachable: a stream that
+closed without a terminal message would no longer be recorded as
+stopped. `go vet` found it.
+
+#### Three tests changed, and what they were protecting
+
+They asserted the answer reaches the person **as pieces**, which is no
+longer how it reaches them. They check what was kept instead. The one
+that matters -- an answer that can still be sent back is never spoken
+-- holds unchanged, and a new one proves the cap: held 2.501s, then let
+go, on a turn that ran 4.502s.

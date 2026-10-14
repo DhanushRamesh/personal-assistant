@@ -3,6 +3,7 @@ package assist_test
 import (
 	"context"
 	"net/http"
+	"personal-assistant/internal/app/runner"
 	"testing"
 	"time"
 
@@ -36,11 +37,19 @@ func (p lateFinisher) Run(ctx context.Context, req environment.Request) (<-chan 
 	return ch, nil
 }
 
-// TestTheWaitEndsAtTheFirstWord : The owner's definition of how long a
-// voice turn took. The answer is spoken as it is written, so the person
-// stops waiting when the speaker starts, and the turn runs on for
-// seconds afterwards. Timing the whole turn describes a wait nobody had.
-func TestTheWaitEndsAtTheFirstWord(t *testing.T) {
+// TestTheWaitEndsWhenTheSpeakerStarts : the owner's definition of how
+// long a voice turn took -- when he stopped waiting, not when the turn
+// finished.
+//
+// It used to end at the first word, because the answer was spoken as
+// it was written. It no longer is: a spoken answer is held whole so
+// the server can read it before anybody hears it, and the wait now
+// ends when the holding does.
+//
+// A lingerer inside [runner.Holding] is held to the end, so the wait
+// is the turn. One past it is let go early, and the wait is the cap
+// rather than the turn -- which is the whole reason the cap exists.
+func TestTheWaitEndsWhenTheSpeakerStarts(t *testing.T) {
 	const linger = 300 * time.Millisecond
 	e := apitest.NewWith(t, apitest.Options{Environment: lateFinisher{linger: linger}})
 	// Pieces of the answer go to a voice turn only, and the wait this
@@ -67,9 +76,15 @@ func TestTheWaitEndsAtTheFirstWord(t *testing.T) {
 	if last.SpokeAfterMS == nil {
 		t.Fatal("the wait was not reported at all")
 	}
-	if spoke := time.Duration(*last.SpokeAfterMS) * time.Millisecond; spoke >= linger {
-		t.Errorf("the wait was timed to the end of the turn, not the first word: "+
-			"spoke after %s, and the turn lingered %s of its %s", spoke, linger, whole)
+	// Held: this answer finishes well inside the cap, so nothing is
+	// said until it is whole and the wait is the turn.
+	spoke := time.Duration(*last.SpokeAfterMS) * time.Millisecond
+	if spoke < linger {
+		t.Errorf("an answer inside the holding time was spoken before it was whole: "+
+			"spoke after %s of a turn that lingered %s", spoke, linger)
+	}
+	if spoke > whole+time.Second {
+		t.Errorf("the wait outran the turn: spoke after %s of %s", spoke, whole)
 	}
 
 	// Only the last chunk carries it, or a reader would see the
@@ -79,4 +94,44 @@ func TestTheWaitEndsAtTheFirstWord(t *testing.T) {
 			t.Errorf("chunk %d reports a wait before the turn ended: %d ms", i, *c.SpokeAfterMS)
 		}
 	}
+}
+
+// TestASlowAnswerIsLetGoRatherThanHeldForEver : the cap, and the
+// reason there is one.
+//
+// Holding a spoken answer until it is whole is what lets the server
+// read it first, and it is only cheap on average. Measured over 725
+// real turns the head start streaming bought was a median of 0.14
+// seconds; 54 of them were over two seconds and the worst was 17.95,
+// speaking at 7.3s of a turn that ran to 25.2. Home Assistant ends a
+// turn at thirty.
+//
+// So an answer that takes longer than [runner.Holding] to finish is
+// let go and spoken from there, exactly as it was before. This turn
+// lingers well past the cap and must be heard long before it ends.
+func TestASlowAnswerIsLetGoRatherThanHeldForEver(t *testing.T) {
+	linger := runner.Holding + 2*time.Second
+	e := apitest.NewWith(t, apitest.Options{Environment: lateFinisher{linger: linger}})
+	satellite := e.LoginOn(t, "the satellite", string(chat.ChannelVoice))
+
+	began := time.Now()
+	rec := e.AsBody(t, satellite.Token, http.MethodPost, "/api/chat", `{
+		"model": "assistant",
+		"messages": [{"role": "user", "content": "good evening"}]
+	}`)
+	whole := time.Since(began)
+	if rec.Code != http.StatusOK {
+		t.Fatalf("status = %d, want 200", rec.Code)
+	}
+	chunks := decodeChunks(t, rec.Body.String())
+	last := chunks[len(chunks)-1]
+	if last.SpokeAfterMS == nil {
+		t.Fatal("the wait was not reported at all")
+	}
+	spoke := time.Duration(*last.SpokeAfterMS) * time.Millisecond
+	if spoke >= linger {
+		t.Errorf("a slow answer was held to the end: spoke after %s of a turn that lingered %s (%s whole)",
+			spoke, linger, whole)
+	}
+	t.Logf("held %s, then let go; the turn ran %s", spoke.Round(time.Millisecond), whole.Round(time.Millisecond))
 }

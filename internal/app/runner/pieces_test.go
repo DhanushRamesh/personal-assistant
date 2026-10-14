@@ -112,14 +112,23 @@ func TestAnAnswerThatCanBeSentBackIsNotSpoken(t *testing.T) {
 
 	tk := h.submitOn(t, chat.ChannelVoice, "move the movie to ten past six")
 	heard := overheard(t, h, tk.ID)
-	h.await(t, tk.ID, chat.StatusCompleted, chat.StatusFailed)
+	done := h.await(t, tk.ID, chat.StatusCompleted, chat.StatusFailed)
 
+	// Nothing at all goes out in pieces on a spoken turn now: the
+	// answer is held whole so the server can read it before anybody
+	// hears it, and it reaches them as one piece at the end. So the
+	// thing to check is that what was sent back never left, and that
+	// what stands is what was kept.
 	said := strings.Join(heard(), "")
 	if strings.Contains(said, "There is no such thing") {
 		t.Errorf("an answer that was then sent back had already been spoken: %q", said)
 	}
-	if !strings.Contains(said, "Nothing of the kind") {
-		t.Errorf("the answer that stands was never spoken: %q", said)
+	kept := done.Response
+	if strings.Contains(kept, "There is no such thing") {
+		t.Errorf("the answer that was sent back is the one that stands: %q", kept)
+	}
+	if !strings.Contains(kept, "Nothing of the kind") {
+		t.Errorf("the answer that stands was never kept: %q", kept)
 	}
 }
 
@@ -138,8 +147,13 @@ func TestTheAnswerAfterToolsIsSpoken(t *testing.T) {
 	heard := overheard(t, h, tk.ID)
 	h.await(t, tk.ID, chat.StatusCompleted, chat.StatusFailed)
 
-	if said := strings.Join(heard(), ""); !strings.Contains(said, "Moved it") {
-		t.Errorf("the answer after a tool ran was never spoken: %q", said)
+	// Held whole on a spoken turn rather than streamed, so what to
+	// check is the answer that was kept and said at the end.
+	if said := strings.Join(heard(), ""); strings.Contains(said, denied) {
+		t.Errorf("a refused change was spoken in pieces: %q", said)
+	}
+	if answer := answered(t, h); !strings.Contains(answer, "Moved it") {
+		t.Errorf("the answer after a tool ran was never kept: %q", answer)
 	}
 	if answer := answered(t, h); strings.Contains(answer, denied) {
 		t.Errorf("a write that worked was denied: %q", answer)

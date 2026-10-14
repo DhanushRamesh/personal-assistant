@@ -304,13 +304,40 @@ func (r *Runner) consume(runCtx, ctx context.Context, t *chat.Chat, systemPrompt
 		if sendable {
 			waiting, stopWaiting, waitingCall = r.ahead(runCtx, t, window, turns, prompt, asking, tools)
 		}
+		// A spoken answer is held whole rather than read as it is
+		// written.
+		//
+		// Everything the server does to an answer -- taking off an
+		// opening that classified the question, counting its
+		// sentences, sending it back to be said shorter -- happens
+		// once the answer exists. Streamed, it has been heard by
+		// then: the strip fired on a turn whose stored answer began
+		// "Backups serve one purpose" while what was spoken began
+		// "This is a question about how to think about something".
+		// Half a fix, and the half nobody is listening to.
+		//
+		// It costs the head start. Measured on a real turn, speech
+		// began at 4.091s of a turn that finished at 4.627s, so the
+		// price is 0.54 seconds and the assist endpoint already
+		// sends the whole answer at the end when nothing was
+		// streamed. Owner, told the figure: *"yes do it."*
+		//
+		// A screen is unchanged. It was never sent the pieces.
+		heard := reading(t) == persona.Spoken
+
 		// Whether any of this turn's answer has already reached
 		// them. A round read aloud cannot be taken back, so nothing
 		// after this point may send it away to be rewritten.
-		if !sendable {
+		if !sendable && !heard {
 			published = true
 		}
-		final := r.drain(ctx, t, stream, call, aloud, &spoke, !sendable, nil)
+		// A recallable round waits for ever; a held spoken one gives
+		// in rather than leave them in silence.
+		hold := time.Duration(0)
+		if sendable == false && heard {
+			hold = Holding
+		}
+		final := r.drain(ctx, t, stream, call, aloud, &spoke, !sendable && !heard, hold, nil)
 		if spent != nil {
 			// Finished with. This only lets its context go.
 			spent()
@@ -664,6 +691,26 @@ const alsoShorter = "And it ran long for something they are listening to. Whatev
 	"first could not. Keep the fact and its figure; drop the sentence that restates " +
 	"their question, the background they did not ask for, and the summary at the end."
 
+// Holding : How long a spoken answer is kept back to be read before
+// any of it is said.
+//
+// Held, the server can take off an opening that classified the
+// question, count the sentences and send it back to be said shorter.
+// Streamed, all three reach what is stored and none of them reach the
+// person, which is the half-fix this replaces.
+//
+// Capped, because holding until the answer is finished is only cheap
+// on average. Measured over 725 turns, the head start streaming bought
+// was a median of 0.14 seconds -- nothing -- but 54 of them were over
+// two seconds and the worst was 17.95, speaking at 7.3s of a turn that
+// ran to 25.2. Eighteen seconds of silence is not a trade anybody
+// agreed to, and Home Assistant ends a turn at thirty.
+//
+// So the wait is bounded. An answer that finishes inside this is read
+// before it is heard; one that does not is spoken from here as it
+// always was, and is the one turn in fourteen this cannot help.
+const Holding = 2500 * time.Millisecond
+
 // first : The opening of a string, for a log line.
 func first(s string, n int) string {
 	s = strings.TrimSpace(s)
@@ -733,18 +780,69 @@ func (r *Runner) drain(
 	// round whose answer could still be sent back must be read in
 	// silence.
 	speak bool,
+	// hold : How long to keep a held answer back before giving in and
+	// speaking it anyway. Zero never gives in, which is what a round
+	// that may still be recalled requires: what a listener has heard
+	// cannot be unheard, whatever it costs in waiting.
+	hold time.Duration,
 	// began : Told the first time text arrives rather than a tool
 	// call, which is the earliest anything knows which sort of round
 	// this is. Nil when nobody is waiting on that.
 	began func(),
 ) *environment.Message {
 	var final *environment.Message
+	// What a held answer has gathered, and when it started gathering.
+	// Kept rather than dropped so that giving in has something to say
+	// rather than starting mid-sentence.
+	var (
+		kept     strings.Builder
+		relented bool
+	)
 	// One per stream. The model narrating twice inside a single round
 	// is describing one piece of work, and saying both would be the
 	// same thought twice; between rounds is where a second sentence
 	// earns its place.
 	saidThisRound := false
-	for msg := range stream {
+	// When a held answer stops being worth holding.
+	//
+	// A timer and not a check on the next piece. Checked on arrival,
+	// the release never fires for the answer that most needs it: one
+	// that writes a clause and then thinks for twenty seconds has no
+	// next piece to carry the check, and would be held in silence to
+	// the end.
+	var release <-chan time.Time
+	for {
+		var (
+			msg environment.Message
+			ok  bool
+		)
+		select {
+		case msg, ok = <-stream:
+			if !ok {
+				// The stream ended without a terminal message, which
+				// is the call having stopped rather than answered.
+				// Recorded here because the loop no longer falls out
+				// of the bottom of the function.
+				t.Ended(call, chat.CallStopped, time.Now())
+				return final
+			}
+		case <-release:
+			release = nil
+			if kept.Len() == 0 {
+				continue
+			}
+			r.logger.InfoContext(ctx, "the answer was too slow to hold back",
+				slog.Duration("held", hold), slog.Int("characters", kept.Len()))
+			relented = true
+			now := time.Now()
+			t.Begun(now)
+			r.publish(events.Event{
+				ChatID: t.ID, Kind: events.KindPartial,
+				Text: kept.String(), At: now,
+			})
+			kept.Reset()
+			continue
+		}
 		t.Heard(call, time.Now())
 		switch msg.Kind {
 		case environment.KindUpdate:
@@ -761,11 +859,20 @@ func (r *Runner) drain(
 				began()
 				began = nil
 			}
-			if !speak {
+			if !speak && !relented {
 				// This round's answer may still be sent back, and
 				// what a listener has heard cannot be unheard. The
 				// pieces are still read, because reading them is how
 				// the round is recognised at all.
+				if hold <= 0 {
+					continue
+				}
+				// Gathered, and the clock started on the first
+				// piece. What lets it go is the timer above.
+				if release == nil && kept.Len() == 0 {
+					release = time.After(hold)
+				}
+				kept.WriteString(msg.Text)
 				continue
 			}
 			// When the person stops waiting, which is not when the
@@ -793,8 +900,6 @@ func (r *Runner) drain(
 				slog.String("kind", string(msg.Kind)))
 		}
 	}
-	t.Ended(call, chat.CallStopped, time.Now())
-	return final
 }
 
 // callEnd : How a call ended, from the message that ended it.
