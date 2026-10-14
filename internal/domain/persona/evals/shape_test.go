@@ -71,6 +71,32 @@ func wall(text string) bool {
 // and the tail ran to ten.
 const Sentences = 2
 
+// counting : First, Second, Third used to enumerate.
+var counting = regexp.MustCompile(`(?i)\s(First|Second|Third|Firstly|Secondly)[,:]\s`)
+
+// marker : A line that is already a markdown list or heading.
+var marker = regexp.MustCompile(`^\s*(#{1,6}\s|[-*+]\s|\d+[.)]\s)`)
+
+// enumerated : A list someone has typed into a paragraph.
+//
+// Only where it runs inside the prose. "1. First, do this" is a
+// markdown list whose item happens to begin with the word, and
+// flagging that would be flagging the thing the rule asks for. So
+// the lines that are already a list are skipped and the rest are
+// read; RE2 has no lookbehind, so one pattern cannot tell the two
+// apart.
+func enumeratedIn(text string) string {
+	for _, line := range strings.Split(text, "\n") {
+		if marker.MatchString(line) {
+			continue
+		}
+		if found := counting.FindString(line); found != "" {
+			return strings.TrimSpace(found)
+		}
+	}
+	return ""
+}
+
 const Shaped = 80
 
 // structure : Markdown that gives an answer its shape.
@@ -120,6 +146,15 @@ func TestTheSameQuestionIsShapedForTheEarAndTheEye(t *testing.T) {
 		}
 		if wall(read) {
 			t.Errorf("WRITTEN %-45q contains a wall of prose:\n    %s", ask, read)
+		}
+		// A list typed into a paragraph. The commonest way a wall
+		// appears, and the one the rule had to name outright: asked
+		// how to think about backups, it wrote "First, they must be
+		// automatic. Second, they must be kept somewhere else.
+		// Third, test them" as prose, and the reader has to take it
+		// apart again before it is any use.
+		if said := enumeratedIn(read); said != "" {
+			t.Errorf("WRITTEN %-45q wrote a list as a sentence (%q):\n    %s", ask, said, read)
 		}
 
 		// The claim the whole change rests on, and the one that has

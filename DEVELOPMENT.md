@@ -19462,3 +19462,49 @@ Nothing is changed for it today and the eval question was reworded
 rather than the rule weakened, because an eval that cries wolf on a
 correct answer stops being read. But it is a real conflict and it will
 come up again the next time he asks about the thing he is building.
+
+### The strict count is for the ear only
+
+Owner, after the spoken count was tightened: *"this strict one liner is
+only when asked by voice and giving announcements. When typed it should
+give neat, easily understandable, formatted md content."*
+
+Two of the three were already true and worth recording as checked
+rather than assumed.
+
+`briefly` is in `spokenRules` and not in `writtenRules`, so nothing
+done to the spoken count touched a typed answer. `writtenRules` uses
+`written`, which says outright that any limit on sentences in the
+manner above is a rule about being listened to and does not apply.
+
+Announcements never had a count and do not need one. Every rule's last
+spoken sentence, read off the table: 14 to 21 words, one or two
+sentences. *"Someone the phone could not name has tried to reach you
+more than once, sir, and has not got through."*
+
+The third was not true. The written rules have always asked for
+markdown -- headings, a list wherever more than two things are named,
+bold for what carries the meaning, tables, code -- and the answer on
+screen was three paragraphs of prose naming three things as *First,
+Second, Third*. Which is the rule's own words: *a list written as a
+sentence is the commonest way a wall appears.*
+
+The client was never the problem. It has `react-markdown` and
+`remark-gfm`, so headings, lists and tables all render.
+
+So the shape is banned by name, the way the word was:
+
+	Three things named in a row is a list, whatever it looks like
+	while you are writing it. If you are about to write First,
+	Second, Third, stop and make it a list instead.
+
+And the eval checks for it. Not with one pattern: "1. First, do this"
+is a markdown list whose item begins with the word, and flagging that
+would be flagging the thing the rule asks for. RE2 has no lookbehind,
+so the lines that are already a list are skipped and the rest are
+read. Its test is the real answer and the same answer written
+properly.
+
+Measured over fourteen days, only four typed answers ran past eighty
+words and two of them were walls -- too few to call a pattern, which
+is why the eval matters more than the count.
