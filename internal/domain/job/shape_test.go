@@ -414,3 +414,38 @@ func TestAJSONNumberIsNotAFloat(t *testing.T) {
 		t.Errorf("value came through as %q, want %q", gate.Value, "20")
 	}
 }
+
+// TestEveryConditionIsAnswered : A page showing a rule's conditions
+// marks each one held or not, so the answer has to cover the whole
+// tree, where Holds stops at the first that settles it -- and agree
+// with Holds on the whole.
+func TestEveryConditionIsAnswered(t *testing.T) {
+	when := job.Occasion{
+		Wake: []job.Hook{{At: "08:00"}},
+		All: []job.Where{
+			{Source: "battery.level", Op: "<", Value: 25},
+			{Any: []job.Where{
+				{Source: "presence", Op: "==", Value: "here"},
+				{Source: "hour", Op: ">=", Value: 22},
+			}},
+		},
+	}
+	noon := time.Date(2026, 10, 9, 14, 0, 0, 0, india)
+	got := readings(map[string]string{"battery.level": "62"}, noon)
+
+	v := when.Judge(got, false, noon)
+	held, _ := when.Holds(got, false, noon)
+	if v.Held != held || v.Held {
+		t.Fatalf("judged %v, Holds said %v; the battery is at 62", v.Held, held)
+	}
+	if len(v.Parts) != 2 || v.Parts[0].Held || !v.Parts[1].Held {
+		t.Fatalf("parts = %+v, want the battery failing and the group holding", v.Parts)
+	}
+	// Both halves of the group answered, though the first settled it.
+	if g := v.Parts[1].Parts; len(g) != 2 || !g[0].Held || g[1].Held {
+		t.Errorf("group parts = %+v, want here held and the hour not", g)
+	}
+	if none := (job.Occasion{Wake: []job.Hook{{Every: "5m"}}}).Judge(got, false, noon); !none.Held || len(none.Parts) != 0 {
+		t.Errorf("a rule with no conditions judged %+v", none)
+	}
+}

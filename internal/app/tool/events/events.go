@@ -97,8 +97,15 @@ func (c Clock) where() *time.Location {
 }
 
 // Tools : Everything in this package.
+//
+// A reader that also keeps the books (event.Ledgers) is given event_ledger as
+// well.
 func Tools(reader Reader, clock Clock) []tool.Tool {
-	return []tool.Tool{kinds(reader, clock), recent(reader, clock)}
+	out := []tool.Tool{kinds(reader, clock), recent(reader, clock), untouched(reader, clock)}
+	if books, ok := reader.(event.Ledgers); ok {
+		out = append(out, ledger(books, clock))
+	}
+	return out
 }
 
 // kinds : What the person's devices report at all.

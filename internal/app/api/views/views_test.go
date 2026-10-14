@@ -253,3 +253,26 @@ func TestTheTimelineSaysWhenTheModelWasAsked(t *testing.T) {
 		t.Errorf("the first reply ended %q, want tools", first.Outcome)
 	}
 }
+
+// A chat is placed by its first message and an announcement by its own, so
+// a client can order the two as they were written. The question that
+// arrived late is still before the announcement written after it.
+func TestChatsAndAnnouncementsCarryTheirOrder(t *testing.T) {
+	early := time.Date(2026, 10, 13, 17, 0, 0, 0, time.UTC)
+	messages := []conversation.Message{
+		{ChatID: "chat_a", Kind: conversation.Chat, Role: conversation.User, Seq: 10, At: early.Add(5 * time.Second)},
+		{ChatID: "chat_a", Kind: conversation.Chat, Role: conversation.Assistant, Seq: 11, At: early.Add(6 * time.Second)},
+		{Kind: conversation.PresenceAnnouncement, Role: conversation.Assistant, Content: "Good evening, sir.", Seq: 12, At: early},
+	}
+	chats := views.Sequenced([]views.Summary{{ID: "chat_a"}, {ID: "chat_old"}}, messages)
+	if chats[0].Seq != 10 || chats[1].Seq != 0 {
+		t.Errorf("seqs = %d, %d; want 10 for the chat and none for one with no messages", chats[0].Seq, chats[1].Seq)
+	}
+	said := views.OfAnnouncements(messages)
+	if len(said) != 1 || said[0].Seq != 12 {
+		t.Errorf("announcements = %+v, want one at 12", said)
+	}
+	if k := keys(t, chats[0]); !k["seq"] {
+		t.Errorf("a chat marshals to %v, without seq", k)
+	}
+}

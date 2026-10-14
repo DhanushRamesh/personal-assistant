@@ -650,3 +650,34 @@ func TestASearchHoldsNothingBack(t *testing.T) {
 		t.Errorf("an unasked browse is still spared the fixes:\n%s", got.Content)
 	}
 }
+
+// The ledger lists each reporter's actions and says what is wrong with
+// how they were kept: an office left twice and entered once, and a
+// headset reported twice in the same second.
+func TestTheLedgerSaysWhatIsWrongWithTheBooks(t *testing.T) {
+	twice := at(t, 9, 30, "bluetooth.connected", "bike helmet")
+	again := at(t, 9, 30, "bluetooth.connected", "bike helmet")
+	again.DedupeKey += "-again"
+	s := store(t,
+		at(t, 9, 0, "place.entered", "office"),
+		at(t, 10, 0, "place.exited", "office"),
+		at(t, 11, 0, "place.exited", "office"),
+		at(t, 11, 30, "place.exited", "office"),
+		twice, again,
+		at(t, 11, 40, "bluetooth.disconnected", "bike helmet"),
+	)
+	got := run(t, s, "event_ledger", `{}`)
+	if got.Outcome == conversation.OutcomeFailed {
+		t.Fatalf("failed: %s", got.Content)
+	}
+	for _, want := range []string{
+		"tasker pixel-7",
+		"place.exited",
+		`place.entered 1 against place.exited 3 for "office"`,
+		"1 of 2 were the same report sent again",
+	} {
+		if !strings.Contains(got.Content, want) {
+			t.Errorf("missing %q in:\n%s", want, got.Content)
+		}
+	}
+}

@@ -19,10 +19,12 @@ import (
 )
 
 // quietPaths : Paths logged at debug rather than info. Health checks are
-// polled continuously and would otherwise crowd out real traffic.
+// polled continuously, and the words being heard arrive several times a
+// second while somebody speaks; either would crowd out real traffic.
 var quietPaths = map[string]bool{
-	"/health": true,
-	"/ready":  true,
+	"/health":            true,
+	"/ready":             true,
+	"/v1/speech/hearing": true,
 }
 
 // RequestContext : Attaches the request identifier to the context, so that

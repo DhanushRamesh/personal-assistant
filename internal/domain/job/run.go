@@ -320,6 +320,15 @@ type Doer interface {
 	Do(ctx context.Context, t Turn, a Act) (Outcome, error)
 }
 
+// Judger : A doer that can say what every condition of a rule
+// answered, not just the first that failed, and why it did not hold.
+//
+// Optional. A trial asks for it to show each condition marked; a
+// doer without it is tried as it always was, on [Doer.Holds].
+type Judger interface {
+	Judge(ctx context.Context, userID string, when Occasion) (Verdict, string, error)
+}
+
 // Runner : Runs jobs when their time comes.
 type Runner struct {
 	// Store : Where jobs are kept. Required.
@@ -621,6 +630,9 @@ type Trial struct {
 	Acts []Act
 	// Did : What came of each step, beside it.
 	Did []string
+	// When : What each condition answered, when the doer could say;
+	// nil when it could not, or the rule has no conditions.
+	When *Verdict
 }
 
 // Try : Runs a rule now and says what it did, without saying
@@ -646,7 +658,20 @@ func (r *Runner) Try(ctx context.Context, j Job) Trial {
 	// says "it would not have held, because this" rather than
 	// walking steps a run would never have reached.
 	if len(j.When.All) > 0 || len(j.When.Any) > 0 {
-		held, says, err := r.Doer.Holds(ctx, j.UserID, j.When)
+		var (
+			held bool
+			says string
+			err  error
+		)
+		if judge, ok := r.Doer.(Judger); ok {
+			var v Verdict
+			v, says, err = judge.Judge(ctx, j.UserID, j.When)
+			if err == nil {
+				held, out.When = v.Held, &v
+			}
+		} else {
+			held, says, err = r.Doer.Holds(ctx, j.UserID, j.When)
+		}
 		switch {
 		case err != nil:
 			out.Why = err.Error()

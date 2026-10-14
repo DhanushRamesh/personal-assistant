@@ -126,6 +126,32 @@ func Quiet(evs []event.Event, now time.Time) (Found, bool) {
 	return Found{}, false
 }
 
+// QuietExcept : [Quiet], leaving out what the machine the assistant runs
+// on reports about itself, under the source name host.
+//
+// That machine cannot have gone quiet while this is running on it, and
+// what it reports is not a heartbeat: the laptop says only that it
+// joined or left a network. A day of office wifi dropping every few
+// minutes made that look like a rhythm, and at home, on a network that
+// held, the server announced at a quarter to one that the laptop it was
+// running on had not been heard from since 11:57 pm. Empty host leaves
+// everything in.
+func QuietExcept(host string) Check {
+	host = strings.TrimSpace(host)
+	return func(evs []event.Event, now time.Time) (Found, bool) {
+		if host == "" {
+			return Quiet(evs, now)
+		}
+		kept := make([]event.Event, 0, len(evs))
+		for _, e := range evs {
+			if e.Source != host {
+				kept = append(kept, e)
+			}
+		}
+		return Quiet(kept, now)
+	}
+}
+
 // longest : The longest a device went without a word while it was
 // still reporting.
 //

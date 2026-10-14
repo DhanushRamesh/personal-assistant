@@ -132,13 +132,21 @@ func (h *Handler) Write(w http.ResponseWriter, r *http.Request) {
 		// it was made from have changed.
 		held.EmbedModel = byHand
 		held.Embedding = nil
+		if err := held.Valid(); err != nil {
+			// Too long, most likely: said as what it is, not as a fault.
+			httpx.WriteError(ctx, w, http.StatusBadRequest, err.Error())
+			return
+		}
 		if err := h.memories.Update(ctx, held); err != nil {
 			h.Fail(ctx, w, "cannot save the description", err)
 			return
 		}
 
 	default:
-		m, err := memory.New(user, memory.TierAlways, profile.Subject, body)
+		// Held to what the server's own description may be, not to a
+		// remembered fact's length: it is the same document, written by
+		// the person this once.
+		m, err := memory.Written(user, memory.TierAlways, profile.Subject, body)
 		if err != nil {
 			httpx.WriteError(ctx, w, http.StatusBadRequest, err.Error())
 			return

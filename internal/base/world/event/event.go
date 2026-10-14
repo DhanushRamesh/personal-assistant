@@ -288,6 +288,15 @@ type Query struct {
 	Until time.Time
 	// Kind : Exactly this kind. Ignored when empty.
 	Kind string
+	// Kinds : Any of these kinds, as several ticked at once are asked
+	// for. Ignored when empty; with Kind as well, both must hold.
+	Kinds []string
+	// From : Only what these reported, each a source ("tasker") or a
+	// source and a device ("tasker/pixel 7"). Ignored when empty.
+	From []string
+	// Late : Only what arrived more than this long after it happened.
+	// Zero takes them all.
+	Late time.Duration
 	// Prefix : Any kind starting with this, which is how a family of
 	// kinds is asked for -- "wifi." covers joining and leaving
 	// without naming either, and without the caller having to know
@@ -318,6 +327,13 @@ type Query struct {
 	Omit []string
 	// Limit : At most this many, newest first. Zero means no limit.
 	Limit int
+}
+
+// Source : One thing that reports events, and how many it has.
+type Source struct {
+	Source string
+	Device string
+	Count  int64
 }
 
 // UnknownNumber : What a bare telephone number is called when it is

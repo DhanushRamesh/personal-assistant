@@ -73,6 +73,12 @@ func (s *Store) Recent(_ context.Context, userID string, q event.Query) ([]event
 			continue
 		case q.Kind != "" && e.Kind != q.Kind:
 			continue
+		case len(q.Kinds) > 0 && !slices.Contains(q.Kinds, e.Kind):
+			continue
+		case len(q.From) > 0 && !slices.Contains(q.From, e.Source) && !slices.Contains(q.From, e.Source+"/"+e.Device):
+			continue
+		case q.Late > 0 && e.ReceivedAt.Sub(e.OccurredAt) <= q.Late:
+			continue
 		case q.Prefix != "" && !strings.HasPrefix(e.Kind, q.Prefix):
 			continue
 		case q.Contains != "" && !strings.Contains(
@@ -170,6 +176,28 @@ func (s *Store) Kinds(_ context.Context, userID string) ([]event.Kind, error) {
 	return out, nil
 }
 
+// Sources : What reported this person's events, each source and device
+// with how many, most first.
+func (s *Store) Sources(_ context.Context, userID string) ([]event.Source, error) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	by := map[[2]string]int64{}
+	for _, e := range s.byUser[userID] {
+		by[[2]string{e.Source, e.Device}]++
+	}
+	out := make([]event.Source, 0, len(by))
+	for k, n := range by {
+		out = append(out, event.Source{Source: k[0], Device: k[1], Count: n})
+	}
+	sort.Slice(out, func(i, j int) bool {
+		if out[i].Count != out[j].Count {
+			return out[i].Count > out[j].Count
+		}
+		return out[i].Source+out[i].Device < out[j].Source+out[j].Device
+	})
+	return out, nil
+}
+
 // Tally : How many of a kind arrived in the window.
 //
 // The same answer the database gives, worked out the obvious way,
@@ -217,4 +245,123 @@ func valued(payload []byte) (bool, string) {
 		return false, ""
 	}
 	return true, *into.Value
+}
+
+// Ledger : Each reporter's each action since a moment, by when they
+// were received: how many, first and last, how many carried "unknown"
+// or no value, and how many repeated the report before them within
+// event.Twice.
+func (s *Store) Ledger(_ context.Context, userID string, since time.Time) ([]event.Line, error) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+
+	type key struct{ source, device, kind string }
+	group := map[key][]*event.Event{}
+	for _, e := range s.byUser[userID] {
+		if e.ReceivedAt.Before(since) {
+			continue
+		}
+		k := key{e.Source, e.Device, e.Kind}
+		group[k] = append(group[k], e)
+	}
+
+	out := make([]event.Line, 0, len(group))
+	for k, evs := range group {
+		sort.Slice(evs, func(i, j int) bool { return evs[i].OccurredAt.Before(evs[j].OccurredAt) })
+		l := event.Line{Source: k.source, Device: k.device, Kind: k.kind, Count: int64(len(evs))}
+		got := make([]time.Time, 0, len(evs))
+		values := map[string]bool{}
+		for i, e := range evs {
+			got = append(got, e.ReceivedAt)
+			if has, value := anyValue(e.Payload); has {
+				values[strings.ToLower(value)] = true
+			}
+			if l.First.IsZero() || e.ReceivedAt.Before(l.First) {
+				l.First = e.ReceivedAt
+			}
+			if e.ReceivedAt.After(l.Last) {
+				l.Last = e.ReceivedAt
+			}
+			switch has, value := anyValue(e.Payload); {
+			case !has:
+				l.Valueless++
+			case strings.EqualFold(value, event.Unknown):
+				l.Unknown++
+			}
+			if i > 0 {
+				prev := evs[i-1]
+				if e.OccurredAt.Sub(prev.OccurredAt) < event.Twice && event.Same(e.Payload, prev.Payload) {
+					l.Repeats++
+				}
+			}
+		}
+		slices.SortFunc(got, func(a, b time.Time) int { return a.Compare(b) })
+		for i := 1; i < len(got); i++ {
+			l.Longest = max(l.Longest, got[i].Sub(got[i-1]))
+		}
+		l.Distinct = int64(len(values))
+		if len(values) == 1 {
+			for v := range values {
+				l.Only = v
+			}
+		}
+		out = append(out, l)
+	}
+	sort.Slice(out, func(i, j int) bool {
+		a, b := out[i], out[j]
+		if a.Source+a.Device != b.Source+b.Device {
+			return a.Source+a.Device < b.Source+b.Device
+		}
+		return a.Count > b.Count
+	})
+	return out, nil
+}
+
+// Values : How many of each of the given kinds carried each value since a
+// moment, per reporter, values folded to one case. Readings with no value
+// are left out.
+func (s *Store) Values(_ context.Context, userID string, since time.Time, kinds []string) ([]event.Valued, error) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+
+	type key struct{ source, device, kind, value string }
+	by := map[key]int64{}
+	for _, e := range s.byUser[userID] {
+		if e.ReceivedAt.Before(since) || !slices.Contains(kinds, e.Kind) {
+			continue
+		}
+		has, value := anyValue(e.Payload)
+		if !has {
+			continue
+		}
+		by[key{e.Source, e.Device, e.Kind, strings.ToLower(value)}]++
+	}
+	out := make([]event.Valued, 0, len(by))
+	for k, n := range by {
+		out = append(out, event.Valued{Source: k.source, Device: k.device, Kind: k.kind, Value: k.value, Count: n})
+	}
+	sort.Slice(out, func(i, j int) bool {
+		a, b := out[i], out[j]
+		if a.Source+a.Device+a.Kind != b.Source+b.Device+b.Kind {
+			return a.Source+a.Device+a.Kind < b.Source+b.Device+b.Kind
+		}
+		return a.Value < b.Value
+	})
+	return out, nil
+}
+
+// anyValue : A payload's value field as text, whatever JSON type it was,
+// and whether it had one -- as the database reads it with JSON_UNQUOTE.
+func anyValue(payload []byte) (bool, string) {
+	var into struct {
+		Value json.RawMessage `json:"value"`
+	}
+	if err := json.Unmarshal(payload, &into); err != nil || len(into.Value) == 0 || string(into.Value) == "null" {
+		return false, ""
+	}
+	var text string
+	if json.Unmarshal(into.Value, &text) == nil {
+		return true, text
+	}
+	return true, string(into.Value)
 }

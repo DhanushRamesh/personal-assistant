@@ -260,6 +260,16 @@ type HomeAssistant struct {
 	// Satellite : The entity to speak through, such as
 	// assist_satellite.laptop_lva_assist_satellite.
 	Satellite string
+	// VoiceState : An entity the server writes what a voice turn is doing
+	// to, such as sensor.jarvis_voice. Empty writes nowhere.
+	//
+	// There is more than one satellite now and only one of them has an
+	// entity Home Assistant keeps. The laptop's is its own; HAwake on the
+	// phone talks to the conversation API directly and registers nothing,
+	// so a dashboard watching the laptop shows an idle assistant while
+	// Jarvis is working for the phone. This is the entity that is true
+	// whichever device asked.
+	VoiceState string
 	// ThisMachine : The source name the machine the assistant runs on
 	// reports its own events under, such as "laptop".
 	//
@@ -629,6 +639,7 @@ func Load(path string, lookup Lookup) (Config, error) {
 			URL:             l.str("homeassistant", "url", ""),
 			Token:           l.secret("homeassistant", "token"),
 			Satellite:       l.str("homeassistant", "satellite", ""),
+			VoiceState:      l.str("homeassistant", "voice_state", ""),
 			PresenceEntity:  l.str("homeassistant", "presence_entity", ""),
 			ThisMachine:     l.str("homeassistant", "this_machine", ""),
 			Notify:          l.list("homeassistant", "notify"),

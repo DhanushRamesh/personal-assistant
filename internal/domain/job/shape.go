@@ -571,6 +571,55 @@ func (o Occasion) Holds(got map[string][]Reading, away bool, now time.Time) (boo
 	return true, ""
 }
 
+// Verdict : What a condition answered and, for a group, what each
+// of its parts answered, in the order they were written.
+//
+// The whole tree, where [Occasion.Holds] stops at the first answer
+// that settles it. Owner, 13 October 2026, in the desktop client: *"I
+// want a conditional view: what are the conditions in when"* -- and a
+// page showing each condition can only mark the ones it was told
+// about.
+type Verdict struct {
+	Held  bool
+	Parts []Verdict
+}
+
+// Judge : Every condition's answer, for showing a rule tried.
+//
+// Agrees with [Occasion.Holds] on the whole; it only does not stop
+// early. An Occasion with no conditions holds, with no parts.
+func (o Occasion) Judge(got map[string][]Reading, away bool, now time.Time) Verdict {
+	return judged(o.where(), len(o.Any) > 0, got, away, now)
+}
+
+// judge : This condition's answer, and its parts' when it is a group.
+func (w Where) judge(got map[string][]Reading, away bool, now time.Time) Verdict {
+	if !w.Group() {
+		ok, _ := w.holds(got, away, now)
+		return Verdict{Held: ok}
+	}
+	if len(w.Any) > 0 {
+		return judged(w.Any, true, got, away, now)
+	}
+	return judged(w.All, false, got, away, now)
+}
+
+// judged : A list of conditions answered one by one, held when all of
+// them are, or, for alternatives, when any one is.
+func judged(in []Where, anyOf bool, got map[string][]Reading, away bool, now time.Time) Verdict {
+	out := Verdict{Held: !anyOf || len(in) == 0, Parts: make([]Verdict, 0, len(in))}
+	for _, w := range in {
+		v := w.judge(got, away, now)
+		out.Parts = append(out.Parts, v)
+		if anyOf {
+			out.Held = out.Held || v.Held
+		} else {
+			out.Held = out.Held && v.Held
+		}
+	}
+	return out
+}
+
 // holds : Whether this condition holds, and why not.
 func (w Where) holds(got map[string][]Reading, away bool, now time.Time) (bool, string) {
 	if len(w.All) > 0 {

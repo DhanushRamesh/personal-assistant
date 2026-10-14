@@ -22,6 +22,7 @@ import (
 	"io"
 	"log/slog"
 	"net/http"
+	"slices"
 	"strconv"
 	"strings"
 	"time"
@@ -99,6 +100,28 @@ type KindCount struct {
 type ListResponse struct {
 	Events []Stored    `json:"events"`
 	Kinds  []KindCount `json:"kinds"`
+	// Sources : What has reported, each source and device with how
+	// many, counted across everything as the kinds are -- the choices a
+	// filter by device offers.
+	Sources []SourceCount `json:"sources"`
+}
+
+// SourceCount : One thing that reports events, and how many.
+type SourceCount struct {
+	Source string `json:"source"`
+	Device string `json:"device,omitempty"`
+	Count  int64  `json:"count"`
+}
+
+// Late : How far behind an event has to arrive to count as late, when
+// only those are asked for. The client calls anything past a minute
+// late, and so does this.
+const Late = time.Minute
+
+// sourcer : A store that can say what has reported. Optional: one that
+// cannot lists no sources.
+type sourcer interface {
+	Sources(ctx context.Context, userID string) ([]event.Source, error)
 }
 
 // Incoming : One event as a device sends it.
@@ -192,6 +215,92 @@ func New(logger *slog.Logger, store Store, now func() time.Time) *Handler {
 func (h *Handler) Mount(r chi.Router) {
 	r.Post("/v1/events", h.Record)
 	r.Get("/v1/events", h.List)
+	r.Get("/v1/events/ledger", h.Ledger)
+}
+
+// LedgerLine : One reporter's one action, as the ledger answers it.
+type LedgerLine struct {
+	Source string    `json:"source"`
+	Device string    `json:"device,omitempty"`
+	Kind   string    `json:"kind"`
+	Count  int64     `json:"count"`
+	First  time.Time `json:"first"`
+	Last   time.Time `json:"last"`
+	// EverySeconds : The usual gap between two of them; absent for one.
+	EverySeconds float64 `json:"every_seconds,omitempty"`
+	Unknown      int64   `json:"unknown"`
+	Valueless    int64   `json:"valueless"`
+	Repeats      int64   `json:"repeats"`
+}
+
+// LedgerPair : Two actions of one family counted side by side for one value.
+type LedgerPair struct {
+	Source string `json:"source"`
+	Device string `json:"device,omitempty"`
+	Family string `json:"family"`
+	Value  string `json:"value"`
+	A      string `json:"a"`
+	B      string `json:"b"`
+	NA     int64  `json:"a_count"`
+	NB     int64  `json:"b_count"`
+	Off    bool   `json:"off"`
+}
+
+// LedgerFault : One way a reporter's books are wrong.
+type LedgerFault struct {
+	Source string `json:"source"`
+	Device string `json:"device,omitempty"`
+	Kind   string `json:"kind"`
+	Says   string `json:"says"`
+}
+
+// LedgerResponse : How each reporter has kept its books over the window.
+type LedgerResponse struct {
+	Days   int           `json:"days"`
+	Lines  []LedgerLine  `json:"lines"`
+	Pairs  []LedgerPair  `json:"pairs"`
+	Faults []LedgerFault `json:"faults"`
+}
+
+// Ledger : Each source's each action over the past days -- how many, how
+// often, when last, how cleanly kept -- with the pairs that should balance
+// and what is wrong. ?days= chooses the window, 7 by default.
+func (h *Handler) Ledger(w http.ResponseWriter, r *http.Request) {
+	ctx := r.Context()
+	books, ok := h.store.(event.Ledgers)
+	if !ok {
+		httpx.WriteError(ctx, w, http.StatusNotFound, "Nothing here keeps a ledger of the reports.")
+		return
+	}
+	days := event.LedgerDays
+	if v := r.URL.Query().Get("days"); v != "" {
+		n, err := strconv.Atoi(v)
+		if err != nil || n <= 0 {
+			httpx.WriteError(ctx, w, http.StatusBadRequest, "That number of days could not be read.")
+			return
+		}
+		days = min(n, event.LedgerMostDays)
+	}
+	now := h.now().UTC()
+	lines, pairs, faults, err := event.Ledgered(ctx, books, authn.Of(ctx).User.ID, now.AddDate(0, 0, -days), now, time.UTC)
+	if err != nil {
+		h.Fail(ctx, w, "keeping the ledger", err)
+		return
+	}
+	out := LedgerResponse{Days: days, Lines: []LedgerLine{}, Pairs: []LedgerPair{}, Faults: []LedgerFault{}}
+	for _, l := range lines {
+		out.Lines = append(out.Lines, LedgerLine{Source: l.Source, Device: l.Device, Kind: l.Kind, Count: l.Count,
+			First: l.First, Last: l.Last, EverySeconds: l.Every().Seconds(),
+			Unknown: l.Unknown, Valueless: l.Valueless, Repeats: l.Repeats})
+	}
+	for _, p := range pairs {
+		out.Pairs = append(out.Pairs, LedgerPair{Source: p.Source, Device: p.Device, Family: p.Family, Value: p.Value,
+			A: p.A, B: p.B, NA: p.NA, NB: p.NB, Off: p.Off()})
+	}
+	for _, f := range faults {
+		out.Faults = append(out.Faults, LedgerFault{Source: f.Source, Device: f.Device, Kind: f.Kind, Says: f.Says})
+	}
+	httpx.WriteJSON(ctx, w, http.StatusOK, out)
 }
 
 // Record : Takes a batch of events from one of the person's devices.
@@ -276,17 +385,21 @@ func (h *Handler) Record(w http.ResponseWriter, r *http.Request) {
 		keep = append(keep, e)
 	}
 
+	keep, again := h.unrepeated(ctx, user, keep)
+
 	stored, seen, err := h.store.Record(ctx, user, keep)
 	if err != nil {
 		h.Fail(ctx, w, "storing events", err)
 		return
 	}
+	seen = append(seen, again...)
 
 	h.Logger.InfoContext(ctx, "events taken from a device",
 		slog.String("source", batch.Source),
 		slog.String("device", batch.Device),
 		slog.Int("stored", len(stored)),
 		slog.Int("seen", len(seen)),
+		slog.Int("sent_again", len(again)),
 		slog.Int("rejected", len(rejected)))
 
 	h.settle(ctx, user, keep)
@@ -294,6 +407,71 @@ func (h *Handler) Record(w http.ResponseWriter, r *http.Request) {
 
 	httpx.WriteJSON(ctx, w, http.StatusOK, BatchResponse{
 		Stored: stored, Seen: seen, Rejected: rejected})
+}
+
+// unrepeated : The events in a batch that are not the same report sent
+// again -- the same source, device, action and payload within
+// event.Twice of one already stored or earlier in the batch -- and the
+// dedupe keys of those that were, to be answered as seen so the device
+// deletes them.
+//
+// A device's own key cannot catch these: Android fires a Bluetooth
+// connection once per link, so one helmet connecting arrived as two or
+// three reports a second apart, each with a key of its own. One read of
+// the store for the whole batch, over the span the batch covers.
+func (h *Handler) unrepeated(ctx context.Context, userID string, batch []*event.Event) ([]*event.Event, []string) {
+	if len(batch) == 0 {
+		return batch, nil
+	}
+	first, last := batch[0].OccurredAt, batch[0].OccurredAt
+	kinds := map[string]bool{}
+	from := map[string]bool{}
+	for _, e := range batch {
+		if e.OccurredAt.Before(first) {
+			first = e.OccurredAt
+		}
+		if e.OccurredAt.After(last) {
+			last = e.OccurredAt
+		}
+		kinds[e.Kind] = true
+		from[e.Source+"/"+e.Device] = true
+	}
+	q := event.Query{Since: first.Add(-event.Twice), Until: last.Add(event.Twice)}
+	for k := range kinds {
+		q.Kinds = append(q.Kinds, k)
+	}
+	for f := range from {
+		q.From = append(q.From, f)
+	}
+	stored, err := h.store.Recent(ctx, userID, q)
+	if err != nil {
+		// Better a repeat kept than a report lost.
+		h.Logger.WarnContext(ctx, "cannot look for reports sent again", slog.Any("error", err))
+		stored = nil
+	}
+
+	keep := make([]*event.Event, 0, len(batch))
+	var again []string
+	for _, e := range batch {
+		repeat := false
+		for i := range stored {
+			if stored[i].DedupeKey != e.DedupeKey && event.Again(&stored[i], e) {
+				repeat = true
+				break
+			}
+		}
+		for _, k := range keep {
+			if !repeat && event.Again(k, e) {
+				repeat = true
+			}
+		}
+		if repeat {
+			again = append(again, e.DedupeKey)
+			continue
+		}
+		keep = append(keep, e)
+	}
+	return keep, again
 }
 
 // tell : Says which kinds landed, for the rules that wait on one.
@@ -653,14 +831,27 @@ func (h *Handler) List(w http.ResponseWriter, r *http.Request) {
 		limit = min(n, MaxLimit)
 	}
 
-	var since time.Time
-	if v := r.URL.Query().Get("since"); v != "" {
-		t, err := time.Parse(time.RFC3339, v)
-		if err != nil {
-			httpx.WriteError(ctx, w, http.StatusBadRequest, "That time could not be read.")
-			return
+	var since, until time.Time
+	for name, at := range map[string]*time.Time{"since": &since, "until": &until} {
+		if v := r.URL.Query().Get(name); v != "" {
+			t, err := time.Parse(time.RFC3339, v)
+			if err != nil {
+				httpx.WriteError(ctx, w, http.StatusBadRequest, "That time could not be read.")
+				return
+			}
+			*at = t
 		}
-		since = t
+	}
+
+	// Several kinds, devices and words at once. Owner, 13 October 2026,
+	// on the desktop client's events: *"it should have advanced
+	// filters"*. Asked of the store and not of a page already fetched,
+	// so a filter reaches past the five hundred a page can hold.
+	query := r.URL.Query()
+	kinds := nonEmpty(query["kind"])
+	late := time.Duration(0)
+	if query.Get("late") == "true" {
+		late = Late
 	}
 
 	// Position readings are left out unless they are asked for by name.
@@ -676,17 +867,20 @@ func (h *Handler) List(w http.ResponseWriter, r *http.Request) {
 	// kind=location.fix wants to look at the readings; the model is
 	// never shown them at all, because a kind listing offering three
 	// thousand of something is an invitation to ask for it.
-	kind := r.URL.Query().Get("kind")
 	var omit []string
-	if kind != event.Fixed {
+	if query.Get("fixes") != "true" && !slices.Contains(kinds, event.Fixed) {
 		omit = []string{event.Fixed}
 	}
 
 	events, err := h.store.Recent(ctx, user, event.Query{
-		Since: since,
-		Kind:  kind,
-		Omit:  omit,
-		Limit: limit,
+		Since:    since,
+		Until:    until,
+		Kinds:    kinds,
+		From:     nonEmpty(query["from"]),
+		Contains: strings.TrimSpace(query.Get("contains")),
+		Late:     late,
+		Omit:     omit,
+		Limit:    limit,
 	})
 	if err != nil {
 		h.Fail(ctx, w, "reading events", err)
@@ -696,14 +890,24 @@ func (h *Handler) List(w http.ResponseWriter, r *http.Request) {
 	// Counted across everything, not across the page. A filtered listing
 	// still has to say which other kinds there are, or the filter has no
 	// way back.
-	kinds, err := h.store.Kinds(ctx, user)
+	counted, err := h.store.Kinds(ctx, user)
 	if err != nil {
 		h.Fail(ctx, w, "counting event kinds", err)
 		return
 	}
 
 	out := ListResponse{Events: make([]Stored, 0, len(events)),
-		Kinds: make([]KindCount, 0, len(kinds))}
+		Kinds: make([]KindCount, 0, len(counted)), Sources: []SourceCount{}}
+	if src, ok := h.store.(sourcer); ok {
+		from, err := src.Sources(ctx, user)
+		if err != nil {
+			h.Fail(ctx, w, "counting event sources", err)
+			return
+		}
+		for _, f := range from {
+			out.Sources = append(out.Sources, SourceCount{Source: f.Source, Device: f.Device, Count: f.Count})
+		}
+	}
 	for _, e := range events {
 		out.Events = append(out.Events, Stored{
 			ID: e.ID, Source: e.Source, Device: e.Device, Kind: e.Kind,
@@ -712,10 +916,21 @@ func (h *Handler) List(w http.ResponseWriter, r *http.Request) {
 			Payload: e.Payload,
 		})
 	}
-	for _, k := range kinds {
+	for _, k := range counted {
 		out.Kinds = append(out.Kinds, KindCount{
 			Kind: k.Kind, Count: k.Count, First: k.First, Last: k.Last})
 	}
 
 	httpx.WriteJSON(ctx, w, http.StatusOK, out)
+}
+
+// nonEmpty : The values given, blanks left out.
+func nonEmpty(values []string) []string {
+	out := make([]string, 0, len(values))
+	for _, v := range values {
+		if v = strings.TrimSpace(v); v != "" {
+			out = append(out, v)
+		}
+	}
+	return out
 }

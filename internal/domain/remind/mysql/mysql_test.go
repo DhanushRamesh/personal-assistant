@@ -301,3 +301,18 @@ func TestListIsOnePersonsAndOrdered(t *testing.T) {
 		}
 	}
 }
+
+// A write that succeeds tells the change hook whose reminders changed; a
+// write by id alone tells it nobody in particular.
+func TestAWriteTellsTheChangeHook(t *testing.T) {
+	s, user := newStore(t)
+	var told []string
+	s.OnChange(func(userID string) { told = append(told, userID) })
+	r := stored(t, s, user, "Hooked", time.Now().Add(time.Hour), remind.Once)
+	if err := s.Hold(context.Background(), r.ID, time.Now()); err != nil {
+		t.Fatalf("Hold: %v", err)
+	}
+	if len(told) != 2 || told[0] != user || told[1] != "" {
+		t.Errorf("told %q, want [%q \"\"]", told, user)
+	}
+}

@@ -112,14 +112,15 @@ func value(s *string) string {
 
 // Store : A remind.Store backed by MySQL.
 type Store struct {
-	db *gorm.DB
+	db      *gorm.DB
+	changed func(userID string)
 }
 
 // New : Returns a Store reading and writing through db.
 func New(db *storage.DB) *Store { return &Store{db: db.DB} }
 
 // Create : Stores a new reminder.
-func (s *Store) Create(ctx context.Context, r *remind.Reminder) error {
+func (s *Store) create(ctx context.Context, r *remind.Reminder) error {
 	if err := r.Valid(); err != nil {
 		return err
 	}
@@ -168,7 +169,7 @@ func (s *Store) List(ctx context.Context, userID string, states ...remind.Status
 
 // Cancel : Calls one off. Cancelling one that has already happened is not
 // an error: the caller wanted it not to happen, and it will not.
-func (s *Store) Cancel(ctx context.Context, userID, id string) error {
+func (s *Store) cancel(ctx context.Context, userID, id string) error {
 	out := s.db.WithContext(ctx).Model(&row{}).
 		Where("id = ? AND user_id = ?", id, userID).
 		Updates(map[string]any{
@@ -203,7 +204,7 @@ func (s *Store) Due(ctx context.Context, at time.Time, limit int) ([]remind.Remi
 }
 
 // Fired : Records that a reminder was said. A zero next finishes it.
-func (s *Store) Fired(ctx context.Context, id string, at, next time.Time) error {
+func (s *Store) fired(ctx context.Context, id string, at, next time.Time) error {
 	changes := map[string]any{
 		"last_fired_at": at.UTC(),
 		"fires":         gorm.Expr("fires + 1"),
@@ -231,7 +232,7 @@ func (s *Store) Fired(ctx context.Context, id string, at, next time.Time) error 
 }
 
 // Missed : Records that a reminder's time passed with nothing listening.
-func (s *Store) Missed(ctx context.Context, id string, at time.Time) error {
+func (s *Store) missed(ctx context.Context, id string, at time.Time) error {
 	// Pending or held. Pending is its time passing with nothing able to
 	// say it; held is the firing loop giving up on one that waited too
 	// long for somebody to come back. Both end the same way.
@@ -264,7 +265,7 @@ func (s *Store) Unmentioned(ctx context.Context, userID string) ([]remind.Remind
 }
 
 // Mentioned : Records that a miss has been brought up.
-func (s *Store) Mentioned(ctx context.Context, ids []string, at time.Time) error {
+func (s *Store) mentioned(ctx context.Context, ids []string, at time.Time) error {
 	if len(ids) == 0 {
 		return nil
 	}
@@ -278,7 +279,7 @@ func (s *Store) Mentioned(ctx context.Context, ids []string, at time.Time) error
 }
 
 // Armed : Records that the phone was asked for these alarms.
-func (s *Store) Armed(ctx context.Context, ids []string, at time.Time) error {
+func (s *Store) armed(ctx context.Context, ids []string, at time.Time) error {
 	if len(ids) == 0 {
 		return nil
 	}
@@ -292,7 +293,7 @@ func (s *Store) Armed(ctx context.Context, ids []string, at time.Time) error {
 }
 
 // Hold : Keeps a reminder back because nobody was there to hear it.
-func (s *Store) Hold(ctx context.Context, id string, at time.Time) error {
+func (s *Store) hold(ctx context.Context, id string, at time.Time) error {
 	// Only while pending, so the firing loop cannot hold one it has
 	// already said, and two passes cannot both claim it.
 	out := s.db.WithContext(ctx).Model(&row{}).
@@ -344,7 +345,7 @@ func (s *Store) Waiting(ctx context.Context, userID string) ([]remind.Reminder, 
 }
 
 // Replace : Writes a changed reminder over the stored one.
-func (s *Store) Replace(ctx context.Context, userID string, r *remind.Reminder, was remind.Status) error {
+func (s *Store) replace(ctx context.Context, userID string, r *remind.Reminder, was remind.Status) error {
 	if r == nil {
 		return remind.ErrNotFound
 	}
@@ -375,7 +376,7 @@ func (s *Store) Replace(ctx context.Context, userID string, r *remind.Reminder, 
 }
 
 // Snooze : Puts a reminder off until a later time.
-func (s *Store) Snooze(ctx context.Context, userID, id string, until time.Time) error {
+func (s *Store) snooze(ctx context.Context, userID, id string, until time.Time) error {
 	if until.IsZero() {
 		return remind.ErrNoTime
 	}
@@ -423,7 +424,7 @@ func (s *Store) LastSpoken(ctx context.Context, userID string, since time.Time) 
 }
 
 // Reschedule : Moves a reminder to its next time without saying it.
-func (s *Store) Reschedule(ctx context.Context, id string, next time.Time) error {
+func (s *Store) reschedule(ctx context.Context, id string, next time.Time) error {
 	out := s.db.WithContext(ctx).Model(&row{}).
 		Where("id = ? AND status = ?", id, string(remind.Pending)).
 		Updates(map[string]any{
@@ -450,3 +451,91 @@ func toReminders(rows []row) []remind.Reminder {
 
 // Ensure the store satisfies the interface it exists to provide.
 var _ remind.Store = (*Store)(nil)
+
+// Create : See create; the change hook is told when it succeeds.
+func (s *Store) Create(ctx context.Context, r *remind.Reminder) error {
+	err := s.create(ctx, r)
+	s.tell(err, r.UserID)
+	return err
+}
+
+// Cancel : See cancel; the change hook is told when it succeeds.
+func (s *Store) Cancel(ctx context.Context, userID, id string) error {
+	err := s.cancel(ctx, userID, id)
+	s.tell(err, userID)
+	return err
+}
+
+// Fired : See fired; the change hook is told when it succeeds.
+func (s *Store) Fired(ctx context.Context, id string, at, next time.Time) error {
+	err := s.fired(ctx, id, at, next)
+	s.tell(err, "")
+	return err
+}
+
+// Missed : See missed; the change hook is told when it succeeds.
+func (s *Store) Missed(ctx context.Context, id string, at time.Time) error {
+	err := s.missed(ctx, id, at)
+	s.tell(err, "")
+	return err
+}
+
+// Mentioned : See mentioned; the change hook is told when it succeeds.
+func (s *Store) Mentioned(ctx context.Context, ids []string, at time.Time) error {
+	err := s.mentioned(ctx, ids, at)
+	s.tell(err, "")
+	return err
+}
+
+// Armed : See armed; the change hook is told when it succeeds.
+func (s *Store) Armed(ctx context.Context, ids []string, at time.Time) error {
+	err := s.armed(ctx, ids, at)
+	s.tell(err, "")
+	return err
+}
+
+// Hold : See hold; the change hook is told when it succeeds.
+func (s *Store) Hold(ctx context.Context, id string, at time.Time) error {
+	err := s.hold(ctx, id, at)
+	s.tell(err, "")
+	return err
+}
+
+// Replace : See replace; the change hook is told when it succeeds.
+func (s *Store) Replace(ctx context.Context, userID string, r *remind.Reminder, was remind.Status) error {
+	err := s.replace(ctx, userID, r, was)
+	s.tell(err, userID)
+	return err
+}
+
+// Snooze : See snooze; the change hook is told when it succeeds.
+func (s *Store) Snooze(ctx context.Context, userID, id string, until time.Time) error {
+	err := s.snooze(ctx, userID, id, until)
+	s.tell(err, userID)
+	return err
+}
+
+// Reschedule : See reschedule; the change hook is told when it succeeds.
+func (s *Store) Reschedule(ctx context.Context, id string, next time.Time) error {
+	err := s.reschedule(ctx, id, next)
+	s.tell(err, "")
+	return err
+}
+
+// OnChange : Has the store say, after each write that succeeds, whose
+// data changed -- empty when the write does not know, as one by id
+// alone does -- so the clients showing it can read it again. The live
+// hub, given it in main.
+func (s *Store) OnChange(f func(userID string)) *Store {
+	if s != nil {
+		s.changed = f
+	}
+	return s
+}
+
+// tell : Passes a write that succeeded to the change hook.
+func (s *Store) tell(err error, userID string) {
+	if err == nil && s != nil && s.changed != nil {
+		s.changed(userID)
+	}
+}

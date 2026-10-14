@@ -423,6 +423,60 @@ var ErrNoEntity = errors.New("hass: no such entity")
 // condition comparing against them does not hold, and that is the
 // right answer -- not knowing is not a fault to be logged every two
 // minutes.
+// Report : Sets entity's state in Home Assistant.
+//
+// Written for the one state Home Assistant cannot work out for itself:
+// what a voice turn is doing when the turn did not come from a satellite
+// it knows about. The laptop has an entity of its own and Home Assistant
+// keeps it; HAwake on the phone talks to the conversation API directly and
+// registers nothing, so without this a dashboard shows an idle assistant
+// while Jarvis is plainly working.
+//
+// A state pushed this way is Home Assistant's to hold and not its to
+// restore: it exists until Home Assistant restarts and then is gone, with
+// no history behind it. That is survivable here because the next turn
+// writes it again, and it is the reason this is not where anything
+// durable belongs.
+//
+// Failure is returned and not retried. A state is worth saying once; by
+// the time a retry landed the turn would have moved on, and a stale state
+// arriving late is worse than one that never arrived.
+func (s *Speaker) Report(ctx context.Context, entity, state string, attrs map[string]any) error {
+	if s == nil || strings.TrimSpace(entity) == "" {
+		return ErrNotConfigured
+	}
+	ctx, cancel := context.WithTimeout(ctx, s.cfg.Timeout)
+	defer cancel()
+
+	if attrs == nil {
+		attrs = map[string]any{}
+	}
+	body, err := json.Marshal(map[string]any{"state": state, "attributes": attrs})
+	if err != nil {
+		return fmt.Errorf("hass: building %s: %w", entity, err)
+	}
+	url := s.cfg.URL + "/api/states/" + strings.TrimSpace(entity)
+	req, err := http.NewRequestWithContext(ctx, http.MethodPost, url, bytes.NewReader(body))
+	if err != nil {
+		return fmt.Errorf("hass: building state request: %w", err)
+	}
+	req.Header.Set("Authorization", "Bearer "+s.cfg.Token.Reveal())
+	req.Header.Set("Content-Type", "application/json")
+
+	resp, err := s.http.Do(req)
+	if err != nil {
+		return fmt.Errorf("hass: setting %s: %w", entity, err)
+	}
+	defer resp.Body.Close()
+	answered, _ := io.ReadAll(io.LimitReader(resp.Body, maxResponseBytes))
+	// 200 is an entity that already existed, 201 one created by this call.
+	if resp.StatusCode >= 400 {
+		return fmt.Errorf("hass: setting %s: %s: %s",
+			entity, resp.Status, strings.TrimSpace(string(answered)))
+	}
+	return nil
+}
+
 func (s *Speaker) State(ctx context.Context, entity string) (string, time.Time, error) {
 	if s == nil || strings.TrimSpace(entity) == "" {
 		return "", time.Time{}, ErrNotConfigured

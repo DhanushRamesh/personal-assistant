@@ -28,13 +28,16 @@ type row struct {
 func (row) TableName() string { return "remarks" }
 
 // Store : Reads and writes what it considered saying.
-type Store struct{ db *gorm.DB }
+type Store struct {
+	db      *gorm.DB
+	changed func(userID string)
+}
 
 // New : Builds one over the given database.
 func New(db *gorm.DB) *Store { return &Store{db: db} }
 
 // Note : Writes down one thing it considered saying.
-func (s *Store) Note(ctx context.Context, n notice.Noted) error {
+func (s *Store) note(ctx context.Context, n notice.Noted) error {
 	var said *string
 	if n.Said != "" {
 		kept := n.Said
@@ -87,3 +90,28 @@ func (s *Store) Recent(ctx context.Context, userID string, limit int) ([]notice.
 
 // Most : The most rows one read returns. A page, not a history.
 const Most = 200
+
+// Note : See note; the change hook is told when it succeeds.
+func (s *Store) Note(ctx context.Context, n notice.Noted) error {
+	err := s.note(ctx, n)
+	s.tell(err, n.UserID)
+	return err
+}
+
+// OnChange : Has the store say, after each write that succeeds, whose
+// data changed -- empty when the write does not know, as one by id
+// alone does -- so the clients showing it can read it again. The live
+// hub, given it in main.
+func (s *Store) OnChange(f func(userID string)) *Store {
+	if s != nil {
+		s.changed = f
+	}
+	return s
+}
+
+// tell : Passes a write that succeeded to the change hook.
+func (s *Store) tell(err error, userID string) {
+	if err == nil && s != nil && s.changed != nil {
+		s.changed(userID)
+	}
+}

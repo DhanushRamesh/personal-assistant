@@ -113,3 +113,41 @@ func TestANoticeIsForItsUserOnly(t *testing.T) {
 		t.Error("an event with no user must reach everyone")
 	}
 }
+
+// A burst of writes is one notice per user and area, sent once it settles.
+func TestChangedAreasAreGatheredIntoOneNoticeEach(t *testing.T) {
+	was := Settle
+	Settle = 20 * time.Millisecond
+	defer func() { Settle = was }()
+	h := NewHub()
+	events, stop := h.Subscribe()
+	defer stop()
+	for i := 0; i < 100; i++ {
+		h.AreaChanged("u1", AreaReminders)
+	}
+	h.AreaChanged("u1", AreaRules, AreaReminders)
+	h.AreaChanged("u2", AreaReminders)
+
+	got := map[string]bool{}
+	timeout := time.After(time.Second)
+	for len(got) < 3 {
+		select {
+		case e := <-events:
+			if e.Kind != Changed {
+				t.Fatalf("kind = %q, want changed", e.Kind)
+			}
+			key := e.UserID + "/" + e.Area
+			if got[key] {
+				t.Fatalf("%s told twice", key)
+			}
+			got[key] = true
+		case <-timeout:
+			t.Fatalf("told %v, want u1/reminders, u1/rules and u2/reminders", got)
+		}
+	}
+	select {
+	case e := <-events:
+		t.Fatalf("told again: %+v", e)
+	case <-time.After(3 * Settle):
+	}
+}

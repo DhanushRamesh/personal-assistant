@@ -63,7 +63,10 @@ func (r *row) toEvent() event.Event {
 }
 
 // Store : Events, in MySQL.
-type Store struct{ db *gorm.DB }
+type Store struct {
+	db      *gorm.DB
+	changed func(userID string)
+}
 
 // New : Builds the store.
 func New(db *storage.DB) *Store { return &Store{db: db.DB} }
@@ -81,7 +84,7 @@ func New(db *storage.DB) *Store { return &Store{db: db.DB} }
 // still ignores duplicates. The read can go stale between the two, which
 // is the point of leaving the insert able to cope: two batches racing
 // produce one row and two honest answers.
-func (s *Store) Record(ctx context.Context, userID string, events []*event.Event) (stored, seen []string, err error) {
+func (s *Store) record(ctx context.Context, userID string, events []*event.Event) (stored, seen []string, err error) {
 	if len(events) == 0 {
 		return nil, nil, nil
 	}
@@ -142,7 +145,7 @@ func (s *Store) Record(ctx context.Context, userID string, events []*event.Event
 // Only the payload and when it arrived. What happened and when it
 // started are what identify it; if those changed it would be a
 // different stay with a different key.
-func (s *Store) Amend(ctx context.Context, userID string, events []*event.Event) (int64, error) {
+func (s *Store) amend(ctx context.Context, userID string, events []*event.Event) (int64, error) {
 	var changed int64
 	for _, e := range events {
 		if e == nil || e.DedupeKey == "" {
@@ -177,6 +180,15 @@ func (s *Store) Recent(ctx context.Context, userID string, q event.Query) ([]eve
 	}
 	if q.Kind != "" {
 		db = db.Where("kind = ?", q.Kind)
+	}
+	if len(q.Kinds) > 0 {
+		db = db.Where("kind IN ?", q.Kinds)
+	}
+	if len(q.From) > 0 {
+		db = db.Where("(source IN ? OR CONCAT(source, '/', device) IN ?)", q.From, q.From)
+	}
+	if q.Late > 0 {
+		db = db.Where("TIMESTAMPDIFF(SECOND, occurred_at, received_at) > ?", int64(q.Late.Seconds()))
 	}
 	if q.Prefix != "" {
 		// Escaped, because a kind is a dotted name and the model writes
@@ -291,6 +303,28 @@ func (s *Store) Kinds(ctx context.Context, userID string) ([]event.Kind, error) 
 	return out, nil
 }
 
+// Sources : What reported this person's events, each source and device
+// with how many, most first.
+func (s *Store) Sources(ctx context.Context, userID string) ([]event.Source, error) {
+	var rows []struct {
+		Source string
+		Device string
+		N      int64
+	}
+	err := s.db.WithContext(ctx).Model(&row{}).
+		Select("source, device, count(*) as n").
+		Where("user_id = ?", userID).
+		Group("source, device").Order("n desc").Scan(&rows).Error
+	if err != nil {
+		return nil, fmt.Errorf("counting event sources: %w", err)
+	}
+	out := make([]event.Source, 0, len(rows))
+	for _, r := range rows {
+		out = append(out, event.Source{Source: r.Source, Device: r.Device, Count: r.N})
+	}
+	return out, nil
+}
+
 // valued : The payload's value field, as SQL reads it, folded to
 // one case.
 //
@@ -346,4 +380,124 @@ func (s *Store) Tally(ctx context.Context, userID string, t event.Tally) (int, e
 		return 0, fmt.Errorf("counting events by value: %w", err)
 	}
 	return int(most.N), nil
+}
+
+// Record : See record; the change hook is told when it succeeds.
+func (s *Store) Record(ctx context.Context, userID string, events []*event.Event) (stored, seen []string, err error) {
+	stored, seen, err = s.record(ctx, userID, events)
+	if len(stored) > 0 {
+		s.tell(err, userID)
+	}
+	return stored, seen, err
+}
+
+// Amend : See amend; the change hook is told when it succeeds.
+func (s *Store) Amend(ctx context.Context, userID string, events []*event.Event) (int64, error) {
+	n, err := s.amend(ctx, userID, events)
+	if n > 0 {
+		s.tell(err, userID)
+	}
+	return n, err
+}
+
+// OnChange : Has the store say, after each write that succeeds, whose
+// data changed -- empty when the write does not know, as one by id
+// alone does -- so the clients showing it can read it again. The live
+// hub, given it in main.
+func (s *Store) OnChange(f func(userID string)) *Store {
+	if s != nil {
+		s.changed = f
+	}
+	return s
+}
+
+// tell : Passes a write that succeeded to the change hook.
+func (s *Store) tell(err error, userID string) {
+	if err == nil && s != nil && s.changed != nil {
+		s.changed(userID)
+	}
+}
+
+// Ledger : Each reporter's each action since a moment, by when they were
+// received. The in-memory store settles what each number means; this says
+// the same in one grouped query, with a repeat found by comparing each
+// report with the one before it in its own line.
+func (s *Store) Ledger(ctx context.Context, userID string, since time.Time) ([]event.Line, error) {
+	var rows []struct {
+		Source    string
+		Device    string
+		Kind      string
+		N         int64
+		First     time.Time
+		Last      time.Time
+		Unknown   int64
+		Valueless int64
+		Repeats   int64
+		Longest   int64
+		Distinct  int64
+		Only      *string
+	}
+	err := s.db.WithContext(ctx).Raw(`
+SELECT source, device, kind, COUNT(*) AS n, MIN(received_at) AS first, MAX(received_at) AS last,
+       COALESCE(SUM(v = ?), 0) AS unknown, COALESCE(SUM(v IS NULL), 0) AS valueless,
+       COALESCE(SUM(again), 0) AS repeats, COALESCE(MAX(gap), 0) AS longest,
+       COUNT(DISTINCT v) AS `+"`distinct`"+`, MIN(v) AS only
+FROM (
+  SELECT source, device, kind, received_at, `+valued+` AS v,
+         (payload = LAG(payload) OVER w
+          AND TIMESTAMPDIFF(MICROSECOND, LAG(occurred_at) OVER w, occurred_at) < ?) AS again,
+         TIMESTAMPDIFF(MICROSECOND, LAG(received_at) OVER r, received_at) AS gap
+  FROM events
+  WHERE user_id = ? AND received_at >= ?
+  WINDOW w AS (PARTITION BY source, device, kind ORDER BY occurred_at),
+         r AS (PARTITION BY source, device, kind ORDER BY received_at)
+) t
+GROUP BY source, device, kind
+ORDER BY source, device, n DESC`,
+		event.Unknown, event.Twice.Microseconds(), userID, since.UTC()).Scan(&rows).Error
+	if err != nil {
+		return nil, fmt.Errorf("keeping the ledger: %w", err)
+	}
+	out := make([]event.Line, 0, len(rows))
+	for _, r := range rows {
+		out = append(out, event.Line{
+			Source: r.Source, Device: r.Device, Kind: r.Kind, Count: r.N,
+			First: r.First.UTC(), Last: r.Last.UTC(),
+			Unknown: r.Unknown, Valueless: r.Valueless, Repeats: r.Repeats,
+			Longest: time.Duration(r.Longest) * time.Microsecond, Distinct: r.Distinct,
+		})
+		if r.Distinct == 1 && r.Only != nil {
+			out[len(out)-1].Only = *r.Only
+		}
+	}
+	return out, nil
+}
+
+// Values : How many of each of the given kinds carried each value since a
+// moment, per reporter, values folded to one case. Readings with no value
+// are left out.
+func (s *Store) Values(ctx context.Context, userID string, since time.Time, kinds []string) ([]event.Valued, error) {
+	if len(kinds) == 0 {
+		return nil, nil
+	}
+	var rows []struct {
+		Source string
+		Device string
+		Kind   string
+		V      string
+		N      int64
+	}
+	err := s.db.WithContext(ctx).Model(&row{}).
+		Select("source, device, kind, "+valued+" AS v, COUNT(*) AS n").
+		Where("user_id = ? AND received_at >= ? AND kind IN ?", userID, since.UTC(), kinds).
+		Where(valued + " IS NOT NULL").
+		Group("source, device, kind, v").Order("source, device, kind, v").Scan(&rows).Error
+	if err != nil {
+		return nil, fmt.Errorf("counting values: %w", err)
+	}
+	out := make([]event.Valued, 0, len(rows))
+	for _, r := range rows {
+		out = append(out, event.Valued{Source: r.Source, Device: r.Device, Kind: r.Kind, Value: r.V, Count: r.N})
+	}
+	return out, nil
 }

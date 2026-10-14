@@ -206,6 +206,16 @@ type Writer struct {
 	Now func() time.Time
 	// Logger : Where failures go. Nil is silent.
 	Logger *slog.Logger
+	// Changes : Told when an announcement has been written, so a client
+	// showing the conversation shows it as it is said rather than the next
+	// time it reads. Nil tells nobody.
+	Changes Changes
+}
+
+// Changes : Somewhere to say that a conversation has something new in it.
+// It must not block.
+type Changes interface {
+	ConversationsChanged(userID, conversationID string)
 }
 
 // Reminded : Notes a reminder or timer said aloud as its time came.
@@ -288,7 +298,89 @@ func (w *Writer) said(ctx context.Context, userID, conversationID string, kind c
 	m := conversation.Announced(id, kind, text, at.In(w.where()).Format("3:04 pm"), at)
 	if _, err := w.Conversations.Append(ctx, m); err != nil {
 		w.warn(ctx, "cannot record what was said aloud", err)
+		return
 	}
+	w.changed(ctx, userID, id)
+}
+
+// Elsewhere : Notes a spoken turn that something other than the assistant
+// answered -- Home Assistant matching one of its own sentences -- as the
+// question and the answer, in the conversation the voice client is talking
+// in.
+//
+// Ordinary messages and not announcements, because that is what they were:
+// the person asked and was answered. Written as such, a later question
+// that follows on from it reads as following on.
+func (w *Writer) Elsewhere(ctx context.Context, userID, heard, said string) {
+	if w == nil || w.Conversations == nil || w.Clients == nil || userID == "" {
+		return
+	}
+	heard, said = strings.TrimSpace(heard), strings.TrimSpace(said)
+	if heard == "" || said == "" {
+		return
+	}
+	id, err := w.found(ctx, userID)
+	if err != nil {
+		w.warn(ctx, "cannot tell which conversation heard this", err)
+		return
+	}
+	if id == "" {
+		return
+	}
+	// A finished chat as well as the messages, because a chat is what a
+	// client shows as a turn: the conversation view and the caption under
+	// the core both read the chats, and two messages alone appeared in
+	// neither.
+	c, err := chat.New(id, chat.ChannelVoice, heard)
+	if err != nil {
+		w.warn(ctx, "cannot record a turn answered elsewhere", err)
+		return
+	}
+	if err := c.Start(); err != nil {
+		w.warn(ctx, "cannot record a turn answered elsewhere", err)
+		return
+	}
+	if err := c.Complete(said); err != nil {
+		w.warn(ctx, "cannot record a turn answered elsewhere", err)
+		return
+	}
+	if err := w.Clients.Create(ctx, c); err != nil {
+		w.warn(ctx, "cannot record a turn answered elsewhere", err)
+		return
+	}
+
+	// Each tied to the chat, as the runner's are, which is what places the
+	// chat among the announcements.
+	at := w.clock()
+	question, answer := conversation.Said(id, heard, at), conversation.Answered(id, said, at)
+	question.ChatID, answer.ChatID = c.ID, c.ID
+	if _, err := w.Conversations.Append(ctx, question); err != nil {
+		w.warn(ctx, "cannot record a turn answered elsewhere", err)
+		return
+	}
+	if _, err := w.Conversations.Append(ctx, answer); err != nil {
+		w.warn(ctx, "cannot record a turn answered elsewhere", err)
+		return
+	}
+	w.changed(ctx, userID, id)
+}
+
+// changed : Tells the conversation's owner's clients that it has something
+// new in it. The owner is read from the conversation when the caller gave
+// only the conversation.
+func (w *Writer) changed(ctx context.Context, userID, conversationID string) {
+	if w.Changes == nil {
+		return
+	}
+	if userID == "" {
+		c, err := w.Clients.GetConversation(ctx, conversationID)
+		if err != nil {
+			w.warn(ctx, "cannot say the conversation changed", err)
+			return
+		}
+		userID = c.UserID
+	}
+	w.Changes.ConversationsChanged(userID, conversationID)
 }
 
 // listening : The conversation the person's voice client is talking in, or

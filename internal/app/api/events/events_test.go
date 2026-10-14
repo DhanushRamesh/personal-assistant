@@ -638,3 +638,100 @@ func TestAStructureThatWillNotParseIsSetAside(t *testing.T) {
 		t.Errorf("the text was not kept: %v", into["unparsed"])
 	}
 }
+
+// Several kinds, an end, a device, words and lateness at once, asked of
+// the store rather than of a page; and what has reported, counted as the
+// kinds are. Owner, 13 October 2026: "it should have advanced filters".
+func TestAListingTakesAdvancedFilters(t *testing.T) {
+	e := apitest.NewWith(t, apitest.Options{DeviceEvents: inmemory.New()})
+	post(t, e, `{"source":"tasker","device":"pixel-7","events":[
+		{"kind":"call.missed","occurred_at":"2026-09-30T08:00:00Z","payload":{"value":"Amma"},"dedupe_key":"1"},
+		{"kind":"call.missed","occurred_at":"2026-09-30T09:00:00Z","payload":{"value":"Gunalan"},"dedupe_key":"2"},
+		{"kind":"place.entered","occurred_at":"2026-09-30T10:00:00Z","payload":{"value":"home"},"dedupe_key":"3"},
+		{"kind":"screen.unlocked","occurred_at":"2026-09-30T11:00:00Z","dedupe_key":"4"}]}`)
+	post(t, e, `{"source":"homeassistant","device":"laptop","events":[
+		{"kind":"battery.level","occurred_at":"2026-09-30T10:30:00Z","payload":{"value":25},"dedupe_key":"5"}]}`)
+
+	kinds := func(got events.ListResponse) []string {
+		out := []string{}
+		for _, ev := range got.Events {
+			out = append(out, ev.Kind)
+		}
+		return out
+	}
+	if got := kinds(listing(t, e, "?kind=call.missed&kind=place.entered")); len(got) != 3 {
+		t.Errorf("two kinds gave %v", got)
+	}
+	if got := kinds(listing(t, e, "?until=2026-09-30T09:30:00Z")); len(got) != 2 {
+		t.Errorf("until gave %v", got)
+	}
+	if got := kinds(listing(t, e, "?from=homeassistant/laptop")); len(got) != 1 || got[0] != "battery.level" {
+		t.Errorf("from a device gave %v", got)
+	}
+	if got := kinds(listing(t, e, "?from=tasker&kind=call.missed&contains=amma")); len(got) != 1 {
+		t.Errorf("words gave %v", got)
+	}
+	// Every one was posted long after it happened, so all are late; none is late by a year.
+	if got := kinds(listing(t, e, "?late=true")); len(got) != 5 {
+		t.Errorf("late gave %v", got)
+	}
+
+	sources := listing(t, e, "?kind=call.missed").Sources
+	if len(sources) != 2 || sources[0].Source != "tasker" || sources[0].Device != "pixel-7" || sources[0].Count != 4 || sources[1].Count != 1 {
+		t.Errorf("sources = %+v", sources)
+	}
+}
+
+// The ledger answers each reporter's each action with its counts, the
+// pairs that should balance, and what is wrong: here an office left
+// twice and entered once.
+func TestTheLedgerIsServed(t *testing.T) {
+	store := inmemory.New()
+	e := apitest.NewWith(t, apitest.Options{DeviceEvents: store})
+	post(t, e, `{"source":"tasker","device":"pixel-7","events":[
+		{"kind":"place.entered","occurred_at":"2026-09-30T09:00:00Z","payload":{"value":"office"},"dedupe_key":"a"},
+		{"kind":"place.exited","occurred_at":"2026-09-30T10:00:00Z","payload":{"value":"office"},"dedupe_key":"b"},
+		{"kind":"place.exited","occurred_at":"2026-09-30T11:00:00Z","payload":{"value":"office"},"dedupe_key":"c"},
+		{"kind":"place.exited","occurred_at":"2026-09-30T12:00:00Z","payload":{"value":"office"},"dedupe_key":"d"}]}`)
+
+	rec := e.Do(t, http.MethodGet, "/v1/events/ledger?days=7", "")
+	if rec.Code != http.StatusOK {
+		t.Fatalf("status %d: %s", rec.Code, rec.Body.String())
+	}
+	var got events.LedgerResponse
+	if err := json.Unmarshal(rec.Body.Bytes(), &got); err != nil {
+		t.Fatal(err)
+	}
+	if got.Days != 7 || len(got.Lines) != 2 {
+		t.Fatalf("days %d, %d lines: %+v", got.Days, len(got.Lines), got.Lines)
+	}
+	if len(got.Pairs) != 1 || got.Pairs[0].NA != 1 || got.Pairs[0].NB != 3 || !got.Pairs[0].Off {
+		t.Errorf("pairs = %+v, want office 1 against 3, off", got.Pairs)
+	}
+	if len(got.Faults) != 1 {
+		t.Errorf("faults = %+v, want the one", got.Faults)
+	}
+}
+
+// One headset connecting is reported once per Bluetooth link, each with a
+// key of its own. The copies are answered as seen and not stored, inside
+// a batch and across batches; a connection a minute later is new.
+func TestAReportSentAgainIsStoredOnce(t *testing.T) {
+	store := inmemory.New()
+	e := apitest.NewWith(t, apitest.Options{DeviceEvents: store})
+	_, out := post(t, e, `{"source":"tasker","device":"pixel-7","events":[
+		{"kind":"bluetooth.connected","occurred_at":"2026-10-13T14:26:19Z","payload":{"value":"bike helmet"},"dedupe_key":"a"},
+		{"kind":"bluetooth.connected","occurred_at":"2026-10-13T14:26:20Z","payload":{"value": "bike helmet"},"dedupe_key":"b"}]}`)
+	if len(out.Stored) != 1 || len(out.Seen) != 1 || out.Seen[0] != "b" {
+		t.Fatalf("stored %v, seen %v; want a stored and b seen", out.Stored, out.Seen)
+	}
+	_, out = post(t, e, `{"source":"tasker","device":"pixel-7","events":[
+		{"kind":"bluetooth.connected","occurred_at":"2026-10-13T14:26:20.5Z","payload":{"value":"bike helmet"},"dedupe_key":"c"},
+		{"kind":"bluetooth.connected","occurred_at":"2026-10-13T14:27:20Z","payload":{"value":"bike helmet"},"dedupe_key":"d"}]}`)
+	if len(out.Stored) != 1 || out.Stored[0] != "d" || len(out.Seen) != 1 || out.Seen[0] != "c" {
+		t.Fatalf("stored %v, seen %v; want c seen and d stored", out.Stored, out.Seen)
+	}
+	if got := len(store.All(e.User.ID)); got != 2 {
+		t.Errorf("%d stored, want 2", got)
+	}
+}

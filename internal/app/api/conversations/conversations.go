@@ -207,29 +207,32 @@ func (h *Handler) Get(w http.ResponseWriter, r *http.Request) {
 	// identifiers are ULIDs, so sorting them sorts by creation time.
 	sort.Slice(summaries, func(i, j int) bool { return summaries[i].ID < summaries[j].ID })
 
+	said := h.said(ctx, id)
 	httpx.WriteJSON(ctx, w, http.StatusOK, DetailResponse{
 		Conversation:  views.OfConversation(*conversation, conversation.ID == c.Client.ActiveConversationID),
-		Chats:         views.OfSummaries(summaries),
-		Announcements: h.announcements(ctx, id),
+		Chats:         views.Sequenced(views.OfSummaries(summaries), said),
+		Announcements: views.OfAnnouncements(said),
 	})
 }
 
-// announcements : What the assistant said unasked in this conversation.
+// said : Everything written in this conversation: the announcements, and
+// where each chat stands among them.
 //
-// Read separately from the chats because it is not one. Failing to read
-// them costs the conversation its announcements and nothing else, so the
-// rest is still shown rather than the whole request failing.
-func (h *Handler) announcements(ctx context.Context, id string) []views.Announcement {
+// Read separately from the chats. Failing to read them costs the
+// conversation its announcements and its order, which falls back to time,
+// and nothing else, so the rest is still shown rather than the whole
+// request failing.
+func (h *Handler) said(ctx context.Context, id string) []conversation.Message {
 	if h.messages == nil {
 		return nil
 	}
 	said, err := h.messages.All(ctx, id)
 	if err != nil {
-		h.Logger.WarnContext(ctx, "cannot read what was announced",
+		h.Logger.WarnContext(ctx, "cannot read what was said",
 			slog.String("conversation_id", id), slog.Any("error", err))
 		return nil
 	}
-	return views.OfAnnouncements(said)
+	return said
 }
 
 // Rename : Changes what a conversation is called.

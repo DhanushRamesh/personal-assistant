@@ -329,3 +329,38 @@ func TestEmbedOneWithoutAnEmbedderDoesNothing(t *testing.T) {
 		t.Errorf("EmbedOne: %v, want it to do nothing quietly", err)
 	}
 }
+
+// The server's own description is in every prompt whatever its length,
+// and a memory too long for what is left is passed over, not the end of
+// the list. As found: two short memories, the description at 2,433, and
+// a short one after it -- the prompt held the first two only.
+func TestTheDescriptionIsAlwaysReadAndShutsNothingOut(t *testing.T) {
+	s := inmemory.New()
+	add := func(m *memory.Memory, err error) {
+		t.Helper()
+		if err != nil {
+			t.Fatal(err)
+		}
+		if err := s.Create(context.Background(), m); err != nil {
+			t.Fatalf("Create: %v", err)
+		}
+	}
+	add(memory.New("usr_1", memory.TierAlways, "Reminder update instruction", strings.Repeat("r", 110)))
+	add(memory.New("usr_1", memory.TierAlways, "Tips preference", strings.Repeat("t", 50)))
+	add(memory.Written("usr_1", memory.TierAlways, "What I have noticed about them", strings.Repeat("p", 2400)))
+	add(memory.New("usr_1", memory.TierAlways, "A long note", strings.Repeat("l", 1900)))
+	add(memory.New("usr_1", memory.TierAlways, "Morning routine", strings.Repeat("m", 120)))
+
+	got, err := (&memory.Recall{Store: s}).Always(context.Background(), "usr_1")
+	if err != nil {
+		t.Fatalf("Always: %v", err)
+	}
+	subjects := []string{}
+	for _, m := range got {
+		subjects = append(subjects, m.Subject)
+	}
+	want := []string{"Reminder update instruction", "Tips preference", "What I have noticed about them", "Morning routine"}
+	if strings.Join(subjects, "|") != strings.Join(want, "|") {
+		t.Errorf("prompt holds %q, want %q", subjects, want)
+	}
+}

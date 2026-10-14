@@ -128,14 +128,15 @@ func toVector(b []byte) []float32 {
 
 // Store : A memory.Store backed by MySQL.
 type Store struct {
-	db *gorm.DB
+	db      *gorm.DB
+	changed func(userID string)
 }
 
 // New : Returns a Store reading and writing through db.
 func New(db *storage.DB) *Store { return &Store{db: db.DB} }
 
 // Create : Stores a new memory.
-func (s *Store) Create(ctx context.Context, m *memory.Memory) error {
+func (s *Store) create(ctx context.Context, m *memory.Memory) error {
 	if err := m.Valid(); err != nil {
 		return err
 	}
@@ -168,7 +169,7 @@ func (s *Store) Get(ctx context.Context, userID, id string) (*memory.Memory, err
 //
 // The embedding is cleared in the same statement. The text it described has
 // changed, and a vector left behind would keep matching the old wording.
-func (s *Store) Update(ctx context.Context, m *memory.Memory) error {
+func (s *Store) update(ctx context.Context, m *memory.Memory) error {
 	if err := m.Valid(); err != nil {
 		return err
 	}
@@ -196,7 +197,7 @@ func (s *Store) Update(ctx context.Context, m *memory.Memory) error {
 
 // Forget : Removes a memory. Removing one already gone is not an error: the
 // caller asked for it to be absent and it is absent.
-func (s *Store) Forget(ctx context.Context, userID, id string) error {
+func (s *Store) forget(ctx context.Context, userID, id string) error {
 	err := s.db.WithContext(ctx).
 		Where("id = ? AND user_id = ?", id, userID).
 		Delete(&row{}).Error
@@ -213,7 +214,7 @@ func (s *Store) Forget(ctx context.Context, userID, id string) error {
 // asking why he changed his mind. Every read that feeds a turn --
 // the standing tier, the keyword search and the vector search --
 // excludes these, and nothing else does.
-func (s *Store) Stale(ctx context.Context, userID, id, why string, at time.Time) error {
+func (s *Store) stale(ctx context.Context, userID, id, why string, at time.Time) error {
 	if s == nil || s.db == nil {
 		return fmt.Errorf("memory: there is nowhere to keep memories")
 	}
@@ -286,7 +287,7 @@ func (s *Store) Unembedded(ctx context.Context, model string, limit int) ([]memo
 }
 
 // Used : Records that memories were given to the model.
-func (s *Store) Used(ctx context.Context, ids []string) error {
+func (s *Store) used(ctx context.Context, ids []string) error {
 	if len(ids) == 0 {
 		return nil
 	}
@@ -392,3 +393,56 @@ func (s *Store) NearestTo(ctx context.Context, userID string, q embed.Vector, mo
 
 // Ensure the store satisfies the interface it exists to provide.
 var _ memory.Store = (*Store)(nil)
+
+// Create : See create; the change hook is told when it succeeds.
+func (s *Store) Create(ctx context.Context, m *memory.Memory) error {
+	err := s.create(ctx, m)
+	s.tell(err, m.UserID)
+	return err
+}
+
+// Update : See update; the change hook is told when it succeeds.
+func (s *Store) Update(ctx context.Context, m *memory.Memory) error {
+	err := s.update(ctx, m)
+	s.tell(err, m.UserID)
+	return err
+}
+
+// Forget : See forget; the change hook is told when it succeeds.
+func (s *Store) Forget(ctx context.Context, userID, id string) error {
+	err := s.forget(ctx, userID, id)
+	s.tell(err, userID)
+	return err
+}
+
+// Stale : See stale; the change hook is told when it succeeds.
+func (s *Store) Stale(ctx context.Context, userID, id, why string, at time.Time) error {
+	err := s.stale(ctx, userID, id, why, at)
+	s.tell(err, userID)
+	return err
+}
+
+// Used : See used; the change hook is told when it succeeds.
+func (s *Store) Used(ctx context.Context, ids []string) error {
+	err := s.used(ctx, ids)
+	s.tell(err, "")
+	return err
+}
+
+// OnChange : Has the store say, after each write that succeeds, whose
+// data changed -- empty when the write does not know, as one by id
+// alone does -- so the clients showing it can read it again. The live
+// hub, given it in main.
+func (s *Store) OnChange(f func(userID string)) *Store {
+	if s != nil {
+		s.changed = f
+	}
+	return s
+}
+
+// tell : Passes a write that succeeded to the change hook.
+func (s *Store) tell(err error, userID string) {
+	if err == nil && s != nil && s.changed != nil {
+		s.changed(userID)
+	}
+}

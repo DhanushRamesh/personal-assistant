@@ -691,3 +691,30 @@ func TestAFailedStepIsRecordedAsFailed(t *testing.T) {
 		t.Errorf("the step after a failed act recorded as %+v", rec.Steps[1])
 	}
 }
+
+// judges : A doer that can say what each condition answered.
+type judges struct{ hands }
+
+func (judges) Judge(_ context.Context, _ string, when job.Occasion) (job.Verdict, string, error) {
+	return job.Verdict{Held: false, Parts: []job.Verdict{{Held: true}, {Held: false}}}, "the condition battery.level < 25 did not hold", nil
+}
+
+// TestATrialMarksEachCondition : Tried by a doer that can say, a rule's
+// trial carries what every condition answered, and stops on them as a
+// run would.
+func TestATrialMarksEachCondition(t *testing.T) {
+	j, err := job.New("job_1", "usr_1", "a rule", "rule", "every 10m",
+		[]job.Step{{Do: job.Announce, Say: "the battery is low"}}, noon)
+	if err != nil {
+		t.Fatal(err)
+	}
+	j.When.All = []job.Where{{Source: "hour", Op: "<", Value: 18}, {Source: "battery.level", Op: "<", Value: 25}}
+	running := &job.Runner{Store: inmemory.New(), Doer: &judges{}, Where: india, Now: func() time.Time { return noon }}
+	tried := running.Try(context.Background(), j)
+	if tried.When == nil || tried.When.Held || len(tried.When.Parts) != 2 || !tried.When.Parts[0].Held {
+		t.Fatalf("when = %+v", tried.When)
+	}
+	if !strings.Contains(tried.Why, "battery.level") || len(tried.Acts) != 0 {
+		t.Errorf("why %q, %d acts: want it stopped on the battery before any step", tried.Why, len(tried.Acts))
+	}
+}

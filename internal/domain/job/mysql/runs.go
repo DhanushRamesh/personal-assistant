@@ -34,7 +34,10 @@ func (runRow) TableName() string { return "runs" }
 // it holds outlives the rules it is about: a rule rewritten or
 // deleted keeps its history, and a row here is never read by the
 // engine. Nothing in a run is state.
-type Runs struct{ db *gorm.DB }
+type Runs struct {
+	db      *gorm.DB
+	changed func(userID string)
+}
 
 // NewRuns : The run journal over a database.
 func NewRuns(db *gorm.DB) *Runs { return &Runs{db: db} }
@@ -45,7 +48,7 @@ func NewRuns(db *gorm.DB) *Runs { return &Runs{db: db} }
 // running would be a rule that stops working because the thing
 // watching it broke, which is the wrong way round -- so this
 // returns its error and the runner only logs it.
-func (s *Runs) Wrote(ctx context.Context, r job.Record) error {
+func (s *Runs) wrote(ctx context.Context, r job.Record) error {
 	steps, err := json.Marshal(r.Steps)
 	if err != nil {
 		// A trace that will not marshal must not lose the run it
@@ -159,4 +162,29 @@ func (r runRow) toRecord() job.Record {
 	}
 	_ = json.Unmarshal(r.Steps, &rec.Steps)
 	return rec
+}
+
+// Wrote : See wrote; the change hook is told when it succeeds.
+func (s *Runs) Wrote(ctx context.Context, r job.Record) error {
+	err := s.wrote(ctx, r)
+	s.tell(err, r.UserID)
+	return err
+}
+
+// OnChange : Has the store say, after each write that succeeds, whose
+// data changed -- empty when the write does not know, as one by id
+// alone does -- so the clients showing it can read it again. The live
+// hub, given it in main.
+func (s *Runs) OnChange(f func(userID string)) *Runs {
+	if s != nil {
+		s.changed = f
+	}
+	return s
+}
+
+// tell : Passes a write that succeeded to the change hook.
+func (s *Runs) tell(err error, userID string) {
+	if err == nil && s != nil && s.changed != nil {
+		s.changed(userID)
+	}
 }

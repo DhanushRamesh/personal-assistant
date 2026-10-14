@@ -150,3 +150,20 @@ func TestTheSameDeviceCountsOnceItIsSteady(t *testing.T) {
 		t.Errorf("it read out the device identifier: %q", got.Says)
 	}
 }
+
+// The machine the assistant runs on is never reported quiet: it is the
+// thing doing the reporting. Its own chatter is left out, and nothing
+// else is.
+func TestTheAssistantsOwnMachineIsNeverQuiet(t *testing.T) {
+	var evs []event.Event
+	for _, e := range chatter("dhanush-12514", 3*time.Hour, 90*time.Minute) {
+		e.Source, e.Kind = "laptop", "wifi.joined"
+		evs = append(evs, e)
+	}
+	if _, ok := situation.QuietExcept("laptop")(evs, midday); ok {
+		t.Error("the assistant's own machine was reported quiet")
+	}
+	if _, ok := situation.QuietExcept("laptop")(chatter("pixel-7", 3*time.Hour, 90*time.Minute), midday); !ok {
+		t.Error("leaving out the laptop also silenced the phone")
+	}
+}

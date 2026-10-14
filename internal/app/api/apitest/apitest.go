@@ -22,6 +22,8 @@ import (
 	"net/http"
 	"net/http/httptest"
 	announcementsapi "personal-assistant/internal/app/api/announcements"
+	rulesapi "personal-assistant/internal/app/api/rules"
+	speechapi "personal-assistant/internal/app/api/speech"
 	livehub "personal-assistant/internal/app/live"
 	"personal-assistant/internal/base/records/client"
 	"personal-assistant/internal/base/records/user"
@@ -33,6 +35,7 @@ import (
 	"golang.org/x/crypto/bcrypt"
 
 	"personal-assistant/internal/app/api"
+	"personal-assistant/internal/app/api/assist"
 	"personal-assistant/internal/app/api/authn"
 	eventsapi "personal-assistant/internal/app/api/events"
 	"personal-assistant/internal/app/api/presence"
@@ -138,6 +141,29 @@ type Options struct {
 	// Live : What /v1/live tells connected clients. Nil leaves the
 	// endpoint answering 404.
 	Live *livehub.Hub
+
+	// Answered : Where turns Home Assistant answered itself are written.
+	// Nil drops them.
+	Answered speechapi.Recorder
+
+	// ShowsVoice, VoiceState : Where a voice turn's state is written in
+	// Home Assistant, and the entity it goes to. Nil writes nowhere.
+	ShowsVoice assist.Reporter
+	VoiceState string
+
+	// Diary : What is written down in the person's calendars. Nil is a
+	// person with no Google account connected.
+	Diary presence.Diary
+	// Restarts : How often the supervisor restarted the server. Nil is a
+	// server not run under one.
+	Restarts func(ctx context.Context) (int, bool)
+	// StartedAt : When the server started.
+	StartedAt time.Time
+
+	// Rules, Ran : The standing rules, and what each has done. Nil
+	// serves none.
+	Rules rulesapi.Store
+	Ran   rulesapi.Runs
 }
 
 // Env : A server, its dependencies, and a client already logged in.
@@ -207,10 +233,14 @@ func NewWith(t *testing.T, opts Options) *Env {
 
 	e := &Env{
 		Server: api.New(api.Options{
-			Logger: logger.Logger,
-			Live:   opts.Live,
-			DB:     opts.DB,
-			Chats:  repo,
+			Logger:   logger.Logger,
+			Live:     opts.Live,
+			Answered: opts.Answered,
+
+			ShowsVoice: opts.ShowsVoice,
+			VoiceState: opts.VoiceState,
+			DB:         opts.DB,
+			Chats:      repo,
 			// The real catalogue, so a test that sets a client's
 			// model exercises the same refusal production does:
 			// a vendor this endpoint speaks to is not the set of
@@ -228,6 +258,11 @@ func NewWith(t *testing.T, opts Options) *Env {
 			Runner:           chatRunner,
 			Events:           bus,
 			AllowCrossOrigin: opts.AllowCrossOrigin,
+			Diary:            opts.Diary,
+			Rules:            opts.Rules,
+			Ran:              opts.Ran,
+			Restarts:         opts.Restarts,
+			StartedAt:        opts.StartedAt,
 		}),
 		Repo:   repo,
 		Runner: chatRunner,

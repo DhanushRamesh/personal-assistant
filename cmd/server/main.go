@@ -19,10 +19,12 @@ import (
 	"strconv"
 	"strings"
 	"sync"
+	"sync/atomic"
 	"syscall"
 	"time"
 
 	"personal-assistant/internal/app/api"
+	"personal-assistant/internal/app/api/assist"
 	"personal-assistant/internal/app/api/presence"
 	"personal-assistant/internal/app/elsewhere"
 	"personal-assistant/internal/app/live"
@@ -261,7 +263,20 @@ func run() error {
 	// Held apart as well as handed over, because setting a memory
 	// aside is a thing only the store can do and the recall
 	// interface has no business learning about.
-	remembered := memorymysql.New(db)
+	// What the clients are told when somebody's data changes: which
+	// area, from the store that wrote it, once the live hub exists --
+	// the stores are built before it. Owner, 13 October 2026: *"all the
+	// data should be reactive from the server."*
+	var changeHub atomic.Pointer[live.Hub]
+	changed := func(areas ...string) func(userID string) {
+		return func(userID string) {
+			if h := changeHub.Load(); h != nil {
+				h.AreaChanged(userID, areas...)
+			}
+		}
+	}
+
+	remembered := memorymysql.New(db).OnChange(changed(live.AreaMemories, live.AreaProfile))
 	remembering := &memory.Recall{
 		Store:      remembered,
 		Transcript: memorymysql.NewTranscript(db),
@@ -272,15 +287,15 @@ func run() error {
 
 	// One store for what the person's devices saw, shared by the endpoint
 	// they report to and the tool that reads it back.
-	deviceEvents := eventmysql.New(db)
+	deviceEvents := eventmysql.New(db).OnChange(changed(live.AreaEvents))
 	// What every rule did. Kept apart from the rules themselves
 	// because it outlives them: a rule rewritten or deleted keeps
 	// its history, and nothing here is ever read by the engine.
-	ranLog := jobmysql.NewRuns(db.DB)
+	ranLog := jobmysql.NewRuns(db.DB).OnChange(changed(live.AreaRules))
 
 	// One store, shared by the tools that make reminders and the loop that
 	// says them.
-	reminderStore := remindmysql.New(db)
+	reminderStore := remindmysql.New(db).OnChange(changed(live.AreaReminders))
 	clock := reminders.Clock{Now: cfg.Assistant.Now, Location: cfg.Assistant.Location}
 
 	// A real alarm on the person's phone, beside every reminder. Nil
@@ -371,9 +386,9 @@ func run() error {
 			// -- what is left here are the two that count and
 			// group, which it cannot.
 			{Name: "trying", Look: situation.Trying},
-			{Name: "quiet", Look: situation.Quiet},
+			{Name: "quiet", Look: situation.QuietExcept(cfg.HomeAssistant.ThisMachine)},
 		}, cfg.Assistant.Now),
-		rules.All(jobmysql.New(db.DB), rules.Clock{
+		rules.All(jobmysql.New(db.DB).OnChange(changed(live.AreaRules)), rules.Clock{
 			Now: cfg.Assistant.Now, Location: cfg.Assistant.Location,
 		}, jobmysql.ID, known, routinemysql.New(db.DB),
 			func(ctx context.Context, j job.Job) job.Trial {
@@ -510,8 +525,11 @@ func run() error {
 	}
 
 	// What connected clients are told as it happens: the satellite's state
-	// (below), and every change to a conversation, from the runner.
+	// (below), and every change to a conversation, from the runner and from
+	// announcements as they are said.
 	liveHub := live.NewHub()
+	changeHub.Store(liveHub)
+	announcements.Changes = liveHub
 
 	chatRunner, err := runner.New(runner.Options{
 		Repository:    chats,
@@ -612,7 +630,7 @@ func run() error {
 	names := vocabularymysql.New(db)
 	// What the assistant considered saying unasked, so that a watcher
 	// which is working and one which has stopped do not look alike.
-	remarked := noticemysql.New(db.DB)
+	remarked := noticemysql.New(db.DB).OnChange(changed(live.AreaRemarks))
 
 	// A standing description of the person, rewritten from what they have
 	// actually said. The memories are facts they gave once and none of
@@ -772,7 +790,7 @@ func run() error {
 	// only so far: nothing existing has been moved onto it, and
 	// reminders move last because they are the feature most used
 	// and a new engine is wrong in small ways for a week.
-	scheduled := jobmysql.New(db.DB)
+	scheduled := jobmysql.New(db.DB).OnChange(changed(live.AreaRules))
 
 	// Nil where there is nothing to think with, which leaves him
 	// noticing nothing rather than failing at startup over a thing
@@ -903,6 +921,8 @@ func run() error {
 		StartedAt:     started,
 		Restarts:      supervisorRestarts,
 		Live:          liveHub,
+		ShowsVoice:    reporting(speaker),
+		VoiceState:    cfg.HomeAssistant.VoiceState,
 		DB:            db,
 		Arrivals:      running,
 		Chats:         chats,
@@ -932,11 +952,13 @@ func run() error {
 		DefaultModel:   cfg.PlatformAI.Model,
 		Persona:        manner,
 		Cut:            cutOff,
+		Answered:       announcements,
 		DeviceEvents:   deviceEvents,
 		Remarks:        remarked,
 		Rules:          scheduled,
 		Usually:        usually,
 		Trying:         running,
+		Ran:            ranLog,
 		Owed:           owed,
 		Naming:         naming(cfg, logger.Logger),
 		Tools:          tools,
@@ -1537,6 +1559,19 @@ func whereabouts(cfg config.Config, logger *slog.Logger) remind.Presence {
 	logger.Info("reminders are held back when nobody is in the room",
 		slog.String("asking", p.Describe()))
 	return p
+}
+
+// reporting : The announcer as something that can write a state into Home
+// Assistant, when it is the one that can.
+//
+// Silent cannot, and a typed nil handed on as an interface is not nil to
+// whatever receives it -- so this returns an untyped nil instead, and the
+// caller's check for one holds.
+func reporting(a announce.Announcer) assist.Reporter {
+	if s, ok := a.(*hass.Speaker); ok && s != nil {
+		return s
+	}
+	return nil
 }
 
 func announcer(cfg config.Config, logger *slog.Logger) announce.Announcer {
@@ -3235,6 +3270,32 @@ var worthSaying = prompt.Text(
 // which the old shape could not do, because each check step was
 // answered on its own and knew nothing of the ones beside it.
 func (d doing) Holds(ctx context.Context, userID string, when job.Occasion) (bool, string, error) {
+	got, away, now, err := d.readings(ctx, userID, when)
+	if err != nil {
+		return false, "", err
+	}
+	held, why := when.Holds(got, away, now)
+	d.logger.InfoContext(ctx, "a job checked its conditions",
+		slog.String("when", when.Describe()), slog.Bool("held", held))
+	return held, why, nil
+}
+
+// Judge : What every one of a rule's conditions answered, and why the
+// whole did not hold, for a rule being tried; read as [doing.Holds]
+// reads them.
+func (d doing) Judge(ctx context.Context, userID string, when job.Occasion) (job.Verdict, string, error) {
+	got, away, now, err := d.readings(ctx, userID, when)
+	if err != nil {
+		return job.Verdict{}, "", err
+	}
+	_, why := when.Holds(got, away, now)
+	return when.Judge(got, away, now), why, nil
+}
+
+// readings : Everything a rule's conditions read, whether anybody is
+// away, and the moment in their own zone -- what answering them
+// needs, fetched once for the whole tree.
+func (d doing) readings(ctx context.Context, userID string, when job.Occasion) (map[string][]job.Reading, bool, time.Time, error) {
 	// One reading each, unless something is being compared with its
 	// own past -- then enough of them to reach back that far. A
 	// phone reports its level every few minutes, so a quarter of an
@@ -3255,14 +3316,14 @@ func (d doing) Holds(ctx context.Context, userID string, when job.Occasion) (boo
 		if job.IsPattern(kind) {
 			reading, err := d.patterned(ctx, userID, kind)
 			if err != nil {
-				return false, "", err
+				return nil, false, time.Time{}, err
 			}
 			got[kind] = []job.Reading{reading}
 			continue
 		}
 		latest, err := d.look.Latest(ctx, userID, kind, deep)
 		if err != nil {
-			return false, "", err
+			return nil, false, time.Time{}, err
 		}
 		got[kind] = latest
 	}
@@ -3274,10 +3335,7 @@ func (d doing) Holds(ctx context.Context, userID string, when job.Occasion) (boo
 	// In their own zone, because an hour means nothing anywhere
 	// else: ten o'clock is ten where they are standing. Lengths of
 	// time are unaffected, being lengths rather than moments.
-	held, why := when.Holds(got, away, d.now().In(d.where()))
-	d.logger.InfoContext(ctx, "a job checked its conditions",
-		slog.String("when", when.Describe()), slog.Bool("held", held))
-	return held, why, nil
+	return got, away, d.now().In(d.where()), nil
 }
 
 // patterned : One pattern source, worked out.

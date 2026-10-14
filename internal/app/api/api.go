@@ -12,9 +12,11 @@
 package api
 
 import (
+	"context"
 	"log/slog"
 	"net/http"
 	"personal-assistant/internal/base/records/store"
+	"strings"
 	"time"
 
 	"github.com/go-chi/chi/v5"
@@ -30,6 +32,7 @@ import (
 	"personal-assistant/internal/app/api/events"
 	googleapi "personal-assistant/internal/app/api/google"
 	"personal-assistant/internal/app/api/health"
+	homeapi "personal-assistant/internal/app/api/home"
 	"personal-assistant/internal/app/api/live"
 	"personal-assistant/internal/app/api/memories"
 	"personal-assistant/internal/app/api/middleware"
@@ -157,6 +160,9 @@ type Options struct {
 	Usually routine.Store
 	// Trying : Runs a rule on demand without it saying anything.
 	Trying rulesapi.Trier
+	// Ran : What each rule has done, run by run. Nil serves an empty
+	// history.
+	Ran rulesapi.Runs
 
 	// Owed : What each client still owes somebody to say, which it
 	// collects for itself. Named apart from Announcements above:
@@ -186,6 +192,9 @@ type Options struct {
 	// stopped while somebody was still speaking. Home Assistant does not
 	// pass that on, so it arrives by this side door instead.
 	Cut *speech.Cut
+	// Answered : Where turns Home Assistant answered itself are written.
+	// Optional: without it they are accepted and dropped.
+	Answered speechapi.Recorder
 
 	// Location : The person's zone, for deciding what hour it is to them.
 	// Nil is UTC.
@@ -202,6 +211,23 @@ type Options struct {
 	// ones a client may be set to answer with. Empty offers none, so a
 	// client keeps whatever the server is configured with.
 	Models []llm.Model
+	// StartedAt : When this process started, for a dashboard's health
+	// reading.
+	StartedAt time.Time
+	// Restarts : How many times the supervisor has restarted the server,
+	// when it can be asked. Optional.
+	Restarts func(ctx context.Context) (int, bool)
+
+	// ShowsVoice, VoiceState : Where what a voice turn is doing is written
+	// in Home Assistant, and the entity it is written to. Both are needed
+	// and either left out writes nowhere.
+	//
+	// There is more than one satellite now and only the laptop's has an
+	// entity Home Assistant keeps of its own accord. This is the one that
+	// is true whichever device asked.
+	ShowsVoice assist.Reporter
+	VoiceState string
+
 	// DefaultModel : The identifier of the model answering a client that has
 	// chosen none, so a listing can name it.
 	DefaultModel string
@@ -228,6 +254,8 @@ type Server struct {
 	requestTimeout   time.Duration
 	allowCrossOrigin bool
 	router           chi.Router
+	// liveHub : Where a change to the clients is told; nil tells nobody.
+	liveHub *livehub.Hub
 
 	health        *health.Handler
 	about         *about.Handler
@@ -249,6 +277,7 @@ type Server struct {
 	remarks       *remarksapi.Handler
 	rules         *rulesapi.Handler
 	announcements *announcementsapi.Handler
+	home          *homeapi.Handler
 }
 
 // New : Builds a Server from opts and registers its routes.
@@ -286,11 +315,41 @@ func New(opts Options) *Server {
 		memories:      memories.New(opts.Logger, opts.Memories),
 		tools:         toolsapi.New(opts.Logger, opts.Tools),
 		remarks:       remarksapi.New(opts.Logger, opts.Remarks),
-		rules:         rulesapi.New(opts.Logger, opts.Rules, opts.Usually, opts.Trying),
+		rules:         rulesapi.New(opts.Logger, opts.Rules, opts.Usually, opts.Trying).Ran(opts.Ran),
 		announcements: announcementsapi.New(opts.Logger, opts.Owed, nil),
+		home:          homeapi.New(homeOptions(opts)),
+	}
+	if opts.Answered != nil {
+		s.speech.Records(opts.Answered)
+	}
+	s.liveHub = opts.Live
+	if opts.Live != nil {
+		s.speech.Tells(opts.Live)
+		// Both satellites reach the assist endpoint, and only one of
+		// them has an entity in Home Assistant to be watched. This is
+		// what tells a screen that the phone is busy.
+		s.assist.Tells(opts.Live)
+	}
+	if opts.ShowsVoice != nil && opts.VoiceState != "" {
+		s.assist.Shows(opts.ShowsVoice, opts.VoiceState)
 	}
 	s.routes()
 	return s
+}
+
+// homeOptions : What the dashboard endpoints read from. The live hub is
+// handed on only when there is one: a nil pointer inside an interface is
+// not nil to the handler.
+func homeOptions(opts Options) homeapi.Options {
+	o := homeapi.Options{
+		Logger: opts.Logger, DB: opts.DB, Chats: opts.Chats, Reminders: opts.Reminders, Diary: opts.Diary,
+		Model: opts.DefaultModel, StartedAt: opts.StartedAt, Restarts: opts.Restarts,
+		Location: opts.Location, Now: opts.Now,
+	}
+	if opts.Live != nil {
+		o.Live = opts.Live
+	}
+	return o
 }
 
 // ServeHTTP : Dispatches r to the matching route.
@@ -309,6 +368,7 @@ func (s *Server) routes() {
 	s.router.Use(middleware.RequestContext)
 	s.router.Use(middleware.RequestLogger(s.logger))
 	s.router.Use(middleware.Recoverer(s.logger))
+	s.router.Use(clientsChanged(s.liveHub))
 	// After the logger, so that a preflight is recorded like any other
 	// request rather than vanishing; before authentication, because a
 	// preflight cannot carry a token and would be refused before it was
@@ -347,5 +407,33 @@ func (s *Server) routes() {
 		s.remarks.Mount(r)
 		s.rules.Mount(r)
 		s.announcements.Mount(r)
+		s.home.Mount(r)
 	})
+}
+
+// clientsChanged : Tells the clients that the list of them changed, after
+// a write to it succeeds -- a sign-in, a revoke, a client's channel or
+// model, the manner for every client. Here and not in a store, because
+// those writes are made only through these endpoints. Everybody's
+// clients are told: the notice holds no data, and at this point in the
+// chain the caller is not yet known.
+func clientsChanged(hub *livehub.Hub) func(http.Handler) http.Handler {
+	return func(next http.Handler) http.Handler {
+		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			if hub == nil || r.Method == http.MethodGet || !touchesClients(r.URL.Path) {
+				next.ServeHTTP(w, r)
+				return
+			}
+			ww := chimw.NewWrapResponseWriter(w, r.ProtoMajor)
+			next.ServeHTTP(ww, r)
+			if code := ww.Status(); code == 0 || code < http.StatusMultipleChoices {
+				hub.AreaChanged("", livehub.AreaClients)
+			}
+		})
+	}
+}
+
+// touchesClients : Whether a request writes to the clients or their manner.
+func touchesClients(path string) bool {
+	return strings.HasPrefix(path, "/v1/clients") || path == "/v1/personas" || path == "/v1/auth/login"
 }

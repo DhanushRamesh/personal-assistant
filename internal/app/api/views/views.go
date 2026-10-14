@@ -74,6 +74,10 @@ type Summary struct {
 	UpdatedAt      time.Time  `json:"updated_at"`
 	StartedAt      *time.Time `json:"started_at,omitempty"`
 	FinishedAt     *time.Time `json:"finished_at,omitempty"`
+	// Seq : Where the chat's question stands among everything said in its
+	// conversation, announcements included; the order to show it in.
+	// Absent for a chat with nothing written, which is shown by its time.
+	Seq int `json:"seq,omitempty"`
 }
 
 // Announcement : Something the assistant said without being asked, as it
@@ -90,6 +94,9 @@ type Announcement struct {
 	Text string `json:"text"`
 	// At : When they were said.
 	At time.Time `json:"at"`
+	// Seq : Where it stands among everything said in its conversation; the
+	// order to show it in.
+	Seq int `json:"seq,omitempty"`
 }
 
 // OfAnnouncements : Renders the announcements among a conversation's
@@ -105,6 +112,7 @@ func OfAnnouncements(messages []conversation.Message) []Announcement {
 			Kind: string(m.Kind),
 			Text: m.Content,
 			At:   m.At,
+			Seq:  m.Seq,
 		})
 	}
 	return out
@@ -125,6 +133,25 @@ func OfSummary(s chat.Summary) Summary {
 		StartedAt:      s.StartedAt,
 		FinishedAt:     s.FinishedAt,
 	}
+}
+
+// Sequenced : Gives each chat the position of its first message among the
+// conversation's messages, so a client can order chats and announcements
+// as they were written rather than by clocks that can disagree.
+func Sequenced(chats []Summary, messages []conversation.Message) []Summary {
+	first := make(map[string]int, len(chats))
+	for _, m := range messages {
+		if m.ChatID == "" {
+			continue
+		}
+		if at, ok := first[m.ChatID]; !ok || m.Seq < at {
+			first[m.ChatID] = m.Seq
+		}
+	}
+	for i := range chats {
+		chats[i].Seq = first[chats[i].ID]
+	}
+	return chats
 }
 
 // OfSummaries : Renders a listing of chat summaries.

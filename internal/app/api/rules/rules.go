@@ -57,6 +57,10 @@ type TriedResponse struct {
 	Why string `json:"why,omitempty"`
 	// Steps : What each step did, as far as it got.
 	Steps []Step `json:"steps"`
+	// When : The rule's when, each condition marked with whether it
+	// held; absent when the rule has no conditions, or what each
+	// answered could not be told.
+	When *When `json:"when,omitempty"`
 }
 
 // Try : Runs a rule now and says what it did, saying nothing aloud.
@@ -114,6 +118,127 @@ func (h *Handler) Try(w http.ResponseWriter, r *http.Request) {
 			Do: "when", Says: want.When.Describe(), Did: tried.Did[len(tried.Acts)],
 		})
 	}
+	if tried.When != nil {
+		when := whenOf(want, tried.When)
+		out.When = &when
+	}
+	httpx.WriteJSON(ctx, w, http.StatusOK, out)
+}
+
+// Runs : What a rule has done, run by run, newest first.
+type Runs interface {
+	Of(ctx context.Context, jobID string, since time.Time, limit int) ([]job.Record, error)
+}
+
+// RunsKept, RunsLimit : How far back a history reaches -- as far as
+// the server keeps one -- and how many runs it holds at most.
+const (
+	RunsKept  = 30 * 24 * time.Hour
+	RunsLimit = 1000
+)
+
+// Run : One run of a rule, as its history shows it.
+type Run struct {
+	At time.Time `json:"at"`
+	// TookMS : How long the whole of it took.
+	TookMS int64 `json:"took_ms"`
+	// Outcome : said, declined (a condition or a step stopped it),
+	// failed, or held (it ran through and said nothing) -- the words
+	// the run journal itself uses.
+	Outcome string `json:"outcome"`
+	// Why : What stopped it or went wrong.
+	Why string `json:"why,omitempty"`
+	// Said : What it said.
+	Said string `json:"said,omitempty"`
+	// Steps : What each step did.
+	Steps []RanStep `json:"steps"`
+}
+
+// RanStep : What one step of a run did.
+type RanStep struct {
+	Do     string `json:"do"`
+	Use    string `json:"use,omitempty"`
+	When   string `json:"when,omitempty"`
+	Came   string `json:"came"`
+	TookMS int64  `json:"took_ms"`
+	Why    string `json:"why,omitempty"`
+}
+
+// RunsResponse : The body of a history.
+type RunsResponse struct {
+	Runs []Run `json:"runs"`
+}
+
+// outcomeOf : What a run came to, in the run journal's four words.
+func outcomeOf(r job.Record) string {
+	switch {
+	case r.Failed:
+		return "failed"
+	case r.Said != "":
+		return "said"
+	case r.Stopped:
+		return "declined"
+	}
+	return "held"
+}
+
+// History : Every run of one of their rules the server still keeps,
+// newest first.
+//
+// Owner, 13 October 2026, in the desktop client: *"not just last ran,
+// I need the history of how and when it prompted, like a timeline."*
+// The journal has been written since rules ran; nothing read it back
+// but the server.
+func (h *Handler) History(w http.ResponseWriter, r *http.Request) {
+	ctx := r.Context()
+	limit := RunsLimit
+	if v := r.URL.Query().Get("limit"); v != "" {
+		n, err := strconv.Atoi(v)
+		if err != nil || n < 1 {
+			httpx.WriteError(ctx, w, http.StatusBadRequest, "That limit could not be read.")
+			return
+		}
+		limit = min(n, RunsLimit)
+	}
+	if h.store == nil || h.ran == nil {
+		httpx.WriteJSON(ctx, w, http.StatusOK, RunsResponse{Runs: []Run{}})
+		return
+	}
+	// Theirs, whatever state it is in: a rule called off still has a
+	// history, and a history is no business of anybody else's.
+	id := chi.URLParam(r, "id")
+	held, err := h.store.Mine(ctx, authn.Of(ctx).User.ID, "", MaxLimit)
+	if err != nil {
+		h.Fail(ctx, w, "reading the rules", err)
+		return
+	}
+	mine := false
+	for _, j := range held {
+		if j.ID == id {
+			mine = true
+			break
+		}
+	}
+	if !mine {
+		httpx.WriteError(ctx, w, http.StatusNotFound, "There is no rule with that identifier.")
+		return
+	}
+	recs, err := h.ran.Of(ctx, id, time.Now().Add(-RunsKept), limit)
+	if err != nil {
+		h.Fail(ctx, w, "reading what a rule did", err)
+		return
+	}
+	out := RunsResponse{Runs: make([]Run, 0, len(recs))}
+	for _, rec := range recs {
+		run := Run{
+			At: rec.At.UTC(), TookMS: rec.Took.Milliseconds(), Outcome: outcomeOf(rec),
+			Why: rec.Why, Said: rec.Said, Steps: make([]RanStep, 0, len(rec.Steps)),
+		}
+		for _, s := range rec.Steps {
+			run.Steps = append(run.Steps, RanStep{Do: string(s.Do), Use: s.Use, When: s.When, Came: s.Came, TookMS: s.Took, Why: s.Why})
+		}
+		out.Runs = append(out.Runs, run)
+	}
 	httpx.WriteJSON(ctx, w, http.StatusOK, out)
 }
 
@@ -132,6 +257,14 @@ type Handler struct {
 	store   Store
 	routine routine.Store
 	trier   Trier
+	ran     Runs
+}
+
+// Ran : Gives the handler somewhere to read what each rule has done.
+// Without it a history is empty.
+func (h *Handler) Ran(r Runs) *Handler {
+	h.ran = r
+	return h
 }
 
 // New : Builds one.
@@ -147,6 +280,7 @@ func New(logger *slog.Logger, store Store, usually routine.Store, trier Trier) *
 func (h *Handler) Mount(r chi.Router) {
 	r.Get("/v1/rules", h.List)
 	r.Post("/v1/rules/{id}/try", h.Try)
+	r.Get("/v1/rules/{id}/runs", h.History)
 }
 
 // Step : One thing a rule does, as a line to read.
@@ -161,6 +295,51 @@ type Step struct {
 	// found, what a check decided, what would have been said.
 	// Empty in a listing, which is a rule at rest.
 	Did string `json:"did,omitempty"`
+}
+
+// When : What sets a rule off and whether it holds, as the rule keeps
+// it: the half of {"when", "perform"} the summary and the steps flatten
+// into sentences.
+//
+// Owner, 13 October 2026, in the desktop client: *"I want a
+// conditional view too: what are the conditions in when, and what
+// happens in perform."* Sent beside the sentences rather than in
+// place of them, which the other clients read.
+type When struct {
+	// Wake : What sets it off. Any one of them does.
+	Wake []Wake `json:"wake"`
+	// Join : "all" or "any" -- whether every condition has to hold,
+	// or one is enough. Absent when there are none.
+	Join string `json:"join,omitempty"`
+	// Conditions : What has to hold, in the order they were written.
+	Conditions []Condition `json:"conditions"`
+}
+
+// Wake : One thing that sets a rule off.
+type Wake struct {
+	// Says : As it was written -- "at 08:00", "when battery.level < 20".
+	Says string `json:"says"`
+	// Clock : A time, rather than a reading arriving.
+	Clock bool `json:"clock"`
+	// After : How long it waits after being set off, as written.
+	After string `json:"after,omitempty"`
+}
+
+// Condition : One condition, or a group of them.
+type Condition struct {
+	// Says : In words, as the rule is read back.
+	Says string `json:"says"`
+	// Source, Op, Value, Ago : What it reads and how it compares,
+	// for one condition; absent for a group.
+	Source string `json:"source,omitempty"`
+	Op     string `json:"op,omitempty"`
+	Value  string `json:"value,omitempty"`
+	Ago    string `json:"ago,omitempty"`
+	// Join, Conditions : For a group, "all" or "any", and its parts.
+	Join       string      `json:"join,omitempty"`
+	Conditions []Condition `json:"conditions,omitempty"`
+	// Held : On a try, whether it held. Absent in a listing.
+	Held *bool `json:"held,omitempty"`
 }
 
 // Rule : One standing rule.
@@ -180,6 +359,10 @@ type Rule struct {
 	State string `json:"state"`
 	// Steps : What it does, in order.
 	Steps []Step `json:"steps"`
+	// When, Perform : The rule in its two halves, as it is kept:
+	// what sets it off and what has to hold, and what it does.
+	When    When   `json:"when"`
+	Perform []Step `json:"perform"`
 	// Next : When it next runs. Absent for a waiting rule, unless
 	// it has been set off and is waiting out a delay, which is the
 	// one time a waiting rule has a time at all.
@@ -322,6 +505,7 @@ func described(j job.Job) Rule {
 		Schedule: j.Schedule, Waits: job.Watches(j.Schedule),
 		State: string(j.State), Why: j.Why, Because: j.Because, Said: j.Said,
 		Steps: make([]Step, 0, len(j.Perform)+1),
+		When:  whenOf(j, nil), Perform: make([]Step, 0, len(j.Perform)),
 	}
 	// The conditions, where there are any, shown as the first
 	// thing the rule does -- which is what they now are.
@@ -345,6 +529,7 @@ func described(j job.Job) Rule {
 	}
 	for _, a := range j.Perform {
 		out.Steps = append(out.Steps, Step{Do: a.Do, Says: says(a)})
+		out.Perform = append(out.Perform, Step{Do: a.Do, Says: says(a)})
 	}
 	if !j.Next.IsZero() {
 		at := j.Next.UTC()
@@ -354,6 +539,72 @@ func described(j job.Job) Rule {
 		at := j.Last.UTC()
 		out.Last = &at
 	}
+	return out
+}
+
+// whenOf : A rule's when as it is kept, each condition marked with
+// what it answered when there is a verdict to mark it with.
+//
+// A rule whose wake is left out is set off by the readings its
+// conditions name arriving, and its written schedule says so; that is
+// shown as its one wake rather than as none.
+func whenOf(j job.Job, v *job.Verdict) When {
+	out := When{Wake: []Wake{}, Conditions: []Condition{}}
+	for _, h := range j.When.Wake {
+		if clock := h.Schedule(); clock != "" {
+			out.Wake = append(out.Wake, Wake{Says: clock, Clock: true, After: h.After})
+			continue
+		}
+		if h.On != nil {
+			out.Wake = append(out.Wake, Wake{Says: job.When + " " + h.On.Describe(), After: h.After})
+		}
+	}
+	if len(out.Wake) == 0 && strings.TrimSpace(j.Schedule) != "" {
+		out.Wake = append(out.Wake, Wake{Says: j.Schedule, Clock: !job.Watches(j.Schedule)})
+	}
+	where, join := j.When.All, "all"
+	if len(j.When.Any) > 0 {
+		where, join = j.When.Any, "any"
+	}
+	if len(where) > 0 {
+		out.Join = join
+	}
+	for i, w := range where {
+		out.Conditions = append(out.Conditions, conditionOf(w, part(v, i)))
+	}
+	return out
+}
+
+// part : The verdict on the i-th part, or nil when there is none.
+func part(v *job.Verdict, i int) *job.Verdict {
+	if v == nil || i >= len(v.Parts) {
+		return nil
+	}
+	return &v.Parts[i]
+}
+
+// conditionOf : One condition, or a group, as the listing shows it.
+func conditionOf(w job.Where, v *job.Verdict) Condition {
+	out := Condition{Says: w.Describe()}
+	if v != nil {
+		held := v.Held
+		out.Held = &held
+	}
+	if w.Group() {
+		in, join := w.All, "all"
+		if len(w.Any) > 0 {
+			in, join = w.Any, "any"
+		}
+		out.Join = join
+		for i, one := range in {
+			out.Conditions = append(out.Conditions, conditionOf(one, part(v, i)))
+		}
+		return out
+	}
+	if gate, err := w.Gate(); err == nil {
+		out.Source, out.Op, out.Value = gate.Source, gate.Op, gate.Value
+	}
+	out.Ago = w.Ago
 	return out
 }
 

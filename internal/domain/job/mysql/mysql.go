@@ -45,7 +45,10 @@ type row struct {
 func (row) TableName() string { return "jobs" }
 
 // Store : Jobs, in MySQL.
-type Store struct{ db *gorm.DB }
+type Store struct {
+	db      *gorm.DB
+	changed func(userID string)
+}
 
 // New : A store over an open database.
 func New(db *gorm.DB) *Store { return &Store{db: db} }
@@ -54,7 +57,7 @@ func New(db *gorm.DB) *Store { return &Store{db: db} }
 func ID() string { return Prefix + ulid.Make().String() }
 
 // Keep : Writes a job down.
-func (s *Store) Keep(ctx context.Context, j job.Job) error {
+func (s *Store) keep(ctx context.Context, j job.Job) error {
 	if s == nil || s.db == nil {
 		return fmt.Errorf("job: there is nowhere to keep jobs")
 	}
@@ -95,7 +98,7 @@ func (s *Store) Keep(ctx context.Context, j job.Job) error {
 // What it is holding back is no longer a repeat of anything, and
 // somebody who has just changed a rule wants to hear whether it
 // works rather than silence from a comparison with the old one.
-func (s *Store) Change(ctx context.Context, j job.Job) error {
+func (s *Store) change(ctx context.Context, j job.Job) error {
 	if s == nil || s.db == nil {
 		return fmt.Errorf("job: there is nowhere to keep jobs")
 	}
@@ -144,7 +147,7 @@ func (s *Store) Change(ctx context.Context, j job.Job) error {
 // The zero time clears it. Nothing else about the rule is touched:
 // being quiet is not being cancelled, and it has to come back as
 // it was.
-func (s *Store) Quiet(ctx context.Context, userID, id string, until time.Time) error {
+func (s *Store) quiet(ctx context.Context, userID, id string, until time.Time) error {
 	if s == nil || s.db == nil {
 		return fmt.Errorf("job: there is nowhere to read jobs")
 	}
@@ -204,7 +207,7 @@ func (s *Store) Due(ctx context.Context, at time.Time, limit int) ([]job.Job, er
 //
 // Scoped to its owner, so an identifier from somewhere else stops
 // nothing rather than stopping somebody's.
-func (s *Store) Stop(ctx context.Context, userID, id string) (bool, error) {
+func (s *Store) stop(ctx context.Context, userID, id string) (bool, error) {
 	if s == nil || s.db == nil {
 		return false, fmt.Errorf("job: there is nowhere to read jobs")
 	}
@@ -262,7 +265,7 @@ func (s *Store) Watching(ctx context.Context, userID string, limit int) ([]job.J
 	return out, nil
 }
 
-func (s *Store) Ran(ctx context.Context, id string, next time.Time,
+func (s *Store) ran(ctx context.Context, id string, next time.Time,
 	state job.State, why, said string, at time.Time) error {
 	if s == nil || s.db == nil {
 		return fmt.Errorf("job: there is nowhere to record that a job ran")
@@ -295,7 +298,7 @@ func (s *Store) Ran(ctx context.Context, id string, next time.Time,
 // Only next_at. Nothing has happened: the rule was set off and is
 // waiting, which is not a run, not a failure and not something
 // said.
-func (s *Store) Arm(ctx context.Context, id string, at time.Time) error {
+func (s *Store) arm(ctx context.Context, id string, at time.Time) error {
 	if s == nil || s.db == nil {
 		return fmt.Errorf("job: there is nowhere to read jobs")
 	}
@@ -309,7 +312,7 @@ func (s *Store) Arm(ctx context.Context, id string, at time.Time) error {
 }
 
 // Waits : Stops a rule part-way through, to carry on at a moment.
-func (s *Store) Waits(ctx context.Context, id string, at time.Time, step int) error {
+func (s *Store) waits(ctx context.Context, id string, at time.Time, step int) error {
 	if s == nil || s.db == nil {
 		return fmt.Errorf("job: there is nowhere to read jobs")
 	}
@@ -331,7 +334,7 @@ func (s *Store) Waits(ctx context.Context, id string, at time.Time, step int) er
 // Only the sentence. Not the run, not the next time, not the
 // state: the rule has not done anything, it has stopped being
 // about something.
-func (s *Store) Forgets(ctx context.Context, id string) error {
+func (s *Store) forgets(ctx context.Context, id string) error {
 	if s == nil || s.db == nil {
 		return fmt.Errorf("job: there is nowhere to read jobs")
 	}
@@ -461,4 +464,79 @@ func clip(s string, max int) string {
 		return s
 	}
 	return s[:max]
+}
+
+// Keep : See keep; the change hook is told when it succeeds.
+func (s *Store) Keep(ctx context.Context, j job.Job) error {
+	err := s.keep(ctx, j)
+	s.tell(err, j.UserID)
+	return err
+}
+
+// Change : See change; the change hook is told when it succeeds.
+func (s *Store) Change(ctx context.Context, j job.Job) error {
+	err := s.change(ctx, j)
+	s.tell(err, j.UserID)
+	return err
+}
+
+// Quiet : See quiet; the change hook is told when it succeeds.
+func (s *Store) Quiet(ctx context.Context, userID, id string, until time.Time) error {
+	err := s.quiet(ctx, userID, id, until)
+	s.tell(err, userID)
+	return err
+}
+
+// Stop : See stop; the change hook is told when it succeeds.
+func (s *Store) Stop(ctx context.Context, userID, id string) (bool, error) {
+	stopped, err := s.stop(ctx, userID, id)
+	s.tell(err, userID)
+	return stopped, err
+}
+
+// Ran : See ran; the change hook is told when it succeeds.
+func (s *Store) Ran(ctx context.Context, id string, next time.Time,
+	state job.State, why, said string, at time.Time) error {
+	err := s.ran(ctx, id, next, state, why, said, at)
+	s.tell(err, "")
+	return err
+}
+
+// Arm : See arm; the change hook is told when it succeeds.
+func (s *Store) Arm(ctx context.Context, id string, at time.Time) error {
+	err := s.arm(ctx, id, at)
+	s.tell(err, "")
+	return err
+}
+
+// Waits : See waits; the change hook is told when it succeeds.
+func (s *Store) Waits(ctx context.Context, id string, at time.Time, step int) error {
+	err := s.waits(ctx, id, at, step)
+	s.tell(err, "")
+	return err
+}
+
+// Forgets : See forgets; the change hook is told when it succeeds.
+func (s *Store) Forgets(ctx context.Context, id string) error {
+	err := s.forgets(ctx, id)
+	s.tell(err, "")
+	return err
+}
+
+// OnChange : Has the store say, after each write that succeeds, whose
+// data changed -- empty when the write does not know, as one by id
+// alone does -- so the clients showing it can read it again. The live
+// hub, given it in main.
+func (s *Store) OnChange(f func(userID string)) *Store {
+	if s != nil {
+		s.changed = f
+	}
+	return s
+}
+
+// tell : Passes a write that succeeded to the change hook.
+func (s *Store) tell(err error, userID string) {
+	if err == nil && s != nil && s.changed != nil {
+		s.changed(userID)
+	}
 }

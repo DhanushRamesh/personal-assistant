@@ -473,6 +473,102 @@ no submitting and polling. A client holds the response open and reads the
 answer as it is produced, and stops by abandoning it. Anything that needs to
 interrupt from elsewhere still uses `POST /v1/chats/{id}/cancel`.
 
+### Jarvis and his men
+
+Owner, 14 October 2026, on how the assistant speaks unasked: *"I'm the
+master, where Jarvis serves me as a personal assistant. He doesn't know
+the facts directly or do things directly; I just ask Jarvis and Jarvis
+asks his men to do the job."* When something should be said unasked,
+the owner sets the condition in words; when it happens the men report
+the facts to Jarvis, and Jarvis forms the sentence and speaks.
+
+Two responsibilities, held apart:
+
+- **The men** -- the event senders and the tools -- keep their facts in
+  a proper structured form, and are given clear instructions on when to
+  call Jarvis (a rule's conditions, checked by the engine without a
+  model). A man reports facts at the level they will be used: nights,
+  not four hundred screen locks; a call, not whatever the call log last
+  held; a place within reach, not the nearest named thing.
+- **Jarvis** reasons over what they report, decides which men to ask,
+  makes them report when a situation he was asked about happens
+  (`rule_add`), and words what he says the owner's way.
+
+So a wrong or missing sentence is first a question about which man
+reported badly or is missing, and is fixed there before any wording.
+Asking Jarvis to derive a fact a man should have kept is the failure to
+avoid: "well short of your usual" cannot come from a model reading raw
+locks, and did not.
+
+### The ledger: how each man keeps his books
+
+Owner, 14 October 2026: *"it should have the data stats, everything
+based on their employees (event source) and the employees' actions
+(.entered, .disconnected)"* -- and then *"start with the ledger"*.
+
+For every source and device, and every action it sends, over a window
+(7 days by default, 30 at most): how many arrived, first and last
+received, the usual gap between them, how many said `"unknown"`, how
+many had no value, and how many repeated the report before them within
+`event.Twice` (2 s). Paired actions -- a reporter's family with exactly
+two kinds, such as `place.entered`/`place.exited` -- are counted side by
+side per value, read from the data rather than listed, so a new device's
+pair is balanced the day it starts sending.
+
+`event.Faults` says what is wrong, knowing nothing about any action:
+a pair more than one apart, a report sent twice, an action whose value is
+always `"unknown"` or always absent, and a steady reporter (20 or more in
+the window) silent for over an hour and four of its usual gaps.
+
+Kept in the database with one grouped query and a window function, never
+by reading the rows, so it costs the same however long the table grows.
+Jarvis reads it with the `event_ledger` tool; clients with
+`GET /v1/events/ledger?days=`. Measured on the first run, 7 days: office
+entered 4 and exited 8, home 4 and 6; 15 bluetooth connections sent
+twice; every screen lock and power plug carrying `"unknown"`.
+
+### A report sent again is stored once
+
+Found by the ledger, 14 October 2026: 16 of 50 `bluetooth.connected`
+were the same report within two seconds. Android fires a Bluetooth
+connection once per link, so one helmet connecting is two or three
+reports, each with its own dedupe key. The phone's Jarvis Event task was
+also changed that day from "Abort New Task" to "Run Both Together" --
+that setting had been discarding the second of any two reports made in
+the same second, which is where most of the missing `place.entered`
+went -- and it lets every one of those copies through.
+
+So `POST /v1/events` drops a report that is `event.Again` of one already
+stored or earlier in the batch: same source, device, kind and payload,
+within `event.Twice`. It is answered as seen, so the device deletes it
+from its spool, and logged as `sent_again`. One store read per batch,
+over the span the batch covers. A store that cannot be read keeps the
+report rather than losing it.
+
+### The assistant's own machine is never reported quiet
+
+Owner, 14 October 2026, at 12:46 am: *"Your laptop has gone quiet again,
+sir -- nothing since eleven fifty-seven"* -- *"its misleading"*. The
+laptop reports only that it joined or left a network. A day of office
+wifi dropping every few minutes gave it a rhythm in the three-hour
+window, and steady wifi at home then read as an outage -- announced by
+the server running on that same laptop. The quiet check is now
+`situation.QuietExcept(this_machine)`, which leaves out what the host
+reports about itself; every other device is checked as before.
+
+### A conversation is ordered by its sequence, not its clocks
+
+Owner, 13 October 2026, after their own question appeared below an
+answer written after it: *"sort by seq"*. Every message in a
+conversation is numbered by `Append` in the order it was written. The
+detail endpoint gives each chat the `seq` of its first message
+(`views.Sequenced`) and each announcement its own, and clients order by
+that. Times are for showing, and a question that reached the server late
+-- the network, a slow transcriber, Home Assistant answering first --
+carries a time later than things written after it. A chat with no
+message tied to it, from before messages carried `chat_id`, has no `seq`
+and is placed by time.
+
 ### There is no server-sent-events stream, and no chat_updates
 
 Both went together. The stream existed so a client could rejoin an answer it
@@ -1203,6 +1299,35 @@ or spoken, which is exactly what makes this hard to notice.
 Turning `prefer_local_intents` off sends everything to Jarvis, and
 costs the device control that only Home Assistant can do. Not yet the
 owner's decision.
+
+**What it says must still reach the clients.** Owner, 13 October 2026:
+*"those HA intents should also be streamed to client, and the
+announcements should also be streamed to client."* A turn Home
+Assistant answered for itself belongs in the conversation as much as
+one Jarvis answered, and an announcement should appear in a client as
+it is said, not the next time the client reads.
+
+Announcements were already written into the conversation by
+`announcement.Writer` but nobody was told, so a client found them only
+on its next read. The Writer now has a `Changes`, wired to the live
+hub, and says `ConversationsChanged` after every write.
+
+Turns Home Assistant answers itself are reported by Home Assistant,
+since the server never sees them. The patched assist pipeline
+(`~/voice-setup/home-assistant/patches/assist_pipeline-pipeline.patch`),
+after a turn it handled locally on a pipeline whose agent is not its
+own, calls `rest_command.assistant_answered_elsewhere` with `heard` and
+`said`. That posts to `POST /v1/speech/answered`, and
+`announcement.Writer.Elsewhere` writes it as a completed voice chat --
+which is what a client shows as a turn, in the conversation and in the
+caption under the core -- plus the question and answer as messages for
+the model's history, in the voice client's conversation, and tells the
+clients. Messages alone appeared nowhere: the client builds turns from
+chats.
+Measured: "hello" through the Jarvis (Deepgram) pipeline came back
+"At your service, sir.", and both messages were in the conversation
+10 ms later. The command's name is the contract between the patch and
+`configuration.yaml`.
 
 ## Listening that will not end is two faults, not one
 
@@ -2150,6 +2275,25 @@ first. The residual risk is a Meet notification that never leads to a
 Phone Idle run -- a missed Meet call -- leaving a name set for the next
 call. The incoming side is protected by `%CRNUM ~ 0`; the outgoing side
 is not, and a timestamp on `%VOIPWITH` is the fix if it ever shows up.
+
+**The staleness guard measured from the wrong end, and a full queue lost a call.**
+Owner, 13 October 2026: a Meet call to Alekhya Chintada from 11:12 to
+11:25 pm was recorded as *"Called Marvel Country Broker · 4 min 36 s"* at
+11:25 -- the cellular call of 7:58 pm. The guard in step 1 of both Phone
+Idle tasks was `Variable Clear %VOIPWITH If %TIMES-%VOIPAT > 120`, and
+`%VOIPAT` is stamped when the Meet notification appears, at the start of
+the call: every Meet call over two minutes cleared its own name on hang-up
+and fell back to the call log. It is now `%OSTART-%VOIPAT > 120`
+(outgoing) and `%CSTART-%VOIPAT > 120` (incoming): stale means set more
+than two minutes before this call began.
+
+The 7:58 pm call itself was never sent. At 19:58:13 the Phone Offhook
+task that sets `%OSTART` was refused `RejMaxQ` -- Tasker's queue was full
+of Spotify Watch runs and Jarvis Flush requests each waiting out a
+30-second timeout with no signal -- so the call-ended task found
+`%OSTART` unset and skipped everything. 21 refusals that day, 17 of them
+Spotify Watch. Both records were corrected by hand. Not yet fixed: the
+queue pressure itself.
 
 **And `via` is in the payload now.** A ninety-minute Meet call and a
 ninety-minute phone call are not the same thing, and the field costs
@@ -4457,6 +4601,21 @@ Three things keep it honest, none of which limits what it may say:
   subject. `memory_list` shows it, and the owner can have it changed
   or dropped like any other. That is the only correction mechanism
   prose has.
+- **It is read before every answer, whatever its length** (13 October
+  2026, found designing the desktop client's Profile). It was not: the
+  always tier is held to 2,000 bytes, read oldest first, and the loop
+  stopped at the first memory that did not fit. The description, at
+  2,433 characters, never fitted, and the morning routine written after
+  it was shut out with it -- the chat prompt held two of four. The
+  server's own description is now not held to the ceiling (it is
+  bounded by `MaxWritten`, 8,000), and a memory too long for what is
+  left is passed over rather than ending the list. Every prompt carries
+  about 2,400 characters more.
+- **A hand edit is held to the description's length, not a fact's.**
+  Written from the Profile page with none there, it was made as an
+  ordinary memory and held to 4,000; it is made as the server's own
+  document now, to 8,000, and one past that is a 400 that says so,
+  not a 500.
 
 A week is read rather than a day: a day is one mood and a handful of
 subjects, and what recurs cannot be told from what came up once.
@@ -7897,6 +8056,20 @@ needs is complete, end to end.
 **The assistant can be looked at, not only talked to.** Owner, 1 October
 2026: they want to see the memories, the events, the tool modules with
 their names, the vocabulary, and the profile it has written about them.
+
+**The events listing takes advanced filters** (owner, 13 October 2026, in
+the desktop client: *"I'm more conscious about events … it should have
+advanced filters"*). `GET /v1/events` took one kind and a start; it now
+takes `kind` as often as wanted (any of them), `until`, `from` as often as
+wanted (a source, `tasker`, or a source and device, `tasker/pixel-7`),
+`contains` (words anywhere in the payload, as the events tool already
+searched), `late=true` (only what arrived more than a minute after it
+happened, the minute the client calls late) and `fixes=true` (position
+readings shown, as naming `location.fix` already did). All of it is
+asked of the store, so a filter reaches past the five hundred a page
+holds. The reply gains `sources`: each source and device with how many,
+counted across everything as the kinds are, which a filter by device
+offers as its choices.
 
 Three of those had no way to be read. `GET /v1/tools` lists everything
 the assistant can do, grouped by domain, marking which tools every
@@ -14663,6 +14836,43 @@ a bare number instead, and it was found by reading the output
 rather than by a test, which is why the output was read.
 
 
+### The listing sends the two halves too
+
+Owner, 13 October 2026, in the desktop client's rules design: *"I want
+a conditional view too: what are the conditions in when, and what
+happens in perform."* The rule is kept as `{when, perform}`, and
+`GET /v1/rules` sent it only as sentences -- the summary line and the
+steps, the conditions folded into one "when" step -- so no client
+could draw a condition on its own, or say which held.
+
+- **Each rule carries `when` and `perform` beside the sentences**,
+  which the other clients go on reading. `when` is `wake` (what sets
+  it off, each with `says`, `clock` and any `after`; a rule kept with
+  no wake shows its written schedule as its one), `join` (`all` or
+  `any`, absent with no conditions) and `conditions`: the tree as
+  kept, each with `says` in the words a rule is read back in and its
+  `source`, `op`, `value` and `ago`, a group with its own `join` and
+  `conditions`. `perform` is the steps without the folded "when".
+- **A try marks every condition.** `POST /v1/rules/{id}/try` adds
+  `when`, each condition with `held`. The engine's `Holds` stops at
+  the first answer that settles it, which is right for running and
+  useless for a page marking each one, so `Occasion.Judge` answers the
+  whole tree and agrees with `Holds` on the whole. The doer answers it
+  through an optional `job.Judger`, from the same readings fetched
+  once; a doer without one is tried as before, with no `when` sent.
+- The words are the engine's own (`presence is here`, `battery.level
+  < 20`). Plainer ones are the client's to choose, from the source.
+- **A rule's history is read back.** Owner, the same day: *"not just
+  last ran, I need the history of how and when it prompted, like a
+  timeline."* The run journal had been written for every run since the
+  rules ran, and only the server read it. `GET /v1/rules/{id}/runs`
+  answers every run it still keeps -- the month `runsKeep` allows --
+  newest first, at most a thousand: `at`, `took_ms`, `outcome` in the
+  journal's own four words (`said`, `declined`, `failed`, `held`),
+  `why`, `said`, and each step's `do`, `use`, `when`, `came`, `took_ms`
+  and `why`. Only for a rule of the caller's, in any state: a rule
+  called off keeps its history, and anybody else's is a 404.
+
 ### The engine reads one shape while the table holds two
 
 The conversion, wired. Every rule is now a `when` and a `perform`
@@ -17581,6 +17791,59 @@ showing that conversation, the conversation again.
 - Not yet announced: what was said unasked, which is written to the
   conversation outside the runner.
 
+**The words being heard are passed to the desktop clients as they are
+said.** Owner, 12 October 2026: *"show the streamed words... only my
+words, what I speak"*, under the core, behind a development switch in the
+client. The speech bridge already streams each turn to Deepgram with
+interim results; it now posts the words heard so far to
+`POST /v1/speech/hearing` (`{text, final}`) whenever they change, and the
+server sends them on at once as a live notice
+`{"type":"hearing","text":…,"final":…}` to that user's clients only.
+
+- **Shown, never stored.** It is a view of the microphone: a notice, not
+  remembered by the hub, so a client that connects later is not sent
+  old words. The turn itself is recorded when it arrives as a question.
+- The text is cut from the front past 600 characters, keeping what is
+  being said now. The path is logged at debug, like the health checks:
+  it arrives several times a second while somebody speaks.
+- Scale: a few posts a second per spoken turn, each one hub fan-out; no
+  database work.
+- **The wait goes with the words** (owner, 13 October 2026, in the desktop
+  client: *"I want to see the timer in the box"*). The bridge ends a turn
+  once no word has come for a while -- two seconds before any word, then
+  a fifth of a second a word, between one and five -- and says how many
+  seconds are left as `wait` on each notice: one with no words at the
+  first audio, and one whenever a word starts the wait again, the words
+  changed or not. The server passes it on as `"wait"`, held between 0 and
+  30 seconds; a notice without one, as the final words are, carries none.
+
+**The dashboard reads the server from two endpoints.** Owner, 11 October
+2026, approving the desktop client's Home with the server's health and
+the day on the right (*"both"*). `internal/app/api/home`, behind the
+token like everything else:
+
+- `GET /v1/home/server` -- `started_at`, `restarts` (systemd's NRestarts
+  for the unit this process runs under, read from its own cgroup; absent
+  outside systemd), `database` (`ok` or `unreachable`, a two-second
+  ping), `satellite` (the live hub's latest state, now readable through
+  `Hub.Latest`), `model` (the default), and `last_turn` (the caller's
+  latest chat: status, channel, started and finished, seconds).
+- `GET /v1/home/today` -- from now to the end of tomorrow in the person's
+  zone: every calendar's events that have not ended (one under way
+  stays), time-ordered, with the calendars that could not be read named;
+  and the reminders due by then. `diary` says `ok`, `not_connected` (no
+  Google account) or `unavailable` (it did not answer within eight
+  seconds); the reminders are answered either way.
+- **Only what the server can see.** The microphone's level, the last
+  wake word and which speech engine the bridge fell back to live on the
+  satellite's machine and never reach the server, so they are left out
+  rather than guessed. Phone alarms are not stored as a list; they come
+  from reminders.
+- Scale: one ping, one `systemctl show` and one single-row chat read per
+  `server` call; one parallel read of every calendar and one reminder
+  listing per `today` call. The client asks every 30 and 60 seconds
+  while Home is open -- about 3,000 calls a day of Home left open.
+
 
 ### The bar that kept the rules scarce forbade every remark
 
@@ -18433,3 +18696,363 @@ nothing:
 
 The leak it caught unwired is the owner's complaint word for word:
 *"The tools I have this turn are the only honest answer to that."*
+
+### An accent is a model, not a hint
+
+Owner: *"i speak indian english ... is there anything we can configure
+in groq."* The honest answer, across three engines, is almost nothing.
+
+Whisper's only lever is the prompt, and a prompt is read as the words
+immediately before the ones being transcribed -- a suggestion of
+register, not a model of one. Deepgram accepts `en-IN` and returns
+byte-identical output to plain `en` on his own recordings; the
+parameter is taken and has no effect worth measuring. Both of those
+were tried and are still here.
+
+Google Speech-to-Text v2 has `en-IN` as a distinct model rather than a
+parameter, GA for streaming and batch alike. That is the only reason
+to add a fourth engine, and the only thing worth measuring once it
+runs.
+
+So `--primary google`, built into the bridge in exactly the place
+`groq` and `deepgram` already sit. The architecture does not move:
+Flux goes on streaming, still ends the turn three seconds after the
+last word, still makes *stop* a word that stops things. The chosen
+engine only ever answers *what was said*, never *when it ended*. Two
+jobs, two engines, and the one that can tell silence from speech is
+the one deciding emptiness -- Google is never asked about a turn Flux
+timed no words in, for the same reason Groq is not. A whole-file
+transcriber handed a recording of a room does not return nothing. It
+invents, and the invented sentence is indistinguishable from a real
+one at the point where it matters.
+
+The vocabulary goes across as `adaptation` -- a boost per phrase, the
+way Deepgram's keyterms work -- rather than as a prompt. So the list
+arrives whole, and none of the shaping needed to stop Whisper reading
+it as a sentence to continue is needed here.
+
+It is built and switched off. Google issues no key to paste: a
+project, billing, the API enabled, a service account and a downloaded
+JSON file. That is the owner's to create, and the file lives in
+`~/.config/jarvis/`, never in a repository. Roughly ₹170 a month at
+four minutes of speech a day, against rather less for Deepgram, and
+whether the accent model earns the difference is unmeasured.
+
+`--google-region` is `us`, which is GA. `asia-south1` is nearer and
+still Preview; it should be timed against `us` rather than assumed
+faster, because on a turn this short the round trip may matter more
+than the model.
+
+And then it was not used. Owner, with the price in front of him:
+*"dont need it, lets stick with deepgram nova."*
+
+What decided it was where the free tier is. v2 has none -- $0.016 a
+minute from the first minute. The 60 free minutes a month belong to
+**v1**, and v1 has no Chirp. So the free way to run the experiment is
+the one that cannot test the thing being tested, and the way that
+tests it costs about ₹180 a month against Deepgram's rather less. v1's
+cheaper rate is also the one *with data logging*: Google keeps the
+audio. For a microphone that sits in his house all day, ₹85 a month is
+not what that is worth.
+
+So the accent stays unaddressed, which is worth saying plainly rather
+than filing as done. It is not that Indian English was handled -- it
+is that no engine within reach handles it at a price worth paying, and
+the one that might was not worth finding out about.
+
+The code stays, off. `--primary google` is one word, the README has
+the credential steps, and the Speech-to-Text API and a `speech-to-text`
+service account exist on the project already. **No key was ever
+created**, so nothing can be spent and there is no private key on the
+laptop. If it is picked up again: that project is on a managed
+Workspace account, so the billing and the key would both be corporate,
+and a personal Google account is the better home.
+
+### Two satellites, one room
+
+The Pixel 7 runs HAwake from 13 Oct 2026, pointed at the same Home
+Assistant over the tailnet, with `conversation.jarvis` as its agent and
+the pipeline's own TTS, so it answers in the same voice. Both satellites
+answer to "Hey Jarvis", which in one room means both wake.
+
+Owner: *"have an option to turn off laptop wake word detection if i use
+phone."* Offered three triggers -- a switch, an automation fired by the
+phone's own wake word, or the laptop's screen being locked -- and he
+took the switch. The two automatic ones were worth declining: the
+phone's event arrives at the same instant the laptop has already woken,
+so it would stop the second turn and not the first, and "the laptop is
+locked" only means "he is on the phone" if he always leaves the desk.
+A control he decides is better than a rule that is right most of the
+time, when being wrong means a room with two assistants talking.
+
+The control already existed. `switch.laptop_lva_mute` was a footer
+button labelled "Mute" beneath a card of settings -- present, correct,
+and in the place something is looked for last. It is now the first card
+on the voice dashboard, named for what it does.
+
+It is a mute and not a wake word turned off, and that distinction is
+the whole of why this was five minutes rather than an afternoon. Muted,
+the detector keeps running and nothing acts on what it hears:
+activations ignored (`__main__.py:980`), stop word ignored (`:1001`),
+audio not streamed (`satellite.py:1346`), follow-up skipped (`:1928`).
+Emptying the wake word selects would have meant a restart, and the
+wake word must never be stopped that way.
+
+The stop word goes quiet with it. That is correct -- there is nothing
+of that satellite's left to stop -- but it is the kind of thing that
+reads as a fault later if nobody wrote it down.
+
+### The ball sat still when the phone was talking
+
+What a client draws of a turn in progress follows one kind of live
+event, `live.SatelliteState`, and that had exactly one source: a watcher
+subscribed to `assist_satellite.laptop_lva_assist_satellite`. One
+satellite, one entity, one watcher.
+
+HAwake is a second satellite and registers no entity in Home Assistant
+at all -- it calls the conversation API directly. So a turn spoken to
+the phone moved nothing, and the client showed an idle assistant while
+Jarvis was plainly working. Owner: *"when i talk in hawake also, the
+listening and processing should be updated in the server, coz the
+personal assistant client updates the jarvis ball."*
+
+The words were never the problem. Both devices go through
+`conversation.jarvis` and land on the same `POST /api/chat`, which is
+how a phone turn was already being recorded. Only the *state* was
+missing, and the endpoint both of them reach is the one place that can
+see either -- so that is where it is now said: `processing` when the
+turn is accepted, `responding` at the first chunk carrying words, and
+`idle` when the answer stops.
+
+`responding` is published from the first word out and not at the end,
+because by the end it has been speaking for several seconds and a
+screen that lights up then is describing the past.
+
+Voice turns only. The web client shares this endpoint, and reporting a
+typed chat as the satellite listening would put a reading on screen
+that nobody took.
+
+Two sources for one state overlap on a laptop turn, and that is
+harmless: the hub drops a repeat of a state it already holds, so the
+watcher and this agree and only one is heard. The case worth knowing is
+a turn ending here while the laptop is genuinely busy -- this says idle
+early and the watcher's next change corrects it.
+
+The near-miss worth recording is which door of the hub to use. `Notify`
+fans out and forgets; `Publish` records the event as the latest of its
+kind. Written with `Notify`, the ball would have moved correctly and a
+client connecting mid-turn would have been told nothing, while the
+dashboard's own reading of the satellite stayed stale. A state is not
+a thing that happens and is gone.
+
+### The dashboard was watching the wrong thing, and so was the ball
+
+Shown the satellite card sitting at Idle through a phone turn, the fault
+looked like the change just made. It was not. There are two pipes and
+they had been conflated.
+
+The card reads `assist_satellite.laptop_lva_assist_satellite`, which
+works perfectly -- for the laptop. Its history during a laptop turn:
+listening at 03:53:25, processing at 03:53:29, responding at 03:53:29,
+idle at 03:53:30. Its last movement before the complaint was 09:32:36,
+while three voice chats sat in the database at 09:42, 09:43 and 09:45.
+Those were the phone, and HAwake registers no entity in Home Assistant
+at all. Publishing to the server's live hub was never going to move a
+Home Assistant dashboard; they are different pipes entirely.
+
+So the state now goes into Home Assistant as well, as
+`sensor.jarvis_voice`, written by the server -- the one thing that sees
+both devices, because both reach the same endpoint. Offered the choice
+of feeding the client directly, feeding Home Assistant, or both, the
+owner took Home Assistant: one thing to read, and two that can disagree
+is the kind of thing that bites months later.
+
+Two things the tests caught that review would not have.
+
+**The writes raced.** A goroutine per state is the obvious shape and it
+is wrong: Home Assistant was told processing, idle, responding, leaving
+the dashboard lit as though a finished turn were still speaking. A state
+arriving out of order is worse than one arriving late, because nothing
+after it corrects it. One goroutine and a queue now, and the order is
+the point.
+
+**The turn must not wait.** A write on the request's path puts a network
+call in front of every spoken word, and Home Assistant being slow would
+be heard as Jarvis being slow. There is a test that answers a turn while
+Home Assistant takes 1.5 seconds and fails if the turn took longer than
+one. The writer also keeps its own context: the request's is cancelled
+the moment the turn ends, and the last state written is idle, which
+would otherwise be the one write that never arrived.
+
+And the measurement that settles the rest of it. One isolated turn:
+
+	04:30:37.720  processing    7.3 seconds, a calendar lookup
+	04:30:45.011  responding      61 milliseconds
+	04:30:45.072  idle
+
+**Responding lasts 61 milliseconds.** The server is finished the moment
+the answer has streamed; Jarvis then speaks for several seconds that the
+server never sees. The client already knew this and compensated by
+holding responding while the laptop's own speaker was sounding -- which
+is silent when the phone is the one talking. So the ball not glowing
+while Jarvis speaks is not a bug in any of this, it is the server having
+no idea how long speech takes.
+
+### We cannot hear it, but we know what it is about to say
+
+Owner, on the two halves: *"when listening it doesnt know the audio
+stream ok, but while speaking it knows what is gonna be spoken right.
+with that we show the jarvis ball audio shakes bars."*
+
+That is the whole insight. Listening cannot be had this way because the
+words do not exist yet. Speaking can: the server is holding the sentence
+before a syllable of it has played, so how long it will take is a
+property of something already in hand.
+
+So how long was measured rather than assumed. Seven of the assistant's
+own sentences, rendered through `tts.piper` at the rate it is set to,
+and their audio read:
+
+	chars   said    estimated
+	    9   1.51s   1.21s   -20.2%
+	   18   1.59s   1.72s    +8.2%
+	   43   2.98s   3.15s    +5.8%
+	   62   4.13s   4.24s    +2.7%
+	  111   6.84s   7.05s    +3.0%
+	  144   9.09s   8.94s    -1.7%
+	   91   6.06s   5.90s    -2.6%
+
+`speech.Saying` is `690ms + 57.27ms per character`, and those seven
+measurements are its test. A constant fitted to numbers and then never
+checked against them is a number nobody can argue with later.
+
+**Characters, not words.** Words are the obvious unit and the wrong one:
+seconds per word ranged from 0.337 to 0.757 across those same sentences,
+because a word is anything from "a" to "eleven-thirty". Seconds per
+character held between 0.0617 and 0.0693 for every real sentence. The
+short ones run high because of the lead-in and tail Piper leaves, which
+is why that is a term of its own rather than folded into the slope.
+
+Proved live afterwards on a 53-character answer: responding held
+**3.725s**, against the 3.725s the formula gives. Before this it was
+**61 milliseconds**.
+
+Two things that had to be right and were not obvious.
+
+**A held idle must not land on the next turn.** Ask twice quickly and
+the first turn's idle, still waiting out its speech, would publish on
+top of the second turn's processing -- and nothing afterwards corrects
+it, so the screen stays dark for the whole of that answer. Turns are
+numbered and a held idle says nothing if the number has moved.
+
+**The wait does not belong on the request.** Home Assistant is holding
+that connection; sleeping there would keep it open for the length of
+every answer. The hold is a goroutine and the handler returns at once.
+
+What is still estimated is named as estimated. Where the audio itself
+can be measured, measure it -- this exists because nothing in the chain
+ever reports that speech has finished.
+
+### The client asked every thirty seconds whether anything had changed
+
+Owner: *"all the data should be reactive from server … any change in
+server should be immediately notified to client."*
+
+The desktop client read reminders, rules, memories and events on a
+timer, so an edit made by voice showed on the laptop up to half a minute
+later, and the client asked even when nothing had happened. Now the
+server says when something has.
+
+**The stores tell, not the handlers.** Each MySQL store -- reminders,
+jobs and their runs, memories, events, remarks -- has an `OnChange`, and
+every write that succeeds passes it the user whose data changed. A write
+made by id alone (`Fired`, `Armed`, `Used` …) does not know the user and
+tells `""`, which reaches everybody's clients. That is safe because a
+notice carries **no data**: it is `{"kind":"changed","area":"rules"}`
+over the live socket, and the client reads the area again through the
+API it already uses, with its own token. The worst a notice to the
+wrong person costs is one reading. Hooking the stores rather than the
+endpoints is what makes a change by voice, by a rule, or by the
+scheduler arrive the same as one made on screen.
+
+Areas: `reminders`, `rules`, `events`, `memories`, `profile`, `remarks`,
+`clients`. A memory write tells `memories` and `profile`, since the
+profile is a memory.
+
+**Clients are told by the router.** Sign-ins, revokes, a client's
+channel or model and the manner are written only through their
+endpoints, so a router step tells `clients` after a write to
+`/v1/clients*`, `/v1/personas` or `/v1/auth/login` returns below 300.
+
+**Bursts are gathered.** A rule arming a dozen reminders, or the phone
+posting a batch of fixes, would be a dozen notices, and a subscriber is
+dropped after 32 unread. The hub gathers changed areas for 200 ms
+(`live.Settle`) and sends one per user and area.
+
+Not covered: what is computed rather than stored -- the server's health,
+"today" -- has no write to hook, and the client keeps reading it on a
+timer.
+
+### A model will not find the longest gap in two hundred timestamps
+
+Asked how long he had slept, with every `screen.locked` and
+`screen.unlocked` of the night in front of it, the assistant answered
+*"roughly two to three hours"*. It got there by abandoning the evidence
+and reasoning from a habit he had once mentioned -- *"you typically
+sleep around 2:30 AM, which would put you at roughly two to three
+hours"* -- and called the rest *"fragmentary activity through the
+night"*. The fragments were a five-and-three-quarter-hour hole it never
+noticed.
+
+The night was not a close call:
+
+	5h 44m 48s   02:55 to 08:40      the only candidate
+	   52m  5s   next longest gap
+
+Six and a half times over. The night before was seven and a half times
+over. This is not a judgement a model should have been asked to make,
+and no wording would have made it: finding the largest difference in two
+hundred sorted timestamps is arithmetic, and arithmetic is what the men
+are for.
+
+So `event.Quiet` finds it and `event_untouched` hands it over as a fact.
+Afterwards, on the same night and the same database:
+
+	how long did i sleep yesterday
+	  Five hours and forty-five minutes, sir.
+
+	what time did i go to bed last night
+	  Your phone lay untouched from 2:55 AM, so that is when you went
+	  to bed, sir.
+
+**Named for what it measures.** This is a phone lying still, not a
+person sleeping -- leave the phone and read a book and it reads the
+same. So the tool says "their phone lay untouched from" and lets the
+assistant draw the obvious conclusion out loud, which is the same rule
+that stopped the phone's forty-five minutes being announced as the
+laptop's night.
+
+**An incoming call is not a touch.** `Touches` counts unlocking, locking,
+making a call, music, plugging in -- things a person did. A call
+*arriving* at four in the morning is something that happened to him, and
+counting it would cut a night in half and report two short sleeps where
+there was one long one. A call he answered shows up anyway, because
+answering it unlocks the screen.
+
+**The next-longest gap goes with the answer.** One stretch of six hours
+against a next-longest of fifty minutes is not a judgement call; two of
+three hours each is. `Clear` is twice the next-longest, and when it does
+not hold the tool says so and tells the assistant to name both rather
+than picking a winner from a coin toss.
+
+The tests are two of his own nights, every touch exactly as recorded.
+Invented data would have proved nothing: the whole question is whether
+one stretch stands out from the churn of a phone picked up forty times
+an evening, and only real churn has that shape.
+
+One premise of the complaint was wrong and worth recording so it is not
+believed later. *"It said good morning to me, so it should have just
+said when I slept"* -- `greet.Band` is a switch on the hour and nothing
+else. It would have said good morning to somebody who had been up all
+night. The greeting was never evidence of knowledge the assistant then
+failed to use; the events were.

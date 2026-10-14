@@ -101,12 +101,30 @@ func (r *Recall) Always(ctx context.Context, userID string) ([]Memory, error) {
 		maxBytes = DefaultAlwaysBytes
 	}
 
+	// The server's own description is not held to the ceiling. It is
+	// written to be read before every answer and is bounded already, by
+	// MaxWritten; under the ceiling it never fitted, and because the loop
+	// stopped at the first memory that did not, every memory written
+	// after it was shut out too. Found 13 October 2026, designing the
+	// desktop client's Profile: of four always-memories the chat prompt
+	// held two -- the description, at 2,433 characters against 2,000, and
+	// the morning routine behind it, were in no prompt at all.
+	//
+	// A memory that does not fit is passed over rather than ending the
+	// list, so one long memory costs only itself.
 	out := make([]Memory, 0, len(all))
 	used := 0
 	for _, m := range all {
-		size := len(m.Text()) + 1
-		if len(out) >= maxCount || used+size > maxBytes {
+		if len(out) >= maxCount {
 			break
+		}
+		if m.Written {
+			out = append(out, m)
+			continue
+		}
+		size := len(m.Text()) + 1
+		if used+size > maxBytes {
+			continue
 		}
 		out = append(out, m)
 		used += size
