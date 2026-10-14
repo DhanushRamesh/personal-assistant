@@ -19111,3 +19111,54 @@ What this did not fix, and is the larger of the two problems: nothing
 sweeps the events table at all. `location.fix` and `battery.level` are
 512 rows a day between them, about 187,000 a year, and `location.fix`
 at least earns it by being what `place.stayed` is made from.
+
+### Nothing was looking for an absence
+
+The manager's first job, and the one that would have made the previous
+section unnecessary: say which of the employees has stopped.
+
+The ledger already reported well on what arrives -- repeats sent
+twice, a value that never changes, none carrying a value at all, a
+pair out of step, a silence longer than that kind's week. What it
+could not report was a kind that sends nothing, because a kind that
+sends nothing writes no line. Seven sat in the table for eleven days
+and in every prompt, invisible to the thing whose job was to notice.
+
+So `event.Quit` reads everything ever sent rather than the window, and
+judges each kind against the gap it used to keep. Against one number
+it could not work: the kinds differ by four orders of magnitude --
+`music.playing` came every four minutes, `call.unanswered` every four
+days -- so a threshold in hours would either miss the first or condemn
+the second.
+
+Measured across every kind in the table at one moment:
+
+	quietest living    wifi.left           2.82x its usual gap
+	liveliest dead     bluetooth.changed    469x
+
+The line is twenty, sitting in a 166-fold gap. Two guards beside it: a
+kind must have been silent three days whatever its habit, so a chatty
+one is not buried after an afternoon, and a kind with fewer than three
+reports is left alone rather than guessed at -- two reports give one
+interval, which is not a habit. Judging a kind wrongly dead is the
+worse error, because the answer to this report is to stop collecting
+something.
+
+Proved both ways on the real database. With the seven deleted the
+report says nothing, which is correct. Restored from the backup and
+asked again:
+
+	Music reporting stopped on 3 October -- pauses, resumes, starts
+	and stops have not sent anything in eleven days. Screen change
+	events stopped on 4 October. Bluetooth reporting a device changed
+	also stopped on 3 October.
+
+Then deleted again: twenty-three kinds, 6,721 rows.
+
+The owner's own words for the parts, which are for talking and not for
+code: he is the master, Jarvis is his PA, the tools are agents,
+screen and bluetooth and music are employees, what they send are
+actions, and this is the manager. The wire format stays source,
+device, kind and payload -- that is the contract with Tasker, and
+renaming a contract to suit a metaphor is how a notation gets
+invented.

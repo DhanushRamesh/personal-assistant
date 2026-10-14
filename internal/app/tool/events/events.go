@@ -103,7 +103,7 @@ func (c Clock) where() *time.Location {
 func Tools(reader Reader, clock Clock) []tool.Tool {
 	out := []tool.Tool{kinds(reader, clock), recent(reader, clock), untouched(reader, clock)}
 	if books, ok := reader.(event.Ledgers); ok {
-		out = append(out, ledger(books, clock))
+		out = append(out, ledger(books, clock, reader))
 	}
 	return out
 }

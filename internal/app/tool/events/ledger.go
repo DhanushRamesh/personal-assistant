@@ -12,14 +12,14 @@ import (
 )
 
 // ledger : How well each reporter is keeping its books.
-func ledger(books event.Ledgers, clock Clock) tool.Tool {
+func ledger(books event.Ledgers, clock Clock, reader Reader) tool.Tool {
 	return tool.Tool{
 		Name:   "event_ledger",
 		Domain: "event",
 		Lists:  true,
 		Purpose: "How each of the person's devices is keeping its reports: for every source and every " +
-			"action it sends, how many arrived, how often they usually come, when last, and what is " +
-			"wrong with them.",
+			"action it sends, how many arrived, how often they usually come, when last, what is " +
+			"wrong with them, and which have stopped sending altogether.",
 		UseWhen: "To know whether a device's reports can be trusted before relying on them, to explain " +
 			"why something was missed or wrong, or when asked how the devices are doing.",
 		Avoid: "Not for what happened, which is event_recent; this is about the reporting itself.",
@@ -70,6 +70,27 @@ func ledger(books event.Ledgers, clock Clock) tool.Tool {
 				fmt.Fprintf(&b, "  %-24s %6d%s, last %s\n", l.Kind, l.Count, often,
 					l.Last.In(where).Format("2 Jan 15:04"))
 			}
+			// What has stopped, which the lines above cannot show: a
+			// kind that sends nothing writes no line at all, so an
+			// absence has to be looked for on purpose. Read over
+			// everything ever sent rather than the window, because
+			// the whole point is a kind that fell out of the window
+			// and was never missed.
+			if reader != nil {
+				if all, err := reader.Kinds(ctx, in.Caller.UserID); err == nil {
+					if gone := event.Quit(all, now); len(gone) > 0 {
+						b.WriteString("\nStopped sending, each judged against the gap it used to keep:\n")
+						for _, g := range gone {
+							fmt.Fprintf(&b, "  %-24s %d in all, last %s -- silent %s against a usual %s\n",
+								g.Kind, g.Count, g.Last.In(where).Format("2 Jan"),
+								event.Roughly(g.Silent), event.Roughly(g.Usual))
+						}
+						b.WriteString("  A kind that has stopped is worth raising: it is still listed as " +
+							"something their devices report, and it is not.\n")
+					}
+				}
+			}
+
 			if len(faults) == 0 {
 				b.WriteString("\nNothing wrong in how they were kept.")
 			} else {
