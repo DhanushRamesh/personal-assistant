@@ -803,6 +803,18 @@ func run() error {
 					system, environment.PurposeRemark, ask)
 			},
 			Kinds: deviceEvents.Kinds,
+			// The same list the writer gets when he asks for a rule
+			// himself, and missing here until 14 October.
+			//
+			// A remarked rule is refused unless it reads something
+			// before it speaks -- Grounded, which means naming a
+			// tool -- and the writer building it was never told a
+			// tool name. It could only name nothing and be refused
+			// for being ungrounded, or invent one and be refused
+			// for naming a tool that does not exist. Neither pass
+			// has ever written a rule, and this half of it could
+			// not have.
+			Reading: func() []string { return readable(registry) },
 		},
 		// The pass that decides whether anything is worth a rule can
 		// now go and look for itself, rather than deciding from a

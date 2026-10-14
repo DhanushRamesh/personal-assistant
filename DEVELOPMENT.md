@@ -19230,3 +19230,38 @@ rule it ever wrote, and nobody would have seen a thing.
 first so that a shape quoted on the way is not mistaken for the
 conclusion. The test is the real answer: prose, timestamps, a count,
 then the object.
+
+### The half that could not have worked
+
+Asked how a rule gets written, the answer is that it already works the
+way he describes: `noticing` decides and hands over one plain sentence,
+and `rules.Writer` -- a separate agent that does nothing else, asked for
+on 9 October -- turns it into `{when, perform}`. Jarvis never sees that
+grammar, which is the point: a description every turn pays for is not
+where sixty lines of specification belong.
+
+The specification is complete. Every hook, every operator, every source
+including the patterns worked out in code, every act, and the traps --
+a tool given no arguments reading yesterday, a wait that does not
+re-check, say for dictated words and write for anything that depends on
+the day. And the worked examples are his own rules rendered as the JSON
+the writer should produce, which he asked for on 7 October.
+
+What was missing was one field, and it made the `remarked` pass
+impossible by construction.
+
+A remarked rule is refused unless `Grounded(acts)` holds -- it must
+read something before it speaks, which means naming a tool. The
+`rules.Writer` built for the noticing path had `Ask` and `Kinds` and no
+`Reading`, so `available()` returned nothing and the line *"The tools a
+rule may use, and nothing else exists"* was absent from its
+specification altogether.
+
+So the writer was required to name a tool and never told one existed.
+Name nothing and the rule is refused for being ungrounded; invent one
+and it is refused for naming a tool that is not there. There was no
+third outcome. The `remarked` kind has never had a single row and could
+not have.
+
+The writer built for his own `rule_add` had the field all along, with a
+comment explaining why. The two were never the same.
