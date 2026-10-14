@@ -19056,3 +19056,21 @@ said when I slept"* -- `greet.Band` is a switch on the hour and nothing
 else. It would have said good morning to somebody who had been up all
 night. The greeting was never evidence of knowledge the assistant then
 failed to use; the events were.
+
+### The web client is gone
+
+Owner: *"in pa, i don't think client/ is no longer needed, we can delete
+it."* It is not. The desktop client in its own repository replaced it,
+and what was left here was 188MB and fifty-seven tracked files that
+nothing used.
+
+Checked before removing rather than assumed: no Go file serves the
+bundle -- the only `go:embed` in the server is the migrations -- and
+nothing outside the directory referred to it but the Makefile's own
+Client section and two variables in `clean`. Those went with it.
+
+What the directory knew that is worth keeping: a web client built
+without `--dart-define=ASSISTANT_URL` posts its login to whatever origin
+served it, which in development was the static file server, which
+answered 501 and looked exactly like the assistant being broken. That
+trap belonged to `make client-build` and leaves with it.
