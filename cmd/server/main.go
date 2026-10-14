@@ -804,11 +804,27 @@ func run() error {
 			},
 			Kinds: deviceEvents.Kinds,
 		},
-		func(ctx context.Context, system, ask string) (string, error) {
-			return askAs(ctx, answerer, cfg.PlatformAI.Vendor,
-				cmp.Or(cfg.PlatformAI.SlowModel, cfg.PlatformAI.Model),
-				system, environment.PurposeProfile, ask)
-		},
+		// The pass that decides whether anything is worth a rule can
+		// now go and look for itself, rather than deciding from a
+		// description somebody else wrote.
+		//
+		// It was answering honestly before and writing nothing: its
+		// own bar is that a pattern must be in the evidence it was
+		// given, with counts, and the evidence it was given counted
+		// one kind at a time. Every single-kind occasion worth having
+		// already had a rule on it, written by him. The combinations
+		// -- left home, then the helmet connected, then the office --
+		// were the only unworked ground and were invisible.
+		//
+		// Reading only, and the slow model. Owner: *"it should have
+		// the provision to fetch and cross-check the facts ... since
+		// there is no time constraint it can take its own time, here
+		// accuracy >> latency."*
+		investigating(answerer, registry, cfg.PlatformAI.Vendor,
+			cmp.Or(cfg.PlatformAI.SlowModel, cfg.PlatformAI.Model),
+			environment.PurposeProfile,
+			[]string{"event_kinds", "event_recent", "event_ledger", "event_untouched", "place_visits"},
+			persona.AddressFor(cfg.Assistant.Persona), Looking, logger.Logger),
 		jobmysql.ID, cfg.Assistant.Now, cfg.Assistant.Location, logger.Logger)
 
 	// And now, with something to think with, the loop that rewrites
@@ -1855,6 +1871,20 @@ const vocabularyTimeout = 3 * time.Minute
 // nobody is waiting on the answer.
 const profileTimeout = 3 * time.Minute
 
+// noticingTimeout : How long the rule-writing pass may take.
+//
+// Its own, and far longer than the description's, because it stopped
+// being one question the day it was given tools. It now reads what it
+// chooses to read, cross-checks what it finds, and may spend twenty
+// rounds doing it. Owner: *"since there is no time constraint it can
+// take its own time, here accuracy >> latency."*
+//
+// A deadline at all, rather than none, because a pass that never
+// returns holds the hourly loop for ever and the next hour's pass
+// never runs. This is the length at which something has gone wrong,
+// not a budget it is meant to spend.
+const noticingTimeout = 20 * time.Minute
+
 // describeDaily : Rewrites everybody's description, for as long as ctx
 // lives.
 //
@@ -1911,7 +1941,13 @@ func describeDaily(
 			// hour ago to decide what to watch for is a pass spent
 			// on yesterday.
 			if noticed != nil {
-				noticed(pass, userID)
+				// Its own deadline, off the parent rather than off
+				// the description's three minutes: this one goes and
+				// looks, and the description's budget was set when
+				// neither of them did.
+				looking, done := context.WithTimeout(ctx, noticingTimeout)
+				noticed(looking, userID)
+				done()
 			}
 		}
 		cancel()
@@ -2106,6 +2142,152 @@ func askOnce(
 // answered "let me check the calendar before saying anything" and
 // wrote out a tool call that does not exist. No tools are passed on
 // any of these; the rules saying to use them should not be either.
+// Looking : How many rounds of tools the rule-writing pass may take
+// before it must answer.
+//
+// Far more than a rule's own remark gets, and deliberately. That one
+// is a reading taken while somebody waits; this is an investigation
+// nobody is waiting for, run on a schedule in the background. Owner,
+// on this pass: *"since there is no time constraint it can take its
+// own time, here accuracy >> latency."*
+const Looking = 20
+
+// investigating : A question a model may use tools to answer.
+//
+// The same shape as a rule's own write step -- ask, run whatever
+// tools come back, ask again -- with two differences. The system
+// prompt is the caller's rather than the assistant's voice, because
+// this one is judging rather than speaking; and every round is
+// written down.
+//
+// The log is not for debugging. Owner, at the start of the day the
+// pass was found never to have written a rule: *"every time the
+// profiling happens and rule writing, log the things the AI is
+// doing, what it says, what events went through, everything -- for a
+// few days we'll monitor if the model is thinking the right way. Is
+// it neglecting some facts? Or is it triggering useless rules?"*
+// A pass that decides in private cannot be held to that.
+func investigating(
+	env environment.Environment,
+	tools *tool.Registry,
+	vendor, model string,
+	why environment.Purpose,
+	names []string,
+	address string,
+	rounds int,
+	logger *slog.Logger,
+) func(ctx context.Context, userID, system, ask string) (string, error) {
+	return func(ctx context.Context, userID, system, ask string) (string, error) {
+		specs, err := offering(tools, names, address)
+		if err != nil {
+			return "", err
+		}
+		var (
+			history []environment.Turn
+			ran     []string
+			asked   = ask
+			began   = time.Now()
+		)
+		logger.InfoContext(ctx, "looking for something worth a rule",
+			slog.String("purpose", string(why)),
+			slog.Int("tools_offered", len(specs)),
+			slog.Int("shown_characters", len(ask)))
+
+		for round := 0; round < rounds; round++ {
+			stream, err := env.Run(ctx, environment.Request{
+				Prompt: asked, History: history, Purpose: why,
+				Vendor: vendor, Model: model, SystemPrompt: system, Tools: specs,
+			})
+			if err != nil {
+				return "", err
+			}
+			var last *environment.Message
+			for msg := range stream {
+				m := msg
+				last = &m
+			}
+			switch {
+			case last == nil:
+				return "", fmt.Errorf("the provider said nothing")
+			case last.Kind == environment.KindError:
+				return "", fmt.Errorf("%s", last.Text)
+			case last.Kind != environment.KindToolCalls:
+				logger.InfoContext(ctx, "it reached a conclusion",
+					slog.String("purpose", string(why)),
+					slog.Int("rounds", round+1),
+					slog.Any("asked_for", ran),
+					slog.Duration("took", time.Since(began)),
+					slog.String("concluded", last.Text))
+				return last.Text, nil
+			}
+
+			if asked != "" {
+				history = append(history, environment.Turn{
+					Role: environment.RoleUser, Text: asked})
+				asked = ""
+			}
+			history = append(history, environment.Turn{
+				Role: environment.RoleAssistant, ToolCalls: last.ToolCalls})
+
+			results := make([]environment.ToolResult, 0, len(last.ToolCalls))
+			for _, c := range last.ToolCalls {
+				out := tools.Call(ctx, c.Name, tool.Invocation{
+					Caller: tool.Caller{UserID: userID, Channel: chat.ChannelDirect},
+					Args:   json.RawMessage(c.Arguments),
+					Ran:    ran,
+				})
+				ran = append(ran, c.Name)
+				// What it asked for and what it was told, both. Which
+				// facts reached it is the question the log exists to
+				// answer, and the arguments are half of that.
+				logger.InfoContext(ctx, "it went and looked",
+					slog.Int("round", round+1),
+					slog.String("tool", c.Name),
+					slog.String("asking", string(c.Arguments)),
+					slog.String("outcome", string(out.Outcome)),
+					slog.Int("told_characters", len(out.Content)),
+					slog.String("told", out.Content))
+				results = append(results, environment.ToolResult{ID: c.ID, Content: out.Content})
+			}
+			history = append(history, environment.Turn{
+				Role: environment.RoleTool, ToolResults: results})
+		}
+		logger.WarnContext(ctx, "it never stopped looking",
+			slog.String("purpose", string(why)),
+			slog.Int("rounds", rounds),
+			slog.Any("asked_for", ran))
+		return "", fmt.Errorf("it asked for tools %d times without answering", rounds)
+	}
+}
+
+// offering : The named tools as specs, refusing any that writes.
+//
+// The same refusal a rule gets, for the same reason: a pass deciding
+// whether to write a rule has no business changing anything while it
+// decides.
+func offering(tools *tool.Registry, names []string, address string) ([]environment.ToolSpec, error) {
+	out := make([]environment.ToolSpec, 0, len(names))
+	for _, name := range names {
+		found, ok := tools.Get(name)
+		if !ok {
+			return nil, fmt.Errorf("the rule-writing pass names %q, which is not a tool", name)
+		}
+		if found.Writes {
+			return nil, fmt.Errorf("the rule-writing pass names %q, which changes things", name)
+		}
+		schema, err := tool.Narrated(found.Params, address).MarshalJSON()
+		if err != nil {
+			return nil, fmt.Errorf("the schema for %s will not render: %w", name, err)
+		}
+		out = append(out, environment.ToolSpec{
+			Name:        name,
+			Description: tool.NarratedDescription(found.Description(), address),
+			Parameters:  schema,
+		})
+	}
+	return out, nil
+}
+
 func askAs(
 	ctx context.Context,
 	env environment.Environment,

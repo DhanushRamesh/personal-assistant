@@ -19162,3 +19162,71 @@ actions, and this is the manager. The wire format stays source,
 device, kind and payload -- that is the contract with Tasker, and
 renaming a contract to suit a metaphor is how a notation gets
 invented.
+
+### It was never told to look
+
+The rule-writing pass had never written a rule. The diagnosis guessed
+at by reading the code was close and wrong in the part that mattered.
+
+It was given the event tools, and the first run with them in hand
+answered in **one round, calling none of them**:
+
+	looking for something worth a rule  tools_offered=5  shown_characters=9182
+	it reached a conclusion  rounds=1  asked_for=[]  took=7.5s
+
+And the refusal it wrote was good -- it weighed a real candidate, a new
+and frequent contact, and declined because nine days cannot tell a
+habit from a moment. The bar was never the problem and neither was the
+model. **Nothing had told it to look.** *"Anything you have noticed"*
+and *"the evidence you were given"* both describe a closed book, and a
+model asked to decide from what it was handed does not go hunting.
+
+So the task became the investigation. The bar is untouched -- every
+*say nothing where* clause is verbatim, because it is the only thing
+between him and four hundred rules nobody wanted -- and what changed is
+the framing: it has tools, nobody is waiting, the description it starts
+from counts one kind at a time, and every pattern of that shape already
+carries a rule he wrote. What has never been looked at is what follows
+what.
+
+The instruction that did the work:
+
+	Count how often the second followed the first -- and count how
+	often the first happened and the second did not, because that
+	number is what separates a habit from a coincidence, and you
+	cannot tell them apart without it.
+
+The next pass, with the same tools and the new framing:
+
+	round 1  event_kinds    "checking what kinds of readings their devices report"
+	round 1  event_recent   days=9   "to look for sequences"
+	round 2  event_recent   bluetooth.connected  30 days
+	round 2  event_recent   place.exited         30 days
+	round 3  event_recent   power.not_charging   30 days
+	round 3  event_recent   place.entered        30 days
+	conclusion after 4 rounds, 2m18s
+
+It listed every morning departure with timestamps, counted the helmet
+against them, **counted the departures with no helmet**, threw out an
+02:09 exit as not a commute, and reported *five of about seven*. Then
+it checked that against the rules in force, found every consequent
+already covered, moved to the evening sequence, and refused. That is
+the pass working, not failing: it found something true and judged it
+redundant.
+
+#### The silent discard this created
+
+`read` unmarshalled the whole answer and failed **silently** -- an
+unreadable answer and a careful refusal both return nothing worth a
+rule. That was safe while the answer was one object. The moment it was
+told to investigate it began counting out loud before concluding, and
+two minutes of good reasoning went in the bin looking exactly like a
+considered no.
+
+It cost one refusal the day it was found. It would have cost the first
+rule it ever wrote, and nobody would have seen a thing.
+
+`concluding` takes the last JSON object in the answer, latest brace
+first so that a shape quoted on the way is not mistaken for the
+conclusion. The test is the real answer: prose, timestamps, a count,
+then the object.

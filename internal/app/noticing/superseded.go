@@ -60,7 +60,7 @@ func (w Watcher) Superseded(ctx context.Context, userID string, held []memory.Me
 		return "", "", nil
 	}
 
-	answer, err := w.Ask(ctx, superseding, prompt.Block(
+	answer, err := w.Ask(ctx, userID, superseding, prompt.Block(
 		prompt.Text("Everything you have been asked to remember about them:"),
 		prompt.Lines(lines...),
 	))

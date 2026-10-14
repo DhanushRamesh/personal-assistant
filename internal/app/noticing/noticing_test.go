@@ -14,7 +14,7 @@ import (
 
 func watcher(answer string, err error) noticing.Watcher {
 	return noticing.Watcher{
-		Ask: func(_ context.Context, _, _ string) (string, error) { return answer, err },
+		Ask: func(_ context.Context, _, _, _ string) (string, error) { return answer, err },
 		Describe: func(_ context.Context, _ string) string {
 			return "He charged the phone on 8 of 9 nights."
 		},
@@ -270,7 +270,7 @@ func TestWhatEveryRuleHasDoneIsShown(t *testing.T) {
 
 	var asked string
 	w := noticing.Watcher{
-		Ask: func(_ context.Context, _, ask string) (string, error) {
+		Ask: func(_ context.Context, _, _, ask string) (string, error) {
 			asked = ask
 			return `{"nothing":"no"}`, nil
 		},
@@ -300,7 +300,7 @@ func TestWhatEveryRuleHasDoneIsShown(t *testing.T) {
 func TestTheJudgeIsGivenNoIDs(t *testing.T) {
 	var asked string
 	w := noticing.Watcher{
-		Ask: func(_ context.Context, _, ask string) (string, error) {
+		Ask: func(_ context.Context, _, _, ask string) (string, error) {
 			asked = ask
 			return `{"nothing":"no"}`, nil
 		},
@@ -327,7 +327,7 @@ func TestTheirRulesAreContextWhenRetiring(t *testing.T) {
 
 	var asked string
 	w := noticing.Watcher{
-		Ask: func(_ context.Context, _, ask string) (string, error) {
+		Ask: func(_ context.Context, _, _, ask string) (string, error) {
 			asked = ask
 			return `{"keep":"all of them"}`, nil
 		},

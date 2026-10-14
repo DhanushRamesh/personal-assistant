@@ -36,8 +36,12 @@ import (
 	"personal-assistant/internal/domain/job"
 )
 
-// Ask : One question put to a model.
-type Ask func(ctx context.Context, system, ask string) (string, error)
+// Ask : One question put to a model, about one person.
+//
+// The person is named because the model may go and look: the pass
+// that decides whether anything is worth a rule is given the event
+// tools, and a tool reading somebody's devices has to be told whose.
+type Ask func(ctx context.Context, userID, system, ask string) (string, error)
 
 // Most : How many rules he may write himself in a day.
 //
@@ -153,7 +157,7 @@ func (w Watcher) Wondered(ctx context.Context, userID string, p Purpose, held []
 		return Thought{}, nil
 	}
 
-	answer, err := w.Ask(ctx, p.Judge, prompt.Block(
+	answer, err := w.Ask(ctx, userID, p.Judge, prompt.Block(
 		prompt.Text(fmt.Sprintf("What you know about them (%d rules already in force):", len(held))),
 		known,
 		prompt.Text("The rules already in force, and what each has actually done:"),
@@ -163,6 +167,40 @@ func (w Watcher) Wondered(ctx context.Context, userID string, p Purpose, held []
 		return Thought{}, err
 	}
 	return read(answer)
+}
+
+// concluding : The answer's last JSON object, or the answer as it
+// stands when there is none.
+//
+// Needed from the day this pass was given tools. Before that it
+// answered in one round with nothing but the object; now it is told
+// to investigate, and a model that has just counted something counts
+// it out loud before it concludes. The whole answer stopped being
+// JSON, [read] went on requiring that it was, and its failure is
+// silent -- an unreadable answer and a careful refusal both come back
+// as nothing worth a rule.
+//
+// That cost one refusal on the day it was found and would have cost
+// the first rule it ever wrote.
+//
+// The last object and not the first: the reasoning on the way may
+// quote the shape it is aiming at, and the conclusion is the one at
+// the end.
+func concluding(answer string) string {
+	answer = strings.TrimSpace(answer)
+	end := strings.LastIndex(answer, "}")
+	if end < 0 {
+		return answer
+	}
+	// Every opening brace, latest first: the last one that parses as
+	// far as the final closing brace is the conclusion.
+	for start := strings.LastIndex(answer[:end+1], "{"); start >= 0; start = strings.LastIndex(answer[:start], "{") {
+		candidate := answer[start : end+1]
+		if json.Valid([]byte(candidate)) {
+			return candidate
+		}
+	}
+	return answer
 }
 
 // read : The model's answer, as a thought.
@@ -176,6 +214,7 @@ func read(answer string) (Thought, error) {
 	answer = strings.TrimPrefix(answer, "```json")
 	answer = strings.TrimPrefix(answer, "```")
 	answer = strings.TrimSuffix(answer, "```")
+	answer = concluding(answer)
 
 	var out struct {
 		Nothing string `json:"nothing"`
@@ -359,7 +398,7 @@ func (w Watcher) Retired(ctx context.Context, userID string, held []Spoke) (stri
 		return "", "", nil
 	}
 
-	answer, err := w.Ask(ctx, retiring, prompt.Block(
+	answer, err := w.Ask(ctx, userID, retiring, prompt.Block(
 		prompt.Text("The rules they asked for, which are theirs and not yours to retire:"),
 		Standing(theirs),
 		prompt.Text("What you know about them now:"),
