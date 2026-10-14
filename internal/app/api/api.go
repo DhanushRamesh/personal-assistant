@@ -307,7 +307,7 @@ func New(opts Options) *Server {
 			Collects(opts.Owed),
 		profile:    profileapi.New(opts.Memories, opts.Now, opts.Logger),
 		vocabulary: vocabularyapi.New(opts.Vocabulary, opts.Logger),
-		google:     googleapi.New(opts.Logger, opts.Google, opts.SettingsURL),
+		google:     googleapi.New(opts.Logger, opts.Google, opts.SettingsURL).Tells(googleChanged(opts.Live)),
 		assist:     assist.New(opts.Logger, opts.Chats, opts.Runner, opts.Events),
 		speech:     speechapi.New(opts.Logger, opts.Cut),
 		events: events.New(opts.Logger, opts.DeviceEvents, opts.Now).
@@ -436,4 +436,12 @@ func clientsChanged(hub *livehub.Hub) func(http.Handler) http.Handler {
 // touchesClients : Whether a request writes to the clients or their manner.
 func touchesClients(path string) bool {
 	return strings.HasPrefix(path, "/v1/clients") || path == "/v1/personas" || path == "/v1/auth/login"
+}
+
+// googleChanged : Tells a person's clients their Google connection changed; nothing without a hub.
+func googleChanged(hub *livehub.Hub) func(userID string) {
+	if hub == nil {
+		return nil
+	}
+	return func(userID string) { hub.AreaChanged(userID, livehub.AreaGoogle) }
 }

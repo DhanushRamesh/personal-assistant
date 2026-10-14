@@ -19355,3 +19355,64 @@ turn that works in silence for nine seconds reads as having stopped.
 The test is the shape rather than the words, because the harness
 invents its own answer: nothing written to a voice stream may end in
 the newline a progress note carries. It fails against the old branch.
+
+### The Google sign-in ended on a page that was gone
+
+Owner, 14 October 2026, building the desktop client's Google module:
+*"add the google link part ... in assistant"*. Google's callback sent
+the browser on to `settings_url`, `localhost:8000/settings/google` -- a
+settings page of the old web client, which no longer runs -- so a
+sign-in that worked left the person on a browser error.
+
+`settings_url` is now empty, and empty no longer answers with JSON: the
+callback leaves the browser on a page of its own, saying it connected
+-- "you can close this tab and go back to the app" -- or why it did not,
+in words (refused on Google's page, too slow, another account). The
+page carries no script and a policy that allows none.
+
+And the connection is an area of its own, `google`: a sign-in finished
+or a disconnect tells the person's clients, so the desktop client's
+Google module follows the browser without being refreshed.
+
+### A ceiling of four is a licence to use four
+
+Owner: *"Jarvis is speaking too much. He should speak only one
+sentence, or maybe two only when needed. It is a strict rule. He just
+answers questions."*
+
+The rule already was a count rather than a principle, which is the
+part that was right. The count was four, and measured across 467
+spoken answers over three days:
+
+	median                  2 sentences, 20 words
+	over two sentences     88 of 467  (19%)
+	longest                10 sentences, 177 words
+
+So the typical answer was fine and the tail was not. A ceiling nobody
+reaches most of the time still gets reached once a day, and 177 words
+said out loud to somebody who asked one question is the whole
+complaint.
+
+The three longest all open the same way -- *"I can answer that, sir."*,
+*"Understood, sir."* -- a sentence of throat-clearing and then an
+essay. So the count now says what a second sentence has to be:
+
+	One sentence. Two only where the second carries something the
+	first could not, and never three. This is a count and not a
+	feeling. A second sentence has to be answering the question as
+	well; a sentence that explains the first, softens it, offers
+	what else you could do or says what you just did is not a
+	second sentence, it is the first one said twice.
+	They asked a question. Answer it and stop.
+
+`Heard` drops from 75 words to 45, and the eval now counts sentences
+as well as words. Three runs against the real model: 16, 20, 16 for
+*"what can you do"* -- the question that produced the capability
+recital -- and 18 to 27 across the rest, every one inside two
+sentences, with the written answers still four to twenty times longer,
+which is the claim the whole split rests on.
+
+The shared `sentences` counter was counting every full stop, which
+made "four and a half hours" two sentences and "9 a.m." three. It now
+counts a stop followed by a space, which is how a listener hears them.
+Both the refusal eval and this one use it.

@@ -57,9 +57,19 @@ var aloud = prompt.Text(
 // in the reply rules and not in [aloud], because [Voice] uses aloud
 // for the greeting, and a greeting worth hearing is sometimes four
 // sentences of what happened while they were out.
+//
+// The count was four until 14 October and the median answer was two,
+// which read as working. The tail was not: of 467 spoken answers over
+// three days, 88 ran past two sentences and the longest was ten --
+// 177 words, said out loud, to somebody who had asked one question.
+// A ceiling of four is a licence to use four. Owner: *"jarvis is
+// speaking too much, he should speak only one sentence, or maybe two
+// only when needed. It is a strict rule. He just answers
+// questions."*
 var briefly = prompt.Text(
-	"Four sentences is the most a spoken answer should ever run to, and one or two is usually right.",
-	"That is a ceiling and not a target: most questions are finished well inside it, and reaching it means checking that every sentence is carrying something.",
+	"One sentence. Two only where the second carries something the first could not, and never three.",
+	"This is a count and not a feeling. A second sentence has to be answering the question as well; a sentence that explains the first, softens it, offers what else you could do or says what you just did is not a second sentence, it is the first one said twice.",
+	"They asked a question. Answer it and stop.",
 )
 
 // written : How it reads when the words are read rather than heard.

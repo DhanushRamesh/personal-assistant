@@ -6,6 +6,7 @@ import (
 	"io"
 	"log/slog"
 	"os"
+	"regexp"
 	"strings"
 	"testing"
 	"time"
@@ -98,16 +99,21 @@ func TestARefusalIsOneSentence(t *testing.T) {
 	}
 }
 
-// sentences : How many it runs to.
+// sentences : How many it runs to, counted the way a listener hears
+// them.
+//
+// A stop followed by a space, rather than every stop. Counting every
+// one made "four and a half hours" two sentences and "9 a.m." three,
+// which is the sort of miscount that turns a brevity check into
+// noise nobody reads.
 func sentences(s string) int {
 	n := 0
-	for _, r := range s {
-		if r == '.' || r == '?' || r == '!' {
+	for _, part := range sentenceEnd.Split(strings.TrimSpace(s), -1) {
+		if strings.TrimSpace(part) != "" {
 			n++
 		}
 	}
-	if n == 0 && strings.TrimSpace(s) != "" {
-		return 1
-	}
 	return n
 }
+
+var sentenceEnd = regexp.MustCompile(`[.!?]+\s+`)

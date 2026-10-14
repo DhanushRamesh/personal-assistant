@@ -8,6 +8,8 @@ package google
 
 import (
 	"errors"
+	"fmt"
+	"html"
 	"log/slog"
 	"net/http"
 	"time"
@@ -62,6 +64,22 @@ type Handler struct {
 	// done : Where the browser is sent after the callback, which is
 	// the settings screen rather than a bare JSON body.
 	done string
+	// changed : Told whose connection changed -- made, or forgotten --
+	// so a screen showing it can read it again. Nil tells nobody.
+	changed func(userID string)
+}
+
+// Tells : Has the handler say whose connection changed.
+func (h *Handler) Tells(changed func(userID string)) *Handler {
+	h.changed = changed
+	return h
+}
+
+// tell : Passes on a change to whoever is told.
+func (h *Handler) tell(userID string) {
+	if h.changed != nil && userID != "" {
+		h.changed(userID)
+	}
 }
 
 // New : Builds the handler. A nil link means nothing is configured,
@@ -157,9 +175,12 @@ func (h *Handler) Callback(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	_, err := h.link.Complete(ctx, q.Get("state"), q.Get("code"))
+	account, err := h.link.Complete(ctx, q.Get("state"), q.Get("code"))
 	switch {
 	case err == nil:
+		if account != nil {
+			h.tell(account.UserID)
+		}
 		h.back(w, r, "")
 	case errors.Is(err, google.ErrUnknownState):
 		h.back(w, r, "expired")
@@ -175,15 +196,11 @@ func (h *Handler) Callback(w http.ResponseWriter, r *http.Request) {
 func (h *Handler) back(w http.ResponseWriter, r *http.Request, failure string) {
 	to := h.done
 	if to == "" {
-		// Nowhere to send them, so say it here rather than redirect to
-		// nothing.
-		if failure == "" {
-			httpx.WriteJSON(r.Context(), w, http.StatusOK,
-				map[string]string{"status": "connected"})
-			return
-		}
-		httpx.WriteError(r.Context(), w, http.StatusBadRequest,
-			"That sign-in did not complete: "+failure)
+		// Nowhere to send them, so say it here, as a page: what arrives
+		// is a browser and a person, and the desktop client follows the
+		// connection on its own (owner, 14 October 2026: the settings
+		// page it was sent to no longer exists).
+		finished(w, failure)
 		return
 	}
 	if failure != "" {
@@ -198,10 +215,41 @@ func (h *Handler) back(w http.ResponseWriter, r *http.Request, failure string) {
 func (h *Handler) Disconnect(w http.ResponseWriter, r *http.Request) {
 	ctx := r.Context()
 
-	err := h.link.Disconnect(ctx, authn.Of(ctx).User.ID)
+	user := authn.Of(ctx).User.ID
+	err := h.link.Disconnect(ctx, user)
 	if err != nil && !errors.Is(err, google.ErrNotConfigured) {
 		h.Fail(ctx, w, "disconnecting Google", err)
 		return
 	}
+	h.tell(user)
 	w.WriteHeader(http.StatusNoContent)
+}
+
+// outcomes : What a finished sign-in says, by how it went.
+var outcomes = map[string]string{
+	"":              "Google is connected. You can close this tab and go back to the app.",
+	"expired":       "That sign-in took too long and was let go. Connect again from the app.",
+	"wrong_account": "That was a different Google account from the one connected. Connect again from the app, with the same account, or disconnect it first.",
+	"failed":        "Google said yes, but the server could not finish the sign-in. Connect again from the app.",
+	"access_denied": "Nothing was connected: permission was not given. Connect again from the app to try once more.",
+}
+
+// finished : The page a browser is left on after Google sends it back.
+func finished(w http.ResponseWriter, failure string) {
+	words, ok := outcomes[failure]
+	if !ok {
+		words = "Google did not connect: " + failure + ". Connect again from the app."
+	}
+	title := "Google connected"
+	status := http.StatusOK
+	if failure != "" {
+		title, status = "Google not connected", http.StatusBadRequest
+	}
+	w.Header().Set("Content-Type", "text/html; charset=utf-8")
+	w.Header().Set("Content-Security-Policy", "default-src 'none'; style-src 'unsafe-inline'")
+	w.WriteHeader(status)
+	_, _ = fmt.Fprintf(w, `<!doctype html><html lang="en"><head><meta charset="utf-8"><title>%s</title>
+<style>body{margin:0;min-height:100vh;display:grid;place-items:center;background:#05080b;color:#dcf3fa;font:16px/1.5 system-ui,sans-serif}
+main{max-width:440px;padding:28px 32px;border:1px solid #2e6378}h1{margin:0 0 8px;font-size:18px;letter-spacing:.08em;text-transform:uppercase;color:%s}</style>
+</head><body><main><h1>%s</h1><p>%s</p></main></body></html>`, html.EscapeString(title), map[bool]string{true: "#4be3a0", false: "#ff5468"}[failure == ""], html.EscapeString(title), html.EscapeString(words))
 }

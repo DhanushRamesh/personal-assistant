@@ -40,7 +40,7 @@ var broad = []string{
 // where it was, and far enough from both that a passing run means the
 // rule held rather than that the sampling was kind. A cap the model
 // straddles tests nothing but the weather.
-const Heard = 75
+const Heard = 45
 
 // wall : A paragraph that works through four sentences without a
 // break.
@@ -62,6 +62,15 @@ func wall(text string) bool {
 
 // Shaped : How long a written answer gets before it owes the reader
 // some structure.
+// Sentences : The most a spoken answer may run to.
+//
+// One, or two where the second carries something the first could not.
+// A count rather than a principle, because a principle the model has
+// to weigh against the answer in front of it is one somebody hears
+// broken once a day: the rule said four, the median answer was two,
+// and the tail ran to ten.
+const Sentences = 2
+
 const Shaped = 80
 
 // structure : Markdown that gives an answer its shape.
@@ -91,6 +100,9 @@ func TestTheSameQuestionIsShapedForTheEarAndTheEye(t *testing.T) {
 		switch {
 		case words > Heard:
 			t.Errorf("SPOKEN %-46q ran to %d words:\n    %s", ask, words, heard)
+		case sentences(heard) > Sentences:
+			t.Errorf("SPOKEN %-46q ran to %d sentences, and the rule is %d:\n    %s",
+				ask, sentences(heard), Sentences, heard)
 		case structure.MatchString(heard):
 			t.Errorf("SPOKEN %-46q used markup that cannot be heard:\n    %s", ask, heard)
 		}

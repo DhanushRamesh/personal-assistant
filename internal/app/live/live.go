@@ -60,6 +60,7 @@ const (
 	AreaProfile   = "profile"
 	AreaRemarks   = "remarks"
 	AreaClients   = "clients"
+	AreaGoogle    = "google"
 )
 
 // Hearing : A notice of the words heard so far while somebody speaks, as
