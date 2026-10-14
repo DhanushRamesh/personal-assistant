@@ -24,6 +24,16 @@ var broad = []string{
 	"what is the difference between a reminder and a task here",
 }
 
+// indent : A written answer laid out under the heading, so markdown
+// stays readable in the test output.
+func indent(text string) string {
+	lines := strings.Split(strings.TrimRight(text, "\n"), "\n")
+	for i, line := range lines {
+		lines[i] = "    " + line
+	}
+	return strings.Join(lines, "\n")
+}
+
 // Heard : How many words a spoken answer to one of those may run to.
 //
 // A judgement and not a derived limit, and worth saying so: nothing
@@ -118,9 +128,31 @@ func TestTheSameQuestionIsShapedForTheEarAndTheEye(t *testing.T) {
 	spoken := persona.Prompt(cfg.Assistant.Persona, cfg.Assistant.Name, persona.Spoken)
 	written := persona.Prompt(cfg.Assistant.Persona, cfg.Assistant.Name, persona.Written)
 
-	for _, ask := range broad {
+	// One of his own instead of the three, for trying a sentence
+	// both ways without editing the file. The limits still apply:
+	// the point of asking is to find out whether it holds.
+	//
+	//	make evals-shape ASK="what is on my calendar tomorrow"
+	questions := broad
+	mine := strings.TrimSpace(os.Getenv("ASK"))
+	if mine != "" {
+		questions = []string{mine}
+	}
+
+	for _, ask := range questions {
 		heard := say(t, env, spoken, ask)
 		read := say(t, env, written, ask)
+
+		// Both answers in full when he asked the question himself.
+		// The counts are what the eval judges; the words are what
+		// he wanted to see, and a word count is no use for deciding
+		// whether a sentence sounds right.
+		if mine != "" {
+			t.Logf("\n  ASKED    %s\n\n  SPOKEN   (%d words, %d sentences)\n    %s\n\n  WRITTEN  (%d words)\n%s\n",
+				ask,
+				len(strings.Fields(heard)), sentences(heard), heard,
+				len(strings.Fields(read)), indent(read))
+		}
 
 		words := len(strings.Fields(heard))
 		switch {
@@ -160,6 +192,15 @@ func TestTheSameQuestionIsShapedForTheEarAndTheEye(t *testing.T) {
 		// The claim the whole change rests on, and the one that has
 		// held on every run: the same question, answered at more
 		// length for somebody who can skim it.
+		//
+		// Only for the three it was measured on. A question of his
+		// own may be one where both answers are a line -- "what is
+		// 2 plus 2" is not longer for being read -- and failing him
+		// for asking would make the switch useless for what it is
+		// for.
+		if mine != "" {
+			continue
+		}
 		if len(strings.Fields(read)) <= len(strings.Fields(heard)) {
 			t.Errorf("%-46q was no longer written than spoken (%d vs %d words)",
 				ask, len(strings.Fields(read)), len(strings.Fields(heard)))

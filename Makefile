@@ -119,7 +119,7 @@ evals-models: ## Ask which models this gateway will accept (costs API calls)
 		-run TestWhichModelsThisGatewayTakes $(ARGS)
 
 .PHONY: evals-shape
-evals-shape: ## Ask a real model the same question for the ear and the eye (costs API calls)
+evals-shape: ## Ask a real model the same question for the ear and the eye. ASK="..." for one of your own (costs API calls)
 	@go test ./internal/domain/persona/evals/ -tags evals -count=1 -v -timeout 10m \
 		-run TestTheSameQuestionIsShapedForTheEarAndTheEye $(ARGS)
 

@@ -19508,3 +19508,26 @@ properly.
 Measured over fourteen days, only four typed answers ran past eighty
 words and two of them were walls -- too few to call a pattern, which
 is why the eval matters more than the count.
+
+### Trying one sentence both ways
+
+	make evals-shape ASK="what is on my calendar tomorrow"
+
+Asks the real model the same thing with the spoken rules and the
+written rules and prints both answers in full, with the word and
+sentence counts beside them. Without ASK it runs the three questions
+it was built on, unchanged.
+
+The length claim -- written longer than spoken -- is skipped for a
+question of his own. It was measured on those three, and a sentence he
+picks may be one where both answers are a line: "what is the capital
+of France" is "Paris." either way, and failing him for asking would
+make the switch useless for what it is for.
+
+**It has no tools and no data.** It is the manner being tested and
+nothing else. Asked "how long did I sleep last night" it answered
+spoken "I'm afraid I don't have access to your sleep data, sir" and
+written "Looking at your sleep data from last night" -- the second
+narrating a lookup it cannot do, which is its own fault and not the
+answer he was after. For anything that needs his own life in it,
+speaking to it is the test; this is for how a sentence lands.
