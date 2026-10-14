@@ -795,7 +795,14 @@ func run() error {
 	// Nil where there is nothing to think with, which leaves him
 	// noticing nothing rather than failing at startup over a thing
 	// nobody asked for.
-	thinkingUp = noticed(scheduled, ranLog, remembered, &profile.Reader{Memories: remembering.Store},
+	thinkingUp = noticed(
+		// The same lookup the rule tool uses, and nil here until 14
+		// October. A rule naming a tool is checked against it, and
+		// with nothing to check against the check panicked rather
+		// than refusing -- which no rule the assistant wrote had
+		// ever reached, because none had ever been written.
+		func(name string) (tool.Tool, bool) { return known(name) },
+		scheduled, ranLog, remembered, &profile.Reader{Memories: remembering.Store},
 		rules.Writer{
 			Ask: func(ctx context.Context, system, ask string) (string, error) {
 				return askAs(ctx, answerer, cfg.PlatformAI.Vendor,
@@ -3711,6 +3718,7 @@ const everyRule = 500
 // if it cannot be made. Nothing he asks for skips the validation
 // anybody else's rule goes through.
 func noticed(
+	look rules.Lookup,
 	store *jobmysql.Store,
 	ran *jobmysql.Runs,
 	remembers *memorymysql.Store,
@@ -3771,7 +3779,7 @@ func noticed(
 			if !noticing.Allowed(mine, purpose, now()) {
 				continue
 			}
-			if made := wrote(ctx, watcher, writer, purpose, userID, mine, held,
+			if made := wrote(ctx, watcher, writer, purpose, userID, mine, held, look,
 				id, now, where, logger); made != nil {
 				if err := store.Keep(ctx, *made); err != nil {
 					logger.WarnContext(ctx, "cannot keep the rule he wrote",
@@ -3796,6 +3804,7 @@ func wrote(
 	userID string,
 	mine []job.Job,
 	held []noticing.Spoke,
+	look rules.Lookup,
 	id func() string,
 	now func() time.Time,
 	where *time.Location,
@@ -3824,7 +3833,7 @@ func wrote(
 	}
 	when, acts, why := writer.Written(ctx, rules.Request{
 		UserID: userID, Asked: thought.Asked, Holding: holding.String(),
-	}, nil)
+	}, look)
 	if why != "" {
 		logger.InfoContext(ctx, "he wanted a rule and could not write it",
 			slog.String("asked", thought.Asked), slog.String("why", why))

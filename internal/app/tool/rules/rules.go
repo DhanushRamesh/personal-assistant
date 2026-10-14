@@ -705,6 +705,22 @@ func cancel(store Store) tool.Tool {
 // safe to repeat; writing is not, and nobody is there to notice the
 // first time it goes wrong.
 func allowed(acts []job.Act, look Lookup) string {
+	missing := false
+	// A rule that names a tool is checked against the lookup, and a
+	// missing one is a mistake in the caller rather than in the
+	// rule. Only the acts that actually name a tool are refused by
+	// it: a rule that only says words looks nothing up and is none
+	// of its business.
+	//
+	// It was nil on the path the assistant writes its own rules by
+	// and could not show, because reaching it needs a rule, and
+	// until 14 October none had ever been written. Two fixes that
+	// morning cleared the way, a rule was written, and the pass
+	// panicked on a nil func.
+	if look == nil {
+		look = func(string) (tool.Tool, bool) { return tool.Tool{}, false }
+		missing = true
+	}
 	if len(acts) == 0 {
 		return "A rule has to do something. Give it at least one thing to perform."
 	}
@@ -719,6 +735,9 @@ func allowed(acts []job.Act, look Lookup) string {
 			if strings.TrimSpace(a.Ask) == "" {
 				return "A write needs to be told what to work out and say."
 			}
+			if missing && len(a.Tools) > 0 {
+				return "There is nothing on this server to check those tools against."
+			}
 			if names, bad := reading(a.Tools, look); bad != "" {
 				return bad
 			} else if len(names) != len(a.Tools) {
@@ -732,6 +751,9 @@ func allowed(acts []job.Act, look Lookup) string {
 			name := strings.TrimSpace(a.Use)
 			found, ok := look(name)
 			if !ok {
+				if missing {
+					return "There is nothing on this server to check that tool against."
+				}
 				return fmt.Sprintf("There is no tool called %q.", name)
 			}
 			if found.Writes {
