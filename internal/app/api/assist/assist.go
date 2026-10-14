@@ -668,9 +668,26 @@ func (h *Handler) follow(
 				return
 			}
 
-			// Progress, spoken as it happens. A chat reporting where it has
-			// got to is why the connection is held open at all.
-			if text := strings.TrimSpace(ev.Text); text != "" {
+			// Progress, to a screen only.
+			//
+			// Home Assistant speaks everything written to it, so a
+			// progress note put on a voice stream is recited whether
+			// or not anybody asked for one. The narration was already
+			// kept off voice where it is made -- the runner announces
+			// it only to a screen, and the aside player that reads it
+			// aloud is off by configuration -- and then it arrived
+			// here by a second path and was spoken anyway.
+			//
+			// Heard on 14 October: "reading your calendar for October
+			// twenty-second", said aloud and nowhere in the
+			// transcript, so the screen showed only the answer that
+			// followed it. Owner: *"i heard oct 22 and all but not in
+			// message ... for now stop speaking them."*
+			//
+			// A screen is unchanged. It cannot speak, it shows this
+			// as a status line, and a turn that works in silence for
+			// nine seconds reads as having stopped.
+			if text := strings.TrimSpace(ev.Text); text != "" && !speaking {
 				say(chunk(text+"\n", false, ""))
 			}
 		}

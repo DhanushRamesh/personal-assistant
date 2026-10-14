@@ -19317,3 +19317,41 @@ only how much there was to list.
 The log is what made all three visible in one evening. None of them
 would have shown otherwise: a panic in a recovered goroutine, an empty
 reply, and a rule nobody ever saw.
+
+### Said aloud, and nowhere on the screen
+
+Owner, having watched the client while listening: *"I heard Oct 22 and
+all but not in message."* The screen showed one sentence about the
+Google connection; he had heard something about the twenty-second
+before it.
+
+Both halves of that turn are in the log:
+
+	23:03:44  an answer was sent back to look at the tools  spoken=false
+	          thrown_away="October 22nd is your birthday, sir."
+	23:03:45  saying on the call  said="reading your calendar for
+	          October twenty-second"  channel=voice
+
+The first was correctly silent. A round that may still be recalled is
+read in silence -- *what a listener has heard cannot be unheard* -- and
+the model's first answer, which asserted a birthday without checking
+anything, was thrown away unspoken. That part worked.
+
+The second was the narration, and it reached him by a path nobody had
+closed. It is kept off voice where it is made: the runner announces it
+only to a screen, and the aside player that would read it aloud has
+been off by configuration since 3 October. The startup log says so
+every time. But a progress note is also published on the event bus,
+and the assist endpoint wrote every non-terminal event straight to the
+stream -- and Home Assistant speaks everything written to it.
+
+So the narration was spoken by the one route that had never been
+gated, while being deliberately suppressed on the two that had.
+
+A voice turn is now sent the answer and nothing else. A screen is
+unchanged: it cannot speak, it draws these as a status line, and a
+turn that works in silence for nine seconds reads as having stopped.
+
+The test is the shape rather than the words, because the harness
+invents its own answer: nothing written to a voice stream may end in
+the newline a progress note carries. It fails against the old branch.
