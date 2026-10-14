@@ -369,9 +369,11 @@ func TestMusicIsLeftOutUntilItIsAskedFor(t *testing.T) {
 		{"nothing asked for", "", false},
 		{"another kind", "call.received", false},
 		{"the music kind by name", event.State, true},
-		{"the kind the phone used to send", event.Playing, true},
 		{"the music family", "music.", true},
-		{"the pauses", event.Paused, true},
+		// The kinds music.state replaced are gone, rows and names
+		// both, so they are history again rather than churn.
+		{"a kind the phone used to send", "music.playing", false},
+		{"the pauses it used to send", "music.paused", false},
 	} {
 		if got := event.Working(c.kind); got != c.want {
 			t.Errorf("%s: Working(%q) = %v, want %v", c.what, c.kind, got, c.want)

@@ -19074,3 +19074,40 @@ without `--dart-define=ASSISTANT_URL` posts its login to whatever origin
 served it, which in development was the static file server, which
 answered 501 and looked exactly like the assistant being broken. That
 trap belonged to `make client-build` and leaves with it.
+
+### Seven kinds nobody had sent for eleven days
+
+A census of what the devices actually report turned up thirty kinds,
+seven of which had stopped: `music.playing`, `music.paused`,
+`music.resumed`, `music.started` and `music.stopped` on 3 October, when
+`music.state` replaced them; `bluetooth.changed` the same day;
+`screen.changed` on the 4th. Seventy-nine rows between them, none newer
+than the day each was replaced.
+
+They were not merely clutter. `event_kinds` is **prefetched into every
+prompt** -- it exists because a model with no list invents one -- and it
+is built from the data, so Jarvis was being told at the top of every
+turn about five music kinds that had reported nothing in eleven days.
+A list meant to stop it guessing was teaching it five wrong things.
+
+The rows went, and with them the constants that only existed to
+describe rows. `music.go` said so itself: *"The two older kinds stay
+named because the rows they wrote are still in the table."* They no
+longer are. `Playing`, `Paused`, `Started` and `Stopped` are gone, and
+`Churn` -- the kinds hidden from anything that has to be read -- is
+`Fixed` and `State` alone.
+
+The tests now name those kinds as plain strings on the *history* side
+of `Working`, which is the right way round: if a device starts sending
+`music.playing` again tomorrow it should be read as something that
+happened, not silently hidden as working material. Hiding is for kinds
+we have decided are noise, and that decision should have to be made
+again rather than inherited from a constant nobody removed.
+
+Nine employees remain, twenty-three kinds. The backup of the deleted
+rows is a dump in the session's scratchpad, not in the repository.
+
+What this did not fix, and is the larger of the two problems: nothing
+sweeps the events table at all. `location.fix` and `battery.level` are
+512 rows a day between them, about 187,000 a year, and `location.fix`
+at least earns it by being what `place.stayed` is made from.

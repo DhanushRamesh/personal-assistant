@@ -193,7 +193,7 @@ func TestEverythingElseIsSaidAsItIs(t *testing.T) {
 // everything else put together, and anything wrongly called churn is
 // a thing that happened and cannot be asked about.
 func TestWhatIsWorkingMaterialAndWhatIsHistory(t *testing.T) {
-	for _, churn := range []string{Fixed, State, Playing, Paused} {
+	for _, churn := range []string{Fixed, State} {
 		if !Working(churn) {
 			t.Errorf("%q is not treated as working material", churn)
 		}
@@ -210,7 +210,11 @@ func TestWhatIsWorkingMaterialAndWhatIsHistory(t *testing.T) {
 		"", "   ",
 		"call.missed", "battery.level", "power.plugged",
 		"place.entered", "place.exited",
-		Started, Stopped,
+		// The kinds music.state replaced, now that neither the
+		// constants nor the rows exist: named as plain strings so
+		// that a device starting to send one again would be read
+		// as history rather than silently hidden as churn.
+		"music.playing", "music.paused", "music.started", "music.stopped",
 	} {
 		if Working(history) {
 			t.Errorf("%q was treated as churn, so it can never be asked about", history)
