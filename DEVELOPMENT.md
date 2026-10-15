@@ -19876,3 +19876,55 @@ heard, with the opening word. Marking one said notes it, then, in the
 conversation that client is talking in (`Writer.HeardBy`), not when it
 was published. Renaming and the greeting still go to the app as they
 happen, through `aloud`.
+
+### The voice setup is off
+
+Owner, 16 October 2026: *"stop pushing to phone ... and I'll be
+keeping HA off for a while, the whole voice setup"*, then *"we can
+stop the voice setup."*
+
+The laptop speaks and listens for itself now, so the satellite had
+nothing left to do. Five containers stopped: `linux-voice-assistant`,
+`wyoming-deepgram`, `wyoming-whisper`, `wyoming-piper` and
+`homeassistant`. `tei-embed` stays -- it is the embedding server, and
+without it memories are matched by wording rather than meaning.
+
+Nothing in the desktop client depended on any of them. It downloads
+its own Piper binary, opens its own socket to
+`wss://api.deepgram.com`, and the audio chain it plays and listens
+through -- the `mic_in` null sink, the loopback that feeds it and the
+echo canceller over it -- is three PulseAudio modules that outlive
+any container.
+
+Four settings commented out rather than deleted, so turning it back
+on is four uncomments: `satellite`, `voice_state`, `presence_entity`,
+`media_player`. With `satellite` blank the announcer is not
+configured at all, so there is no fallback behind the laptop and
+nothing tries.
+
+`notify = notify.mobile_app_pixel_7` went with them. It was the one
+thing here that sent his words out of the house, through Google's
+push, and the laptop makes it unnecessary.
+
+**Reminders are safe with it off, and worth saying why.**
+`hass.Presence.Away` returns false when it cannot read the state, on
+purpose -- *"holding a reminder back on the strength of a fault loses
+it for somebody sitting right there."* So an unreachable Home
+Assistant reads as nobody being away, the reminder fires, and the
+laptop says it. With the app shut as well, nothing can say it, so it
+stays pending and `remind.Unsaid` puts it in front of the next turn.
+
+#### An entity named by a blank setting is not an entity
+
+The watcher that follows the satellite's state was built with
+`Entities: []string{cfg.HomeAssistant.Satellite}`. Blank, that is a
+slice of length one, so `len(cfg.Entities) == 0` was false and it
+built. It then dialled a Home Assistant that had been turned off on
+purpose, backing off one second to thirty, for ever, and said so each
+time:
+
+	msg="lost Home Assistant's live states, retrying" in=30s
+
+`NewWatcher` drops blank names before counting them. The guard goes
+there and not at the call site, because every caller passing a
+setting that might be empty has the same problem.

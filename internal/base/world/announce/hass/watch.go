@@ -55,7 +55,14 @@ type Watcher struct {
 
 // NewWatcher : Builds a Watcher, or reports ErrNotConfigured when there is
 // nothing to watch or nothing to watch it with.
+//
+// An entity named by a setting that is now blank is not an entity. A
+// caller passing one entity reads as something to watch, so the
+// connection was made and retried for ever against a Home Assistant
+// that had been turned off on purpose, once a second and then once
+// every thirty, saying so each time.
 func NewWatcher(cfg WatcherConfig) (*Watcher, error) {
+	cfg.Entities = named(cfg.Entities)
 	if cfg.URL == "" || cfg.Token.Reveal() == "" || len(cfg.Entities) == 0 || cfg.OnState == nil {
 		return nil, ErrNotConfigured
 	}
@@ -67,6 +74,17 @@ func NewWatcher(cfg WatcherConfig) (*Watcher, error) {
 		cfg.Logger = slog.Default()
 	}
 	return &Watcher{cfg: cfg, ws: ws, wait: sleep}, nil
+}
+
+// named : The entities that have a name, in order.
+func named(entities []string) []string {
+	kept := make([]string, 0, len(entities))
+	for _, e := range entities {
+		if e = strings.TrimSpace(e); e != "" {
+			kept = append(kept, e)
+		}
+	}
+	return kept
 }
 
 // websocketURL : Home Assistant's WebSocket address for its base URL.
