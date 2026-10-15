@@ -410,3 +410,23 @@ func TestNothingIsOwedWithoutWordsOrAKindThatSpeaks(t *testing.T) {
 		t.Error("a reply was accepted as something to announce")
 	}
 }
+
+func TestPublishingTellsTheClients(t *testing.T) {
+	s := inmemory.New()
+	var told []string
+	p := &outbox.Publisher{
+		Store:   s,
+		Clients: func(context.Context, string) ([]string, error) { return []string{"laptop"}, nil },
+		Told:    func(userID string) { told = append(told, userID) },
+	}
+	o, err := outbox.New("o1", "u1", conversation.Immediate, "The battery is low.", time.Now())
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := p.Publish(context.Background(), o); err != nil {
+		t.Fatal(err)
+	}
+	if len(told) != 1 || told[0] != "u1" {
+		t.Fatalf("told %v", told)
+	}
+}

@@ -248,6 +248,25 @@ func (w *Writer) Announced(ctx context.Context, userID, text string) {
 	w.said(ctx, userID, "", conversation.Immediate, text)
 }
 
+// HeardBy : Notes an announcement a client collected and said, in the
+// conversation that client is talking in -- where the answer to it will
+// arrive. Said now, not when it was published: one held while the laptop
+// was locked was heard when it was unlocked, or not at all.
+//
+// Not for a naming, which is noted in the conversation it named when the
+// name is given.
+func (w *Writer) HeardBy(ctx context.Context, userID string, c *client.Client, kind conversation.Kind, text string) {
+	if w == nil || c == nil || kind == conversation.Renaming || w.Clients == nil {
+		return
+	}
+	id, err := chat.ActiveConversation(ctx, w.Clients, userID, c.ID, c.ActiveConversationID)
+	if err != nil {
+		w.warn(ctx, "cannot tell which conversation heard this", err)
+		return
+	}
+	w.said(ctx, userID, id, kind, text)
+}
+
 // Renamed : Notes the assistant having given a conversation its name.
 //
 // Asked, and the conversation is known, so it is given rather than

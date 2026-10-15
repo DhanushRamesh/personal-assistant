@@ -536,6 +536,9 @@ func run() error {
 	liveHub := live.NewHub()
 	changeHub.Store(liveHub)
 	announcements.Changes = liveHub
+	// Something owed: the person's clients are told at once, so one that is
+	// there collects and says it then.
+	publishing.Told = func(userID string) { liveHub.AreaChanged(userID, live.AreaAnnouncements) }
 
 	// The tools a person's desktop app offers over MCP on /v1/live, added
 	// to that person's chats while it stays connected.
@@ -587,15 +590,10 @@ func run() error {
 	reminding := &remind.Loop{
 		Store:    reminderStore,
 		Presence: here,
-		Speaker: remind.Everywhere{
-			To: []remind.Speaker{remind.Aloud{
-				Announcer:     voices,
-				Location:      cfg.Assistant.Location,
-				Now:           cfg.Assistant.Now,
-				Announcements: announcements,
-			}},
-			Logger: logger.Logger,
-		},
+		// A reminder falling due is written down for every client to
+		// collect and say, as a rule's announcement is, and not spoken
+		// from here (owner, 16 October 2026: *"go with b"*).
+		Speaker:  owingReminders{to: publishing, where: cfg.Assistant.Location, now: cfg.Assistant.Now},
 		Location: cfg.Assistant.Location,
 		Alarm:    alarming(alarms),
 		Logger:   logger.Logger,
@@ -920,10 +918,6 @@ func run() error {
 		if err := publishing.Publish(ctx, o); err != nil {
 			logger.Error("cannot publish that an alarm never arrived", slog.Any("error", err))
 		}
-		if err := announcement.Speak(ctx, voices, conversation.ReminderAnnouncement, said); err != nil {
-			logger.Error("cannot say that an alarm never arrived", slog.Any("error", err))
-		}
-		announcements.Announced(ctx, userID, said)
 	}
 
 	watching.Add(1)
@@ -978,6 +972,7 @@ func run() error {
 		Reminders:     reminderStore,
 		Announcer:     voices,
 		Announcements: announcements,
+		Heard:         announcements,
 		Greeting:      greeting,
 		Spoke:         chats,
 		Reported:      deviceEvents,
@@ -2608,6 +2603,27 @@ func everyClient(talkers subscribed, cfg config.Config, logger *slog.Logger,
 	}
 }
 
+// owingReminders : A reminder falling due, written down for every client
+// to collect and say -- the desktop app when it is open and unlocked --
+// rather than spoken here. Delivered once it is published: whether it was
+// heard is each client's to say.
+type owingReminders struct {
+	to    *outbox.Publisher
+	where *time.Location
+	now   func() time.Time
+}
+
+// Say : Publishes the reminder, as it would have been said.
+func (o owingReminders) Say(ctx context.Context, r remind.Reminder) error {
+	at := o.now()
+	owed, err := outbox.New(outboxmysql.ID(), r.UserID, conversation.ReminderAnnouncement,
+		remind.Spoken(r, at, o.where), at)
+	if err != nil {
+		return err
+	}
+	return o.to.Publish(ctx, owed)
+}
+
 // announcing : Turns what a piece of logic decided into an
 // announcement, and publishes it.
 //
@@ -2690,9 +2706,11 @@ func (d doing) Do(ctx context.Context, run job.Turn, s job.Act) (job.Outcome, er
 		if run.Trying {
 			return job.Outcome{Said: s.Text}, nil
 		}
-		// Published, which is where announcements go now, and
-		// spoken, which is the only way one is currently heard.
-		// The second half goes when a client collects.
+		// Published, and that is all: each client collects its own
+		// copy and says it when somebody is there -- the desktop app
+		// once it is open and unlocked (owner, 16 October 2026: *"go
+		// with b"*) -- and is noted in the conversation when it is
+		// said. Nothing is spoken through Home Assistant any more.
 		kind := heard(run.Anywhere)
 		o, err := outbox.Keeping(outboxmysql.ID(), run.UserID,
 			kind, s.Text, d.now(), run.Worth)
@@ -2702,10 +2720,6 @@ func (d doing) Do(ctx context.Context, run job.Turn, s job.Act) (job.Outcome, er
 		if err := d.to.Publish(ctx, o); err != nil {
 			return job.Outcome{}, err
 		}
-		if err := announcement.Speak(ctx, d.speaker, kind, s.Text); err != nil {
-			return job.Outcome{}, err
-		}
-		d.written.Announced(ctx, run.UserID, s.Text)
 		return job.Outcome{Said: s.Text}, nil
 
 	case job.DoRelay:
@@ -3082,9 +3096,8 @@ func (d doing) relay(ctx context.Context, run job.Turn) (job.Outcome, error) {
 	return job.Outcome{Said: said}, nil
 }
 
-// publish : Writes an announcement down, says it, and records it.
-//
-// The speaking is the half that goes when every client collects.
+// publish : Writes an announcement down for every client to collect and
+// say; each notes it when it does.
 func (d doing) publish(ctx context.Context, run job.Turn, said string) error {
 	// A trial has already worked the sentence out, which is the
 	// expensive and interesting half. Publishing it is the half
@@ -3099,14 +3112,7 @@ func (d doing) publish(ctx context.Context, run job.Turn, said string) error {
 	if err != nil {
 		return err
 	}
-	if err := d.to.Publish(ctx, o); err != nil {
-		return err
-	}
-	if err := announcement.Speak(ctx, d.speaker, kind, said); err != nil {
-		return err
-	}
-	d.written.Announced(ctx, userID, said)
-	return nil
+	return d.to.Publish(ctx, o)
 }
 
 // write : Asks the model for the sentence, then says it.

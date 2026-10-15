@@ -63,6 +63,9 @@ const (
 	AreaRemarks   = "remarks"
 	AreaClients   = "clients"
 	AreaGoogle    = "google"
+	// AreaAnnouncements : Something is owed a client to say; it collects
+	// it from /v1/announcements.
+	AreaAnnouncements = "announcements"
 )
 
 // Hearing : A notice of the words heard so far while somebody speaks, as

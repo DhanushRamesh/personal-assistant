@@ -120,6 +120,8 @@ type Options struct {
 	// Owed : What each client has been published and not said.
 	// Nil greets without anything behind it.
 	Owed announcementsapi.Store
+	// Heard : Where an announcement a client said is noted. Nil notes nothing.
+	Heard announcementsapi.Heard
 
 	// DeviceEvents : Where what the person's devices saw is kept. Nil
 	// selects a store that keeps them in memory.
@@ -255,6 +257,7 @@ func NewWith(t *testing.T, opts Options) *Env {
 			Reminders:        opts.Reminders,
 			Announcer:        opts.Announcer,
 			Owed:             opts.Owed,
+			Heard:            opts.Heard,
 			DeviceEvents:     deviceEvents(opts.DeviceEvents),
 			Memories:         opts.Memories,
 			Tools:            opts.Tools,

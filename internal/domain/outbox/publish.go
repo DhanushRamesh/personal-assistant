@@ -20,6 +20,10 @@ type Publisher struct {
 	Store Store
 	// Clients : Every client of one person. Required.
 	Clients func(ctx context.Context, userID string) ([]string, error)
+	// Told : Tells the person's connected clients that something is owed
+	// them, so one that is there collects it at once. Nil tells nobody, and
+	// they collect when they next look.
+	Told func(userID string)
 }
 
 // Publish : Works out who should hear this and writes it down for
@@ -54,12 +58,20 @@ func (p *Publisher) Publish(ctx context.Context, o Owing) error {
 	// situation. Splitting the two is the fix; until then, reaching
 	// too many beats reaching none.
 	if rule.Audience == conversation.Asked && o.From != "" {
-		return p.Store.Publish(ctx, o, []string{o.From})
+		return p.told(o.UserID, p.Store.Publish(ctx, o, []string{o.From}))
 	}
 
 	to, err := p.Clients(ctx, o.UserID)
 	if err != nil {
 		return fmt.Errorf("outbox: %w", err)
 	}
-	return p.Store.Publish(ctx, o, to)
+	return p.told(o.UserID, p.Store.Publish(ctx, o, to))
+}
+
+// told : Tells the clients once something is written down for them.
+func (p *Publisher) told(userID string, err error) error {
+	if err == nil && p.Told != nil {
+		p.Told(userID)
+	}
+	return err
 }

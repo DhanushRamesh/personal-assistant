@@ -180,6 +180,9 @@ type Options struct {
 	// Read by two: the endpoint a screen polls, and the greeting,
 	// where the voice client collects its own at the door.
 	Owed announcementsapi.Store
+	// Heard : Where an announcement a client has said is noted, in the
+	// conversation it is talking in. Optional.
+	Heard announcementsapi.Heard
 
 	// DeviceEvents : Where the person's own devices report what happened
 	// to them, which is what lets the assistant say something first.
@@ -324,7 +327,7 @@ func New(opts Options) *Server {
 		tools:         toolsapi.New(opts.Logger, opts.Tools),
 		remarks:       remarksapi.New(opts.Logger, opts.Remarks),
 		rules:         rulesapi.New(opts.Logger, opts.Rules, opts.Usually, opts.Trying).Ran(opts.Ran),
-		announcements: announcementsapi.New(opts.Logger, opts.Owed, nil),
+		announcements: announcementsapi.New(opts.Logger, opts.Owed, nil).Notes(opts.Heard),
 		home:          homeapi.New(homeOptions(opts)),
 	}
 	if opts.Answered != nil {

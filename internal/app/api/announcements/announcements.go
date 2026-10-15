@@ -36,6 +36,9 @@ import (
 
 	"personal-assistant/internal/app/api/authn"
 	"personal-assistant/internal/app/api/httpx"
+	"personal-assistant/internal/base/records/client"
+	"personal-assistant/internal/base/records/conversation"
+	"personal-assistant/internal/domain/announcement"
 	"personal-assistant/internal/domain/outbox"
 )
 
@@ -46,11 +49,25 @@ type Store interface {
 		tries int, why string, at time.Time) error
 }
 
+// Heard : Where an announcement a client said is noted, in the
+// conversation it is talking in.
+type Heard interface {
+	HeardBy(ctx context.Context, userID string, c *client.Client, kind conversation.Kind, text string)
+}
+
 // Handler : Serves one client its own announcements.
 type Handler struct {
 	httpx.Responder
 	store Store
 	now   func() time.Time
+	heard Heard
+}
+
+// Notes : Notes each announcement a client says it has said, in its
+// conversation, so "what was that?" has something to answer with.
+func (h *Handler) Notes(heard Heard) *Handler {
+	h.heard = heard
+	return h
 }
 
 // New : Builds one.
@@ -133,9 +150,11 @@ func (h *Handler) Pending(w http.ResponseWriter, r *http.Request) {
 	out := make([]Announcement, 0, len(owing))
 	for _, d := range owing {
 		a := Announcement{
-			ID:      d.Owing.ID,
-			Kind:    string(d.Owing.Kind),
-			Say:     d.Owing.Text,
+			ID:   d.Owing.ID,
+			Kind: string(d.Owing.Kind),
+			// As it is to be heard: with the word said in front of a
+			// cold one, as the satellite was given it.
+			Say:     announcement.Spoken(d.Owing.Kind, d.Owing.Text),
 			Due:     d.Owing.Due,
 			Expires: d.Owing.Expires,
 			Tries:   d.Tries,
@@ -195,12 +214,28 @@ func (h *Handler) Mark(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	// What it was, read before it is marked, so a said one can be noted
+	// where its answer will arrive.
+	var owed *outbox.Delivery
+	if state == outbox.Said && h.heard != nil {
+		if pending, err := h.store.Pending(ctx, client.ID, outbox.Limit); err == nil {
+			for i := range pending {
+				if pending[i].Owing.ID == id {
+					owed = &pending[i]
+				}
+			}
+		}
+	}
+
 	// Counted here rather than sent by the client. A client that
 	// reports its own attempt count can report anything, and the
 	// count is what bounds a thing that fails every time.
 	if err := h.store.Mark(ctx, client.ID, id, state, 1, req.Why, h.now()); err != nil {
 		h.Fail(ctx, w, "recording what was announced", err)
 		return
+	}
+	if owed != nil {
+		h.heard.HeardBy(ctx, authn.Of(ctx).User.ID, client, owed.Owing.Kind, owed.Owing.Text)
 	}
 	w.WriteHeader(http.StatusNoContent)
 }

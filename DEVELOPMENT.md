@@ -19851,3 +19851,28 @@ no end sound or follow-up. `Reach` also rings the phone
 as before. It does the same when the client answers `no voice`, or when
 the client leaves before saying it. The outbox is untouched: rows for
 the app's client still go stale as before.
+
+## Announcements wait for somebody at the laptop
+
+Owner, 16 October 2026: *"when it should not announce is when the laptop
+is locked or when the app is not opened ... when unlocked or app opened,
+it should say the held ones"*, then *"go with b"*. Home Assistant is not
+used for now: *"the app has the voice pipeline"*.
+
+A reminder falling due, and a rule's announcement (Immediate, Reaching),
+are now only published to the outbox: one copy per client, with how long
+it stays worth saying and whether to hold or drop it when nobody is
+there. Nothing speaks them from here any more; not Home Assistant, and
+not the app over `say`. A reminder is published by `owingReminders` in
+place of `remind.Aloud`. Each publish tells the person's clients on
+`/v1/live` (`changed`, area `announcements`), so the desktop app collects
+at once.
+
+The desktop app says its copies only while the screen is unlocked. When
+locked it holds the ones marked hold and drops the ones marked drop, and
+it says the held ones once unlocked or opened. An expired one is left
+for the sweeper. `GET /v1/announcements` gives `say` as it is to be
+heard, with the opening word. Marking one said notes it, then, in the
+conversation that client is talking in (`Writer.HeardBy`), not when it
+was published. Renaming and the greeting still go to the app as they
+happen, through `aloud`.
