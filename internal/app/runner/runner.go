@@ -122,6 +122,9 @@ type Options struct {
 	// Tools : What the assistant can do as well as say. Nil offers none, and
 	// a model offered none answers from what it knows.
 	Tools *tool.Registry
+	// Away : The tools a person's own devices offer while connected, added
+	// to Tools for that person's chats. Nil adds none.
+	Away Away
 	// Memory : What the assistant has been asked to remember. Nil remembers
 	// nothing, which is how it behaved before there was anywhere to keep
 	// anything.
@@ -171,10 +174,14 @@ type Runner struct {
 	announcer       announce.Announcer
 	cut             *utterance.Cut
 	tools           *tool.Registry
-	memory          *memory.Recall
-	now             func() time.Time
-	recently        *remind.Recently
-	aside           Aside
+	away            Away
+	// chatTools : Each running chat's tools -- Tools with what the
+	// person's devices offer -- by chat id, for as long as it runs.
+	chatTools sync.Map
+	memory    *memory.Recall
+	now       func() time.Time
+	recently  *remind.Recently
+	aside     Aside
 
 	// freshMu, fresh : Prefetched answers a tool asked to have reused,
 	// keyed by person and tool. Empty for every tool that does not,
@@ -252,6 +259,7 @@ func New(opts Options) (*Runner, error) {
 		cut:             opts.Cut,
 		announcer:       opts.Announcer,
 		tools:           opts.Tools,
+		away:            opts.Away,
 		memory:          opts.Memory,
 		now:             opts.Now,
 		recently:        opts.Recently,
@@ -662,6 +670,21 @@ func (r *Runner) alongside(t *chat.Chat, systemPrompt string) int {
 		n += len(x.Name) + len(tool.NarratedDescription(x.Description(), address)) + len(schema)
 	}
 	return n
+}
+
+// Away : The tools a person's connected devices offer now.
+type Away interface {
+	For(userID string) []tool.Tool
+}
+
+// toolsOf : The tools a chat may reach: its own while it runs, which hold
+// what the person's devices offered as it began, and the server's
+// otherwise.
+func (r *Runner) toolsOf(t *chat.Chat) *tool.Registry {
+	if got, ok := r.chatTools.Load(t.ID); ok {
+		return got.(*tool.Registry)
+	}
+	return r.tools
 }
 
 // stop : Cancels a chat, recording why. It reports whether one was running.

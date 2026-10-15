@@ -10,10 +10,12 @@ package live
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"log/slog"
 	"net/http"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/coder/websocket"
@@ -23,6 +25,7 @@ import (
 	"personal-assistant/internal/app/api/authn"
 	"personal-assistant/internal/app/asking"
 	hub "personal-assistant/internal/app/live"
+	"personal-assistant/internal/base/records/chat"
 	"personal-assistant/internal/base/world/events"
 )
 
@@ -56,6 +59,30 @@ type inbound struct {
 	ConversationID string `json:"conversation_id,omitempty"`
 	Text           string `json:"text,omitempty"`
 	ChatID         string `json:"chat_id,omitempty"`
+	// Spoken : For a prompt, whether it was spoken; absent is typed.
+	Spoken bool `json:"spoken,omitempty"`
+	// Message : For an mcp message, one MCP message, as JSON-RPC.
+	Message json.RawMessage `json:"message,omitempty"`
+	// Failure : For said, why the announcement was not said; absent when it was.
+	Failure string `json:"failure,omitempty"`
+}
+
+// Voices : Where a client that speaks announcements itself is joined, so
+// they are said there as they fall due.
+type Voices interface {
+	Join(userID, clientID string, send func(ctx context.Context, request, text string) error) (done func(request, failure string), leave func())
+}
+
+// mcpOut : An MCP message to the client, wrapped so it shares the line with everything else.
+type mcpOut struct {
+	Type    string          `json:"type"`
+	Message json.RawMessage `json:"message"`
+}
+
+// Away : Where a client holding an MCP server is joined, so the
+// assistant can use its tools while it stays connected.
+type Away interface {
+	Join(ctx context.Context, userID, clientID string, send func(context.Context, json.RawMessage) error) (deliver func(json.RawMessage), leave func())
 }
 
 // outbound : A message to the client about one of its chats.
@@ -77,6 +104,22 @@ type Handler struct {
 	hub    *hub.Hub
 	asking Asking
 	cancel Canceller
+	away   Away
+	voices Voices
+}
+
+// Speaks : Joins a client that says it speaks announcements to v, which
+// hands them to it.
+func (h *Handler) Speaks(v Voices) *Handler {
+	h.voices = v
+	return h
+}
+
+// Offers : Joins a client that says it holds an MCP server to a, which
+// uses its tools.
+func (h *Handler) Offers(a Away) *Handler {
+	h.away = a
+	return h
 }
 
 // New : Builds the handler. A nil hub serves 404, as if the endpoint did not
@@ -118,6 +161,23 @@ func (h *Handler) Live(w http.ResponseWriter, r *http.Request) {
 
 	ctx, cancel := context.WithCancel(r.Context())
 	defer cancel()
+	// deliver, leave : The client's MCP session, once it has said it holds a server.
+	var deliver func(json.RawMessage)
+	var leave func()
+	// said, quiet : The client's place among the voices, once it has said it speaks.
+	var said func(request, failure string)
+	var quiet func()
+	var leaving sync.Mutex
+	defer func() {
+		leaving.Lock()
+		defer leaving.Unlock()
+		if leave != nil {
+			leave()
+		}
+		if quiet != nil {
+			quiet()
+		}
+	}()
 	go func() {
 		defer cancel()
 		for {
@@ -125,7 +185,35 @@ func (h *Handler) Live(w http.ResponseWriter, r *http.Request) {
 			if err := wsjson.Read(ctx, c, &m); err != nil {
 				return
 			}
-			h.handle(ctx, c, caller, m, log)
+			switch {
+			case m.Type == "mcp-hello" && deliver == nil && h.away != nil && caller != nil && caller.Client != nil:
+				leaving.Lock()
+				deliver, leave = h.away.Join(ctx, caller.User.ID, caller.Client.ID, func(ctx context.Context, msg json.RawMessage) error {
+					return send(ctx, c, mcpOut{Type: "mcp", Message: msg})
+				})
+				leaving.Unlock()
+				log.InfoContext(ctx, "live: the client offers tools")
+			case m.Type == "mcp" && deliver != nil && len(m.Message) > 0:
+				deliver(m.Message)
+			// The client speaks announcements itself (on), or has stopped (off: no voice now).
+			case m.Type == "speaks" && said == nil && h.voices != nil && caller != nil && caller.Client != nil:
+				leaving.Lock()
+				said, quiet = h.voices.Join(caller.User.ID, caller.Client.ID, func(ctx context.Context, request, text string) error {
+					return send(ctx, c, outbound{Type: "say", Request: request, Text: text})
+				})
+				leaving.Unlock()
+				log.InfoContext(ctx, "live: the client speaks announcements")
+			case m.Type == "silent" && said != nil:
+				leaving.Lock()
+				quiet()
+				said, quiet = nil, nil
+				leaving.Unlock()
+				log.InfoContext(ctx, "live: the client no longer speaks announcements")
+			case m.Type == "said" && said != nil && m.Request != "":
+				said(m.Request, m.Failure)
+			default:
+				h.handle(ctx, c, caller, m, log)
+			}
 		}
 	}()
 
@@ -172,7 +260,7 @@ func (h *Handler) handle(ctx context.Context, c *websocket.Conn, caller *authn.C
 		started, err := h.asking.Ask(ctx, asking.Request{
 			UserID:               caller.User.ID,
 			ClientID:             caller.Client.ID,
-			Channel:              caller.Client.Channel,
+			Channel:              channelOf(m.Spoken),
 			Model:                caller.Client.Model,
 			ActiveConversationID: caller.Client.ActiveConversationID,
 			ConversationID:       m.ConversationID,
@@ -261,4 +349,14 @@ func send(ctx context.Context, c *websocket.Conn, v any) error {
 	ctx, cancel := context.WithTimeout(ctx, writeTimeout)
 	defer cancel()
 	return wsjson.Write(ctx, c, v)
+}
+
+// channelOf : How a prompt is answered: spoken, short and to be heard; or
+// typed, shaped to be read. The request's, never the client's: a client
+// can be asked in both ways.
+func channelOf(spoken bool) chat.Channel {
+	if spoken {
+		return chat.ChannelVoice
+	}
+	return chat.ChannelDirect
 }

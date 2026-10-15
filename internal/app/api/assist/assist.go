@@ -123,6 +123,10 @@ type ChatRequest struct {
 	// should not have to switch the client's active conversation first and race
 	// anything else using the same token.
 	ConversationID string `json:"conversation_id,omitempty"`
+	// Spoken : Whether the question was spoken. Absent is spoken: this
+	// is the endpoint a voice pipeline calls -- Home Assistant's -- and
+	// one typing to it says so. Not part of Ollama's shape either.
+	Spoken *bool `json:"spoken,omitempty"`
 }
 
 // ChatChunk : One piece of an answer.
@@ -412,14 +416,17 @@ func (h *Handler) Chat(w http.ResponseWriter, r *http.Request) {
 
 	// A named conversation is used when the caller knows one and it is
 	// theirs; anything else falls back to whichever this client is active
-	// in. The channel comes from the caller, not from this endpoint: this one
-	// speaks Ollama's wire format, and a format says nothing about how the
-	// words were produced.
+	// in. Spoken or typed is the request's, not the client's (owner, 15
+	// October 2026: "a client can make a request in both ways").
 	caller := authn.Of(ctx)
+	channel := chat.ChannelVoice
+	if req.Spoken != nil && !*req.Spoken {
+		channel = chat.ChannelDirect
+	}
 	started, err := h.asker.Ask(ctx, asking.Request{
 		UserID:               caller.User.ID,
 		ClientID:             caller.Client.ID,
-		Channel:              caller.Client.Channel,
+		Channel:              channel,
 		Model:                caller.Client.Model,
 		ActiveConversationID: caller.Client.ActiveConversationID,
 		ConversationID:       req.ConversationID,

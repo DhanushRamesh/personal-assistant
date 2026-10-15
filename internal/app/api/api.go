@@ -87,6 +87,14 @@ type Options struct {
 	// Live : What /v1/live tells connected clients. Optional; without it
 	// the endpoint answers 404.
 	Live *livehub.Hub
+	// Away : Where a client holding an MCP server is joined on /v1/live,
+	// so the assistant can use its tools. Optional; without it a client's
+	// offer is not taken up.
+	Away live.Away
+	// Voices : Where a client that speaks announcements itself is joined
+	// on /v1/live. Optional; without it every announcement goes to Home
+	// Assistant.
+	Voices live.Voices
 	// DB : Checked by the readiness endpoint. Required.
 	DB Pinger
 	// Chats : Stores and retrieves chats. Required.
@@ -294,7 +302,7 @@ func New(opts Options) *Server {
 
 		health:        health.New(opts.Logger, opts.DB),
 		about:         about.New(opts.AssistantName),
-		live:          live.New(opts.Logger, opts.Live, asking.New(opts.Logger, opts.Chats, opts.Runner, opts.Events), opts.Runner),
+		live:          live.New(opts.Logger, opts.Live, asking.New(opts.Logger, opts.Chats, opts.Runner, opts.Events), opts.Runner).Offers(opts.Away).Speaks(opts.Voices),
 		authn:         authn.New(opts.Logger, opts.Chats),
 		clients:       clients.New(opts.Logger, opts.Chats, opts.Models, opts.DefaultModel, opts.Persona),
 		conversations: conversations.New(opts.Logger, opts.Chats, opts.Messages),

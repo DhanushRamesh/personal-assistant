@@ -62,7 +62,7 @@ type ElsewhereRequest struct {
 	Said string `json:"said"`
 }
 
-// Recorder : Where a turn answered elsewhere is written down.
+// Recorder : Where a turn answered elsewhere is passed on: the live hub, which tells the clients.
 type Recorder interface {
 	Elsewhere(ctx context.Context, userID, heard, said string)
 }
@@ -141,9 +141,9 @@ func (h *Handler) Hearing(w http.ResponseWriter, r *http.Request) {
 }
 
 // Answered : A spoken turn Home Assistant answered from its own sentences,
-// reported by it after answering. The server never saw the question, so
-// without this the turn is missing from the conversation and from every
-// client showing it.
+// reported by it after answering. The server never saw the question; the
+// clients are told, for the core to show what was said, and nothing is
+// written: such a turn is not part of the conversation.
 func (h *Handler) Answered(w http.ResponseWriter, r *http.Request) {
 	ctx := r.Context()
 	var req ElsewhereRequest

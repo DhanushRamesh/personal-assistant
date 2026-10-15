@@ -241,30 +241,23 @@ func TestChatIsCancelledWhenHomeAssistantHangsUp(t *testing.T) {
 	t.Errorf("chat status = %q, want %q", got.Status, chat.StatusCancelled)
 }
 
-// The channel says how the words were produced, and this endpoint cannot
-// know that: it is Ollama's wire format, and a format is not a microphone.
-// So it comes from the client holding the token, and this endpoint records
-// whatever that client is.
-func TestTheOllamaEndpointDoesNotMakeAPromptVoice(t *testing.T) {
+// Spoken or typed is the request's, not the client's (owner, 15 October
+// 2026: "a client can make a request in both ways"). This is the endpoint
+// a voice pipeline calls, so a question that does not say is spoken, from
+// any client; one typed to it says so.
+func TestTheOllamaEndpointTakesSpokenOrTypedFromTheRequest(t *testing.T) {
 	e := apitest.New(t)
 
 	e.Do(t, http.MethodPost, "/api/chat",
-		`{"model":"assistant","messages":[{"role":"user","content":"typed at the ollama endpoint"}]}`)
-
+		`{"model":"assistant","messages":[{"role":"user","content":"typed at the ollama endpoint"}],"spoken":false}`)
 	if got := lastChannel(t, e, e.Token); got != string(chat.ChannelDirect) {
-		t.Errorf("channel = %q, want direct: the endpoint decided instead of the client", got)
+		t.Errorf("channel = %q, want direct: the request said it was typed", got)
 	}
-}
 
-func TestAClientThatSaidItIsVoiceRecordsVoice(t *testing.T) {
-	e := apitest.New(t)
-	satellite := e.LoginOn(t, "the satellite", string(chat.ChannelVoice))
-
-	e.AsBody(t, satellite.Token, http.MethodPost, "/api/chat",
+	e.Do(t, http.MethodPost, "/api/chat",
 		`{"model":"assistant","messages":[{"role":"user","content":"spoken aloud"}]}`)
-
-	if got := lastChannel(t, e, satellite.Token); got != string(chat.ChannelVoice) {
-		t.Errorf("channel = %q, want voice", got)
+	if got := lastChannel(t, e, e.Token); got != string(chat.ChannelVoice) {
+		t.Errorf("channel = %q, want voice: a typed client asked as a voice pipeline does", got)
 	}
 }
 

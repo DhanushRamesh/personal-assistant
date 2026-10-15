@@ -112,7 +112,7 @@ func TestATypedTurnSaysNothingAboutTheSatellite(t *testing.T) {
 
 	got := states(t, hub, 0, func() {
 		e.Do(t, http.MethodPost, "/api/chat",
-			`{"model":"assistant","messages":[{"role":"user","content":"typed, not spoken"}]}`)
+			`{"model":"assistant","messages":[{"role":"user","content":"typed, not spoken"}],"spoken":false}`)
 	})
 
 	if len(got) != 0 {

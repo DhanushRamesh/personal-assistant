@@ -22,6 +22,7 @@ import (
 	"net/http"
 	"net/http/httptest"
 	announcementsapi "personal-assistant/internal/app/api/announcements"
+	liveapi "personal-assistant/internal/app/api/live"
 	rulesapi "personal-assistant/internal/app/api/rules"
 	speechapi "personal-assistant/internal/app/api/speech"
 	livehub "personal-assistant/internal/app/live"
@@ -141,6 +142,8 @@ type Options struct {
 	// Live : What /v1/live tells connected clients. Nil leaves the
 	// endpoint answering 404.
 	Live *livehub.Hub
+	// Away : Where a client offering MCP tools on /v1/live is joined.
+	Away liveapi.Away
 
 	// Answered : Where turns Home Assistant answered itself are written.
 	// Nil drops them.
@@ -236,6 +239,7 @@ func NewWith(t *testing.T, opts Options) *Env {
 			Logger:   logger.Logger,
 			Live:     opts.Live,
 			Answered: opts.Answered,
+			Away:     opts.Away,
 
 			ShowsVoice: opts.ShowsVoice,
 			VoiceState: opts.VoiceState,

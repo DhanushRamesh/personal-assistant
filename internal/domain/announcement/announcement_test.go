@@ -153,46 +153,6 @@ func TestAnAsideIsToldToTheClients(t *testing.T) {
 	}
 }
 
-// A turn Home Assistant answered for itself is written as the question and
-// its answer, where the voice client is talking, and the clients are told.
-func TestATurnAnsweredElsewhereIsWrittenAsOne(t *testing.T) {
-	w, repo, user := writer(t)
-	voice := registerClient(t, repo, user.ID, "home assistant", chat.ChannelVoice)
-	changes := &told{}
-	w.Changes = changes
-
-	w.Elsewhere(context.Background(), user.ID, "hello", "At your service, sir.")
-
-	id := reread(t, repo, user.ID, voice.ID).ActiveConversationID
-	said, err := repo.All(context.Background(), id)
-	if err != nil {
-		t.Fatalf("reading the conversation: %v", err)
-	}
-	if len(said) != 2 ||
-		said[0].Role != conversation.User || said[0].Content != "hello" ||
-		said[1].Role != conversation.Assistant || said[1].Content != "At your service, sir." {
-		t.Fatalf("messages = %+v, want the question and its answer", said)
-	}
-	if len(changes.changes) != 1 {
-		t.Errorf("told %d times, want once", len(changes.changes))
-	}
-
-	// And as a finished chat, which is what a client shows as a turn.
-	chats, err := repo.List(context.Background(), chat.Filter{ConversationID: id})
-	if err != nil {
-		t.Fatalf("listing chats: %v", err)
-	}
-	if len(chats) != 1 || chats[0].Status != chat.StatusCompleted {
-		t.Fatalf("chats = %+v, want one completed", chats)
-	}
-	got, err := repo.Get(context.Background(), chats[0].ID)
-	if err != nil || got.Prompt != "hello" || got.Response != "At your service, sir." || got.Channel != chat.ChannelVoice {
-		t.Errorf("chat = %+v, err = %v", got, err)
-	}
-}
-
-// A person with nothing that listens is not spoken to, so there is nothing
-// to write down and no conversation is disturbed.
 func TestNothingIsWrittenWhenNobodyIsListening(t *testing.T) {
 	w, repo, user := writer(t)
 	typed := registerClient(t, repo, user.ID, "chrome", chat.ChannelDirect)

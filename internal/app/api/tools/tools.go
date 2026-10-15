@@ -18,7 +18,6 @@ import (
 
 	"github.com/go-chi/chi/v5"
 
-	"personal-assistant/internal/app/api/authn"
 	"personal-assistant/internal/app/api/httpx"
 	"personal-assistant/internal/app/tool"
 	"personal-assistant/internal/base/records/chat"
@@ -86,13 +85,13 @@ func (h *Handler) List(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// The caller's own channel decides which tools exist for them at all:
-	// a satellite is offered a different set from a typed client, and
-	// listing the others would describe abilities this caller does not
-	// have.
-	channel := authn.Of(ctx).Client.Channel
-	if !channel.Valid() {
-		channel = chat.ChannelDirect
+	// Which tools exist depends on how the asking is done: a spoken
+	// question is offered a different set from a typed one. Typed unless
+	// ?spoken=true says otherwise: spoken or typed is the request's, not
+	// the client's.
+	channel := chat.ChannelDirect
+	if r.URL.Query().Get("spoken") == "true" {
+		channel = chat.ChannelVoice
 	}
 
 	byDomain := map[string][]Listed{}

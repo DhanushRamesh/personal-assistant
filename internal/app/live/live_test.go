@@ -1,6 +1,7 @@
 package live
 
 import (
+	"context"
 	"testing"
 	"time"
 )
@@ -149,5 +150,22 @@ func TestChangedAreasAreGatheredIntoOneNoticeEach(t *testing.T) {
 	case e := <-events:
 		t.Fatalf("told again: %+v", e)
 	case <-time.After(3 * Settle):
+	}
+}
+
+// A turn Home Assistant answered itself is told to its owner's clients, as
+// heard and said, and an empty answer is not told at all.
+func TestATurnAnsweredElsewhereIsToldNotKept(t *testing.T) {
+	h := NewHub()
+	events, stop := h.Subscribe()
+	defer stop()
+	h.Elsewhere(context.Background(), "u1", "", "  ")
+	h.Elsewhere(context.Background(), "u1", " hello ", "At your service, sir.")
+	e := <-events
+	if e.Kind != Answered || e.Text != "hello" || e.Said != "At your service, sir." || !e.For("u1") || e.For("u2") {
+		t.Fatalf("event = %+v, want hello answered for u1 only", e)
+	}
+	if _, kept := h.Latest(Answered); kept {
+		t.Error("an answered notice was kept as the latest, to be sent again")
 	}
 }

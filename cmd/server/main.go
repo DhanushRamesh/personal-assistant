@@ -23,9 +23,11 @@ import (
 	"syscall"
 	"time"
 
+	"personal-assistant/internal/app/aloud"
 	"personal-assistant/internal/app/api"
 	"personal-assistant/internal/app/api/assist"
 	"personal-assistant/internal/app/api/presence"
+	"personal-assistant/internal/app/away"
 	"personal-assistant/internal/app/elsewhere"
 	"personal-assistant/internal/app/live"
 	"personal-assistant/internal/app/noticing"
@@ -251,6 +253,10 @@ func run() error {
 	// Assistant is configured, which is not a fault: it is how the server
 	// behaved before it could speak first.
 	speaker := announcer(cfg, logger.Logger)
+	// What says announcements: the person's own desktop app when it speaks
+	// for itself, and Home Assistant's satellite when it does not. The
+	// speaker stays the one for Home Assistant's states.
+	voices := aloud.New(speaker, logger.Logger)
 	// What the person is called, for the word said in front of an
 	// announcement that arrives out of nowhere. One configured
 	// persona for the server, so it is set here rather than carried
@@ -531,6 +537,10 @@ func run() error {
 	changeHub.Store(liveHub)
 	announcements.Changes = liveHub
 
+	// The tools a person's desktop app offers over MCP on /v1/live, added
+	// to that person's chats while it stays connected.
+	devices := away.NewSet(logger.Logger)
+
 	chatRunner, err := runner.New(runner.Options{
 		Repository:    chats,
 		Messages:      chats,
@@ -543,9 +553,10 @@ func run() error {
 		HistoryLimits: historyLimits(cfg, logger.Logger),
 		AssistantName: cfg.Assistant.Name,
 		Persona:       manner,
-		Announcer:     speaker,
+		Announcer:     voices,
 		Cut:           cutOff,
 		Tools:         tools,
+		Away:          devices,
 		Memory:        remembering,
 		Now:           cfg.Assistant.Now,
 		Recently: &remind.Recently{
@@ -578,7 +589,7 @@ func run() error {
 		Presence: here,
 		Speaker: remind.Everywhere{
 			To: []remind.Speaker{remind.Aloud{
-				Announcer:     speaker,
+				Announcer:     voices,
 				Location:      cfg.Assistant.Location,
 				Now:           cfg.Assistant.Now,
 				Announcements: announcements,
@@ -883,7 +894,7 @@ func run() error {
 	running = &job.Runner{
 		Store: scheduled,
 		Doer: doing{
-			tools: tools, speaker: speaker, written: announcements,
+			tools: tools, speaker: voices, written: announcements,
 			to: publishing, events: deviceEvents, here: here, look: look,
 			usually:  ordinarily(&profile.Reader{Memories: remembering.Store}, logger.Logger),
 			shapes:   pattern.Matcher{Events: deviceEvents, Now: cfg.Assistant.Now},
@@ -909,7 +920,7 @@ func run() error {
 		if err := publishing.Publish(ctx, o); err != nil {
 			logger.Error("cannot publish that an alarm never arrived", slog.Any("error", err))
 		}
-		if err := announcement.Speak(ctx, speaker, conversation.ReminderAnnouncement, said); err != nil {
+		if err := announcement.Speak(ctx, voices, conversation.ReminderAnnouncement, said); err != nil {
 			logger.Error("cannot say that an alarm never arrived", slog.Any("error", err))
 		}
 		announcements.Announced(ctx, userID, said)
@@ -956,6 +967,8 @@ func run() error {
 		StartedAt:     started,
 		Restarts:      supervisorRestarts,
 		Live:          liveHub,
+		Away:          devices,
+		Voices:        voices,
 		ShowsVoice:    reporting(speaker),
 		VoiceState:    cfg.HomeAssistant.VoiceState,
 		DB:            db,
@@ -963,7 +976,7 @@ func run() error {
 		Chats:         chats,
 		Messages:      chats,
 		Reminders:     reminderStore,
-		Announcer:     speaker,
+		Announcer:     voices,
 		Announcements: announcements,
 		Greeting:      greeting,
 		Spoke:         chats,
@@ -987,7 +1000,7 @@ func run() error {
 		DefaultModel:   cfg.PlatformAI.Model,
 		Persona:        manner,
 		Cut:            cutOff,
-		Answered:       announcements,
+		Answered:       liveHub,
 		DeviceEvents:   deviceEvents,
 		Remarks:        remarked,
 		Rules:          scheduled,

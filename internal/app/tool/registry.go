@@ -104,6 +104,39 @@ func (r *Registry) Add(t Tool) error {
 	return nil
 }
 
+// With : A copy of the registry holding these tools as well, for one
+// chat: the tools a person's own devices offer while they are connected.
+// One whose name is taken already is left out, so a device can never stand
+// in for one of the server's own tools.
+func (r *Registry) With(extra ...Tool) *Registry {
+	if len(extra) == 0 {
+		return r
+	}
+	c := &Registry{tools: map[string]Tool{}}
+	if r != nil {
+		for name, t := range r.tools {
+			c.tools[name] = t
+		}
+		c.order = append(c.order, r.order...)
+		c.Elsewhere = r.Elsewhere
+	}
+	for _, t := range extra {
+		if _, taken := c.tools[t.Name]; taken {
+			continue
+		}
+		c.tools[t.Name] = t
+		c.order = append(c.order, t.Name)
+	}
+	// tool_describe closes over the registry it was made for, so the copy
+	// is given its own: asked about a device's tool, the server's would
+	// say there is none, and the model, told so, said it could not open
+	// Spotify (15 October 2026).
+	if _, ok := c.tools[DescribeName]; ok {
+		c.tools[DescribeName] = Describing(c)
+	}
+	return c
+}
+
 // Get : The tool with the given name, and whether there is one.
 func (r *Registry) Get(name string) (Tool, bool) {
 	t, ok := r.tools[name]

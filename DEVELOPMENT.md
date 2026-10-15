@@ -1329,6 +1329,20 @@ Measured: "hello" through the Jarvis (Deepgram) pipeline came back
 10 ms later. The command's name is the contract between the patch and
 `configuration.yaml`.
 
+**Answered elsewhere is told, not kept.** Owner, 15 October 2026: *"this
+HA (custom intents) need not be in conversation history in server; it
+should be just shown in the globe; they should not be in the
+conversation. In future I'll be adding custom intents for this client
+app too; they should not go to conversation."* This replaces writing
+them down, above. `POST /v1/speech/answered` now hands the turn to the
+live hub (`Hub.Elsewhere`), which sends the owner's clients an
+`answered` notice -- `text` what was heard, `said` the reply -- and
+keeps nothing: no chat, no messages, not remembered as the latest. The
+client's core shows the reply in its caption while it is spoken. A
+follow-up question no longer reads as following on from such a turn,
+since the model never sees it. `announcement.Writer.Elsewhere` is gone.
+A client's own custom intents are to be reported the same way.
+
 ## Listening that will not end is two faults, not one
 
 The owner, 29 September 2026: it wakes, it hears the question, and
@@ -19682,3 +19696,158 @@ had to be made to write down what it had decided:
 Passing strings -- `setGlobal("JFIXAT",""+now)` -- stores
 `1792050481284` and `12.8299512` exactly, and the fifteen-minute send
 fired on the next cycle.
+
+### The desktop app's tools, over MCP on the live connection
+
+The owner, 15 October 2026: the assistant should work the desktop
+client -- its spaces, apps, settings -- and start Claude Code there,
+*"I think we should have like MCP in the app"*. The client holds an MCP
+server (the TypeScript SDK); this server is its MCP client (the Go SDK,
+`github.com/modelcontextprotocol/go-sdk` v1.8.0), and the messages ride
+`/v1/live`, the connection the client already holds, so nothing new is
+opened to the network and a server elsewhere still reaches the laptop.
+
+- **The line.** The client sends `{"type":"mcp-hello"}` once its server
+  is ready; from then each MCP message goes either way as
+  `{"type":"mcp","message":…}`. `live.Handler.Offers(away)` joins the
+  client to `away.Set`, whose `conn` is the MCP `Connection` over it.
+- **The tools.** `away.Set` does the handshake and `tools/list`, and turns
+  each tool into a `tool.Tool`: its description, its arguments from its
+  JSON Schema (string, integer, number, boolean -- any other kind leaves
+  the tool out), domain `laptop`, reachable by voice and typing. One the
+  client marks read-only `Lists`; any other `Writes`, so the registry's
+  read-before-write reads the laptop first. Its `Run` is `tools/call`,
+  given 20 seconds.
+- **Per chat.** The registry is fixed at start and a device comes and
+  goes, so each chat, as it begins, takes `Tools.With(the person's
+  device tools)` -- a copy, the server's own never displaced by a name
+  taken -- kept by chat id while it runs. The device's tools are described
+  in full (marked revealed): `tool_describe` knows only the server's.
+- **tool_describe is the chat's own.** The model called it on
+  `open_app` before using it, and the server's -- made for the fixed
+  registry -- said there was no such tool; told so, it answered "I
+  cannot open Spotify from here" (15 October 2026). `With` gives the copy
+  a `Describing(copy)`. Each device tool also says it acts on the
+  laptop whichever device the person speaks from: the model had taken a
+  voice turn to mean the phone.
+- **And the prompt says so.** Given the tools and a describe that knew
+  them, the model still answered "I cannot open Spotify from here ...
+  on your phone", never calling one: the conversation had said it could
+  not, and a voice turn read as the phone. While a device offers tools
+  the chat's prompt says the laptop is connected, names them, and says
+  what was said before was before it was (`laptopConnected`).
+- **Not held back to read first.** `open_app` was refused by the
+  read-before-write rule, which read the spaces instead -- Spotify listed
+  in several -- so the call never reached the laptop and the model said
+  Spotify was running, though it had been closed. The device finds what is
+  asked for by name and says what there is otherwise, which is what the
+  rule guards, so its tools are in no domain. The note also says to look
+  again each time and to open by calling the opener, not to decide first
+  that a thing is open.
+- **What it may do** is the client's to decide, and it offers no tool that
+  types into a terminal (owner: *"Jarvis can control the app settings,
+  but cannot run terminal commands directly; it can only run claude with
+  a prompt"*).
+- Tested end to end over a real WebSocket in `live_mcp_test.go`, with the
+  Go SDK's server playing the app.
+
+### Simple words, as a count
+
+Owner: *"i always say say in simple words ... that is how i want
+jarvis to say. tune the prompt to it."*
+
+He asks for it by hand, every time, which is the mark of a rule that
+is stated and not kept. It was stated twice already -- `aloud` says
+*"plain, everyday words"* and `written` says it again -- and
+[briefly] is the precedent for what to do about that: a count holds
+where a principle does not.
+
+Measured over 1,995 sentences of real answers from the last
+fortnight. The median is eleven words, which is fine. The tail is
+not: 607 run past fifteen, 220 past twenty, and the longest are
+thirty to forty-five, built the same way every time -- a clause, a
+dash, three or four things named inside it, another clause.
+
+	I can also check what your own devices report about you -- who
+	called, where you were, what you have been listening to, how
+	your battery stands -- and work out what those readings mean
+	together, sir.
+
+Said once, that is four things to hold at a time in a language that
+is not the listener's first. A third of the long sentences are built
+with a dash aside or a chain of three commas.
+
+So `simply`: fifteen words to a sentence, one thought to a sentence,
+no second thought hung off a dash, and the everyday word wherever
+there is one. It goes into the spoken rules, the written rules and
+the greeting, because the difficulty is the same whoever is reading.
+Fifteen leaves seven sentences in ten exactly as they are.
+
+What it bought, same question before and after:
+
+	spoken   24 words in one comma chain  ->  19, one plain clause
+	written  332 words                    ->  237
+	"what can you do", written  112 words ->  51, as a list
+
+#### It reached a short answer, which it should not
+
+`TestAShortQuestionGetsAShortAnswer` passed before and failed after:
+*"how many days are there in February this year"* came back *"I'd
+need to know the current year to answer that. What year is it?"* --
+fourteen words in two sentences, against a cap of twelve. The rule
+about breaking a long sentence in two was being applied to an answer
+that was already short.
+
+So it is bounded: it applies only to a sentence that would otherwise
+run past fifteen words, and *thirteen, sir* stays *thirteen, sir*.
+
+**That bound is unproven.** The gateway stopped answering the evals
+partway through -- every question, including *"what time is it"*, and
+on the stock prompt as well as this one, so it is the gateway and not
+the change. `make evals-shape` and the manner eval need running again
+when it is back.
+
+### Spoken or typed is the request's, and every client hears and speaks for itself (planned)
+
+The owner, 15 October 2026: a client is not voice or direct -- *"a client
+can make a request in both ways"* -- and *"the wake word, STT should be
+inside the client, and TTS too; HA should have wake word, STT, TTS ... our
+app too"*, since the server is to move to the cloud, Home Assistant to
+stay in the house and the laptop to go to the office.
+
+- A request says whether it was spoken or typed; how it is answered, and
+  which tools it may reach, follow the request, not the client.
+- The server takes text and answers with text. Hearing (wake word and
+  speech-to-text) and speaking are each client's: Home Assistant's
+  pipeline for the house, the desktop app's own on the laptop.
+- The desktop app stops being shown Home Assistant's satellite state.
+
+**Step 1, built:** spoken or typed is read from the request. A prompt on
+`/v1/live` carries `"spoken"` (absent is typed); `/api/chat`, the
+endpoint a voice pipeline calls, takes an optional `"spoken"` (absent is
+spoken, as Home Assistant's Ollama integration cannot send it); the tools
+listing takes `?spoken=true`. The client's stored channel no longer
+decides how a turn is answered.
+
+## Announcements are said by the desktop app, as the satellite said them
+
+Owner, 16 October 2026: *"look at how announcements are handled
+there..i want the exact flow"*. The desktop app has its own voice, so
+an announcement is said there instead of through the laptop's Home
+Assistant satellite. `aloud.Voices` is now the announcer for everything
+that speaks unasked: reminders, rules, the greeting, the renaming, and
+the alarm that never arrived. Home Assistant's speaker stays only for
+its states. A client that says `{"type":"speaks"}` on `/v1/live` is
+joined. Each `Say` is sent to the client joined last as
+`{"type":"say","request","text"}`, and the call blocks until the client
+answers `{"type":"said","request"}`, with `failure` when it was not
+said. That is how Home Assistant's announce call blocked.
+
+The client does the satellite's part. It waits up to ninety seconds for
+its own voice to fall quiet, then for a second more (`QuietWait`,
+`Settle`). It says the words with no chime, with "stop" heard, and with
+no end sound or follow-up. `Reach` also rings the phone
+(`hass.Speaker.Notify`). With no client joined, Home Assistant says it
+as before. It does the same when the client answers `no voice`, or when
+the client leaves before saying it. The outbox is untouched: rows for
+the app's client still go stale as before.

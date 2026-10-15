@@ -199,6 +199,30 @@ func (r *Runner) consume(runCtx, ctx context.Context, t *chat.Chat, systemPrompt
 	// true for about forty seconds.
 	revealed := r.alreadyDescribed(window.Messages)
 
+	// What the person's own devices offer, taken as the chat begins and
+	// described in full: there are a few, and a device's tool named but
+	// not described could be described by nothing, since tool_describe
+	// knows only the server's.
+	if r.away != nil {
+		if extra := r.away.For(r.callerFor(ctx, t).UserID); len(extra) > 0 {
+			r.chatTools.Store(t.ID, r.tools.With(extra...))
+			defer r.chatTools.Delete(t.ID)
+			names := make([]string, 0, len(extra))
+			for _, x := range extra {
+				revealed[x.Name] = true
+				names = append(names, x.Name)
+			}
+			r.logger.InfoContext(ctx, "the person's devices offer tools", slog.Any("tools", names))
+			// Said in the prompt as well. Offered the tools and nothing
+			// more, the model answered "I cannot open Spotify from here,
+			// that is a desktop app and I do not have the means to launch
+			// applications on your phone" three times, sent back to look
+			// each time (15 October 2026): the conversation had always
+			// said it could not, and a voice turn read as the phone.
+			systemPrompt += "\n\n" + laptopConnected(names)
+		}
+	}
+
 	// worked : Rounds that got something done, as against rounds the
 	// server spent correcting the model.
 	//
@@ -1289,4 +1313,20 @@ func (r *Runner) ahead(
 		return nil, nil, -1
 	}
 	return stream, cancel, call
+}
+
+// laptopConnected : What the model is told while the person's laptop is
+// connected: that it can act there now, whatever was said before, and
+// whichever device the person is speaking from.
+func laptopConnected(tools []string) string {
+	return "The person's laptop is connected now, through the desktop app on it. " +
+		"With these tools you can see it and act on it -- its spaces, its terminals, its apps, " +
+		"opening a space, an app or a folder: " + strings.Join(tools, ", ") + ". " +
+		"Use them when asked to open, switch to or check something on the laptop or the computer, " +
+		"whichever device the person is speaking from: a voice turn may come from the room's speaker or the phone, " +
+		"and what is opened still opens on the laptop. Anything said earlier in this conversation about " +
+		"not being able to do this was before the laptop was connected. " +
+		"The laptop changes all the time -- an app closed, a space switched -- so look again with these tools " +
+		"each time, never answering from what an earlier turn found; and to open something, call the tool that " +
+		"opens it rather than deciding first that it is open."
 }

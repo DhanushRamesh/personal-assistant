@@ -147,3 +147,50 @@ func TestLiveIsAbsentWithoutAHub(t *testing.T) {
 		t.Fatalf("status = %d, want 404", rec.Code)
 	}
 }
+
+// Spoken or typed is each prompt's: the same client asks both ways on
+// the same connection.
+func TestALivePromptSaysWhetherItWasSpoken(t *testing.T) {
+	e := apitest.NewWith(t, apitest.Options{Live: live.NewHub()})
+	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	defer cancel()
+	c, _, err := websocket.Dial(ctx, liveURL(e.Live(t)), &websocket.DialOptions{
+		HTTPHeader: http.Header{"Authorization": {"Bearer " + e.Token}},
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer c.CloseNow()
+
+	ask := func(request string, spoken bool) string {
+		if err := wsjson.Write(ctx, c, map[string]any{"type": "prompt", "request": request, "text": "what time is it", "spoken": spoken}); err != nil {
+			t.Fatal(err)
+		}
+		for {
+			var m struct {
+				Type    string `json:"type"`
+				Request string `json:"request"`
+				ChatID  string `json:"chat_id"`
+			}
+			if err := wsjson.Read(ctx, c, &m); err != nil {
+				t.Fatal(err)
+			}
+			if m.Type == "chat" && m.Request == request {
+				return m.ChatID
+			}
+		}
+	}
+	channelOf := func(id string) string {
+		var got struct {
+			Channel string `json:"channel"`
+		}
+		e.Decode(t, e.Do(t, http.MethodGet, "/v1/chats/"+id, ""), &got)
+		return got.Channel
+	}
+	if got := channelOf(ask("r1", true)); got != "voice" {
+		t.Errorf("a spoken prompt was answered as %q", got)
+	}
+	if got := channelOf(ask("r2", false)); got != "direct" {
+		t.Errorf("a typed prompt was answered as %q", got)
+	}
+}

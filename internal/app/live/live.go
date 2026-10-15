@@ -10,6 +10,8 @@
 package live
 
 import (
+	"context"
+	"strings"
 	"sync"
 	"time"
 )
@@ -68,6 +70,13 @@ const (
 // final once the turn has ended. Shown, never stored.
 const Hearing Kind = "hearing"
 
+// Answered : A notice of a spoken turn something other than the
+// assistant answered -- Home Assistant matching one of its own sentences --
+// with what was heard and what was said back. Shown by the core, never
+// stored: such a turn is not part of the conversation (owner, 15 October
+// 2026: *"they should not go to conversation"*).
+const Answered Kind = "answered"
+
 // Event : One thing a client is told.
 type Event struct {
 	Kind  Kind   `json:"type"`
@@ -82,6 +91,8 @@ type Event struct {
 	// wait for another word before it is ended, as of when the bridge
 	// sent it; absent when it will not be ended for quiet.
 	Wait *float64 `json:"wait,omitempty"`
+	// Said : For an answered notice, what was said back; Text holds what was heard.
+	Said string `json:"said,omitempty"`
 	// Area : For a changed notice, what changed: one of the Area names.
 	Area string    `json:"area,omitempty"`
 	At   time.Time `json:"at"`
@@ -148,6 +159,16 @@ func (h *Hub) Notify(e Event) {
 // theirs has something new in it.
 func (h *Hub) ConversationsChanged(userID, conversationID string) {
 	h.Notify(Event{Kind: ConversationChanged, ConversationID: conversationID, UserID: userID, At: time.Now().UTC()})
+}
+
+// Elsewhere : Tells userID's clients of a spoken turn answered elsewhere,
+// for the core to show; nothing is written.
+func (h *Hub) Elsewhere(_ context.Context, userID, heard, said string) {
+	heard, said = strings.TrimSpace(heard), strings.TrimSpace(said)
+	if userID == "" || said == "" {
+		return
+	}
+	h.Notify(Event{Kind: Answered, Text: heard, Said: said, UserID: userID, At: time.Now().UTC()})
 }
 
 // AreaChanged : Tells userID's clients that an area of their data

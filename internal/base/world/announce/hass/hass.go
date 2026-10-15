@@ -263,6 +263,14 @@ func (s *Speaker) Reach(ctx context.Context, message string) error {
 	return nil
 }
 
+// Notify : Sends the words to the phone alone, for an announcement the
+// desktop app has already said in the room in place of the satellite.
+func (s *Speaker) Notify(ctx context.Context, message string) {
+	if message = strings.TrimSpace(message); message != "" {
+		s.alsoNotify(ctx, message)
+	}
+}
+
 // alsoNotify : Sends the same words to every notify service configured.
 //
 // After the satellite, and never instead of it: the speaker in the room

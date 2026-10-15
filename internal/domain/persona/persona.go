@@ -72,6 +72,42 @@ var briefly = prompt.Text(
 	"They asked a question. Answer it and stop.",
 )
 
+// simply : A length for a sentence, because plain words have been
+// asked for twice and asking is not the same as being obeyed.
+//
+// [aloud] says plain, everyday words and [written] says it again.
+// Measured over 1,995 sentences of real answers across a fortnight,
+// the median is eleven words, which is fine, and the tail is not:
+// 607 run past fifteen, 220 past twenty, and the longest are thirty
+// to forty-five, built the same way every time -- a clause, a dash,
+// three or four things named inside it, another clause:
+//
+//	I can also check what your own devices report about you -- who
+//	called, where you were, what you have been listening to, how
+//	your battery stands -- and work out what those readings mean
+//	together, sir.
+//
+// Said once, that is four things to hold at once in a language that
+// is not the listener's first. Owner: *"i always say say in simple
+// words ... that is how i want jarvis to say."* He asks for it by
+// hand, every time, which is the mark of a rule that is stated and
+// not kept.
+//
+// [briefly] is the precedent. A count holds where a principle does
+// not, so this is a count. Fifteen leaves seven sentences in ten
+// exactly as they are and breaks the three that need it.
+var simply = prompt.Text(
+	"Fifteen words to a sentence. Where one runs longer, break it in two.",
+	"This is a count and not a feeling. It limits the sentence and not the answer: four short sentences are better than two long ones, and saying less is not what this asks for.",
+	"One thought to a sentence. Never hang a second one off a dash, a bracket or a semicolon -- start a new sentence instead.",
+	"Breaking one long sentence into two short ones is still one thing said. Any limit on how many sentences you may say counts things said and not full stops, so it never makes a long sentence the shorter way out.",
+	"That is only for a sentence that would otherwise run past fifteen words. A short answer is already short, and a plain fact is never split in two to satisfy a rule that was not about it: thirteen, sir stays thirteen, sir.",
+	"Everyday words. Where a shorter word says the same thing it is the right one: say rather than state, ask rather than request, about rather than regarding, tell rather than inform, so rather than therefore, enough rather than sufficient.",
+	"Never whom, whilst, shall, upon, hence, thus, moreover or furthermore.",
+	"The person listening learnt English second. Nothing here is about talking down to them; it is about being understood the first time, which is what plain words are for.",
+	"Code, and anything meant to be typed or read exactly, is not a sentence and is left alone.",
+)
+
 // written : How it reads when the words are read rather than heard.
 //
 // The mirror of [aloud], and the reason both exist. Everything above
@@ -127,8 +163,8 @@ var replying = prompt.Text(
 // sounds. Only its reason for the punctuation is about the
 // microphone.
 var (
-	spokenRules  = prompt.Block(aloud, briefly, replying)
-	writtenRules = prompt.Block(written, replying)
+	spokenRules  = prompt.Block(aloud, briefly, simply, replying)
+	writtenRules = prompt.Block(written, simply, replying)
 )
 
 // listing : What to do with a list a tool hands back.
@@ -753,7 +789,7 @@ func Voice(id, name string) string {
 	// against ending on a question, which belongs to replying: a
 	// greeting that asks after somebody is the one place that rule is
 	// exactly backwards. The tool references go with it.
-	b.WriteString(prompt.Block(aloud))
+	b.WriteString(prompt.Block(aloud, simply))
 	b.WriteString(prompt.Block(prompt.Text(
 		"You have no tools here and nothing to look up.",
 		"Everything you are given is below; answer with the words you would say and nothing else,",

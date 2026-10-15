@@ -44,7 +44,8 @@ const MaxRounds = 9
 // registry checks again when one is actually called, because this is a
 // prompt and a prompt is not a boundary.
 func (r *Runner) offered(t *chat.Chat, revealed map[string]bool) []environment.ToolSpec {
-	if r.tools == nil {
+	tools := r.toolsOf(t)
+	if tools == nil {
 		return nil
 	}
 
@@ -53,7 +54,7 @@ func (r *Runner) offered(t *chat.Chat, revealed map[string]bool) []environment.T
 	// Describing all of them was 72% of a request and the endpoint
 	// caches nothing, so the rest are named in the prompt instead and
 	// described when the model asks.
-	reachable := r.tools.Offered(t.Channel, revealed)
+	reachable := tools.Offered(t.Channel, revealed)
 	out := make([]environment.ToolSpec, 0, len(reachable))
 	for _, x := range reachable {
 		schema, err := tool.Narrated(x.Params, address).MarshalJSON()
@@ -106,10 +107,11 @@ func withheld(tools *tool.Registry, name string) tool.Result {
 // Unchanged when there are none, so nothing is said about a mechanism
 // that is not in use.
 func (r *Runner) asking(systemPrompt string, t *chat.Chat, revealed map[string]bool) string {
-	if r.tools == nil {
+	tools := r.toolsOf(t)
+	if tools == nil {
 		return systemPrompt
 	}
-	catalogue := r.tools.Catalogue(t.Channel, revealed)
+	catalogue := tools.Catalogue(t.Channel, revealed)
 	if catalogue == "" {
 		return systemPrompt
 	}
@@ -156,6 +158,7 @@ func (r *Runner) runTools(
 	r.remember(ctx, t, call)
 
 	caller := r.callerFor(ctx, t)
+	tools := r.toolsOf(t)
 
 	got := make([]conversation.ToolResult, 0, len(calls))
 	ran := make([]tool.Result, 0, len(calls))
@@ -165,7 +168,7 @@ func (r *Runner) runTools(
 		// Whether this call was going to change something. Counted
 		// before the branch below, so a write refused for never having
 		// been described still counts as having been tried.
-		x, known := r.tools.Get(c.Name)
+		x, known := tools.Get(c.Name)
 		if known && x.Writes {
 			wrote.tried++
 		}
@@ -180,8 +183,8 @@ func (r *Runner) runTools(
 		// described from the next round on, which costs the round the
 		// model should have spent asking. Not running it also matters
 		// for a write: a guess that happens to validate would act.
-		if r.tools.Withheld(t.Channel, revealed, c.Name) {
-			result := withheld(r.tools, c.Name)
+		if tools.Withheld(t.Channel, revealed, c.Name) {
+			result := withheld(tools, c.Name)
 			r.logger.InfoContext(ctx, "a tool was called before it was described",
 				slog.String("tool", c.Name))
 			ran = append(ran, result)
@@ -192,7 +195,7 @@ func (r *Runner) runTools(
 			continue
 		}
 
-		result := r.tools.Call(ctx, c.Name, tool.Invocation{
+		result := tools.Call(ctx, c.Name, tool.Invocation{
 			Caller: caller,
 			Args:   []byte(c.Arguments),
 			Ran:    *seen,
