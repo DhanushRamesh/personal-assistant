@@ -19626,3 +19626,59 @@ longer how it reaches them. They check what was kept instead. The one
 that matters -- an answer that can still be sent back is never spoken
 -- holds unchanged, and a new one proves the cap: held 2.501s, then let
 go, on a turn that ran 4.502s.
+
+### A fix when he moves, not when the clock ticks
+
+The phone had been sending its position every five minutes since the
+day it was wired up, awake or asleep, moving or not. He asked for
+better while moving: *"we acn in creatr the loaction tracking moree
+ifetn while moving."*
+
+Three cadences were measured against four weeks of his own fixes. He
+moves 5.6% of the time, about an hour and a quarter a day, and he
+chose the middle one: often while moving, rarely while still.
+
+Tasker will not repeat a time profile faster than every two minutes --
+*"Error: the smallest minute repeat value is 2"* -- so that is the
+sampling rate. What changed is what gets sent. `Send Location` is now
+two actions: `Get Location v2`, and a JavaScriptlet that decides. It
+sends when the new position is more than 150 metres from the last one
+sent, or when fifteen minutes have passed since that one. Standing
+still, consecutive readings differ by about six metres, so there is no
+risk of the distance firing on noise.
+
+The decision could have been an If condition on the existing `Perform
+Task` action, but Tasker's JavaScript has `performTask()`, so the
+JavaScriptlet calls `Jarvis Event` itself and that action is gone.
+That also meant the new action could be added at the end, where Tasker
+puts it, and come out in the right order once the old one was cut --
+no dragging a row up a list over adb.
+
+	before   288 fixes a day, every five minutes
+	after    about 127 -- 91 from the fifteen-minute floor,
+	         36 from the hour and a quarter he is moving
+
+#### setGlobal turns a timestamp into a two-hour bucket
+
+It sent once and then went quiet. Half an hour passed with the profile
+firing every two minutes, the JavaScriptlet reporting OK each time,
+and nothing reaching the server.
+
+`setGlobal()` called from JavaScript with a **number** stores about
+six significant digits. A latitude comes back as `12.8299` -- five
+metres of error, survivable. An epoch millisecond count comes back as
+`1.79205e+12`, which is a bucket **ten million milliseconds wide**,
+nearly three hours. Every reading inside that bucket read back as the
+same instant, `now - pat` never reached fifteen minutes, and the fix
+was never due.
+
+Nothing failed. There was no error to find, which is why the script
+had to be made to write down what it had decided:
+
+	1792050361253 lat=12.829964 plat=12.8299 pat=1792050000000
+	dt=361253 moved=false due=false
+
+`pat` is six minutes old and reads as the same instant as `now`.
+Passing strings -- `setGlobal("JFIXAT",""+now)` -- stores
+`1792050481284` and `12.8299512` exactly, and the fifteen-minute send
+fired on the next cycle.
