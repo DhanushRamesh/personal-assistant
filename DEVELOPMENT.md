@@ -19928,3 +19928,55 @@ time:
 `NewWatcher` drops blank names before counting them. The guard goes
 there and not at the call site, because every caller passing a
 setting that might be empty has the same problem.
+
+### Speed sets the interval, not the clock
+
+A highway drew as one straight line. The gap between fixes was time,
+and at two minutes a fix, a hundred kilometres an hour puts 3.3 km
+between points. In town the same two minutes is a kilometre, which is
+why slow roads already looked right.
+
+So the distance is held and the interval moves. `Send Location` is
+four actions now:
+
+	1  Get Location v2
+	2  JavaScriptlet   decide, send, work out the next wait
+	3  Wait  %waitfor seconds
+	4  Goto  Action 1        if %again = 1
+
+Tasker will not repeat a time profile faster than two minutes, and
+its user guide has no location-update event, so nothing can push a
+fix at us. The only place a faster beat can live is inside the task,
+which is what the loop is.
+
+The JavaScriptlet aims at a fix every 300 m, with a floor of twenty
+seconds so a fast road cannot empty the battery, and it stops at a
+hundred seconds so the loop never overruns the next tick. Proven off
+the phone against the real script:
+
+	 18 km/h   wait 60s   300 m apart
+	 30 km/h   wait 36s   300 m apart
+	 60 km/h   wait 20s   333 m apart
+	100 km/h   wait 20s   556 m apart
+	under 18 km/h   no loop at all, one fix as before
+
+	100s into the window: wait 0, again 0 -- it winds down
+
+Standing still nothing changes: the loop never starts and the
+fifteen-minute floor carries the day. Speed comes from `%gl_speed`
+when the fix gives one, and from the last sent point and its time
+when it does not -- both are already in the globals.
+
+About 300 fixes a day against 251, concentrated where the line bends.
+
+#### I batched five taps and they landed in somebody's chat
+
+Exporting the task to check it, I sent the whole menu sequence in one
+go without reading the screen between taps. A notification arrived
+mid-sequence, and the taps went into a Zoho Cliq channel instead.
+Nothing was sent -- the composer was still empty -- and the task had
+already been saved, so nothing was lost but the time.
+
+The rule against this was already written down from the last three
+times. The export menu is exactly where it is tempting to break it,
+because the sequence is known and five taps feel like one action.
