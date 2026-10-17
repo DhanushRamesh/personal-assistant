@@ -322,7 +322,8 @@ func TestTheAskingSaysWhatHappenedAndHowToStayQuiet(t *testing.T) {
 		time.UTC, "", []string{"read_terminal"})
 	for _, want := range []string{"Terminal: Server", "Space: PAC", "Folder: /home/x", "Command: npm run dev",
 		"1 hour 1 minute 40 seconds", "Exit code: 1", "Error: boom", "Saturday 17 October 2026, 9:31 am",
-		"read_terminal", "You cannot type into a terminal from here", prompt.Silence} {
+		"read_terminal", "You cannot type into a terminal from here", "end with one short question offering it",
+		"a yes lets you do exactly that", prompt.Silence} {
 		if !strings.Contains(got, want) {
 			t.Errorf("the prompt does not say %q:\n%s", want, got)
 		}

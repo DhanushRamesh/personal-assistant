@@ -6,8 +6,10 @@
 // a long command finished, a program asked for the owner, a shell ended
 // -- and this decides, with a short turn of the fast model, whether any
 // of it is worth a sentence. The model may look closer with the terminal
-// tools the app offers, and may offer a next step; it ends with one
-// sentence for the laptop that sent the news, or with nothing.
+// tools the app offers; it ends with one sentence for the laptop that
+// sent the news -- and, when a command finished with a step plainly
+// next, one question offering it, which the owner answers aloud -- or
+// with nothing.
 //
 // Started as the news lands and never waited on: the laptop is answered
 // at once, and the reaction runs on its own.
@@ -420,6 +422,17 @@ func Asking(t event.Terminal, at, now time.Time, where *time.Location, usually s
 		)
 	}
 
+	// Owner, 17 October 2026: *"when the terminal process is done it
+	// should announce and ask a follow-up proactive question"*. The
+	// question is answered aloud with no wake word, and a bare yes lets
+	// the next command run without its card -- so it offers one thing,
+	// plainly enough that the yes cannot mean two.
+	offering := prompt.Text(
+		"When a command has finished and there is an obvious next step you could take for them -- the tests after a build, the build again after a fix, explaining an error -- end with one short question offering it.",
+		"They answer aloud, without your name, and a yes lets you do exactly that and nothing else, so offer one thing only and say it so it cannot be read two ways: a short command as it is typed (npm test), a longer one by what it does.",
+		"No question when no step follows naturally, and never one offering to answer a program's question for them.",
+	)
+
 	return prompt.Block(
 		prompt.Text(
 			"Something has just happened in one of the terminals on their laptop, in the desktop app.",
@@ -429,23 +442,24 @@ func Asking(t event.Terminal, at, now time.Time, where *time.Location, usually s
 		prompt.Lines(facts...),
 		output,
 		prompt.Text(
-			"Usually worth saying: a long build, test run or install that finished, with whether it worked and, when it did not, the gist of why in a few words;",
+			"Usually worth saying: a command that ran a while and finished -- they asked to hear whenever one is done, even in the terminal they are looking at -- with whether it worked and, when it did not, the gist of why in a few words;",
 			"a program waiting for them, such as Claude Code asking something or done with its work;",
 			"a server or other long-running program that stopped, or a shell that ended with an error.",
 		),
 		prompt.Text(
-			"Usually not worth saying: a quick or routine command, a clean finish nobody was waiting on, output that only scrolled past,",
+			"Usually not worth saying: a quick or routine command, output that only scrolled past,",
 			"and anything whose meaning you cannot tell from what is in front of you.",
 		),
 		ordinary,
 		looking,
+		offering,
 		noticing.Interrupting,
 		prompt.Text(
-			"Say it as one short spoken sentence in your own manner: what happened and where, by the terminal's or the space's name, then the one thing worth knowing.",
-			"Never read out a path, a command line, a hidden value or an error word for word; say what it means.",
+			"Say it as one short spoken sentence in your own manner: what happened and where, by the terminal's or the space's name, then the one thing worth knowing; then the question, if you are offering a step.",
+			"Never read out a path, a command line, a hidden value or an error word for word; say what it means. A short command you offer to run is the one exception.",
 			"Say only what is in front of you or what you looked up, and nothing you have worked out around it.",
 		),
-		prompt.Text("Answer with the sentence and nothing else.",
+		prompt.Text("Answer with the sentence, and the question if there is one, and nothing else.",
 			"If it is not worth saying, answer with "+prompt.Silence+"."),
 	)
 }

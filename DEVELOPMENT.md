@@ -20228,6 +20228,21 @@ Claude Code's questions for them. `terminalTools` now leaves out every
 `type_*` tool, so a reaction may list and read terminals and say what it
 found, and the prompt says it cannot type; the owner, told, does the rest.
 
+**A finished command is said, with the next step offered** (owner, 17
+October 2026: *"when the terminal process is done it should announce and
+ask a follow-up proactive question"*, and announced *"anyway"*, in the
+terminal they are looking at too). A command that ran a while and
+finished is now usually worth saying, clean or not -- the app sends only
+those of 10 s or more. When a step plainly follows (the tests after a
+build, the build after a fix, explaining an error) the sentence ends in
+one short question offering it, a short command named as typed ("npm
+test"), a long one by what it does; never one offering to answer a
+program's question. The reaction still cannot type. The desktop app
+opens the microphone after an announcement that ends in "?", the
+announcement is in the conversation before the answer arrives, and a
+bare yes lets the next command the assistant asks to run go without its
+card, once -- so the one question offers one thing.
+
 **Leaving takes two fixes** (owner, 17 October 2026: *"I literally was in
 home .. and in home till now .. but it showed moving"*). On the night of
 16 October the phone twice reported the same point, 235 m east of home --
