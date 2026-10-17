@@ -108,7 +108,7 @@ var leaks = []string{"forty thousand", "Chennai", "Kapil Dev", "MS Dhoni", "roof
 
 func TestOfferedNotesAreUsedOnlyWhenTheyFit(t *testing.T) {
 	env := provider(t)
-	system := manner(t) + "\n\n" + memory.Offered(notes)
+	system := manner(t) + "\n\n" + memory.Offered(notes, time.UTC)
 
 	var used, missed int
 	for _, c := range answerable {
@@ -149,7 +149,7 @@ func TestOfferedNotesAreUsedOnlyWhenTheyFit(t *testing.T) {
 // risks the second.
 func TestANoteThatDisagreesIsRaised(t *testing.T) {
 	env := provider(t)
-	system := manner(t) + "\n\n" + memory.Offered(notes)
+	system := manner(t) + "\n\n" + memory.Offered(notes, time.UTC)
 
 	var raised, silent int
 	for _, c := range conflicts {

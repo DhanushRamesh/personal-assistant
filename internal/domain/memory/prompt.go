@@ -2,6 +2,7 @@ package memory
 
 import (
 	"strings"
+	"time"
 
 	"personal-assistant/internal/base/thinking/prompt"
 )
@@ -59,9 +60,12 @@ func Standing(all []Memory) string {
 // attributed.
 //
 // Empty when there is nothing to offer.
-func Offered(matches []Match) string {
+func Offered(matches []Match, loc *time.Location) string {
 	if len(matches) == 0 {
 		return ""
+	}
+	if loc == nil {
+		loc = time.UTC
 	}
 
 	var b strings.Builder
@@ -91,11 +95,42 @@ func Offered(matches []Match) string {
 	b.WriteString("what the note says, and invent no concern it does not support. ")
 	b.WriteString("Most turns need no such line.")
 
+	b.WriteString("\n\nEach note is stamped with the day it was written, and is ")
+	b.WriteString("evidence of what was true then. Where somebody was, what a thing ")
+	b.WriteString("cost, what was decided: any of it may have moved on since. Say ")
+	b.WriteString("when a note is from rather than stating it as true now.")
+
 	for i := range matches {
 		b.WriteString("\n- ")
 		b.WriteString(matches[i].Memory.Text())
+		if day := written(matches[i].Memory, loc); day != "" {
+			b.WriteString(" [written ")
+			b.WriteString(day)
+			b.WriteString("]")
+		}
 	}
 	return b.String()
+}
+
+// written : The day a note was last written, in the person's own time.
+//
+// The later of the two, because amending a memory is writing it again:
+// a note changed last week is evidence about last week, whatever day it
+// was first stored. Empty when nothing stored a time, which is every
+// memory built in a test and none built by the server.
+//
+// The day and not the minute. A memory is about a day -- what somebody
+// decided, where they were living -- and the clock on it would be
+// twelve characters of noise in a prompt that already repeats.
+func written(m Memory, loc *time.Location) string {
+	at := m.CreatedAt
+	if m.UpdatedAt.After(at) {
+		at = m.UpdatedAt
+	}
+	if at.IsZero() {
+		return ""
+	}
+	return at.In(loc).Format("2 January 2006")
 }
 
 // IDs : The identifiers of the memories in matches.

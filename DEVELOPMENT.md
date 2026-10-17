@@ -20685,3 +20685,46 @@ being easier to find, and it is the one still worth building.
 **And the method is the finding.** A twelve-case benchmark said do it;
 the real store said do not. Both were measured the same way, and only
 one of them is his.
+
+### A note says when it was written
+
+The temporal half, and it turned out to be a gap rather than a
+feature.
+
+`precedence` has always told the assistant, of anything recalled, to
+say *"that this is what was said, and when"*. It was never given the
+when. `Offered` printed `subject: body` and nothing else, so the one
+instruction it could not follow was the one about time.
+
+So each note now carries the day it was written:
+
+	- Girlfriend location: Girlfriend Alekhya Chintada is in
+	  Hyderabad. [written 17 October 2026]
+
+and three sentences say what the stamp is for: a note is evidence of
+what was true then, and where somebody was or what a thing cost may
+have moved on since.
+
+**The day and not the minute.** A memory is about a day -- what was
+decided, where somebody was living -- and the clock on it would be
+noise in a block that repeats per note. In the person's own time,
+which is why the test puts the memory at 21:30 UTC and expects the
+next day.
+
+**Amending is writing again.** The later of the two timestamps wins: a
+note changed last week is evidence about last week, whatever day it
+was first stored.
+
+**Written, not embedded.** The stamp goes on the rendering and never
+into `Text()`, which is what gets embedded. That is the whole lesson
+of the framing measurement one section up: padding the stored sentence
+cost us a question, and padding the shown line costs nothing, because
+nothing searches it.
+
+	three notes: 2197 characters, of which the stamps are 78
+	the instruction costs 242, once
+
+**Recalled only, not standing.** The four standing memories are
+instructions and preferences -- how to answer, what has been noticed.
+They do not go stale, and they are in front of the model on every
+single turn, where 26 characters each is a per-turn tax for nothing.

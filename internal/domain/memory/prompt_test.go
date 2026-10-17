@@ -13,7 +13,7 @@ func TestNothingProducesNoBlock(t *testing.T) {
 	if got := memory.Standing(nil); got != "" {
 		t.Errorf("Standing = %q, want empty", got)
 	}
-	if got := memory.Offered(nil); got != "" {
+	if got := memory.Offered(nil, time.UTC); got != "" {
 		t.Errorf("Offered = %q, want empty", got)
 	}
 }
@@ -44,7 +44,7 @@ func TestStandingListsWhatIsKnown(t *testing.T) {
 func TestOfferedSaysTheyMayNotFit(t *testing.T) {
 	got := memory.Offered([]memory.Match{
 		{Memory: memory.Memory{Subject: "Roof quote", Body: "forty thousand"}},
-	})
+	}, time.UTC)
 
 	for _, want := range []string{
 		"most of the time none of them will",
@@ -60,7 +60,7 @@ func TestOfferedSaysTheyMayNotFit(t *testing.T) {
 // A note that was not used is not mentioned, or the answer becomes a report
 // about the assistant's filing.
 func TestOfferedForbidsTalkingAboutUnusedNotes(t *testing.T) {
-	got := memory.Offered([]memory.Match{{Memory: memory.Memory{Subject: "A", Body: "b"}}})
+	got := memory.Offered([]memory.Match{{Memory: memory.Memory{Subject: "A", Body: "b"}}}, time.UTC)
 
 	if !strings.Contains(got, "Do not mention a note you did not use") {
 		t.Errorf("Offered lets the assistant talk about notes it ignored:\n%s", got)
@@ -73,7 +73,7 @@ func TestOfferedCarriesEveryNote(t *testing.T) {
 		{Memory: memory.Memory{Subject: "Roof", Body: "forty thousand"}},
 		{Memory: memory.Memory{Subject: "Cricket", Body: "Kapil Dev"}},
 		{Memory: memory.Memory{Subject: "Home", Body: "Chennai"}},
-	})
+	}, time.UTC)
 
 	for _, want := range []string{"forty thousand", "Kapil Dev", "Chennai"} {
 		if !strings.Contains(got, want) {
@@ -101,7 +101,7 @@ func TestIDsFollowTheMatches(t *testing.T) {
 func TestOfferedPermitsAWarningAndBoundsIt(t *testing.T) {
 	got := memory.Offered([]memory.Match{
 		{Memory: memory.Memory{Subject: "Roof quote", Body: "Agreed forty thousand."}},
-	})
+	}, time.UTC)
 
 	for _, want := range []string{
 		"says what they are about to do",
@@ -122,7 +122,7 @@ func TestOfferedPermitsAWarningAndBoundsIt(t *testing.T) {
 // Warning and answering are told apart, because the rule for one forbids
 // the other.
 func TestAnsweringAndWarningAreSeparateInstructions(t *testing.T) {
-	got := memory.Offered([]memory.Match{{Memory: memory.Memory{Subject: "A", Body: "b"}}})
+	got := memory.Offered([]memory.Match{{Memory: memory.Memory{Subject: "A", Body: "b"}}}, time.UTC)
 
 	answer := strings.Index(got, "To answer with:")
 	warn := strings.Index(got, "To warn with:")
@@ -153,7 +153,7 @@ func TestTheTranscriptMayNotWarn(t *testing.T) {
 // Refusing a note because the question named the same thing differently is
 // a miss and a false statement at once, so both are forbidden by name.
 func TestOfferedJudgesTheThingNotTheWording(t *testing.T) {
-	got := memory.Offered([]memory.Match{{Memory: memory.Memory{Subject: "Roof quote", Body: "forty thousand"}}})
+	got := memory.Offered([]memory.Match{{Memory: memory.Memory{Subject: "Roof quote", Body: "forty thousand"}}}, time.UTC)
 
 	for _, want := range []string{
 		"named one way in the question and another in the note",
@@ -163,6 +163,94 @@ func TestOfferedJudgesTheThingNotTheWording(t *testing.T) {
 	} {
 		if !strings.Contains(got, want) {
 			t.Errorf("Offered is missing %q:\n%s", want, got)
+		}
+	}
+}
+
+// A note says when it was written, because precedence already tells the
+// assistant to say what was said "and when" -- and before this it had no
+// way to know. The day, in the person's own time, and never the minute.
+func TestANoteSaysWhenItWasWritten(t *testing.T) {
+	chennai, err := time.LoadLocation("Asia/Kolkata")
+	if err != nil {
+		t.Skipf("no zone database here: %v", err)
+	}
+	// Late enough in the day that the zone changes the date, which is
+	// what makes this a test of the zone and not of the format.
+	at := time.Date(2026, time.October, 16, 21, 30, 0, 0, time.UTC)
+
+	got := memory.Offered([]memory.Match{
+		{Memory: memory.Memory{Subject: "Girlfriend", Body: "Alekhya is in Hyderabad.", CreatedAt: at}},
+	}, chennai)
+
+	if !strings.Contains(got, "[written 17 October 2026]") {
+		t.Errorf("a note does not say when it was written, in their own time:\n%s", got)
+	}
+	if strings.Contains(got, "pm]") || strings.Contains(got, ":") && strings.Contains(got, "[written 17 October 2026 at") {
+		t.Errorf("a note carries the clock as well as the day:\n%s", got)
+	}
+	if !strings.Contains(got, "stamped with the day it was written") {
+		t.Errorf("nothing tells the assistant what the stamp is:\n%s", got)
+	}
+}
+
+// Amending a memory is writing it again, so the later day is the one that
+// counts: a note changed last week is evidence about last week.
+func TestAnAmendedNoteSaysWhenItWasChanged(t *testing.T) {
+	made := time.Date(2026, time.January, 2, 9, 0, 0, 0, time.UTC)
+	changed := time.Date(2026, time.September, 30, 9, 0, 0, 0, time.UTC)
+
+	got := memory.Offered([]memory.Match{
+		{Memory: memory.Memory{Subject: "A", Body: "b", CreatedAt: made, UpdatedAt: changed}},
+	}, time.UTC)
+
+	if !strings.Contains(got, "[written 30 September 2026]") {
+		t.Errorf("an amended note is dated from when it was first stored:\n%s", got)
+	}
+}
+
+// A memory with no times on it says nothing rather than 1 January year one,
+// which is every memory built in a test and none built by the server.
+func TestANoteWithNoTimeSaysNothing(t *testing.T) {
+	got := memory.Offered([]memory.Match{
+		{Memory: memory.Memory{Subject: "A", Body: "b"}},
+	}, time.UTC)
+
+	if strings.Contains(got, "[written") {
+		t.Errorf("a note with no stored time was dated anyway:\n%s", got)
+	}
+}
+
+// TestWhatTheStampCosts : Printed rather than asserted. This block is in
+// front of the model on every turn that recalls anything, and what it
+// costs is worth knowing by the character rather than by the feeling.
+func TestWhatTheStampCosts(t *testing.T) {
+	at := time.Date(2026, time.October, 17, 9, 0, 0, 0, time.UTC)
+	notes := func(dated bool) []memory.Match {
+		out := []memory.Match{
+			{Memory: memory.Memory{Subject: "Girlfriend location", Body: "Girlfriend Alekhya Chintada is in Hyderabad."}},
+			{Memory: memory.Memory{Subject: "Roof quote", Body: "The roofer quoted forty thousand rupees."}},
+			{Memory: memory.Memory{Subject: "Location", Body: "Lives in Chennai."}},
+		}
+		if dated {
+			for i := range out {
+				out[i].Memory.CreatedAt = at
+			}
+		}
+		return out
+	}
+
+	dated := memory.Offered(notes(true), time.UTC)
+	plain := memory.Offered(notes(false), time.UTC)
+
+	t.Logf("three notes: %d characters, of which the stamps are %d", len(dated), len(dated)-len(plain))
+	t.Logf("the instruction that explains them is in both, and costs %d once",
+		len("\n\nEach note is stamped with the day it was written, and is evidence of what was "+
+			"true then. Where somebody was, what a thing cost, what was decided: any of it may "+
+			"have moved on since. Say when a note is from rather than stating it as true now."))
+	for _, line := range strings.Split(dated, "\n") {
+		if strings.HasPrefix(line, "- ") {
+			t.Logf("  %s", line)
 		}
 	}
 }

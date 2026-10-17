@@ -577,7 +577,7 @@ func (r *Runner) recalled(ctx context.Context, userID, question string, note *ch
 		})
 		note.ByWords = note.ByWords || found[i].ByWords
 	}
-	return memory.Offered(found)
+	return memory.Offered(found, r.now().Location())
 }
 
 // missed : Reminders that were never said, to be brought up once.
