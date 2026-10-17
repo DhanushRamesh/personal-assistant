@@ -32,6 +32,7 @@ import (
 	"personal-assistant/internal/app/elsewhere"
 	"personal-assistant/internal/app/foresight"
 	"personal-assistant/internal/app/glance"
+	"personal-assistant/internal/app/knowing"
 	"personal-assistant/internal/app/live"
 	"personal-assistant/internal/app/noticing"
 	"personal-assistant/internal/app/pattern"
@@ -94,6 +95,8 @@ import (
 	"personal-assistant/internal/domain/greet"
 	"personal-assistant/internal/domain/job"
 	jobmysql "personal-assistant/internal/domain/job/mysql"
+	"personal-assistant/internal/domain/knowledge"
+	knowledgemysql "personal-assistant/internal/domain/knowledge/mysql"
 	"personal-assistant/internal/domain/mail"
 	"personal-assistant/internal/domain/memory"
 	memorymysql "personal-assistant/internal/domain/memory/mysql"
@@ -305,6 +308,25 @@ func run() error {
 		Logger:     logger.Logger,
 	}
 	catchUpEmbeddings(context.Background(), remembering, logger.Logger)
+
+	// Everything known of them, kept on disk and found by meaning: their
+	// description and memories put there by the server, notes, Claude
+	// Code's conversations and files by the desktop app.
+	kept := &knowledge.Known{Store: knowledgemysql.New(db), Embed: remembering.Embedder, Now: cfg.Assistant.Now}
+	knowingThem := &knowing.Knowing{
+		Known:   kept,
+		Profile: (&profile.Reader{Memories: remembering.Store}).Profile,
+		Memories: func(ctx context.Context, userID string) ([]memory.Memory, error) {
+			always, err := remembering.Store.All(ctx, userID, memory.TierAlways)
+			if err != nil {
+				return nil, err
+			}
+			recalled, err := remembering.Store.All(ctx, userID, memory.TierRecall)
+			return append(always, recalled...), err
+		},
+		Logger: logger.Logger,
+		Now:    cfg.Assistant.Now,
+	}
 
 	// One store for what the person's devices saw, shared by the endpoint
 	// they report to and the tool that reads it back.
@@ -1000,6 +1022,7 @@ func run() error {
 		Voice:    func() string { return persona.Voice(manner.Current(), cfg.Assistant.Name) },
 		Address:  func() string { return persona.AddressFor(manner.Current()) },
 		Usually:  ordinarily(&profile.Reader{Memories: remembering.Store}, logger.Logger),
+		Knowing:  workingWithClaude(knowingThem, tools, logger.Logger),
 		Tools:    devices.For,
 		Publish:  announcing{publishing, cfg.Assistant.Now},
 		Notes:    remarked,
@@ -1053,6 +1076,7 @@ func run() error {
 		DeviceEvents: deviceEvents,
 		Places:       drawnPlaces,
 		Usage:        calls,
+		Knowledge:    kept,
 		// "What am I seeing": one quick call from what the client shows,
 		// the fast model where one is configured.
 		Glance: &glance.Glancer{
@@ -3999,4 +4023,44 @@ func wrote(
 		slog.String("name", name), slog.String("purpose", purpose.Kind),
 		slog.String("because", thought.Why), slog.String("when", when.Describe()))
 	return &made
+}
+
+// workingWithClaude : What the assistant knows of the person that bears on
+// what Claude Code is doing, for the turns of Claude Code it judges as they
+// would (owner, 17 October 2026: *"it has all the knowledge about me, my
+// spaces, my schedule"*): what is known of them, found by meaning against
+// what Claude Code was last asked and said -- their description, memories,
+// notes, past work with Claude Code, files -- rather than pushed whole
+// (owner, same day: *"the embedding model should bring my personality"*);
+// the space and its notes; and today's calendar, read just now. A part
+// that cannot be had is left out; the rest still goes.
+func workingWithClaude(them *knowing.Knowing, tools *tool.Registry, logger *slog.Logger) func(context.Context, string, event.Terminal) string {
+	return func(ctx context.Context, userID string, t event.Terminal) string {
+		var parts []string
+		about := t.Conversation
+		if r := []rune(about); len(r) > 1200 {
+			about = string(r[len(r)-1200:])
+		}
+		if found := them.About(ctx, userID, about); found != "" {
+			parts = append(parts, "What is known of them that bears on this, found by its meaning, nearest first:\n"+found)
+		}
+		if t.Space != "" {
+			space := "The space it is in: " + t.Space + "."
+			if notes := strings.TrimSpace(t.Notes); notes != "" {
+				space += " Its notes:\n" + notes
+			}
+			parts = append(parts, space)
+		}
+		if tools != nil {
+			read := tools.Call(ctx, "calendar_events", tool.Invocation{
+				Caller: tool.Caller{UserID: userID, Channel: chat.ChannelDirect}, Args: json.RawMessage(`{"days":1}`),
+			})
+			if read.Outcome != conversation.OutcomeFailed && strings.TrimSpace(read.Content) != "" {
+				parts = append(parts, "Their calendar for today, read just now:\n"+strings.TrimSpace(read.Content))
+			} else if logger != nil {
+				logger.InfoContext(ctx, "working with Claude Code without the calendar", slog.String("why", read.Content))
+			}
+		}
+		return strings.Join(parts, "\n\n")
+	}
 }

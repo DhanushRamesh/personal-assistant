@@ -100,6 +100,7 @@ func TestRouteTableIsComplete(t *testing.T) {
 		"GET /v1/home/today":                    true,
 		"GET /v1/usage":                         true,
 		"POST /v1/glance":                       true,
+		"POST /v1/knowledge":                    true,
 		// Fixed by the caller: Home Assistant appends these to the address it
 		// was given, so they cannot live under /v1 with the rest. /api/chat
 		// is also the only way to submit a prompt, whatever is asking.

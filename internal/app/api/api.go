@@ -34,6 +34,7 @@ import (
 	googleapi "personal-assistant/internal/app/api/google"
 	"personal-assistant/internal/app/api/health"
 	homeapi "personal-assistant/internal/app/api/home"
+	knowledgeapi "personal-assistant/internal/app/api/knowledge"
 	"personal-assistant/internal/app/api/live"
 	"personal-assistant/internal/app/api/memories"
 	"personal-assistant/internal/app/api/middleware"
@@ -215,6 +216,10 @@ type Options struct {
 	// on its screen, in one quick call. Nil answers that it cannot.
 	Glance glanceapi.Looker
 
+	// Knowledge : Keeps what a client knows of the person, for
+	// /v1/knowledge. Nil answers that nothing is kept.
+	Knowledge knowledgeapi.Keeper
+
 	// Naming : What to ask about a place the person never drew a
 	// geofence around. Optional: without it a stay somewhere new is
 	// written down as its coordinates.
@@ -313,6 +318,7 @@ type Server struct {
 	home          *homeapi.Handler
 	usage         *usageapi.Handler
 	glance        *glanceapi.Handler
+	knowledge     *knowledgeapi.Handler
 }
 
 // New : Builds a Server from opts and registers its routes.
@@ -357,7 +363,8 @@ func New(opts Options) *Server {
 		home:          homeapi.New(homeOptions(opts)),
 		usage: usageapi.New(usageapi.Options{Logger: opts.Logger, Store: opts.Usage,
 			Titles: opts.Chats, Location: opts.Location, Now: opts.Now}),
-		glance: glanceapi.New(opts.Logger, opts.Glance),
+		glance:    glanceapi.New(opts.Logger, opts.Glance),
+		knowledge: knowledgeapi.New(opts.Logger, opts.Knowledge),
 	}
 	if opts.Answered != nil {
 		s.speech.Records(opts.Answered)
@@ -451,6 +458,7 @@ func (s *Server) routes() {
 		s.home.Mount(r)
 		s.usage.Mount(r)
 		s.glance.Mount(r)
+		s.knowledge.Mount(r)
 	})
 }
 
