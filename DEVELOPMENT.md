@@ -20585,3 +20585,60 @@ that was never the problem.
 
 Nothing here says do not. It says the saving is the loop, and the loop
 is the part that already works.
+
+### Mem0, measured against our own retrieval
+
+Same twelve memories, same twelve questions, same embedding server --
+the labelled set `embed/evals` already uses, so the answer is known
+for every question.
+
+	ours: embed and cosine, with the bge query prefix
+	  right first 11/12   in the top three 12/12
+
+	mem0 2.2.1, memories stored as written
+	  right first 11/12   in the top three 12/12
+
+	mem0 2.2.1, with its own fact extraction
+	  right first 12/12   in the top three 12/12
+
+As a vector search Mem0 is a dead heat with what we do, and it misses
+a different question than we do. What it wins on is the other half:
+an LLM call at **write** time that rewords the memory before storing
+it.
+
+#### What the rewording actually does
+
+	given  Orders from Swiggy Instamart, Flipkart and Meesho.
+	kept   User orders groceries and goods from Swiggy Instamart ...
+
+	given  Auto fares are usually between 165 and 700 rupees.
+	kept   User's auto rickshaw fares in Chennai typically range ...
+
+	given  The roofer quoted forty thousand for the terrace work.
+	kept   A roofer quoted Rs 40,000 for terrace work around October 2026.
+
+It adds the frame the sentence was written without: the category
+(*groceries and goods*), the place (*in Chennai*), the time (*around
+October 2026*). The one question we lose is *"which apps do I buy
+things through"*, and it is won by the words *goods* and *orders*
+being in the stored text at all.
+
+So the win is in **how a memory is worded when it is written**, not in
+the library. Memories here are already written by a model. The same
+gain is one more sentence in a prompt we already send, with no
+container, no Python and nothing leaving the machine.
+
+Twelve questions and a difference of one, so this is a direction and
+not a measurement. The next thing is to word memories that way and
+run it again on the real store.
+
+#### The shim, which outlived the question
+
+Mem0's extraction needs a model, and the gateway is not OpenAI. So
+`cmd/spike-shim` serves `/v1/chat/completions` over it: messages in,
+`environment.Request` out, the reply back as a completion, JSON mode
+passed on as an instruction because the gateway has no field for it.
+Twenty-five calls through it during this run, loopback only.
+
+It is worth more than the spike it was written for. Anything that
+speaks OpenAI can now be measured against this gateway.
