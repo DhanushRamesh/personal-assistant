@@ -79,3 +79,32 @@ func TestALaptopsToolIsOfferedAndRun(t *testing.T) {
 		t.Errorf("open_app ran %d times, want once", opened)
 	}
 }
+
+// Only the device tools used most are described in full; the rest are
+// named in the catalogue, to be asked for.
+func TestALaptopsRarerToolsAreNamedNotDescribed(t *testing.T) {
+	mk := func(name string) tool.Tool {
+		return tool.Tool{
+			Name: name, Purpose: "Does " + name + " on the laptop.", UseWhen: "Asked to.",
+			Channels: []chat.Channel{chat.ChannelVoice, chat.ChannelDirect},
+			Params:   tool.Schema{Properties: map[string]tool.Property{}},
+			Run:      func(context.Context, tool.Invocation) tool.Result { return tool.OK("") },
+		}
+	}
+	env := &noting{scripted: &scripted{rounds: []environment.Message{environment.Final("Done.")}}}
+	h := newHarness(t, env, runner.Options{Tools: deferring(t, func() tool.Result { return tool.OK("") }),
+		Away: laptop{[]tool.Tool{mk("read_terminal"), mk("change_space")}}})
+
+	tk := h.submitOn(t, chat.ChannelVoice, "what is in the terminal")
+	h.await(t, tk.ID, chat.StatusCompleted, chat.StatusFailed)
+
+	env.mu.Lock()
+	defer env.mu.Unlock()
+	got := strings.Join(env.offered[0], " ")
+	if !strings.Contains(got, "read_terminal") || strings.Contains(got, "change_space") {
+		t.Errorf("described %v, want read_terminal and not change_space", env.offered[0])
+	}
+	if !strings.Contains(env.prompts[0], "- change_space: Does change_space on the laptop.") {
+		t.Error("change_space is not named in the catalogue")
+	}
+}

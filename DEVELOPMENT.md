@@ -20306,6 +20306,20 @@ The desktop app sends the next prompt Claude Code itself suggests, when
 it shows one, in the notification's words; the reaction weighs it first
 and offers it in its words when it is the right next step.
 
+**Speed: the device's tools named, the used ones described** (owner, 17
+October 2026: *"go build the speed work"*). Measured on the day's turns,
+a chat request was about 186 KB: the tools 111 KB (49 of them), the
+system prompt 63 KB -- the manner 28.6 KB, prefetched readings 11.6 KB
+(memory_list and event_kinds), memories known 6.5 KB, past exchanges
+2.7 KB, recalled memories 2.1 KB, where they are up to 2.4 KB -- and the
+conversation 11 KB. Every device tool was revealed as the chat began, so
+all 27 of the desktop app's were described in full every round. Now only
+`deviceHot` are -- read_terminal, type_into_terminal, list_terminals,
+list_spaces, open_space, open_app, 50 of the 51 device calls in two
+weeks -- and the rest are named in the catalogue and described when
+asked for, which tool_describe can do since `With` gave it the merged
+registry.
+
 **Leaving takes two fixes** (owner, 17 October 2026: *"I literally was in
 home .. and in home till now .. but it showed moving"*). On the night of
 16 October the phone twice reported the same point, 235 m east of home --

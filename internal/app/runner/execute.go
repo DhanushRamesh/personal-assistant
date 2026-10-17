@@ -204,17 +204,22 @@ func (r *Runner) consume(runCtx, ctx context.Context, t *chat.Chat, systemPrompt
 	// true for about forty seconds.
 	revealed := r.alreadyDescribed(window.Messages)
 
-	// What the person's own devices offer, taken as the chat begins and
-	// described in full: there are a few, and a device's tool named but
-	// not described could be described by nothing, since tool_describe
-	// knows only the server's.
+	// What the person's own devices offer, taken as the chat begins. The
+	// ones used most are described in full; the rest are named in the
+	// catalogue and described when asked for, as the server's own are --
+	// tool_describe knows a device's tools since With gave it the merged
+	// registry. All of them described was 27 tools and about a fifth of
+	// every request once the desktop app offered everything it can do
+	// (owner, 17 October 2026: *"go build the speed work"*).
 	if r.away != nil {
 		if extra := r.away.For(r.callerFor(ctx, t).UserID); len(extra) > 0 {
 			r.chatTools.Store(t.ID, r.tools.With(extra...))
 			defer r.chatTools.Delete(t.ID)
 			names := make([]string, 0, len(extra))
 			for _, x := range extra {
-				revealed[x.Name] = true
+				if deviceHot[x.Name] {
+					revealed[x.Name] = true
+				}
 				names = append(names, x.Name)
 			}
 			r.logger.InfoContext(ctx, "the person's devices offer tools", slog.Any("tools", names))
@@ -1348,4 +1353,19 @@ func laptopConnected(tools []string) string {
 		"The laptop changes all the time -- an app closed, a space switched -- so look again with these tools " +
 		"each time, never answering from what an earlier turn found; and to open something, call the tool that " +
 		"opens it rather than deciding first that it is open."
+}
+
+// deviceHot : The tools of the person's devices described in full on every
+// request, by use: of the device tools called in the two weeks to 17
+// October 2026, these six were 50 of 51 calls -- read_terminal 13,
+// type_into_terminal 10, list_spaces 9, list_terminals 9, open_space 3,
+// open_app 2 -- and opening a space or an app is said in one breath and
+// should not wait a round to learn its arguments. The rest are named.
+var deviceHot = map[string]bool{
+	"read_terminal":      true,
+	"type_into_terminal": true,
+	"list_terminals":     true,
+	"list_spaces":        true,
+	"open_space":         true,
+	"open_app":           true,
 }
