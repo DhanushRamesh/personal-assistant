@@ -688,6 +688,31 @@ type tokenState struct {
 // OpenAI's shape does, leaves the vendor behind it complaining that a
 // tool_use had no tool_result after it.
 func asWire(turn environment.Turn) []chatMessage {
+	var out []chatMessage
+
+	// A call and its answer are two messages, in that order. A turn
+	// carrying both used to return only the answer, which put a result
+	// on the wire with no call in front of it for it to belong to, and
+	// the gateway refuses the whole request for it:
+	//
+	//	messages.0.content.1: unexpected `tool_use_id` found in
+	//	`tool_result` blocks
+	//
+	// Nothing says a turn may not carry both. The runner's turns come
+	// from stored messages that are already separate, so it never built
+	// one -- but the first caller that did lost its tool calls in
+	// silence, which is the worst way to find out.
+	if len(turn.ToolResults) == 0 || len(turn.ToolCalls) > 0 || turn.Text != "" {
+		msg := chatMessage{Role: string(turn.Role), Content: turn.Text}
+		for _, c := range turn.ToolCalls {
+			wire := wireToolCall{ID: c.ID, Type: "function"}
+			wire.Function.Name = c.Name
+			wire.Function.Arguments = c.Arguments
+			msg.ToolCalls = append(msg.ToolCalls, wire)
+		}
+		out = append(out, msg)
+	}
+
 	if len(turn.ToolResults) > 0 {
 		msg := chatMessage{Role: "tool"}
 		for _, r := range turn.ToolResults {
@@ -697,17 +722,9 @@ func asWire(turn environment.Turn) []chatMessage {
 				Content: r.Content,
 			})
 		}
-		return []chatMessage{msg}
+		out = append(out, msg)
 	}
-
-	msg := chatMessage{Role: string(turn.Role), Content: turn.Text}
-	for _, c := range turn.ToolCalls {
-		wire := wireToolCall{ID: c.ID, Type: "function"}
-		wire.Function.Name = c.Name
-		wire.Function.Arguments = c.Arguments
-		msg.ToolCalls = append(msg.ToolCalls, wire)
-	}
-	return []chatMessage{msg}
+	return out
 }
 
 // asWireTools : The offered tools in the shape the endpoint expects.

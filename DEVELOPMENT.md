@@ -20381,6 +20381,59 @@ used. Measured on three weeks of spoken questions as it would have run
 then: calendar 67% foreseen, reminders 60%, places 75%, fetched on 14%
 of turns.
 
+**With Claude Code, the assistant speaks from what it knows of the
+owner** (owner, 17 October 2026: *"it should be like me talking to
+Claude, but it's not me, it's [the assistant] .. it has all the
+knowledge about me, my spaces, my schedule"*). Today the terminal
+reaction that judges Claude Code's turns is given the Claude Code record
+and the owner's ordinary day, nothing more; a chat turn has their
+memories but treats Claude Code as a terminal to read. Planned: the
+reaction given the owner's standing description, the memories in every
+prompt and those recalled by what Claude Code is doing, the decisions
+they have recorded, the space and its notes, and the next hours of the
+calendar; and what is typed into Claude Code written as the owner would
+put it, with what it knows of them that bears on the work.
+Built first (owner, same day: *"start with giving the assistant full
+context when you check in, and keep always ask me"*): `Reactor.Knowing`
+(`knowingThem` in main) gives a Claude Code turn their standing
+description, the memories in every prompt, the memories recalled by what
+Claude Code was last asked and said, the space and its notes (sent by the
+app), and today's calendar read just now; the prompt says to weigh what
+Claude Code did, asks and would do next against it, say when it settles
+something, and recommend -- never answer Claude Code for them.
+
+**Retrieve what is relevant, never push everything** (owner, same day:
+*"I should pass it everything, but I can't just push everything .. so
+everything should be recorded on disk somewhere and the embedding model
+should bring my personality"*). Where it stands: memories (22) and the
+transcript (3,445 messages) are embedded and found by meaning; the
+standing description, the memories in every prompt and the whole
+memory list (prefetched every turn, 11.6 KB) are pushed whole; the
+manner is 22 KB on every call. The direction: everything about the
+owner kept on disk and embedded -- the description by its sections,
+memories, decisions, the spaces' notes, past exchanges -- and what bears
+on the moment retrieved, for chat turns and Claude Code's alike.
+
+**The knowledge store** (owner, 17 October 2026: *"embed all sources ..
+leave the manner for now -- keep the work to one clear thing"*). Table
+`knowledge` (migration 00057): a person's sources in chunks of about 700
+characters (`knowledge.Chunks`), each embedded with the local model, kept
+by source and ref and replaced whole when the text's hash changes
+(`knowledge.Known.Keep`); found by the nearest chunks to a question
+(`Find`, compared in Go, as message_vectors are). Sources: their
+description by its three sections and every memory, put there by the
+server (`internal/app/knowing`: at once the first time something is
+asked about them, every 15 minutes after, a memory forgotten when it
+is); and a space's notes, Claude Code's conversations and files, put by
+the desktop app through `POST /v1/knowledge` (`notes`, `claude`,
+`file`; the server's own sources may not be written from outside).
+Built first: the store, the endpoint, the server's sources, and Claude
+Code's turns given what is found for what Claude Code was last asked and
+said (8 pieces at most, as alike as 0.55 at least) in place of the whole
+description and memories. Next: the desktop app sending its sources;
+then chat turns given what is found in place of what is pushed whole.
+Past exchanges stay where they are embedded already, message_vectors.
+
 **Leaving takes two fixes** (owner, 17 October 2026: *"I literally was in
 home .. and in home till now .. but it showed moving"*). On the night of
 16 October the phone twice reported the same point, 235 m east of home --
@@ -20390,3 +20443,98 @@ past its edge, timed at the first; the first may be the last fix of an
 earlier batch (`Before`, read back from the store). A lone stray leaves
 nothing; a real leaving is still seen within a minute or two, as the
 phone reports every 20 to 100 s once it moves. Entering still takes one.
+
+### A day with Eino, to find out rather than argue
+
+Owner: *"we can have a adapter right ... agentic workflow library will
+be very useful as i dont have to maintain stuffs."* He is right that
+the adapter is small, so the question is what is left after it.
+
+Behind `//go:build spike`, so it is out of every ordinary build:
+`internal/base/thinking/environment/einomodel` puts an `Environment`
+behind Eino's `ToolCallingChatModel`, and `cmd/spike-eino` asks one
+question through Eino's ReAct agent with two tools in front.
+
+**It works.** Two rounds, the second reading the first:
+
+	ASKED    what is on my calendar tomorrow, and what time is it now?
+	TOOK     11.2s
+	TOOLS    time_now {}
+	         calendar_events {"day":"Sunday 18 October 2026"}
+	ANSWER   It is 5:11 pm, sir. Tomorrow is clear.
+
+	ASKED    who wrote the book The Hobbit
+	TOOK     3.3s
+	TOOLS    none were called
+	ANSWER   J.R.R. Tolkien, sir, published in 1937.
+
+The persona survives the trip, and so does `simply`: two short
+sentences, and the second answer is six words.
+
+The adapter is about 170 lines. `Generate` is the stream drained,
+`Stream` is a `schema.Pipe`, `WithTools` stores a list.
+
+#### Three things broke at the seam, and the third is ours
+
+**An empty argument list is not JSON.** A tool that takes nothing is
+called with nothing, and the gateway reports that as an empty string.
+Eino unmarshals the arguments whatever the tool takes, so the call
+failed before the tool was reached. `""` becomes `{}` in the adapter.
+
+**Only a trailing user message is the prompt.** Taking the last user
+message from anywhere in the list moved it behind the turn that
+answered it, and a tool result arrived as `messages.0` with no tool
+call in front of it. A round ending on a tool result has nothing
+newly said, and `attemptOnce` already leaves an empty prompt off the
+wire.
+
+**`asWire` drops tool calls when a turn has both.** It looks at
+`ToolResults` first and returns a tool message, so the `ToolCalls` on
+that same turn are silently gone -- which puts a `tool_result` on the
+wire with nothing for it to answer, and the gateway refuses the whole
+request. Nothing in `Turn`'s doc comment says a turn carries one or
+the other, and nothing enforces it. Our own runner happens never to
+build one that way, because its turns come from stored messages that
+are already separate. **This is a trap waiting for the next caller,
+and it is worth fixing whatever is decided about Eino.**
+
+#### What the spike does not answer
+
+Three agent calls prove the gateway, the tool round trip and the
+persona. They say nothing about the five things that live in our own
+loop: holding a spoken answer 2.5 seconds, the asides running beside
+it, the tool list deferred past fifty, the clock placed after the
+history as a turn, and sending an answer back to be said shorter.
+Eino owns its loop, and whether those fit is the question a migration
+turns on.
+
+The cost of looking is on the record: `go.mod` gains Eino and **25
+indirect dependencies**, among them sonic, gonja and a JSON schema
+library. The ordinary build is unchanged and still green.
+
+### A call and its answer are two messages
+
+The trap the Eino spike walked into, fixed where it lives.
+
+`asWire` turned one `environment.Turn` into one wire message. It looked
+at `ToolResults` first and returned a tool message, so any `ToolCalls`
+on that same turn were gone without a word. What reaches the gateway
+is then a `tool_result` with nothing in front of it for it to answer,
+and the whole request is refused:
+
+	messages.0.content.1: unexpected `tool_use_id` found in
+	`tool_result` blocks (HTTP 400)
+
+Nothing in `Turn` said a turn may carry one or the other, and nothing
+enforced it. The runner never built one, because its turns come from
+stored messages that are already separate -- so this sat there until
+the first caller that did, and that caller lost its tool calls in
+silence, which is the worst way to find out.
+
+It returns both now, in the order the wire needs: the message with the
+text and the calls, then the tool message with the results. A turn
+with only one of them comes out exactly as it did before, which the
+second test pins down.
+
+The first test was run against the old code before being believed:
+*"a turn with a call and its answer became 1 messages, want 2."*
