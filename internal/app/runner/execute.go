@@ -843,6 +843,9 @@ func (r *Runner) drain(
 	var (
 		kept     strings.Builder
 		relented bool
+		// gathering : When the first piece of a held answer arrived,
+		// so that the silence it bought can be measured.
+		gathering time.Time
 	)
 	// One per stream. The model narrating twice inside a single round
 	// is describing one piece of work, and saying both would be the
@@ -917,6 +920,7 @@ func (r *Runner) drain(
 				// piece. What lets it go is the timer above.
 				if release == nil && kept.Len() == 0 {
 					release = time.After(hold)
+					gathering = time.Now()
 				}
 				kept.WriteString(msg.Text)
 				continue
@@ -938,6 +942,16 @@ func (r *Runner) drain(
 				At:     msg.At,
 			})
 		case environment.KindFinal, environment.KindError, environment.KindToolCalls:
+			// What holding this answer cost, which until now was only
+			// recorded when it failed. The cap being hit is logged
+			// above; an answer that finishes inside it was silent for
+			// this long too, and that is the number a spoken turn is
+			// actually judged on.
+			if !gathering.IsZero() && !relented {
+				r.logger.InfoContext(ctx, "an answer was held whole before it was heard",
+					slog.Duration("silent_for", time.Since(gathering)),
+					slog.Int("characters", kept.Len()))
+			}
 			m := msg
 			final = &m
 			t.Ended(call, callEnd(msg.Kind), time.Now())
