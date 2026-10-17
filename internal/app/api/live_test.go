@@ -13,6 +13,7 @@ import (
 	"personal-assistant/internal/app/api/apitest"
 	"personal-assistant/internal/app/live"
 	"personal-assistant/internal/base/records/chat"
+	"personal-assistant/internal/base/thinking/environment"
 )
 
 func liveURL(base string) string {
@@ -244,5 +245,60 @@ func TestALivePromptCarriesWhereThePersonIs(t *testing.T) {
 	}
 	if got := whereOf(ask("r3", "")); got != "" {
 		t.Errorf("a prompt without where kept %q", got)
+	}
+}
+
+// saying : A provider that says what it is about to do and then answers,
+// which is the shape of every turn that reads something.
+type saying struct{ text string }
+
+func (p *saying) Name() string { return "saying" }
+
+func (p *saying) Run(ctx context.Context, req environment.Request) (<-chan environment.Message, error) {
+	ch := make(chan environment.Message, 2)
+	if req.Purpose == environment.PurposeChat {
+		ch <- environment.Update(p.text)
+	}
+	ch <- environment.Final("It is ten past six, sir.")
+	close(ch)
+	return ch, nil
+}
+
+// TestLiveSendsProgressBeforeTheAnswer : What the turn is doing reaches
+// the screen that asked, ahead of the answer and on the same connection.
+//
+// Every link in this was covered except the one that carries it: the
+// runner publishes, the client parses `progress` and draws it, and
+// nothing checked that the websocket in between puts it on the wire.
+func TestLiveSendsProgressBeforeTheAnswer(t *testing.T) {
+	e := apitest.NewWith(t, apitest.Options{
+		Live:        live.NewHub(),
+		Environment: &saying{text: "reading your diary for tomorrow"},
+	})
+	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	t.Cleanup(cancel)
+	c, _, err := websocket.Dial(ctx, liveURL(e.Live(t)), &websocket.DialOptions{
+		HTTPHeader: http.Header{"Authorization": {"Bearer " + e.Token}},
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { c.CloseNow() })
+
+	if err := wsjson.Write(ctx, c, map[string]any{
+		"type": "prompt", "request": "r1", "text": "what time is the movie", "spoken": false,
+	}); err != nil {
+		t.Fatal(err)
+	}
+	accepted := until(t, ctx, c, "chat")
+	progress := until(t, ctx, c, "progress")
+	if progress.ChatID != accepted.ChatID {
+		t.Errorf("progress = %+v; want it for chat %s", progress, accepted.ChatID)
+	}
+	if progress.Text != "reading your diary for tomorrow" {
+		t.Errorf("progress text = %q; want what the turn said it was doing", progress.Text)
+	}
+	if answer := until(t, ctx, c, "answer"); answer.Text == "" {
+		t.Errorf("answer = %+v; want the finished answer after the progress", answer)
 	}
 }
