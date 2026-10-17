@@ -20320,6 +20320,21 @@ weeks -- and the rest are named in the catalogue and described when
 asked for, which tool_describe can do since `With` gave it the merged
 registry.
 
+**Sonnet stays on the quick paths** (owner, 17 October 2026, choosing
+*"Keep Sonnet"*). Measured that day through the gateway: a call has a
+floor of about 2 to 2.7 s whatever its size, and size adds about 0.06 s
+for every thousand tokens. Shortening the twenty tools always described
+was weighed and left: they are the ones used (calendar_events 106 calls
+in three weeks, reminder_set 89, reminder_list 63 ...), and at most
+about 15 KB, a quarter of a second, could be taken out of descriptions
+whose every sentence fixed something. claude-haiku-4-5-20251001 answers
+here, and was faster -- 2.0 s against 3.3 to 4 s for a Claude Code
+record -- but twice said Claude Code had "switched the quick-path model
+to Haiku across the codebase" while it was still reading, where Sonnet
+said "nothing's changed yet". Told something happened that did not is
+worse than a second and a half; `fast_model` stays empty. Next: fewer
+rounds a question.
+
 **Leaving takes two fixes** (owner, 17 October 2026: *"I literally was in
 home .. and in home till now .. but it showed moving"*). On the night of
 16 October the phone twice reported the same point, 235 m east of home --
