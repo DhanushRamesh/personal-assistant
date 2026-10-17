@@ -366,7 +366,8 @@ func TestClaudeCodesRecordIsWeighedWhenItAsks(t *testing.T) {
 		Conversation: "They last asked Claude Code:\nfix the crossings\n\nWhat it said since:\nDelete the false ones, or keep them?"},
 		at, at, time.UTC, "", nil)
 	for _, want := range []string{"its own record of the conversation", "Delete the false ones, or keep them?", "which answer you would choose",
-		"done with its turn", "offering to tell Claude Code to do it", "a yes is typed into Claude Code"} {
+		"done with its turn", "offering to tell Claude Code to do it", "a yes is typed into Claude Code",
+		"the next prompt Claude Code itself suggests"} {
 		if !strings.Contains(got, want) {
 			t.Errorf("the prompt does not say %q:\n%s", want, got)
 		}

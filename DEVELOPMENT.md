@@ -20302,6 +20302,9 @@ did, then the best next step from its whole record, ending in a question
 offering to tell Claude Code to do it (or to give it the answer to what
 it asked); a yes is typed into Claude Code by the turn that hears it.
 Everything else -- a shell ending, a bell elsewhere -- is still judged.
+The desktop app sends the next prompt Claude Code itself suggests, when
+it shows one, in the notification's words; the reaction weighs it first
+and offers it in its words when it is the right next step.
 
 **Leaving takes two fixes** (owner, 17 October 2026: *"I literally was in
 home .. and in home till now .. but it showed moving"*). On the night of

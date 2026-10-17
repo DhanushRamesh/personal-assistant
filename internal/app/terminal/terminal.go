@@ -424,6 +424,7 @@ func Asking(t event.Terminal, at, now time.Time, where *time.Location, usually s
 				"It is Claude Code, done with its turn and waiting for them, and this is its own record of the conversation, newest last, secrets hidden: what they asked of it, what it did and what it said.",
 				"Say in a sentence or two what it did, by what it comes to -- what changed, whether it worked -- then the best next step, judged from the whole record, and end with one short question offering to tell Claude Code to do it.",
 				"If it asked them something -- a question at the end of what it said, or a choice on its screen -- say plainly what it asks and which answer you would choose, with the reason in a few words, and offer to give Claude Code that answer.",
+				"When the notification gives the next prompt Claude Code itself suggests, weigh that first: offer it, in its words, when it is the right next step.",
 				"If the record does not settle it, say what it hinges on, and offer nothing. They answer aloud; a yes is typed into Claude Code for them.",
 			),
 			cut(t.Conversation, MaxConversation),
