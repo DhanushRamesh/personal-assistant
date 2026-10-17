@@ -173,6 +173,20 @@ evals: ## Ask a real model whether the tool descriptions work (costs API calls)
 	@# reads like a verdict and is not one.
 	@go test ./internal/app/tool/evals/... ./internal/base/thinking/embed/evals/... ./internal/domain/memory/evals/... ./internal/domain/persona/evals/... ./internal/base/records/conversation/evals/... ./internal/domain/remind/evals/... -tags evals -count=1 -v -timeout 45m
 
+.PHONY: spike-eino
+spike-eino: ## Ask one question through Eino's agent, over this gateway (costs API calls)
+	@# Behind a build tag, so it is out of every ordinary build. What
+	@# it answers is whether the gateway, the tool round trip and the
+	@# persona survive somebody else's loop. ARGS="the question".
+	@go run -tags spike ./cmd/spike-eino/ $(ARGS)
+
+.PHONY: spike-five
+spike-five: ## Try the five things our own loop does inside Eino's (costs API calls)
+	@# Holding a spoken answer, an aside beside it, tools deferred
+	@# past fifty, the clock after the history, and saying it again
+	@# shorter. One check each, printing what happened.
+	@go run -tags spike ./cmd/spike-five/
+
 .PHONY: check
 check: ## Everything that must pass before committing
 	@gofmt -l .
@@ -190,6 +204,11 @@ check: ## Everything that must pass before committing
 	@# run before every commit, rather than by whoever next spends
 	@# real money running them.
 	@go vet -tags evals ./... 2>&1 | grep -v "^#" || true
+	@# And the spike, for the same reason. It is kept, so it has to
+	@# keep building: an Environment whose signature moves would
+	@# strand it silently otherwise, and a spike nobody can run is
+	@# not kept, it is just still in the tree.
+	@go vet -tags spike ./... 2>&1 | grep -v "^#" || true
 	@go test ./... -race
 
 .PHONY: clean
