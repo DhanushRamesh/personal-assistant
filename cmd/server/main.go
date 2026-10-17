@@ -30,6 +30,7 @@ import (
 	"personal-assistant/internal/app/api/presence"
 	"personal-assistant/internal/app/away"
 	"personal-assistant/internal/app/elsewhere"
+	"personal-assistant/internal/app/glance"
 	"personal-assistant/internal/app/live"
 	"personal-assistant/internal/app/noticing"
 	"personal-assistant/internal/app/pattern"
@@ -1029,24 +1030,35 @@ func run() error {
 		// The same diary and lists the tools use, for a greeting that
 		// can mention what is first thing tomorrow. Nil without
 		// Google, and a greeting is then about what has happened.
-		Diary:          greetingDiary(googleLink, cfg),
-		Chores:         greetingChores(googleLink),
-		Google:         googleLink,
-		SettingsURL:    cfg.Google.SettingsURL,
-		Location:       cfg.Assistant.Location,
-		Now:            cfg.Assistant.Now,
-		Runner:         chatRunner,
-		Memories:       remembering.Store,
-		Vocabulary:     names,
-		Events:         bus,
-		Models:         reachableModels(cfg),
-		DefaultModel:   cfg.PlatformAI.Model,
-		Persona:        manner,
-		Cut:            cutOff,
-		Answered:       liveHub,
-		DeviceEvents:   deviceEvents,
-		Places:         drawnPlaces,
-		Usage:          calls,
+		Diary:        greetingDiary(googleLink, cfg),
+		Chores:       greetingChores(googleLink),
+		Google:       googleLink,
+		SettingsURL:  cfg.Google.SettingsURL,
+		Location:     cfg.Assistant.Location,
+		Now:          cfg.Assistant.Now,
+		Runner:       chatRunner,
+		Memories:     remembering.Store,
+		Vocabulary:   names,
+		Events:       bus,
+		Models:       reachableModels(cfg),
+		DefaultModel: cfg.PlatformAI.Model,
+		Persona:      manner,
+		Cut:          cutOff,
+		Answered:     liveHub,
+		DeviceEvents: deviceEvents,
+		Places:       drawnPlaces,
+		Usage:        calls,
+		// "What am I seeing": one quick call from what the client shows,
+		// the fast model where one is configured.
+		Glance: &glance.Glancer{
+			Ask: func(ctx context.Context, system, ask string) (string, error) {
+				return askAs(ctx, answerer, cfg.PlatformAI.Vendor,
+					cmp.Or(cfg.PlatformAI.FastModel, cfg.PlatformAI.Model), system, environment.PurposeChat, ask)
+			},
+			Voice:  func() string { return persona.Voice(manner.Current(), cfg.Assistant.Name) },
+			Notes:  announcements,
+			Logger: logger.Logger,
+		},
 		Remarks:        remarked,
 		Rules:          scheduled,
 		Usually:        usually,

@@ -267,6 +267,33 @@ func (w *Writer) HeardBy(ctx context.Context, userID string, c *client.Client, k
 	w.said(ctx, userID, id, kind, text)
 }
 
+// Glanced : Notes a "what am I seeing" asked on a client and answered in
+// one quick call, in the conversation that client is talking in, so what
+// is asked next goes on from it. Written as a question and its answer,
+// not as something said unasked: it was asked.
+func (w *Writer) Glanced(ctx context.Context, userID string, c *client.Client, asked, said string) {
+	if w == nil || c == nil || w.Clients == nil || w.Conversations == nil {
+		return
+	}
+	asked, said = strings.TrimSpace(asked), strings.TrimSpace(said)
+	if asked == "" || said == "" {
+		return
+	}
+	id, err := chat.ActiveConversation(ctx, w.Clients, userID, c.ID, c.ActiveConversationID)
+	if err != nil || id == "" {
+		w.warn(ctx, "cannot tell which conversation the glance was in", err)
+		return
+	}
+	at := w.clock()
+	for _, m := range []conversation.Message{conversation.Said(id, asked, at), conversation.Answered(id, said, at)} {
+		if _, err := w.Conversations.Append(ctx, m); err != nil {
+			w.warn(ctx, "cannot write down a glance", err)
+			return
+		}
+	}
+	w.changed(ctx, userID, id)
+}
+
 // Renamed : Notes the assistant having given a conversation its name.
 //
 // Asked, and the conversation is known, so it is given rather than

@@ -48,6 +48,9 @@ const (
 	// FeatureTerminal : A terminal on the laptop wanting attention,
 	// deciding whether to tell them and what.
 	FeatureTerminal Feature = "terminal"
+	// FeatureGlance : Saying what the person has in front of them, in
+	// one quick call.
+	FeatureGlance Feature = "glance"
 	// FeatureOther : A call nobody labelled.
 	FeatureOther Feature = "other"
 )
@@ -57,7 +60,7 @@ func Features() []Feature {
 	return []Feature{
 		FeatureChat, FeatureTitle, FeatureCondense, FeatureProfile,
 		FeatureVocabulary, FeatureGreeting, FeatureRuleWriter, FeatureComing,
-		FeatureNoticing, FeatureNoticingWriter, FeatureRuleRemark, FeatureTerminal,
+		FeatureNoticing, FeatureNoticingWriter, FeatureRuleRemark, FeatureTerminal, FeatureGlance,
 		FeatureOther,
 	}
 }

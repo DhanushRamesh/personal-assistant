@@ -341,3 +341,24 @@ func TestAPersonaThatCallsThemNothingGetsNoOpening(t *testing.T) {
 		t.Errorf("got %q, want it untouched", got)
 	}
 }
+
+// A glance is written as the question asked and its answer, into the
+// conversation the asking client is in, so what is asked next goes on
+// from it.
+func TestAGlanceIsWrittenAsAQuestionAndItsAnswer(t *testing.T) {
+	w, repo, user := writer(t)
+	laptop := registerClient(t, repo, user.ID, "laptop", chat.ChannelDirect)
+
+	w.Glanced(context.Background(), user.ID, laptop, "What am I seeing?", "The build failed in Shell.")
+	w.Glanced(context.Background(), user.ID, laptop, " ", "Nothing asked is nothing written.")
+
+	got := reread(t, repo, user.ID, laptop.ID)
+	said, err := repo.All(context.Background(), got.ActiveConversationID)
+	if err != nil {
+		t.Fatalf("reading the conversation: %v", err)
+	}
+	if len(said) != 2 || said[0].Role != conversation.User || said[1].Role != conversation.Assistant ||
+		said[0].Content != "What am I seeing?" || said[1].Content != "The build failed in Shell." {
+		t.Fatalf("wrote %+v", said)
+	}
+}

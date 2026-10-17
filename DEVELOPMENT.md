@@ -20243,6 +20243,21 @@ announcement is in the conversation before the answer arrives, and a
 bare yes lets the next command the assistant asks to run go without its
 card, once -- so the one question offers one thing.
 
+**"What am I seeing" is one quick call** (owner, 17 October 2026: *"when
+I ask 'what am I seeing' it should say about the current terminal, page
+or notes in a simple way"*, and *"I'm more into the fast and swift
+response"*). A chat turn here is three rounds of the model over about
+39,000 tokens -- the manner, memories, past exchanges, prefetched
+readings and every tool -- seven to fourteen seconds. `POST /v1/glance`
+(`internal/app/glance`) is one call: the manner (`persona.Voice`), what
+the client says is in front of the owner (at most 24 KB), and the
+question; no tools, nothing recalled. The fast model when one is
+configured, the main one otherwise. It leads with what needs them --
+an error, a program waiting -- in two or three plain sentences. The
+question and answer are then written into the client's conversation
+(`announcement.Writer.Glanced`), so what is asked next goes on from it.
+Its calls are counted in Settings › Usage as "What am I seeing".
+
 **Leaving takes two fixes** (owner, 17 October 2026: *"I literally was in
 home .. and in home till now .. but it showed moving"*). On the night of
 16 October the phone twice reported the same point, 235 m east of home --
