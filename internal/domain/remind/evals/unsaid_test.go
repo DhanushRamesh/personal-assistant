@@ -80,7 +80,7 @@ func TestAMissedReminderIsPassedOn(t *testing.T) {
 		"\n\n" + memory.Offered([]memory.Match{
 		{Memory: memory.Memory{Subject: "Guitar", Body: "Likes playing guitar."}, Score: 0.41},
 		{Memory: memory.Memory{Subject: "Owl City", Body: "Likes the band Owl City."}, Score: 0.38},
-	}, time.UTC) +
+	}) +
 		"\n\n" + memory.Quoted([]memory.Heard{
 		{Exchange: memory.Exchange{
 			Text: "They said: my pet name is Toofy\nYou answered: Noted, sir, spelt T-O-O-F-Y.",

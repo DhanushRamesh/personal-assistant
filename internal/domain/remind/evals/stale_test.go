@@ -132,7 +132,7 @@ func TestAStaleAnswerIsNotRepeated(t *testing.T) {
 		{Memory: memory.Memory{Subject: "Guitar", Body: "Likes playing guitar."}, Score: 0.42},
 		{Memory: memory.Memory{Subject: "Owl City", Body: "Likes the band Owl City."}, Score: 0.39},
 		{Memory: memory.Memory{Subject: "Pet name", Body: "Pet name is Toofy."}, Score: 0.36},
-	}, time.UTC) +
+	}) +
 		"\n\n" + stale +
 		// The same block production hands over before a question, from
 		// the same constant, so this cannot drift from what the server

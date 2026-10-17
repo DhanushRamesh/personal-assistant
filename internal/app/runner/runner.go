@@ -455,67 +455,15 @@ func (r *Runner) promptFor(ctx context.Context, t *chat.Chat) (string, []remind.
 	var note chat.Recalled
 	started := time.Now()
 
-	// Gathered at once rather than one after another.
-	//
-	// Every part reads something different -- the memories, the
-	// transcript, the diary, what the tools have listed -- and none of
-	// them reads what another writes, so the only thing they shared
-	// was the clock. In series the median was 265ms and the slowest
-	// one in ten took 1,757ms, with a worst of 8,291ms, all of it
-	// spent before the model was asked anything. A turn is 4.6
-	// seconds at the median and the owner wants three, so two seconds
-	// of waiting in a row is not something to leave lying there.
-	//
-	// Each writes its own note and they are merged in a fixed order
-	// afterwards, so what is recorded does not depend on which
-	// finished first.
-	var (
-		wait                                   sync.WaitGroup
-		where, known, recalled, quoted         string
-		justSaid, prefetched, foreseen, unsaid string
-		covered                                []remind.Reminder
-		forKnown, forRecalled, forQuoted       chat.Recalled
-		forPrefetched, forForeseen             chat.Recalled
-	)
-	// How long each part took, so that a build that stalls says which
-	// part stalled. Gathering in parallel means the whole wait is the
-	// slowest one, and without this the only figure is that total: a
-	// build of 5.17 seconds against a median of 265ms, intermittent
-	// and present long before anything ran in parallel.
-	var (
-		slowest sync.Mutex
-		spent   = map[string]time.Duration{}
-	)
-	gather := func(name string, run func()) {
-		wait.Add(1)
-		go func() {
-			defer wait.Done()
-			at := time.Now()
-			run()
-			took := time.Since(at)
-			slowest.Lock()
-			spent[name] = took
-			slowest.Unlock()
-		}()
-	}
-	gather("unsaid", func() { unsaid, covered = r.missed(ctx, userID) })
-	gather("where", func() { where = r.whereTheyAre(ctx, t, userID) })
-	gather("known", func() { known = r.known(ctx, userID, &forKnown) })
-	gather("recalled", func() { recalled = r.recalled(ctx, userID, t.Prompt, &forRecalled) })
-	gather("quoted", func() { quoted = r.quoted(ctx, userID, t.Prompt, t.ConversationID, &forQuoted) })
-	gather("justSaid", func() { justSaid = r.justSaid(ctx, userID) })
-	gather("prefetched", func() { prefetched = r.prefetch(ctx, t, &forPrefetched) })
-	gather("foreseen", func() { foreseen = r.foresee(ctx, t, userID, &forForeseen) })
-	wait.Wait()
+	unsaid, covered := r.missed(ctx, userID)
 
-	for _, part := range []chat.Recalled{forKnown, forRecalled, forQuoted, forPrefetched, forForeseen} {
-		note.Always = append(note.Always, part.Always...)
-		note.Notes = append(note.Notes, part.Notes...)
-		note.Exchanges = append(note.Exchanges, part.Exchanges...)
-		note.Tools = append(note.Tools, part.Tools...)
-		note.ByWords = note.ByWords || part.ByWords
-	}
-
+	where := r.whereTheyAre(ctx, t, userID)
+	known := r.known(ctx, userID, &note)
+	recalled := r.recalled(ctx, userID, t.Prompt, &note)
+	quoted := r.quoted(ctx, userID, t.Prompt, t.ConversationID, &note)
+	justSaid := r.justSaid(ctx, userID)
+	prefetched := r.prefetch(ctx, t, &note)
+	foreseen := r.foresee(ctx, t, userID, &note)
 	prompt := join(standing, where, known, recalled, quoted, justSaid, prefetched, foreseen, unsaid)
 
 	// What the system prompt is made of, in bytes: the parts that are not
@@ -526,11 +474,7 @@ func (r *Runner) promptFor(ctx context.Context, t *chat.Chat) (string, []remind.
 		slog.Int("known", len(known)), slog.Int("recalled", len(recalled)),
 		slog.Int("quoted", len(quoted)), slog.Int("just_said", len(justSaid)),
 		slog.Int("prefetched", len(prefetched)), slog.Int("foreseen", len(foreseen)), slog.Int("unsaid", len(unsaid)),
-		slog.Int("whole", len(prompt)), slog.Duration("took", time.Since(started)),
-		slog.Duration("t_known", spent["known"]), slog.Duration("t_recalled", spent["recalled"]),
-		slog.Duration("t_quoted", spent["quoted"]), slog.Duration("t_prefetched", spent["prefetched"]),
-		slog.Duration("t_foreseen", spent["foreseen"]), slog.Duration("t_unsaid", spent["unsaid"]),
-		slog.Duration("t_where", spent["where"]), slog.Duration("t_just_said", spent["justSaid"]))
+		slog.Int("whole", len(prompt)), slog.Duration("took", time.Since(started)))
 
 	note.TookMS = time.Since(started).Milliseconds()
 	r.recordRecalled(ctx, t, note)
@@ -633,7 +577,7 @@ func (r *Runner) recalled(ctx context.Context, userID, question string, note *ch
 		})
 		note.ByWords = note.ByWords || found[i].ByWords
 	}
-	return memory.Offered(found, r.now().Location())
+	return memory.Offered(found)
 }
 
 // missed : Reminders that were never said, to be brought up once.
