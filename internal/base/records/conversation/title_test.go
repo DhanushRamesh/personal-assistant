@@ -188,3 +188,25 @@ func TestOnlyASpokenTurnIsToldAboutNames(t *testing.T) {
 		t.Error("the clock fragment carries the name rule")
 	}
 }
+
+// What the app reports this turn beats what was said earlier.
+//
+// Asked "what is in my terminal?", the app reported the terminal PAC in
+// ~/workspace/personal-assistant-client. The model called read_terminal
+// for "PA - Claude" -- the terminal named in its own answer two turns
+// back, still sitting in the window and read as though it were current.
+func TestWhereTheyAreOverridesWhatWasSaidEarlier(t *testing.T) {
+	got := conversation.WhereTheyAre("the desktop app",
+		"In front of them: the terminal PAC, in ~/workspace/personal-assistant-client.")
+
+	for _, want := range []string{
+		"PAC",
+		"replaces anything said earlier",
+		"were true when you gave",
+		"never from a name further up the conversation",
+	} {
+		if !strings.Contains(got, want) {
+			t.Errorf("WhereTheyAre is missing %q:\n%s", want, got)
+		}
+	}
+}

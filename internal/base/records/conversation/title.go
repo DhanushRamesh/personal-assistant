@@ -115,7 +115,12 @@ func WhereTheyAre(clientName, where string) string {
 		clientName = "the app"
 	}
 	return "Where they are in " + clientName +
-		" right now (shown by the app, not said by them):\n" + where
+		" right now (shown by the app, not said by them):\n" + where +
+		"\n\nThis is where they are as the app reports it this turn, and it " +
+		"replaces anything said earlier. Your own past answers about which " +
+		"terminal, page or space was in front of them were true when you gave " +
+		"them and are not evidence now. Asked about what they are looking at, " +
+		"answer from this and never from a name further up the conversation."
 }
 
 // Heard : What the assistant is told when the words reached it as speech.
