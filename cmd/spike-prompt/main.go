@@ -105,7 +105,7 @@ func main() {
 		fmt.Printf("  %-26s %7d chars  ~%6d tokens\n", "", total, total/perToken)
 
 		fmt.Println("\n  the ten heaviest tools:")
-		for _, t := range heaviest(described, 10) {
+		for _, t := range heaviest(described, 200) {
 			fmt.Printf("    %-22s %6d chars  ~%5d tokens\n", t.Name, size(t), size(t)/perToken)
 		}
 	}

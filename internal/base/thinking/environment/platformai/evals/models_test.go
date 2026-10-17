@@ -41,6 +41,16 @@ var asking = []platformai.ModelRef{
 	{Vendor: "anthropic", ID: "claude-sonnet-5"},
 	{Vendor: "anthropic", ID: "claude-opus-5-5"},
 	{Vendor: "anthropic", ID: "claude-haiku-5-5"},
+	// Asked for again 17 October 2026, because the owner wants the
+	// quickest model there is: *"we can use haiku .. i want the 3
+	// second response"*. The dated spellings go in with the plain
+	// ones, since this endpoint has answered to a dated name where it
+	// refused the short one before.
+	{Vendor: "anthropic", ID: "claude-haiku-4-5"},
+	{Vendor: "anthropic", ID: "claude-haiku-4-5-20251001"},
+	{Vendor: "anthropic", ID: "claude-3-5-haiku-latest"},
+	{Vendor: "anthropic", ID: "claude-3-5-haiku-20241022"},
+	{Vendor: "anthropic", ID: "claude-haiku-4"},
 }
 
 func TestWhichModelsTheEndpointAnswersTo(t *testing.T) {

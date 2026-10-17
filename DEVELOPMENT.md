@@ -20792,3 +20792,70 @@ is worth a thousand tokens on a heavy turn rather than half the
 prompt. The weigher is committed so the next guess gets checked first:
 
 	go run -tags spike ./cmd/spike-prompt/ <conversation-id>
+
+**A yes goes to the terminal named, and a recommendation is asked** (owner,
+17 October 2026: *"make sure it puts to the appropriate terminal"*, *"why
+wasn't this a question?"*). The reaction names the terminal exactly as it
+is called -- "PA terminal" was taken for PAC, the terminal in front -- and
+the desktop app tells the turn that answers which one the question was
+about. A Claude Code turn's sentence that recommends and asks nothing is
+given "Shall I tell it that?" (`asked`), and the prompt says the question
+is the last thing said, after the recommendation, never in its place.
+
+### Speed is rounds, not tokens
+
+Owner, 17 October 2026: *"its a conversationsla agent so it has to be
+fast"*, then *"the tokens can go large .. but i want ultimate speed ..
+i want the 3 second response"*.
+
+The measurement that settles it was already in `config.ini` from 8
+October: **time to first token is flat at about 2.5 seconds whatever
+the prompt carries** -- 2157ms under 10k tokens, 2995ms at 35k. So
+cutting 39,000 tokens to 20,000 would buy about 400ms. Every token
+saving today was worth a rounding error in time.
+
+What costs time is rounds:
+
+	calls in a turn   turns   average   worst
+	      2             81      6.6s    17.9s
+	      3             61     15.0s    28.6s
+	      4             16     18.8s    25.3s
+	     10              1     41.6s    41.6s
+
+A turn needing no tool takes 6.6 seconds. One that uses a tool takes
+fifteen. Each round is about four and a half seconds.
+
+#### So the token work is reverted
+
+The withdrawal line is said in full at every result again. Saying it
+once saved 10,500 characters a turn, which bought roughly 400ms, and
+cost the certainty of the sentence being under every one of them.
+
+`mail_thread` is described always again. It was deferred on the
+evidence that it had been called once ever while costing 2,874 bytes
+a turn -- true, and the wrong measure. A deferred tool costs a whole
+round the first time it is wanted.
+
+**The promotions stay**, because they go the other way:
+`calendar_update`, `reminder_update`, `memory_update` and
+`task_list_add` were the four `tool_describe` kept asking for -- five
+each, against 25, 19, 19 and 14 real calls. They cost 8,947 bytes a
+turn and save about twenty four-and-a-half-second rounds.
+
+**Eino is gone**, with its 25 dependencies. It answered its question
+-- all five of the runner's behaviours fit, deferred tools fall out of
+`UnknownToolsHandler` -- and the answer was that it buys the loop and
+nothing else. The spike that measures prompts stays, and so does the
+OpenAI shim, which has nothing to do with Eino.
+
+#### Two things the model list turned up
+
+**Haiku is still refused.** `claude-haiku-5-5: Model is not supported
+for the endpoint`. The other spellings are untested: the gateway
+rate-limited mid-run -- *"You have made too many requests
+continuously"* -- which is also what yesterday's phantom eval failures
+were.
+
+**claude-sonnet-5-5 now answers.** It was refused on 10 October and
+that refusal is why `slow_model` is opus. Worth retrying on its own
+merits.

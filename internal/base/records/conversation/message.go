@@ -652,7 +652,17 @@ func withdrawn(results []ToolResult, said *bool) []ToolResult {
 	out := make([]ToolResult, len(results))
 	copy(out, results)
 	for i := range out {
-		out[i].Content = Withdrawn(out[i].Name, !*said)
+		// Said in full at every one, not once at the oldest.
+		//
+		// Saying it once saved 10,500 characters a turn and was
+		// right about tokens, which turned out to be the wrong
+		// thing to be right about: on this gateway time to first
+		// token is flat at about 2.5 seconds whatever the prompt
+		// carries, so the saving bought roughly 400ms. Owner, 17
+		// October 2026: *"the tokens can go large .. but i want
+		// ultimate speed"*. Where a sentence costs nothing in time
+		// and buys certainty, it stays at every one of them.
+		out[i].Content = Withdrawn(out[i].Name, true)
 		*said = true
 	}
 	return out
