@@ -302,3 +302,19 @@ func TestNeitherEndsOnAQuestion(t *testing.T) {
 		}
 	}
 }
+
+// The rule about a bare follow-up reaches the prompt, spoken and
+// written both. A block not in prompt.Block is a rule that never runs.
+func TestABareFollowUpRuleIsInThePrompt(t *testing.T) {
+	for _, how := range []persona.Reading{persona.Spoken, persona.Written} {
+		got := persona.Prompt("jarvis", "Jarvis", how)
+		for _, want := range []string{
+			"no subject of its own is about the thing you have just said",
+			"Never ask which of them they meant when your own last answer says which",
+		} {
+			if !strings.Contains(got, want) {
+				t.Errorf("%v prompt is missing %q", how, want)
+			}
+		}
+	}
+}

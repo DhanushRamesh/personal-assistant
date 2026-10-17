@@ -332,7 +332,31 @@ var naming = prompt.Text(
 // "that is a question for a doctor, sir, not for me", which is not a
 // thing a butler in a large house would say and not a thing anybody
 // needs an assistant to tell them.
+// carried : A question with no subject of its own is about what was
+// just said.
+//
+// Owner, 17 October 2026, after asking how a film was and then *"Where
+// did you get this?"*: *"why it is asking more context? i'm talking
+// about that obviously .. usually the reply will be for the previous
+// message so ask the model to assume."*
+//
+// The conversation moves between subjects without warning -- code, then
+// a film, then the diary -- and nothing marks the change, so a bare
+// follow-up looks ambiguous against the whole window when it is not
+// ambiguous at all against the turn before it.
+//
+// A separate block because replying already allows asking which of
+// several things they meant, and this says when that permission does
+// not apply. Put beside answering, which is read before replying is.
+var carried = prompt.Text(
+	"A question with no subject of its own is about the thing you have just said.",
+	"Where did you get this, is that right, how long, why, what about the other one: take the subject from your last answer and answer it there.",
+	"Conversations here change subject without warning -- code, then a film, then the diary -- so look at the turn before yours, not across the whole conversation.",
+	"Never ask which of them they meant when your own last answer says which.",
+)
+
 var answering = prompt.Block(
+	carried,
 	prompt.Text(
 		"Answer the question you are asked.",
 		"Health, money, law, whatever it is: say what you know, plainly and in full, as a well-read person would to somebody who asked them directly.",
