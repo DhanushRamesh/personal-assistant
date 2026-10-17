@@ -108,8 +108,7 @@ func TestListRejectsBadParameters(t *testing.T) {
 	}
 }
 
-// Cancelling is how "stop" reaches the server while it is still speaking;
-// a turn stopped before anything was done is then forgotten.
+// Cancelling is how "stop" reaches the server while it is still speaking.
 func TestCancelStopsARunningChat(t *testing.T) {
 	e := apitest.NewWith(t, apitest.Options{
 		Environment: &environment.Stub{Updates: []string{"a", "b", "c", "d"}, Delay: 40 * time.Millisecond},
@@ -128,16 +127,11 @@ func TestCancelStopsARunningChat(t *testing.T) {
 		t.Fatalf("cancel: status = %d, want 202: %s", rec.Code, rec.Body)
 	}
 
-	// Stopped before anything was done, it is forgotten (owner, 17 October
-	// 2026): the chat is gone.
-	deadline := time.Now().Add(5 * time.Second)
-	for time.Now().Before(deadline) {
-		if e.Do(t, http.MethodGet, "/v1/chats/"+created.ID, "").Code == http.StatusNotFound {
-			return
-		}
-		time.Sleep(5 * time.Millisecond)
+	done := e.AwaitStatus(t, created.ID,
+		string(chat.StatusCancelled), string(chat.StatusCompleted), string(chat.StatusFailed))
+	if done.Status != string(chat.StatusCancelled) {
+		t.Errorf("status = %q, want cancelled", done.Status)
 	}
-	t.Error("the stopped chat was not forgotten")
 }
 
 func TestCancelAFinishedChatConflicts(t *testing.T) {

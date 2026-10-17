@@ -157,20 +157,6 @@ func (h *harness) await(t *testing.T, id string, want ...chat.Status) *chat.Chat
 	return nil
 }
 
-// awaitForgotten : Waits for a chat to be gone, as a turn stopped before
-// anything was done is.
-func (h *harness) awaitForgotten(t *testing.T, id string) {
-	t.Helper()
-	deadline := time.Now().Add(5 * time.Second)
-	for time.Now().Before(deadline) {
-		if _, err := h.repo.Get(context.Background(), id); errors.Is(err, chat.ErrNotFound) {
-			return
-		}
-		time.Sleep(2 * time.Millisecond)
-	}
-	t.Fatalf("chat %s was not forgotten", id)
-}
-
 func TestRunToCompletionAnnouncesProgressAndStoresTheResult(t *testing.T) {
 	updates := []string{"Let me take a look.", "Still working on it."}
 	h := newHarness(t, &environment.Stub{Updates: updates}, runner.Options{})
@@ -237,9 +223,8 @@ func TestProviderThatWillNotStartFailsTheChat(t *testing.T) {
 	}
 }
 
-// Cancelling mid-run must stop the chat, which is what saying "stop" while
-// the assistant is speaking will do; stopped before anything was done, it
-// is forgotten.
+// Cancelling mid-run must stop the chat and record it, which is what saying
+// "stop" while the assistant is speaking will do.
 func TestCancelStopsARunningChat(t *testing.T) {
 	h := newHarness(t, &environment.Stub{
 		Updates: []string{"one", "two", "three", "four", "five"},
@@ -253,7 +238,16 @@ func TestCancelStopsARunningChat(t *testing.T) {
 		t.Fatal("Cancel reported no running chat")
 	}
 
-	h.awaitForgotten(t, tk.ID)
+	done := h.await(t, tk.ID, chat.StatusCancelled, chat.StatusCompleted, chat.StatusFailed)
+	if done.Status != chat.StatusCancelled {
+		t.Errorf("Status = %q, want cancelled", done.Status)
+	}
+	if done.Response != "" {
+		t.Errorf("a cancelled chat has a response: %q", done.Response)
+	}
+	if done.FinishedAt == nil {
+		t.Error("finish time not recorded for a cancelled chat")
+	}
 }
 
 func TestCancelReportsWhenNothingIsRunning(t *testing.T) {
@@ -500,5 +494,11 @@ func TestCancelStopsAQueuedChat(t *testing.T) {
 		t.Fatal("Cancel reported nothing to stop for a queued chat")
 	}
 
-	h.awaitForgotten(t, queued.ID)
+	done := h.await(t, queued.ID, chat.StatusCancelled, chat.StatusRunning, chat.StatusCompleted)
+	if done.Status != chat.StatusCancelled {
+		t.Errorf("Status = %q, want cancelled", done.Status)
+	}
+	if done.StartedAt != nil {
+		t.Error("a chat cancelled before running has a start time")
+	}
 }

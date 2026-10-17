@@ -104,35 +104,3 @@ const Aloud = 2
 func TooLong(answer string, how Reading) bool {
 	return how == Spoken && Sentences(answer) > Aloud
 }
-
-// inPassing : What is said in passing, the assistant's name and a
-// "hey" around it aside -- thanks, an acknowledgement, a hold, a hello or
-// a goodbye. Never a yes: a yes to something offered is answered by doing
-// it.
-var inPassing = regexp.MustCompile(`^(?:thanks|thank you|thanks a lot|thank you so much|cheers|okay|ok|okay then|alright|all right|got it|understood|cool|great|nice|good|fine|perfect|wait|hold on|one moment|one second|not now|never mind|nevermind|nothing|forget it|leave it|no|no thanks|hello|hi|hey|good morning|good afternoon|good evening|good night|bye|goodbye|see you|i was just checking|just checking|i was just checking in)$`)
-
-// InPassing : Whether what was said is said in passing, with nothing to
-// look up or do, so its answer is not sent back to look at the tools,
-// and no round is run beside it for that.
-//
-// Owner, 17 October 2026, asking for a faster round trip: of two hundred
-// answers sent back to look, the commonest thrown away were "Here, sir."
-// (18), "Of course, sir." (6), "Understood, sir." (4) and "You are
-// welcome, sir." (3) -- answers to being thanked or called, where looking
-// changes nothing and the round run beside it costs up to a second, or
-// five when it reaches for a tool anyway. A command or a question is not
-// in passing, however short: "open Spotify" was answered "I cannot" until
-// it was sent back, which is what the send-back is for.
-func InPassing(said, name string) bool {
-	s := strings.ToLower(said)
-	s = regexp.MustCompile(`[^a-z' ]+`).ReplaceAllString(s, " ")
-	s = strings.Join(strings.Fields(s), " ")
-	s = strings.TrimPrefix(s, "hey ")
-	if n := strings.ToLower(strings.TrimSpace(name)); n != "" {
-		s = strings.TrimSpace(strings.TrimSuffix(strings.TrimPrefix(s, n+" "), " "+n))
-		if s == n {
-			return true
-		}
-	}
-	return s != "" && inPassing.MatchString(s)
-}

@@ -216,7 +216,7 @@ func TestOldToolResultsAreWithdrawn(t *testing.T) {
 	if !strings.Contains(results[0].Content, "reminder_list") {
 		t.Errorf("content = %q, want the tool named", results[0].Content)
 	}
-	if !strings.Contains(strings.ToLower(results[0].Content), "call it again") {
+	if !strings.Contains(results[0].Content, "Call it again") {
 		t.Errorf("content = %q, want it to say to look again", results[0].Content)
 	}
 }

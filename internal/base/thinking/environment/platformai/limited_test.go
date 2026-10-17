@@ -6,8 +6,6 @@ import (
 	"net/http"
 	"testing"
 	"time"
-
-	"personal-assistant/internal/base/platform/failure"
 )
 
 // TestBeingToldToSlowDownIsNotBeingToldNo : The gateway reports
@@ -69,20 +67,5 @@ func TestItGivesUpRatherThanHammering(t *testing.T) {
 	}
 	if total > 10*time.Second {
 		t.Errorf("the waits total %s, which is most of a turn", total)
-	}
-}
-
-// TestStillBusyIsSaidAsBusy : Refused still after the waits, being told to
-// slow down is said as busy, not as the question having been turned away.
-func TestStillBusyIsSaidAsBusy(t *testing.T) {
-	limit := &APIError{
-		Message: "You have made too many requests continuously. Please try again after some time.",
-		Status:  http.StatusBadRequest,
-	}
-	if got := classify(limit); got.Code != failure.RateLimited {
-		t.Errorf("code = %q, want %q", got.Code, failure.RateLimited)
-	}
-	if got := classify(&APIError{Message: "model is required", Status: http.StatusBadRequest}); got.Code != failure.BadRequest {
-		t.Errorf("a malformed request became %q", got.Code)
 	}
 }

@@ -115,21 +115,8 @@ func WhereTheyAre(clientName, where string) string {
 		clientName = "the app"
 	}
 	return "Where they are in " + clientName +
-		" right now (shown by the app, not said by them):\n" + where + "\n\n" + Background
+		" right now (shown by the app, not said by them):\n" + where
 }
-
-// Background : What the screen is to an answer: background, behind the
-// conversation.
-//
-// Owner, 17 October 2026, after "Which number?" -- asked of the answer
-// just given, which ended "tap Build number seven times" -- was answered
-// by typing 1 into Claude Code, whose screen showed numbered choices: *"it
-// should say build number .. the conversation will be a mix of various
-// unrelated topics .. it should refer to the latest message and answer
-// accordingly."*
-const Background = "That is background, for a question about what is on their screen. " +
-	"What they say follows from the latest exchange in this conversation unless they point at the screen -- answer that first. " +
-	"Never type into a terminal or choose an option on it because of what it shows: only when they ask you to."
 
 // Heard : What the assistant is told when the words reached it as speech.
 //

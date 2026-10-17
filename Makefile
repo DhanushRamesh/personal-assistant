@@ -190,9 +190,6 @@ check: ## Everything that must pass before committing
 	@# run before every commit, rather than by whoever next spends
 	@# real money running them.
 	@go vet -tags evals ./... 2>&1 | grep -v "^#" || true
-	@# And what is behind the spike tag, for the same reason: a
-	@# signature that moves would strand it silently otherwise.
-	@go vet -tags spike ./... 2>&1 | grep -v "^#" || true
 	@go test ./... -race
 
 .PHONY: clean

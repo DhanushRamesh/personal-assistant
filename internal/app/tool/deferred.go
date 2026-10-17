@@ -64,41 +64,7 @@ var hot = []string{
 	"conversation_new",
 	"memory_remember",
 
-	// By the clock rather than by the token, 17 October 2026.
-	//
-	// Deferral trades rounds for tokens, and the exchange rate was
-	// never measured. It is bad for something being spoken to: on
-	// this gateway time to first token is flat at about 2.5 seconds
-	// whatever the prompt carries, so the 13,275 tokens deferral
-	// saves buy roughly 400ms, while every tool_describe is a whole
-	// round. Measured on real turns:
-	//
-	//	2 calls in a turn   6.6s      no tool was needed
-	//	3 calls            15.0s      one was
-	//	4 calls            18.8s      one had to be described first
-	//
-	// tool_describe ran 58 times, and more than a third of turns paid
-	// a round for it. These four are what it kept asking for -- five
-	// describes each, against 25, 19, 19 and 14 real calls -- so each
-	// is a tool the conversation reaches for often and waits four and
-	// a half seconds to be told about. They cost 8,947 bytes on every
-	// turn and save about twenty of those rounds.
-	//
-	// The ones that stay deferred are the ones that are rarely wanted,
-	// which is the measure that matters: not how big the description
-	// is, but how often somebody is sitting there while it is fetched.
-	"calendar_update",
-	"reminder_update",
-	"memory_update",
-	"task_list_add",
 	// By shape rather than by measurement. See above.
-	//
-	// mail_thread was deferred for an hour on 17 October, on the
-	// evidence that it had been called once ever while costing 2,874
-	// bytes on every turn. Put back the same day: the measure that
-	// matters is not what a description costs but whether somebody is
-	// waiting while it is fetched, and a deferred tool costs a round
-	// of about four and a half seconds the first time it is wanted.
 	"mail_inbox",
 	"mail_search",
 	"mail_thread",

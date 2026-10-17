@@ -15,8 +15,8 @@ import (
 
 type runner struct{}
 
-func (runner) Submit(*chat.Chat) error           { return nil }
-func (runner) CancelBecause(string, string) bool { return false }
+func (runner) Submit(*chat.Chat) error { return nil }
+func (runner) Cancel(string) bool      { return false }
 
 type bus struct{}
 
