@@ -144,14 +144,10 @@ func TestAFailureIsRecordedAndSentOnWithItsDetail(t *testing.T) {
 	}
 }
 
-// A cancelled turn leaves its question and a note that it was stopped. The
-// question alone would be read by the next turn as something never answered,
-// and joined onto whatever is asked next.
-//
-// This test used to assert the question alone, and passed for the wrong
-// reason: the note was being written and silently refused by the store,
-// because Valid did not know the kind. The log said so and nothing else did.
-func TestACancelledChatLeavesItsQuestionAndAMark(t *testing.T) {
+// A turn stopped before anything was said or done is forgotten, question
+// and all: nothing ran that the next turn has to reason about, and the
+// owner wants it out of the history (17 October 2026).
+func TestACancelledChatThatDidNothingIsForgotten(t *testing.T) {
 	h := newHarness(t, &environment.Stub{
 		Updates: []string{"one", "two", "three"},
 		Delay:   30 * time.Millisecond,
@@ -160,20 +156,10 @@ func TestACancelledChatLeavesItsQuestionAndAMark(t *testing.T) {
 	tk := h.submit(t, "List three programming languages.")
 	h.await(t, tk.ID, chat.StatusRunning)
 	h.runner.Cancel(tk.ID)
-	h.await(t, tk.ID, chat.StatusCancelled, chat.StatusCompleted, chat.StatusFailed)
+	h.awaitForgotten(t, tk.ID)
 
-	said := h.repo.Said(h.conversation(t))
-	if len(said) != 2 {
-		t.Fatalf("recorded %v, want the question and the mark", contents(said))
-	}
-	if said[0].Content != "List three programming languages." {
-		t.Errorf("recorded %q", said[0].Content)
-	}
-	if said[1].Kind != conversation.Interruption {
-		t.Errorf("second message is %q, want an interruption", said[1].Kind)
-	}
-	if said[1].Role != conversation.Assistant {
-		t.Errorf("the mark is %q, want the assistant so the roles alternate", said[1].Role)
+	if said := h.repo.Said(h.conversation(t)); len(said) != 0 {
+		t.Fatalf("recorded %v, want nothing", contents(said))
 	}
 }
 
@@ -378,7 +364,7 @@ func TestItIsSentBackOnlyOnce(t *testing.T) {
 	recorder := &recordingProvider{}
 	h := newHarness(t, recorder, runner.Options{Tools: offering()})
 
-	tk := h.submit(t, "hello")
+	tk := h.submit(t, "what is on my list")
 	h.await(t, tk.ID, chat.StatusCompleted, chat.StatusFailed)
 
 	if len(recorder.prompts) != 2 {
@@ -398,5 +384,19 @@ func TestNothingIsSentBackWhenThereAreNoTools(t *testing.T) {
 
 	if len(recorder.prompts) != 1 {
 		t.Errorf("a turn with no tools was sent back: %v", recorder.prompts)
+	}
+}
+
+// TestWhatIsSaidInPassingIsNotSentBack : Thanks or a hello has nothing to
+// look up, so its answer goes out as it is, in one round.
+func TestWhatIsSaidInPassingIsNotSentBack(t *testing.T) {
+	recorder := &recordingProvider{}
+	h := newHarness(t, recorder, runner.Options{Tools: offering()})
+
+	tk := h.submit(t, "thanks")
+	h.await(t, tk.ID, chat.StatusCompleted, chat.StatusFailed)
+
+	if len(recorder.prompts) != 1 {
+		t.Errorf("asked %d times, want once: %v", len(recorder.prompts), recorder.prompts)
 	}
 }

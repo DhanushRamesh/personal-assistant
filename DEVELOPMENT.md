@@ -20335,6 +20335,28 @@ said "nothing's changed yet". Told something happened that did not is
 worse than a second and a half; `fast_model` stays empty. Next: fewer
 rounds a question.
 
+**What is said in passing is not sent back to look** (owner, 17 October
+2026, choosing to cut the round lost to the look-first check). Of two
+hundred answers sent back to look, the commonest thrown away were "Here,
+sir." (18), "Of course, sir." (6), "Understood, sir." (4), "You are
+welcome, sir." (3): answers to being thanked or called. A prompt that is
+only thanks, an acknowledgement, a hold, a hello or a goodbye, the
+assistant's name aside (`persona.InPassing`), is answered in one round:
+no send-back, and no round run beside it for one. A command or a
+question is never in passing, however short, and neither is a yes.
+
+**A turn the person stopped before anything happened is forgotten**
+(owner, 17 October 2026: *"these kinds of stopped ones need not go in
+the conversation history, in the UI nor the server .. just delete them
+from the database too"*). A chat the person stopped -- the stop word or
+button, no reason of its own -- that answered nothing and ran no tool is
+removed with its question and its vectors (`ForgetChat`). One that ran a
+tool stays, marked, for what it left behind; one superseded by a new
+prompt now stops with a reason of its own (`asking.Superseded`) and
+stays, since a correction makes sense only beside what it corrects; so
+does one whose caller hung up. The 264 already kept -- of 448 stopped --
+were deleted the same day, after a dump of their rows.
+
 **Leaving takes two fixes** (owner, 17 October 2026: *"I literally was in
 home .. and in home till now .. but it showed moving"*). On the night of
 16 October the phone twice reported the same point, 235 m east of home --

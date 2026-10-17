@@ -290,6 +290,23 @@ func (m *Repository) DeleteConversation(_ context.Context, userID, conversationI
 	return nil
 }
 
+// ForgetChat : Removes a chat and the messages it wrote.
+func (m *Repository) ForgetChat(_ context.Context, chatID string) error {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	delete(m.chats, chatID)
+	for id, said := range m.said {
+		kept := said[:0]
+		for _, x := range said {
+			if x.ChatID != chatID {
+				kept = append(kept, x)
+			}
+		}
+		m.said[id] = kept
+	}
+	return nil
+}
+
 // clearActive : Unpoints every client using a conversation. The caller holds mu.
 func (m *Repository) clearActive(conversationID string) {
 	for id, d := range m.clients {

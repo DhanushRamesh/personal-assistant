@@ -544,6 +544,23 @@ func (r *Repository) DeleteConversation(ctx context.Context, userID, conversatio
 	})
 }
 
+// ForgetChat : Removes a chat, the messages it wrote and their vectors, in
+// one transaction.
+func (r *Repository) ForgetChat(ctx context.Context, chatID string) error {
+	return r.db.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
+		if err := tx.Exec("DELETE v FROM message_vectors v JOIN messages m ON m.id = v.message_id WHERE m.chat_id = ?", chatID).Error; err != nil {
+			return fmt.Errorf("chat: forgetting the vectors of %s: %w", chatID, err)
+		}
+		if err := tx.Where("chat_id = ?", chatID).Delete(&conversationMessageRow{}).Error; err != nil {
+			return fmt.Errorf("chat: forgetting the messages of %s: %w", chatID, err)
+		}
+		if err := tx.Where("id = ?", chatID).Delete(&chatRow{}).Error; err != nil {
+			return fmt.Errorf("chat: forgetting %s: %w", chatID, err)
+		}
+		return nil
+	})
+}
+
 // clearActiveConversation : Unpoints every found that was using a conversation.
 func clearActiveConversation(tx *gorm.DB, conversationID string) error {
 	err := tx.Model(&clientRow{}).

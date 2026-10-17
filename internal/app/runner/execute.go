@@ -186,6 +186,12 @@ func (r *Runner) consume(runCtx, ctx context.Context, t *chat.Chat, systemPrompt
 	// prefetched on every turn, so something has always run. This is
 	// about what the model chose.
 	var reached, pressed bool
+	// Said in passing -- thanks, a hold, a hello -- is not sent back to
+	// look, nor run a round beside it for that: see persona.InPassing.
+	if persona.InPassing(t.Prompt, r.assistantName) {
+		pressed = true
+		r.logger.InfoContext(ctx, "said in passing: not sent back to look")
+	}
 
 	// What has been said beside this turn, so each round's sentence
 	// follows the last rather than landing on top of it.
@@ -1085,6 +1091,22 @@ func (r *Runner) recordOutcome(ctx context.Context, t *chat.Chat) {
 	// stopped. Partial output is kept rather than replaced: what ran, ran,
 	// and once a turn can call tools some of it will have left effects
 	// behind that the next turn has to reason about.
+	// Stopped before anything was said or done: forgotten, chat and
+	// question both, as if it had not been asked -- nothing ran that the
+	// next turn has to reason about (owner, 17 October 2026: *"these
+	// kinds of stopped ones need not go in the conversation history, in
+	// the UI nor the server .. just delete them from the database too"*).
+	// One that ran a tool stays, marked, for what it left behind; so does
+	// one stopped for a reason of its own -- superseded by a new prompt,
+	// or a caller that hung up -- which the next turn reads with it.
+	if t.Status == chat.StatusCancelled && len(written) == 0 && r.stoppedByThem(t.ID) && !r.ranAnything(ctx, t) {
+		if err := r.repo.ForgetChat(context.WithoutCancel(ctx), t.ID); err != nil {
+			r.logger.ErrorContext(ctx, "cannot forget a stopped turn", slog.Any("error", err))
+		} else {
+			r.logger.InfoContext(ctx, "a turn stopped before anything was done is forgotten")
+		}
+		return
+	}
 	if t.Status == chat.StatusCancelled {
 		// Why, when something other than the person stopped it. Read
 		// here rather than carried on the chat because the entry is
@@ -1099,6 +1121,30 @@ func (r *Runner) recordOutcome(ctx context.Context, t *chat.Chat) {
 			r.logger.ErrorContext(ctx, "cannot record the answer", slog.Any("error", err))
 		}
 	}
+}
+
+// stoppedByThem : Whether the person stopped a chat -- the stop word or
+// button -- rather than something else with a reason of its own.
+func (r *Runner) stoppedByThem(id string) bool {
+	why, _ := r.cancelReason(id)
+	return why == ""
+}
+
+// ranAnything : Whether a chat wrote anything beyond its question -- a
+// tool called, or its result. Asked when it cannot be read: a turn kept
+// by mistake costs a line in the history; one forgotten by mistake could
+// hide what a tool did.
+func (r *Runner) ranAnything(ctx context.Context, t *chat.Chat) bool {
+	said, err := r.messages.ByChat(context.WithoutCancel(ctx), t.ID)
+	if err != nil {
+		return true
+	}
+	for _, m := range said {
+		if len(m.ToolCalls) > 0 || len(m.ToolResults) > 0 || m.Role != conversation.User {
+			return true
+		}
+	}
+	return false
 }
 
 // complete : Records a chat's result, failing it instead if the result cannot
