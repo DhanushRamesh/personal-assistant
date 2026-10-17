@@ -140,6 +140,14 @@ type Conversations interface {
 	// foreign keys. Nothing here can be undone.
 	DeleteConversation(ctx context.Context, userID, conversationID string) error
 
+	// ForgetChat : Removes a chat and everything it wrote into its
+	// conversation, as if it had never been asked. For a turn the person
+	// stopped before anything was done or said (owner, 17 October 2026:
+	// *"these kinds of stopped ones need not go in the conversation history,
+	// in the UI nor the server .. just delete them from the database too"*).
+	// No chat is not an error.
+	ForgetChat(ctx context.Context, chatID string) error
+
 	// GetConversation : Returns a conversation. It reports ErrNotFound if
 	// there is none.
 	GetConversation(ctx context.Context, id string) (*Conversation, error)

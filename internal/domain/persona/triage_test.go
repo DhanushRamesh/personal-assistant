@@ -69,3 +69,18 @@ func TestNothingUnderneathIsLeftAlone(t *testing.T) {
 		t.Errorf("emptied an answer that had nothing else in it, leaving %q", got)
 	}
 }
+
+// Thanks, a hold or a hello is said in passing; a command, a question or
+// a yes never is, however short.
+func TestInPassing(t *testing.T) {
+	for _, said := range []string{"Thanks, Nova.", "Okay, Nova.", "Wait.", "Not now, Nova.", "Nova.", "hey Nova good morning", "I was just checking in."} {
+		if !InPassing(said, "Nova") {
+			t.Errorf("%q is not taken as said in passing", said)
+		}
+	}
+	for _, said := range []string{"Yes, do it.", "Open Spotify.", "What's the time?", "okay open the terminal", "go to machines", ""} {
+		if InPassing(said, "Nova") {
+			t.Errorf("%q is taken as said in passing", said)
+		}
+	}
+}

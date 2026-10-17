@@ -24,10 +24,16 @@ import (
 type Runner interface {
 	// Submit : Starts running a stored chat in the background.
 	Submit(t *chat.Chat) error
-	// Cancel : Stops a queued or running chat, reporting whether one was
-	// found.
-	Cancel(id string) bool
+	// CancelBecause : Stops a queued or running chat, saying why for the
+	// transcript, and reports whether one was found.
+	CancelBecause(id, reason string) bool
 }
+
+// Superseded : Why a chat stopped for a new prompt, as the transcript says
+// it. A reason of its own, so the turn is kept for the next one to read --
+// a correction makes sense only beside what it corrects -- where a turn the
+// person stopped is forgotten.
+const Superseded = "The person asked something new before this finished."
 
 // Subscriber : Somewhere to listen for a chat's events as they happen.
 type Subscriber interface {
@@ -174,7 +180,7 @@ func (s *Service) supersede(ctx context.Context, conversationID string) {
 		return
 	}
 	for _, id := range unfinished {
-		if s.runner.Cancel(id) {
+		if s.runner.CancelBecause(id, Superseded) {
 			s.logger.InfoContext(ctx, "superseded by a new prompt", slog.String("chat_id", id))
 			continue
 		}
