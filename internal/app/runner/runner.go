@@ -455,15 +455,53 @@ func (r *Runner) promptFor(ctx context.Context, t *chat.Chat) (string, []remind.
 	var note chat.Recalled
 	started := time.Now()
 
-	unsaid, covered := r.missed(ctx, userID)
+	// Gathered at once rather than one after another.
+	//
+	// Every part reads something different -- the memories, the
+	// transcript, the diary, what the tools have listed -- and none of
+	// them reads what another writes, so the only thing they shared
+	// was the clock. In series the median was 265ms and the slowest
+	// one in ten took 1,757ms, with a worst of 8,291ms, all of it
+	// spent before the model was asked anything. A turn is 4.6
+	// seconds at the median and the owner wants three, so two seconds
+	// of waiting in a row is not something to leave lying there.
+	//
+	// Each writes its own note and they are merged in a fixed order
+	// afterwards, so what is recorded does not depend on which
+	// finished first.
+	var (
+		wait                                   sync.WaitGroup
+		where, known, recalled, quoted         string
+		justSaid, prefetched, foreseen, unsaid string
+		covered                                []remind.Reminder
+		forKnown, forRecalled, forQuoted       chat.Recalled
+		forPrefetched, forForeseen             chat.Recalled
+	)
+	gather := func(run func()) {
+		wait.Add(1)
+		go func() {
+			defer wait.Done()
+			run()
+		}()
+	}
+	gather(func() { unsaid, covered = r.missed(ctx, userID) })
+	gather(func() { where = r.whereTheyAre(ctx, t, userID) })
+	gather(func() { known = r.known(ctx, userID, &forKnown) })
+	gather(func() { recalled = r.recalled(ctx, userID, t.Prompt, &forRecalled) })
+	gather(func() { quoted = r.quoted(ctx, userID, t.Prompt, t.ConversationID, &forQuoted) })
+	gather(func() { justSaid = r.justSaid(ctx, userID) })
+	gather(func() { prefetched = r.prefetch(ctx, t, &forPrefetched) })
+	gather(func() { foreseen = r.foresee(ctx, t, userID, &forForeseen) })
+	wait.Wait()
 
-	where := r.whereTheyAre(ctx, t, userID)
-	known := r.known(ctx, userID, &note)
-	recalled := r.recalled(ctx, userID, t.Prompt, &note)
-	quoted := r.quoted(ctx, userID, t.Prompt, t.ConversationID, &note)
-	justSaid := r.justSaid(ctx, userID)
-	prefetched := r.prefetch(ctx, t, &note)
-	foreseen := r.foresee(ctx, t, userID, &note)
+	for _, part := range []chat.Recalled{forKnown, forRecalled, forQuoted, forPrefetched, forForeseen} {
+		note.Always = append(note.Always, part.Always...)
+		note.Notes = append(note.Notes, part.Notes...)
+		note.Exchanges = append(note.Exchanges, part.Exchanges...)
+		note.Tools = append(note.Tools, part.Tools...)
+		note.ByWords = note.ByWords || part.ByWords
+	}
+
 	prompt := join(standing, where, known, recalled, quoted, justSaid, prefetched, foreseen, unsaid)
 
 	// What the system prompt is made of, in bytes: the parts that are not
