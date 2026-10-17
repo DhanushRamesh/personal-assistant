@@ -434,14 +434,33 @@ func (r *Runner) promptFor(ctx context.Context, t *chat.Chat) (string, []remind.
 	var note chat.Recalled
 	started := time.Now()
 
-	unsaid, covered := r.missed(ctx, userID)
+	// How long each part took, beside how big it was.
+	//
+	// The total was already here and the total is not enough: building
+	// this takes 265ms at the median and has been measured at 4.64s,
+	// 5.17s and 5.56s, on builds weeks apart. A fifteen-second turn
+	// spent five of them here, more than the model took to answer. One
+	// of these parts stalls and the total cannot say which.
+	//
+	// Measurement only. Nothing is reordered and nothing is skipped.
+	spent := map[string]time.Duration{}
+	timed := func(name string, run func()) {
+		at := time.Now()
+		run()
+		spent[name] = time.Since(at)
+	}
 
-	where := r.whereTheyAre(ctx, t, userID)
-	known := r.known(ctx, userID, &note)
-	recalled := r.recalled(ctx, userID, t.Prompt, &note)
-	quoted := r.quoted(ctx, userID, t.Prompt, t.ConversationID, &note)
-	justSaid := r.justSaid(ctx, userID)
-	prefetched := r.prefetch(ctx, t, &note)
+	var (
+		unsaid, where, known, recalled, quoted, justSaid, prefetched string
+		covered                                                      []remind.Reminder
+	)
+	timed("unsaid", func() { unsaid, covered = r.missed(ctx, userID) })
+	timed("where", func() { where = r.whereTheyAre(ctx, t, userID) })
+	timed("known", func() { known = r.known(ctx, userID, &note) })
+	timed("recalled", func() { recalled = r.recalled(ctx, userID, t.Prompt, &note) })
+	timed("quoted", func() { quoted = r.quoted(ctx, userID, t.Prompt, t.ConversationID, &note) })
+	timed("just_said", func() { justSaid = r.justSaid(ctx, userID) })
+	timed("prefetched", func() { prefetched = r.prefetch(ctx, t, &note) })
 	prompt := join(standing, where, known, recalled, quoted, justSaid, prefetched, unsaid)
 
 	// What the system prompt is made of, in bytes: the parts that are not
@@ -452,7 +471,11 @@ func (r *Runner) promptFor(ctx context.Context, t *chat.Chat) (string, []remind.
 		slog.Int("known", len(known)), slog.Int("recalled", len(recalled)),
 		slog.Int("quoted", len(quoted)), slog.Int("just_said", len(justSaid)),
 		slog.Int("prefetched", len(prefetched)), slog.Int("unsaid", len(unsaid)),
-		slog.Int("whole", len(prompt)), slog.Duration("took", time.Since(started)))
+		slog.Int("whole", len(prompt)), slog.Duration("took", time.Since(started)),
+		slog.Duration("t_unsaid", spent["unsaid"]), slog.Duration("t_where", spent["where"]),
+		slog.Duration("t_known", spent["known"]), slog.Duration("t_recalled", spent["recalled"]),
+		slog.Duration("t_quoted", spent["quoted"]), slog.Duration("t_just_said", spent["just_said"]),
+		slog.Duration("t_prefetched", spent["prefetched"]))
 
 	note.TookMS = time.Since(started).Milliseconds()
 	r.recordRecalled(ctx, t, note)
