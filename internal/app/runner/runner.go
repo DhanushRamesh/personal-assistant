@@ -477,21 +477,35 @@ func (r *Runner) promptFor(ctx context.Context, t *chat.Chat) (string, []remind.
 		forKnown, forRecalled, forQuoted       chat.Recalled
 		forPrefetched, forForeseen             chat.Recalled
 	)
-	gather := func(run func()) {
+	// How long each part took, so that a build that stalls says which
+	// part stalled. Gathering in parallel means the whole wait is the
+	// slowest one, and without this the only figure is that total: a
+	// build of 5.17 seconds against a median of 265ms, intermittent
+	// and present long before anything ran in parallel.
+	var (
+		slowest sync.Mutex
+		spent   = map[string]time.Duration{}
+	)
+	gather := func(name string, run func()) {
 		wait.Add(1)
 		go func() {
 			defer wait.Done()
+			at := time.Now()
 			run()
+			took := time.Since(at)
+			slowest.Lock()
+			spent[name] = took
+			slowest.Unlock()
 		}()
 	}
-	gather(func() { unsaid, covered = r.missed(ctx, userID) })
-	gather(func() { where = r.whereTheyAre(ctx, t, userID) })
-	gather(func() { known = r.known(ctx, userID, &forKnown) })
-	gather(func() { recalled = r.recalled(ctx, userID, t.Prompt, &forRecalled) })
-	gather(func() { quoted = r.quoted(ctx, userID, t.Prompt, t.ConversationID, &forQuoted) })
-	gather(func() { justSaid = r.justSaid(ctx, userID) })
-	gather(func() { prefetched = r.prefetch(ctx, t, &forPrefetched) })
-	gather(func() { foreseen = r.foresee(ctx, t, userID, &forForeseen) })
+	gather("unsaid", func() { unsaid, covered = r.missed(ctx, userID) })
+	gather("where", func() { where = r.whereTheyAre(ctx, t, userID) })
+	gather("known", func() { known = r.known(ctx, userID, &forKnown) })
+	gather("recalled", func() { recalled = r.recalled(ctx, userID, t.Prompt, &forRecalled) })
+	gather("quoted", func() { quoted = r.quoted(ctx, userID, t.Prompt, t.ConversationID, &forQuoted) })
+	gather("justSaid", func() { justSaid = r.justSaid(ctx, userID) })
+	gather("prefetched", func() { prefetched = r.prefetch(ctx, t, &forPrefetched) })
+	gather("foreseen", func() { foreseen = r.foresee(ctx, t, userID, &forForeseen) })
 	wait.Wait()
 
 	for _, part := range []chat.Recalled{forKnown, forRecalled, forQuoted, forPrefetched, forForeseen} {
@@ -512,7 +526,11 @@ func (r *Runner) promptFor(ctx context.Context, t *chat.Chat) (string, []remind.
 		slog.Int("known", len(known)), slog.Int("recalled", len(recalled)),
 		slog.Int("quoted", len(quoted)), slog.Int("just_said", len(justSaid)),
 		slog.Int("prefetched", len(prefetched)), slog.Int("foreseen", len(foreseen)), slog.Int("unsaid", len(unsaid)),
-		slog.Int("whole", len(prompt)), slog.Duration("took", time.Since(started)))
+		slog.Int("whole", len(prompt)), slog.Duration("took", time.Since(started)),
+		slog.Duration("t_known", spent["known"]), slog.Duration("t_recalled", spent["recalled"]),
+		slog.Duration("t_quoted", spent["quoted"]), slog.Duration("t_prefetched", spent["prefetched"]),
+		slog.Duration("t_foreseen", spent["foreseen"]), slog.Duration("t_unsaid", spent["unsaid"]),
+		slog.Duration("t_where", spent["where"]), slog.Duration("t_just_said", spent["justSaid"]))
 
 	note.TookMS = time.Since(started).Milliseconds()
 	r.recordRecalled(ctx, t, note)
