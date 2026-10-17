@@ -444,6 +444,16 @@ func classify(err error) *failure.Error {
 		if strings.Contains(strings.ToLower(apiErr.Message), "content filtering") {
 			return failure.New(failure.Filtered, apiErr.Message, err)
 		}
+		// Too many requests arrives as a 400 too, still refused after the
+		// waits above: busy, not wrong. Said as a refusal, it read as the
+		// owner's question having been turned away (17 October 2026: five
+		// turns of "How do you say so?" answered "The server would not
+		// accept that request").
+		if limited(apiErr.Status, err) {
+			busy := failure.FromStatus(apiErr.Status, apiErr.Message, err)
+			busy.Code = failure.RateLimited
+			return busy
+		}
 		return failure.FromStatus(apiErr.Status, apiErr.Message, err)
 	}
 	if errors.Is(err, context.DeadlineExceeded) {
