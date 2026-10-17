@@ -327,3 +327,25 @@ func TestAnAnswerAppearsOnceOnTheWire(t *testing.T) {
 		})
 	}
 }
+
+// The Ollama endpoint takes where as the live connection does, and keeps
+// it with the chat.
+func TestTheOllamaEndpointTakesWhereThePersonIs(t *testing.T) {
+	e := apitest.New(t)
+
+	e.Do(t, http.MethodPost, "/api/chat",
+		`{"model":"assistant","messages":[{"role":"user","content":"why did this fail?"}],"spoken":false,"where":" Terminals view: FAIL TestX "}`)
+	rec := e.Get(t, "/v1/chats")
+	var list chats.ListResponse
+	e.Decode(t, rec, &list)
+	if len(list.Chats) == 0 {
+		t.Fatal("nothing was recorded at all")
+	}
+	got, err := e.Repo.Get(context.Background(), list.Chats[0].ID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got.Where != "Terminals view: FAIL TestX" {
+		t.Errorf("where = %q, want it kept, trimmed", got.Where)
+	}
+}

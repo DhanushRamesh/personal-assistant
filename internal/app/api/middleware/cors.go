@@ -30,6 +30,7 @@ var Methods = []string{
 	http.MethodGet,
 	http.MethodPost,
 	http.MethodPut,
+	http.MethodPatch,
 	http.MethodDelete,
 	http.MethodOptions,
 }

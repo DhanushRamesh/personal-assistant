@@ -26,6 +26,7 @@ import (
 	"personal-assistant/internal/app/aloud"
 	"personal-assistant/internal/app/api"
 	"personal-assistant/internal/app/api/assist"
+	"personal-assistant/internal/app/api/authn"
 	"personal-assistant/internal/app/api/presence"
 	"personal-assistant/internal/app/away"
 	"personal-assistant/internal/app/elsewhere"
@@ -34,6 +35,7 @@ import (
 	"personal-assistant/internal/app/pattern"
 	"personal-assistant/internal/app/profile"
 	"personal-assistant/internal/app/runner"
+	"personal-assistant/internal/app/terminal"
 	"personal-assistant/internal/app/tool"
 	calendartool "personal-assistant/internal/app/tool/calendar"
 	callingtool "personal-assistant/internal/app/tool/calling"
@@ -96,10 +98,13 @@ import (
 	"personal-assistant/internal/domain/outbox"
 	outboxmysql "personal-assistant/internal/domain/outbox/mysql"
 	"personal-assistant/internal/domain/persona"
+	placesmysql "personal-assistant/internal/domain/places/mysql"
 	"personal-assistant/internal/domain/remind"
 	remindmysql "personal-assistant/internal/domain/remind/mysql"
 	"personal-assistant/internal/domain/situation"
 	"personal-assistant/internal/domain/tasks"
+	"personal-assistant/internal/domain/usage"
+	usagemysql "personal-assistant/internal/domain/usage/mysql"
 	"personal-assistant/internal/domain/vocabulary"
 	vocabularymysql "personal-assistant/internal/domain/vocabulary/mysql"
 )
@@ -239,7 +244,11 @@ func run() error {
 	bus := events.NewBus(logger.Logger)
 	defer bus.Close()
 
-	answerer, err := buildProvider(cfg, logger.Logger)
+	// Every call to a model, with what it cost, kept where every call
+	// passes. Told to the clients once the live hub exists, below.
+	calls := usagemysql.New(db)
+
+	answerer, err := buildProvider(cfg, usage.Recorder{Store: calls, Logger: logger.Logger}, logger.Logger)
 	if err != nil {
 		return err
 	}
@@ -282,6 +291,10 @@ func run() error {
 		}
 	}
 
+	// A chat is several calls in a few seconds; a settings page showing
+	// them is told once in a while rather than once a call.
+	calls.OnChange(usage.Throttled(usageSettle, changed(live.AreaUsage)))
+
 	remembered := memorymysql.New(db).OnChange(changed(live.AreaMemories, live.AreaProfile))
 	remembering := &memory.Recall{
 		Store:      remembered,
@@ -294,6 +307,10 @@ func run() error {
 	// One store for what the person's devices saw, shared by the endpoint
 	// they report to and the tool that reads it back.
 	deviceEvents := eventmysql.New(db).OnChange(changed(live.AreaEvents))
+	// The places the person draws on the client's map. Their fixes are
+	// tested against these as they arrive, and the crossings written
+	// into deviceEvents like any other report.
+	drawnPlaces := placesmysql.New(db).OnChange(changed(live.AreaPlaces))
 	// What every rule did. Kept apart from the rules themselves
 	// because it outlives them: a rule rewritten or deleted keeps
 	// its history, and nothing here is ever read by the engine.
@@ -409,7 +426,7 @@ func run() error {
 				// JSON -- and a manner would only be something
 				// else for it to spend its reply on.
 				Ask: func(ctx context.Context, system, ask string) (string, error) {
-					return askAs(ctx, answerer, cfg.PlatformAI.Vendor,
+					return askAs(askedBy(ctx, environment.FeatureRuleWriter, "", ""), answerer, cfg.PlatformAI.Vendor,
 						cmp.Or(cfg.PlatformAI.FastModel, cfg.PlatformAI.Model),
 						system, environment.PurposeRemark, ask)
 				},
@@ -445,8 +462,8 @@ func run() error {
 		[]tool.Tool{comingtool.Due(comingtool.Looking{
 			Diary: comingDiary(googleLink, cfg),
 			Store: comingmysql.New(db.DB),
-			Ask: func(ctx context.Context, _, ask string) (string, error) {
-				return askAs(ctx, answerer, cfg.PlatformAI.Vendor,
+			Ask: func(ctx context.Context, userID, ask string) (string, error) {
+				return askAs(askedBy(ctx, environment.FeatureComing, userID, ""), answerer, cfg.PlatformAI.Vendor,
 					cmp.Or(cfg.PlatformAI.FastModel, cfg.PlatformAI.Model),
 					persona.Voice(cfg.Assistant.Persona, cfg.Assistant.Name),
 					environment.PurposeRemark, ask)
@@ -670,8 +687,8 @@ func run() error {
 			return ""
 		},
 		Ask: func(ctx context.Context, ask string) (string, error) {
-			return askOnce(ctx, answerer, cfg.PlatformAI.Vendor, cfg.PlatformAI.Model,
-				environment.PurposeProfile, ask)
+			return askOnce(askedBy(ctx, environment.FeatureProfile, "", ""), answerer,
+				cfg.PlatformAI.Vendor, cfg.PlatformAI.Model, environment.PurposeProfile, ask)
 		},
 	}
 	// What he writes for himself, once the description is fresh.
@@ -698,8 +715,8 @@ func run() error {
 		Now:    cfg.Assistant.Now,
 		Logger: logger.Logger,
 		Ask: func(ctx context.Context, ask string) (string, error) {
-			return askOnce(ctx, answerer, cfg.PlatformAI.Vendor, cfg.PlatformAI.Model,
-				environment.PurposeVocabulary, ask)
+			return askOnce(askedBy(ctx, environment.FeatureVocabulary, "", ""), answerer,
+				cfg.PlatformAI.Vendor, cfg.PlatformAI.Model, environment.PurposeVocabulary, ask)
 		},
 	}
 	watching.Add(1)
@@ -729,11 +746,22 @@ func run() error {
 	go func() {
 		defer watching.Done()
 		logging.Surviving(remindCtx, logger.Logger, "forgetting old rule history", func() {
-			forgetRunsDaily(remindCtx, ranLog, cfg.Assistant.Now, logger.Logger)
+			forgetOlderDaily(remindCtx, ranLog, runsKeep, "rule history", cfg.Assistant.Now, logger.Logger)
 		})
 	}()
 	logger.Info("forgetting old rule history daily",
 		slog.Duration("every", forgetEvery), slog.Duration("keeping", runsKeep))
+
+	// What every model call cost, which is worth a quarter.
+	watching.Add(1)
+	go func() {
+		defer watching.Done()
+		logging.Surviving(remindCtx, logger.Logger, "forgetting old model calls", func() {
+			forgetOlderDaily(remindCtx, calls, usage.Keep, "model calls", cfg.Assistant.Now, logger.Logger)
+		})
+	}()
+	logger.Info("forgetting old model calls daily",
+		slog.Duration("every", forgetEvery), slog.Duration("keeping", usage.Keep))
 
 	// What is said at the door. A model writes it from what has
 	// happened since the two of them last spoke, and falls back to one
@@ -756,7 +784,8 @@ func run() error {
 				if model == "" {
 					model = cfg.PlatformAI.Model
 				}
-				return askAs(ctx, answerer, cfg.PlatformAI.Vendor, model,
+				return askAs(askedBy(ctx, environment.FeatureGreeting, "", ""), answerer,
+					cfg.PlatformAI.Vendor, model,
 					persona.Voice(cfg.Assistant.Persona, cfg.Assistant.Name),
 					environment.PurposeGreeting, ask)
 			},
@@ -814,8 +843,8 @@ func run() error {
 		scheduled, ranLog, remembered, &profile.Reader{Memories: remembering.Store},
 		rules.Writer{
 			Ask: func(ctx context.Context, system, ask string) (string, error) {
-				return askAs(ctx, answerer, cfg.PlatformAI.Vendor,
-					cmp.Or(cfg.PlatformAI.SlowModel, cfg.PlatformAI.Model),
+				return askAs(askedBy(ctx, environment.FeatureNoticingWriter, "", ""), answerer,
+					cfg.PlatformAI.Vendor, cmp.Or(cfg.PlatformAI.SlowModel, cfg.PlatformAI.Model),
 					system, environment.PurposeRemark, ask)
 			},
 			Kinds: deviceEvents.Kinds,
@@ -955,6 +984,24 @@ func run() error {
 		logger.Warn("cannot follow the satellite", slog.Any("error", err))
 	}
 
+	// A terminal on the laptop wanting attention: a short turn of the
+	// fast model decides whether to tell them, and the sentence goes to
+	// the laptop that sent the news (owner, 17 October 2026).
+	reacting := &terminal.Reactor{
+		Answerer: answerer,
+		Vendor:   cfg.PlatformAI.Vendor,
+		Model:    cmp.Or(cfg.PlatformAI.FastModel, cfg.PlatformAI.Model),
+		Voice:    func() string { return persona.Voice(manner.Current(), cfg.Assistant.Name) },
+		Address:  func() string { return persona.AddressFor(manner.Current()) },
+		Usually:  ordinarily(&profile.Reader{Memories: remembering.Store}, logger.Logger),
+		Tools:    devices.For,
+		Publish:  announcing{publishing, cfg.Assistant.Now},
+		Notes:    remarked,
+		Location: cfg.Assistant.Location,
+		Now:      cfg.Assistant.Now,
+		Logger:   logger.Logger,
+	}
+
 	handler := api.New(api.Options{
 		Logger:        logger.Logger,
 		AssistantName: cfg.Assistant.Name,
@@ -967,6 +1014,7 @@ func run() error {
 		VoiceState:    cfg.HomeAssistant.VoiceState,
 		DB:            db,
 		Arrivals:      running,
+		Terminals:     reacting,
 		Chats:         chats,
 		Messages:      chats,
 		Reminders:     reminderStore,
@@ -997,6 +1045,8 @@ func run() error {
 		Cut:            cutOff,
 		Answered:       liveHub,
 		DeviceEvents:   deviceEvents,
+		Places:         drawnPlaces,
+		Usage:          calls,
 		Remarks:        remarked,
 		Rules:          scheduled,
 		Usually:        usually,
@@ -1024,7 +1074,7 @@ func run() error {
 
 // buildProvider : Returns the engine that answers chats, as configuration
 // selects it.
-func buildProvider(cfg config.Config, logger *slog.Logger) (environment.Environment, error) {
+func buildProvider(cfg config.Config, keeping environment.Recorder, logger *slog.Logger) (environment.Environment, error) {
 	switch cfg.Provider.Name {
 	case config.ProviderPlatformAI:
 		return platformai.New(platformai.Config{
@@ -1045,6 +1095,7 @@ func buildProvider(cfg config.Config, logger *slog.Logger) (environment.Environm
 			// default gets exactly what it got before.
 			SystemPrompt:       persona.Prompt(cfg.Assistant.Persona, cfg.Assistant.Name, persona.Spoken),
 			Thinking:           cfg.PlatformAI.Thinking,
+			Recorder:           keeping,
 			Timeout:            cfg.PlatformAI.Timeout,
 			InsecureSkipVerify: cfg.PlatformAI.InsecureSkipVerify,
 		}, logger)
@@ -1954,7 +2005,7 @@ func describeDaily(
 			continue
 		}
 		for _, userID := range who {
-			if err := describing.Build(pass, userID); err != nil {
+			if err := describing.Build(environment.Labelled(pass, environment.Label{UserID: userID}), userID); err != nil {
 				logger.Warn("cannot describe them", slog.Any("error", err))
 				continue
 			}
@@ -1993,6 +2044,14 @@ const (
 	forgetFirst = 20 * time.Minute
 )
 
+// usageSettle : The least time between two notices that somebody's
+// model calls changed.
+//
+// A turn with tools is four or five calls in as many seconds, and a
+// settings page that read them all again after each would be reading
+// for the whole turn.
+const usageSettle = 5 * time.Second
+
 // forgetTimeout : How long one pass may take.
 //
 // Generous for the same reason the pass is batched: nobody is waiting,
@@ -2019,17 +2078,19 @@ const forgetTimeout = 10 * time.Minute
 // nobody does across a year.
 const runsKeep = 30 * 24 * time.Hour
 
-// forgetRunsDaily : Drops rule history older than [runsKeep].
+// forgetting : Something that drops what is older than a moment.
+type forgetting interface {
+	Forget(ctx context.Context, before time.Time) (int64, error)
+}
+
+// forgetOlderDaily : Drops what is older than [keep], once a day, for
+// as long as ctx lives -- rule history ([runsKeep]) and model calls
+// ([usage.Keep]).
 //
-// Its own loop rather than a second errand inside the readings
-// one, so that a failure to sweep one cannot stop the other.
-func forgetRunsDaily(
-	ctx context.Context,
-	forgetting interface {
-		Forget(ctx context.Context, before time.Time) (int64, error)
-	},
-	now func() time.Time,
-	logger *slog.Logger,
+// A loop of its own for each rather than a second errand inside the
+// readings one, so that a failure to sweep one cannot stop the other.
+func forgetOlderDaily(ctx context.Context, from forgetting, keep time.Duration, what string,
+	now func() time.Time, logger *slog.Logger,
 ) {
 	timer := time.NewTimer(forgetFirst)
 	defer timer.Stop()
@@ -2041,22 +2102,28 @@ func forgetRunsDaily(
 		case <-timer.C:
 		}
 		timer.Reset(forgetEvery)
-
-		pass, cancel := context.WithTimeout(ctx, forgetTimeout)
-		before := now().Add(-runsKeep)
-		gone, err := forgetting.Forget(pass, before)
-		cancel()
-		if err != nil {
-			logger.Warn("cannot forget what the rules did",
-				slog.Any("error", err))
-			continue
-		}
-		if gone == 0 {
-			continue
-		}
-		logger.Info("forgot old rule history",
-			slog.Int64("rows", gone), slog.Time("older_than", before))
+		forgetOlder(ctx, from, keep, what, now, logger)
 	}
+}
+
+// forgetOlder : One pass of forgetOlderDaily. A failure is logged and
+// the next day tries again.
+func forgetOlder(ctx context.Context, from forgetting, keep time.Duration, what string,
+	now func() time.Time, logger *slog.Logger,
+) {
+	pass, cancel := context.WithTimeout(ctx, forgetTimeout)
+	defer cancel()
+	before := now().Add(-keep)
+	gone, err := from.Forget(pass, before)
+	if err != nil {
+		logger.Warn("cannot forget old "+what, slog.Any("error", err))
+		return
+	}
+	if gone == 0 {
+		return
+	}
+	logger.Info("forgot old "+what,
+		slog.Int64("rows", gone), slog.Time("older_than", before))
 }
 
 func forgetDaily(
@@ -2129,7 +2196,7 @@ func listenDaily(
 			continue
 		}
 		for _, userID := range who {
-			if err := listening.Build(pass, userID); err != nil {
+			if err := listening.Build(environment.Labelled(pass, environment.Label{UserID: userID}), userID); err != nil {
 				logger.Warn("cannot collect the names they say", slog.Any("error", err))
 				continue
 			}
@@ -2205,6 +2272,7 @@ func investigating(
 	logger *slog.Logger,
 ) func(ctx context.Context, userID, system, ask string) (string, error) {
 	return func(ctx context.Context, userID, system, ask string) (string, error) {
+		ctx = askedBy(ctx, environment.FeatureNoticing, userID, "")
 		specs, err := offering(tools, names, address)
 		if err != nil {
 			return "", err
@@ -2344,6 +2412,26 @@ func askAs(
 		return "", fmt.Errorf("%s", last.Text)
 	}
 	return last.Text, nil
+}
+
+// askedBy : ctx, saying which feature is about to ask a model and for
+// whom, so the call is kept under the right name.
+//
+// The person is the one given, else whoever is already on ctx, else the
+// caller of the request being served: the greeting is written inside a
+// request and is told nobody's id.
+func askedBy(ctx context.Context, what environment.Feature, userID, detail string) context.Context {
+	if userID == "" {
+		if l, ok := environment.LabelOf(ctx); ok {
+			userID = l.UserID
+		}
+	}
+	if userID == "" {
+		if c := authn.Of(ctx); c != nil && c.User != nil {
+			userID = c.User.ID
+		}
+	}
+	return environment.Labelled(ctx, environment.Label{UserID: userID, Feature: what, Detail: detail})
 }
 
 // settingOff : Says when to leave for something with an address.
@@ -3132,6 +3220,10 @@ func (d doing) write(ctx context.Context, run job.Turn, s job.Act) (job.Outcome,
 	if bad != nil {
 		return job.Outcome{}, bad
 	}
+	// Named for the rule, so what each rule costs can be told apart.
+	ctx = environment.Labelled(ctx, environment.Label{
+		UserID: run.UserID, Feature: environment.FeatureRuleRemark, Detail: run.Name,
+	})
 	answer, err := d.converse(ctx, run.UserID,
 		writing(s.Ask, run.Already, run.Before, d.routine(ctx, run.UserID)), specs)
 	if err != nil {
@@ -3765,6 +3857,8 @@ func noticed(
 	}
 
 	return func(ctx context.Context, userID string) {
+		// Whose pass this is, for every model call it makes.
+		ctx = environment.Labelled(ctx, environment.Label{UserID: userID})
 		mine, err := store.Mine(ctx, userID, "", everyRule, job.Active)
 		if err != nil {
 			logger.WarnContext(ctx, "cannot read his own rules", slog.Any("error", err))

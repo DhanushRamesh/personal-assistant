@@ -149,7 +149,18 @@ type reply struct {
 	Text      string
 	ToolCalls []environment.ToolCall
 	// Usage : What the endpoint says it cost. Zero when it did not say.
+	//
+	// Kept on a failure too, where the endpoint said: a reply that
+	// streamed for a minute and came to nothing was still charged for.
 	Usage wireUsage
+
+	// Vendor, Model : What this attempt was sent to, after defaults.
+	Vendor string
+	Model  string
+	// At, Took : When this attempt was sent and how long it ran, for
+	// the record of it.
+	At   time.Time
+	Took time.Duration
 }
 
 // APIError : A message the service itself returned, in its own error envelope.
@@ -250,10 +261,14 @@ func (p *Environment) mintToken(ctx context.Context) (string, error) {
 // answer as it arrives. A retry passes nil: whatever the first attempt
 // put through has already been said, and saying the second attempt's
 // version as well would say it twice.
-func (p *Environment) chat(ctx context.Context, ask environment.Request, onText func(string)) (reply, error) {
+//
+// Every attempt but the last comes back in tried, each of them a failure
+// that was sent and may have been charged for, so it can be kept beside
+// the one that counted.
+func (p *Environment) chat(ctx context.Context, ask environment.Request, onText func(string)) (got reply, tried []reply, err error) {
 	got, status, err := p.attemptChat(ctx, ask, onText)
 	if err == nil {
-		return got, nil
+		return got, nil, nil
 	}
 
 	// A token can be refused before we believe it has expired, so a
@@ -262,8 +277,9 @@ func (p *Environment) chat(ctx context.Context, ask environment.Request, onText 
 	// been revoked would otherwise loop.
 	if status == http.StatusUnauthorized {
 		p.forgetToken()
+		tried = append(tried, got)
 		got, _, err = p.attemptChat(ctx, ask, nil)
-		return got, err
+		return got, tried, err
 	}
 
 	// A connection kept open between calls can be closed at the far end
@@ -277,8 +293,9 @@ func (p *Environment) chat(ctx context.Context, ask environment.Request, onText 
 	if status == 0 && dropped(err) && ctx.Err() == nil {
 		p.logger.WarnContext(ctx, "the connection to platform ai was dead, asking again",
 			slog.Any("error", err))
+		tried = append(tried, got)
 		got, _, err = p.attemptChat(ctx, ask, nil)
-		return got, err
+		return got, tried, err
 	}
 
 	// Being told to slow down is not being told no. Nothing was read,
@@ -298,12 +315,13 @@ func (p *Environment) chat(ctx context.Context, ask environment.Request, onText 
 		if !sleep(ctx, wait) {
 			break
 		}
+		tried = append(tried, got)
 		got, status, err = p.attemptChat(ctx, ask, nil)
 		if err == nil {
-			return got, nil
+			return got, tried, nil
 		}
 	}
-	return reply{}, err
+	return got, tried, err
 }
 
 // Slowed : How long to wait before each attempt after being told to
@@ -382,6 +400,24 @@ func withSummary(prompt, summary string) string {
 }
 
 func (p *Environment) attemptChat(ctx context.Context, ask environment.Request, onText func(string)) (reply, int, error) {
+	began := time.Now()
+	got, status, err := p.attemptOnce(ctx, ask, onText)
+	got.Vendor, got.Model = p.target(ask)
+	got.At, got.Took = began.UTC(), time.Since(began)
+	return got, status, err
+}
+
+// target : The vendor and model a request is sent to: its own when it
+// names a model, and the configured ones when it does not.
+func (p *Environment) target(ask environment.Request) (vendor, model string) {
+	if ask.Model != "" {
+		return ask.Vendor, ask.Model
+	}
+	return p.cfg.Vendor, p.cfg.Model
+}
+
+// attemptOnce : The try itself, which attemptChat times.
+func (p *Environment) attemptOnce(ctx context.Context, ask environment.Request, onText func(string)) (reply, int, error) {
 	token, err := p.accessToken(ctx)
 	if err != nil {
 		// A refusal minting the token is the same problem as a refusal
@@ -403,10 +439,7 @@ func (p *Environment) attemptChat(ctx context.Context, ask environment.Request, 
 		})
 	}
 
-	vendor, model := p.cfg.Vendor, p.cfg.Model
-	if ask.Model != "" {
-		vendor, model = ask.Vendor, ask.Model
-	}
+	vendor, model := p.target(ask)
 
 	prompt := p.cfg.SystemPrompt
 	if ask.SystemPrompt != "" {
@@ -477,8 +510,10 @@ func (p *Environment) attemptChat(ctx context.Context, ask environment.Request, 
 
 	var parsed chatResponse
 	if err := json.Unmarshal(raw, &parsed); err != nil || len(parsed.Data.Messages) == 0 {
+		// Whatever it said the call cost, which a failure may still carry.
+		spent := reply{Usage: parsed.Data.Usage.Stats}
 		if msg := errorMessage(raw); msg != "" {
-			return reply{}, resp.StatusCode, &APIError{Message: msg, Status: resp.StatusCode}
+			return spent, resp.StatusCode, &APIError{Message: msg, Status: resp.StatusCode}
 		}
 
 		// The body is logged because without it this is unanswerable. A
@@ -491,7 +526,7 @@ func (p *Environment) attemptChat(ctx context.Context, ask environment.Request, 
 			slog.Any("parse_error", err),
 			slog.String("body", excerpt(raw, 700)))
 
-		return reply{}, resp.StatusCode,
+		return spent, resp.StatusCode,
 			fmt.Errorf("platformai: chat response was not usable (HTTP %d, %d bytes)",
 				resp.StatusCode, len(raw))
 	}
@@ -520,7 +555,7 @@ func (p *Environment) attemptChat(ctx context.Context, ask environment.Request, 
 	}
 
 	if text == "" {
-		return reply{}, resp.StatusCode, fmt.Errorf("platformai: the reply was empty")
+		return reply{Usage: parsed.Data.Usage.Stats}, resp.StatusCode, fmt.Errorf("platformai: the reply was empty")
 	}
 	return reply{Text: text, Usage: parsed.Data.Usage.Stats}, resp.StatusCode, nil
 }

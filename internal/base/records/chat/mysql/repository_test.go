@@ -588,6 +588,52 @@ func TestAChatRemembersItsModel(t *testing.T) {
 	}
 }
 
+// Where the person was when they asked is stored with the chat, so one
+// recovered after a restart is answered as it was asked; and a chat asked
+// without it reads back empty.
+func TestAChatRemembersWhereThePersonWas(t *testing.T) {
+	r := newRepository(t)
+	ctx := context.Background()
+
+	asked, err := chat.New(storedConversation(t, r), chat.ChannelDirect, "why did this fail?")
+	if err != nil {
+		t.Fatalf("chat.New: %v", err)
+	}
+	asked.Where = "Terminals view. Focused terminal \"server\" in ~/work, running go test.\nFAIL: TestX"
+	if err := r.Create(ctx, asked); err != nil {
+		t.Fatalf("Create: %v", err)
+	}
+	got, err := r.Get(ctx, asked.ID)
+	if err != nil {
+		t.Fatalf("Get: %v", err)
+	}
+	if got.Where != asked.Where {
+		t.Errorf("Where = %q, want %q", got.Where, asked.Where)
+	}
+
+	// The lifecycle writes over the chat without losing it.
+	if err := got.Start(); err != nil {
+		t.Fatalf("Start: %v", err)
+	}
+	if err := r.Update(ctx, got); err != nil {
+		t.Fatalf("Update: %v", err)
+	}
+	if again, _ := r.Get(ctx, asked.ID); again == nil || again.Where != asked.Where {
+		t.Errorf("Where after an update = %+v, want it kept", again)
+	}
+
+	plain, err := chat.New(storedConversation(t, r), chat.ChannelDirect, "what is the time")
+	if err != nil {
+		t.Fatalf("chat.New: %v", err)
+	}
+	if err := r.Create(ctx, plain); err != nil {
+		t.Fatalf("Create: %v", err)
+	}
+	if got, _ := r.Get(ctx, plain.ID); got == nil || got.Where != "" {
+		t.Errorf("a chat asked without it read back %+v", got)
+	}
+}
+
 // A setting nobody has written is empty rather than an error: every one has a
 // default, and not having chosen is the ordinary case.
 func TestAnUnwrittenSettingIsEmpty(t *testing.T) {
@@ -730,5 +776,33 @@ func TestAMessageRecordsItsChat(t *testing.T) {
 	}
 	if len(all) != 1 || all[0].ChatID != m.ChatID {
 		t.Errorf("chat id = %q, want %q", all[0].ChatID, m.ChatID)
+	}
+}
+
+// The usage page names each call's conversation, a hundred of them at
+// once, so the titles are read in one query -- and only the person's
+// own: another's id asked for is simply absent.
+func TestConversationTitlesAreReadTogether(t *testing.T) {
+	r := newRepository(t)
+	ctx := context.Background()
+	mine := storedConversation(t, r)
+	theirs := storedConversation(t, r)
+	c, err := r.GetConversation(ctx, mine)
+	if err != nil {
+		t.Fatalf("GetConversation: %v", err)
+	}
+	if err := r.RenameConversation(ctx, c.UserID, mine, "The cinema booking"); err != nil {
+		t.Fatalf("RenameConversation: %v", err)
+	}
+
+	got, err := r.ConversationTitles(ctx, c.UserID, []string{mine, theirs, "conv_missing"})
+	if err != nil {
+		t.Fatalf("ConversationTitles: %v", err)
+	}
+	if len(got) != 1 || got[mine] != "The cinema booking" {
+		t.Errorf("titles = %v, want only mine", got)
+	}
+	if none, err := r.ConversationTitles(ctx, c.UserID, nil); err != nil || len(none) != 0 {
+		t.Errorf("no ids gave %v, %v", none, err)
 	}
 }

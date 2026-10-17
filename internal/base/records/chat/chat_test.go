@@ -5,6 +5,7 @@ import (
 	"strings"
 	"testing"
 	"time"
+	"unicode/utf8"
 
 	"personal-assistant/internal/base/records/chat"
 )
@@ -473,5 +474,24 @@ func TestAModelIsChosenOrLeftToTheServer(t *testing.T) {
 	}
 	if m.Vendor != "anthropic" || m.ID != "claude-sonnet-5-5" {
 		t.Errorf("model = %+v, want it trimmed", m)
+	}
+}
+
+// Where is trimmed, and a long one cut rather than refused, on a
+// character boundary so what is kept is still text.
+func TestCutWhere(t *testing.T) {
+	if got := chat.CutWhere("  in Terminals, build failing \n"); got != "in Terminals, build failing" {
+		t.Errorf("CutWhere = %q, want it trimmed", got)
+	}
+	if got := chat.CutWhere("   "); got != "" {
+		t.Errorf("CutWhere of blanks = %q, want empty", got)
+	}
+	long := "a" + strings.Repeat("é", chat.MaxWhereBytes)
+	got := chat.CutWhere(long)
+	if len(got) > chat.MaxWhereBytes {
+		t.Errorf("kept %d bytes, want at most %d", len(got), chat.MaxWhereBytes)
+	}
+	if !utf8.ValidString(got) || !strings.HasPrefix(long, got) || len(got) < chat.MaxWhereBytes-4 {
+		t.Errorf("cut badly: %d bytes, valid %v", len(got), utf8.ValidString(got))
 	}
 }

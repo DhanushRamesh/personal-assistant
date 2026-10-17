@@ -22,6 +22,7 @@ type chatRow struct {
 	ClientID       *string    `gorm:"column:client_id"`
 	ConversationID *string    `gorm:"column:conversation_id"`
 	Prompt         string     `gorm:"column:prompt"`
+	Where          *string    `gorm:"column:where_context"`
 	Channel        string     `gorm:"column:channel"`
 	Vendor         *string    `gorm:"column:vendor"`
 	Model          *string    `gorm:"column:model"`
@@ -156,6 +157,7 @@ func toRow(t *chat.Chat) *chatRow {
 		ID:             t.ID,
 		ConversationID: nullable(t.ConversationID),
 		Prompt:         t.Prompt,
+		Where:          nullable(t.Where),
 		ClientID:       nullable(t.ClientID),
 		Channel:        string(t.Channel),
 		Vendor:         nullable(t.Model.Vendor),
@@ -181,6 +183,7 @@ func (r *chatRow) toChat() *chat.Chat {
 		ID:             r.ID,
 		ConversationID: value(r.ConversationID),
 		Prompt:         r.Prompt,
+		Where:          value(r.Where),
 		ClientID:       value(r.ClientID),
 		Channel:        chat.Channel(r.Channel),
 		Model:          chat.NewModel(value(r.Vendor), value(r.Model)),

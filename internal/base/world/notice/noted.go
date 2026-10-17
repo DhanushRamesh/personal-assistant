@@ -43,14 +43,23 @@ const (
 
 // Reason : Why something was worth saying.
 //
-// One value, and kept as a type with one value on purpose: it is
-// written down with every row, and a column that has only ever
-// held one word is how the next person reading the page knows
-// there was never a second kind.
+// Kept as a type on purpose: it is written down with every row, and
+// the words the column has held are how the next person reading the
+// page knows which kinds there have been. Two: a rule firing, and a
+// terminal wanting attention.
 type Reason string
 
 // Immediate : The rule that fired said this was to be said now.
 const Immediate Reason = "immediate"
+
+// Terminal : A terminal on their laptop wanted attention -- a long
+// command finished, a program asked for them, or a shell ended.
+//
+// The second value the column has held, from 17 October 2026. Not a
+// rule: the desktop app reports it and the assistant decides at once
+// whether it is worth a sentence, so this row is the only place a
+// decision to stay quiet about it can be seen.
+const Terminal Reason = "terminal"
 
 // Noted : One thing the assistant considered saying.
 type Noted struct {

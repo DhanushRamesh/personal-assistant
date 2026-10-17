@@ -33,6 +33,11 @@ func (r *Runner) execute(ctx, lifeCtx context.Context, t *chat.Chat) {
 		return
 	}
 
+	// Whose chat every model call from here on is for, including the
+	// ones a tool makes and the naming and condensing after it. Each
+	// call says what it is on top of this.
+	ctx, lifeCtx = r.labelled(ctx, t), r.labelled(lifeCtx, t)
+
 	// The deadline covers the run itself, not the wait for a slot.
 	runCtx, stopRun := context.WithTimeout(lifeCtx, r.chatTimeout)
 	defer stopRun()
@@ -295,7 +300,9 @@ func (r *Runner) consume(runCtx, ctx context.Context, t *chat.Chat, systemPrompt
 		drop()
 		if stream == nil {
 			call = t.Asking(time.Now(), false)
-			stream, err = r.environment.Run(runCtx, environment.Request{
+			stream, err = r.environment.Run(environment.Labelled(runCtx, environment.Label{
+				Feature: environment.FeatureChat,
+			}), environment.Request{
 				Prompt:  prompt,
 				History: turns,
 				Summary: window.Summary,
@@ -1292,7 +1299,9 @@ func (r *Runner) ahead(
 	prompt, asking string,
 	tools []environment.ToolSpec,
 ) (<-chan environment.Message, context.CancelFunc, int) {
-	ctx, cancel := context.WithCancel(runCtx)
+	ctx, cancel := context.WithCancel(environment.Labelled(runCtx, environment.Label{
+		Feature: environment.FeatureChat, Detail: environment.DetailEarly, Early: true,
+	}))
 	call := t.Asking(time.Now(), true)
 	stream, err := r.environment.Run(ctx, environment.Request{
 		Prompt:  lookFirst,
@@ -1313,6 +1322,16 @@ func (r *Runner) ahead(
 		return nil, nil, -1
 	}
 	return stream, cancel, call
+}
+
+// labelled : ctx, saying every model call made under it is for this
+// chat and whoever's conversation it is in.
+func (r *Runner) labelled(ctx context.Context, t *chat.Chat) context.Context {
+	return environment.Labelled(ctx, environment.Label{
+		UserID:         r.callerFor(ctx, t).UserID,
+		ChatID:         t.ID,
+		ConversationID: t.ConversationID,
+	})
 }
 
 // laptopConnected : What the model is told while the person's laptop is

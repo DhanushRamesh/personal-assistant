@@ -54,8 +54,12 @@ import (
 	eventmemory "personal-assistant/internal/base/world/event/inmemory"
 	"personal-assistant/internal/base/world/events"
 	recall "personal-assistant/internal/domain/memory"
+	"personal-assistant/internal/domain/places"
+	placesmemory "personal-assistant/internal/domain/places/inmemory"
 	"personal-assistant/internal/domain/remind"
 	remindmemory "personal-assistant/internal/domain/remind/inmemory"
+	"personal-assistant/internal/domain/usage"
+	usagememory "personal-assistant/internal/domain/usage/inmemory"
 )
 
 // Username and Password : The account every environment is given.
@@ -126,6 +130,19 @@ type Options struct {
 	// DeviceEvents : Where what the person's devices saw is kept. Nil
 	// selects a store that keeps them in memory.
 	DeviceEvents eventsapi.Store
+	// Arrivals : Told which kinds of reading just landed. Nil tells
+	// nobody.
+	Arrivals eventsapi.Arrivals
+	// Terminals : Told of a terminal's news. Nil tells nobody.
+	Terminals eventsapi.Terminals
+	// Places : The places the person draws. Nil selects an empty store
+	// kept in memory.
+	Places places.Store
+	// Usage : The model calls kept. Nil selects an empty store kept in
+	// memory.
+	Usage usage.Store
+	// Now : The server's clock. Nil is the real one.
+	Now func() time.Time
 
 	// Memories : What the assistant remembers. Nil selects an empty store.
 	Memories recall.Store
@@ -235,6 +252,12 @@ func NewWith(t *testing.T, opts Options) *Env {
 	if opts.Reminders == nil {
 		opts.Reminders = remindmemory.New()
 	}
+	if opts.Places == nil {
+		opts.Places = placesmemory.New()
+	}
+	if opts.Usage == nil {
+		opts.Usage = usagememory.New()
+	}
 
 	e := &Env{
 		Server: api.New(api.Options{
@@ -259,6 +282,11 @@ func NewWith(t *testing.T, opts Options) *Env {
 			Owed:             opts.Owed,
 			Heard:            opts.Heard,
 			DeviceEvents:     deviceEvents(opts.DeviceEvents),
+			Places:           opts.Places,
+			Usage:            opts.Usage,
+			Now:              opts.Now,
+			Arrivals:         opts.Arrivals,
+			Terminals:        opts.Terminals,
 			Memories:         opts.Memories,
 			Tools:            opts.Tools,
 			Announcements:    opts.Announcements,

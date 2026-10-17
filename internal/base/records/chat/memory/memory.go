@@ -202,6 +202,19 @@ func (m *Repository) GetConversation(_ context.Context, id string) (*chat.Conver
 	return &c, nil
 }
 
+// ConversationTitles : See chat.Conversations.
+func (m *Repository) ConversationTitles(_ context.Context, userID string, ids []string) (map[string]string, error) {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	out := make(map[string]string, len(ids))
+	for _, id := range ids {
+		if c, ok := m.conversations[id]; ok && c.UserID == userID {
+			out[id] = c.Title
+		}
+	}
+	return out, nil
+}
+
 // ListConversations : Returns stored conversations.
 func (m *Repository) ListConversations(ctx context.Context, userID string, limit int) ([]chat.Conversation, error) {
 	return m.listConversations(ctx, userID, limit, false)

@@ -16,6 +16,7 @@ import (
 	"net"
 	"net/http"
 	"strings"
+	"sync"
 	"time"
 
 	"personal-assistant/internal/base/platform/failure"
@@ -138,6 +139,10 @@ type Config struct {
 	// leaves it to the vendor.
 	Thinking string
 
+	// Recorder : Where every attempt is kept, with what it cost. Nil
+	// keeps nothing.
+	Recorder environment.Recorder
+
 	// Timeout : How long one call may take. Zero selects DefaultTimeout.
 	Timeout time.Duration
 	// InsecureSkipVerify : Skips certificate verification. The public
@@ -152,6 +157,10 @@ type Environment struct {
 	cfg    Config
 	logger *slog.Logger
 	http   *http.Client
+
+	// unlabelled : The purposes already warned of reaching the model
+	// unlabelled, so the warning is said once and not on every call.
+	unlabelled sync.Map
 
 	tokenState
 }
@@ -278,7 +287,7 @@ func (p *Environment) Run(ctx context.Context, req environment.Request) (<-chan 
 			// one duration for the whole call hides which of them is
 			// costing the wait.
 			var firstPiece time.Duration
-			got, err := p.chat(ctx, req, func(text string) {
+			got, tried, err := p.chat(ctx, req, func(text string) {
 				if pieces == 0 {
 					firstPiece = time.Since(started)
 				}
@@ -290,10 +299,17 @@ func (p *Environment) Run(ctx context.Context, req environment.Request) (<-chan 
 				// which is several seconds before the round says so.
 				send(ctx, ch, environment.Partial(text))
 			})
+			// The attempts before the last, each of them sent and
+			// refused. Kept because they were sent: a token refused
+			// or a limiter saying slow down is a call all the same.
+			for _, t := range tried {
+				p.keep(ctx, req.Purpose, t, environment.EndedFailed)
+			}
 			if err != nil {
 				// A cancelled chat is the user's doing, not a failure worth
 				// reporting to them.
 				if ctx.Err() != nil {
+					p.keep(ctx, req.Purpose, got, p.unheard(ctx))
 					return
 				}
 				p.logger.ErrorContext(ctx, "platform ai call failed",
@@ -301,6 +317,7 @@ func (p *Environment) Run(ctx context.Context, req environment.Request) (<-chan 
 					slog.Any("error", err))
 				f := classify(err)
 				send(ctx, ch, environment.Failure(f.Sentence(), string(f.Code), f.Full()))
+				p.keep(ctx, req.Purpose, got, environment.EndedFailed)
 				return
 			}
 
@@ -329,7 +346,8 @@ func (p *Environment) Run(ctx context.Context, req environment.Request) (<-chan 
 				// you have planned for tomorrow before I can answer
 				// that, sir" in front of an answer about tomorrow. It
 				// is kept in the log, where it costs nothing.
-				send(ctx, ch, environment.ToolCalls(got.ToolCalls))
+				p.keep(ctx, req.Purpose, got, p.delivered(ctx,
+					send(ctx, ch, environment.ToolCalls(got.ToolCalls)), environment.EndedTools))
 				return
 			}
 
@@ -340,11 +358,72 @@ func (p *Environment) Run(ctx context.Context, req environment.Request) (<-chan 
 				slog.Duration("after", time.Since(started)),
 				slog.Duration("first_piece_after", firstPiece),
 				slog.Int("reply_bytes", len(got.Text)))
-			send(ctx, ch, environment.Final(got.Text))
+			p.keep(ctx, req.Purpose, got, p.delivered(ctx,
+				send(ctx, ch, environment.Final(got.Text)), environment.EndedAnswered))
 		})
 	}()
 
 	return ch, nil
+}
+
+// delivered : How a call that came back ended: as it came back if the
+// caller took it, and otherwise as nobody hearing it.
+//
+// Decided after the send and not before, because only the send knows.
+// A round started early is left unread in its channel until the runner
+// decides whether it wants it; dropped, its context is cancelled and
+// this send is the thing that finds out.
+func (p *Environment) delivered(ctx context.Context, taken bool, ended environment.Ended) environment.Ended {
+	if taken {
+		return ended
+	}
+	return p.unheard(ctx)
+}
+
+// unheard : How a call ended that the caller stopped listening to:
+// unused if it was a round started ahead of need, stopped otherwise.
+func (p *Environment) unheard(ctx context.Context) environment.Ended {
+	if l, ok := environment.LabelOf(ctx); ok && l.Early {
+		return environment.EndedUnused
+	}
+	return environment.EndedStopped
+}
+
+// keep : Records one attempt, labelled with whatever ctx says asked it.
+//
+// Here, at the one place every call passes, so that nothing that asks a
+// model can be missed by forgetting to record it. A call nobody
+// labelled is kept as "other" and said once per purpose in the log:
+// the tokens were spent, and a gap in the record would be worse than a
+// row that says it does not know who asked.
+func (p *Environment) keep(ctx context.Context, why environment.Purpose, got reply, ended environment.Ended) {
+	if p.cfg.Recorder == nil {
+		return
+	}
+	label, _ := environment.LabelOf(ctx)
+	if label.Feature == "" {
+		label.Feature = environment.FeatureOther
+		if _, said := p.unlabelled.LoadOrStore(why, true); !said {
+			p.logger.WarnContext(ctx, "a model was asked by something that did not say what it was",
+				slog.String("purpose", string(why)))
+		}
+	}
+	if label.Detail == "" && ended == environment.EndedTools {
+		label.Detail = environment.DetailTools
+	}
+	// Without the caller's cancellation: a stopped call is still
+	// worth its row, and the context that stopped it would refuse to
+	// write one.
+	p.cfg.Recorder.Record(context.WithoutCancel(ctx), environment.Call{
+		Label:  label,
+		Vendor: got.Vendor,
+		Model:  got.Model,
+		Input:  got.Usage.Input,
+		Output: got.Usage.Output,
+		At:     got.At,
+		Took:   got.Took,
+		Ended:  ended,
+	})
 }
 
 // classify : Sorts a failure into a code, keeping what the service said.

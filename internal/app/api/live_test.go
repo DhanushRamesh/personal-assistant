@@ -12,6 +12,7 @@ import (
 
 	"personal-assistant/internal/app/api/apitest"
 	"personal-assistant/internal/app/live"
+	"personal-assistant/internal/base/records/chat"
 )
 
 func liveURL(base string) string {
@@ -192,5 +193,56 @@ func TestALivePromptSaysWhetherItWasSpoken(t *testing.T) {
 	}
 	if got := channelOf(ask("r2", false)); got != "direct" {
 		t.Errorf("a typed prompt was answered as %q", got)
+	}
+}
+
+// A live prompt's where is kept with the chat it starts, trimmed, and a
+// long one cut to chat.MaxWhereBytes rather than refused.
+func TestALivePromptCarriesWhereThePersonIs(t *testing.T) {
+	e := apitest.NewWith(t, apitest.Options{Live: live.NewHub()})
+	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	defer cancel()
+	c, _, err := websocket.Dial(ctx, liveURL(e.Live(t)), &websocket.DialOptions{
+		HTTPHeader: http.Header{"Authorization": {"Bearer " + e.Token}},
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer c.CloseNow()
+
+	ask := func(request, where string) string {
+		if err := wsjson.Write(ctx, c, map[string]any{"type": "prompt", "request": request, "text": "why did this fail?", "where": where}); err != nil {
+			t.Fatal(err)
+		}
+		for {
+			var m struct {
+				Type    string `json:"type"`
+				Request string `json:"request"`
+				ChatID  string `json:"chat_id"`
+			}
+			if err := wsjson.Read(ctx, c, &m); err != nil {
+				t.Fatal(err)
+			}
+			if m.Type == "chat" && m.Request == request {
+				return m.ChatID
+			}
+		}
+	}
+	whereOf := func(id string) string {
+		got, err := e.Repo.Get(ctx, id)
+		if err != nil {
+			t.Fatal(err)
+		}
+		return got.Where
+	}
+
+	if got := whereOf(ask("r1", "  Terminals view. Focused terminal \"server\": FAIL TestX \n")); got != "Terminals view. Focused terminal \"server\": FAIL TestX" {
+		t.Errorf("where = %q, want it as sent, trimmed", got)
+	}
+	if got := whereOf(ask("r2", strings.Repeat("x", chat.MaxWhereBytes+500))); len(got) != chat.MaxWhereBytes {
+		t.Errorf("a long where kept %d bytes, want it cut to %d", len(got), chat.MaxWhereBytes)
+	}
+	if got := whereOf(ask("r3", "")); got != "" {
+		t.Errorf("a prompt without where kept %q", got)
 	}
 }

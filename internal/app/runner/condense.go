@@ -91,7 +91,12 @@ func between(messages []conversation.Message, after, through int) []conversation
 // Used for the assistant's own housekeeping rather than for a chat, so the
 // result is not recorded anywhere and no failure is shown to anyone.
 func (r *Runner) ask(ctx context.Context, model chat.Model, why environment.Purpose, prompt string) (string, error) {
-	stream, err := r.environment.Run(ctx, environment.Request{
+	// Named for what it is, beside the chat it follows from.
+	what := environment.FeatureCondense
+	if why == environment.PurposeTitle {
+		what = environment.FeatureTitle
+	}
+	stream, err := r.environment.Run(environment.Labelled(ctx, environment.Label{Feature: what}), environment.Request{
 		Prompt:  prompt,
 		Purpose: why,
 		Vendor:  model.Vendor,

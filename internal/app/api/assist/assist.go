@@ -127,6 +127,10 @@ type ChatRequest struct {
 	// is the endpoint a voice pipeline calls -- Home Assistant's -- and
 	// one typing to it says so. Not part of Ollama's shape either.
 	Spoken *bool `json:"spoken,omitempty"`
+	// Where : What the person has in front of them in the client right
+	// now, as plain text, as on the live connection's prompt. Absent says
+	// nothing; longer than 8 KB is cut. Not part of Ollama's shape.
+	Where string `json:"where,omitempty"`
 }
 
 // ChatChunk : One piece of an answer.
@@ -431,6 +435,7 @@ func (h *Handler) Chat(w http.ResponseWriter, r *http.Request) {
 		ActiveConversationID: caller.Client.ActiveConversationID,
 		ConversationID:       req.ConversationID,
 		Prompt:               prompt,
+		Where:                req.Where,
 	})
 	switch {
 	case errors.Is(err, asking.ErrNoSuchConversation):

@@ -152,6 +152,10 @@ type Conversations interface {
 	// ListArchivedConversations : Returns a user's archived conversations, most
 	// recently used first.
 	ListArchivedConversations(ctx context.Context, userID string, limit int) ([]Conversation, error)
+
+	// ConversationTitles : The titles of those of ids that are the user's,
+	// by id, read at once. One that is not theirs, or is gone, is absent.
+	ConversationTitles(ctx context.Context, userID string, ids []string) (map[string]string, error)
 }
 
 // Settings : Values the server keeps for itself, by name.

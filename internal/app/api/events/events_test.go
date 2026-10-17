@@ -3,15 +3,22 @@ package events_test
 import (
 	"context"
 	"encoding/json"
+	"io"
+	"log/slog"
 	"net/http"
 	"net/http/httptest"
 	"strconv"
 	"strings"
+	"sync"
 	"testing"
 	"time"
 
 	"personal-assistant/internal/app/api/apitest"
 	"personal-assistant/internal/app/api/events"
+	"personal-assistant/internal/app/terminal"
+	"personal-assistant/internal/base/records/conversation"
+	"personal-assistant/internal/base/thinking/environment"
+	"personal-assistant/internal/base/thinking/prompt"
 	"personal-assistant/internal/base/world/event"
 	"personal-assistant/internal/base/world/event/inmemory"
 )
@@ -735,3 +742,81 @@ func TestAReportSentAgainIsStoredOnce(t *testing.T) {
 		t.Errorf("%d stored, want 2", got)
 	}
 }
+
+// reactedTo : Remembers the terminal news it was handed.
+type reactedTo struct {
+	mu     sync.Mutex
+	client []string
+	kinds  []string
+}
+
+func (t *reactedTo) Terminal(_ context.Context, _, clientID string, news []*event.Event) {
+	t.mu.Lock()
+	defer t.mu.Unlock()
+	for _, e := range news {
+		t.client = append(t.client, clientID)
+		t.kinds = append(t.kinds, e.Kind)
+	}
+}
+
+// A terminal's news is handed on with the client that sent it, once:
+// the same batch sent again was reacted to the first time.
+func TestATerminalsNewsIsHandedOnOnceWithItsClient(t *testing.T) {
+	heard := &reactedTo{}
+	e := apitest.NewWith(t, apitest.Options{DeviceEvents: inmemory.New(), Terminals: heard})
+	body := `{"source":"desktop","device":"laptop","events":[
+		{"kind":"terminal.finished","occurred_at":"2026-10-01T09:00:00Z",
+		 "payload":{"terminal":"t1","name":"Server","command":"npm run build","seconds":84},"dedupe_key":"t1:f"},
+		{"kind":"battery.low","occurred_at":"2026-10-01T09:00:01Z","dedupe_key":"b"}]}`
+
+	_, first := post(t, e, body)
+	post(t, e, body)
+
+	if len(heard.kinds) != 1 || heard.kinds[0] != "terminal.finished" || heard.client[0] != e.Client.ID {
+		t.Fatalf("handed on %v from %v (the first reply: %+v)", heard.kinds, heard.client, first)
+	}
+}
+
+// slow : A model that does not answer until it is let go.
+type slow struct{ let chan struct{} }
+
+func (slow) Name() string { return "slow" }
+
+func (s slow) Run(ctx context.Context, _ environment.Request) (<-chan environment.Message, error) {
+	<-s.let
+	ch := make(chan environment.Message, 1)
+	ch <- environment.Final(prompt.Silence)
+	close(ch)
+	return ch, nil
+}
+
+// The laptop is answered while the model is still deciding: a reaction
+// is seconds of work the reply must not wait on.
+func TestTheReplyDoesNotWaitForTheReaction(t *testing.T) {
+	model := slow{let: make(chan struct{})}
+	reacting := &terminal.Reactor{Answerer: model, Publish: nowhere{},
+		Logger: slog.New(slog.NewTextHandler(io.Discard, nil))}
+	e := apitest.NewWith(t, apitest.Options{DeviceEvents: inmemory.New(), Terminals: reacting})
+
+	answered := make(chan int, 1)
+	go func() {
+		code, _ := post(t, e, `{"source":"desktop","events":[{"kind":"terminal.asks",
+			"occurred_at":"2026-10-01T09:00:00Z","payload":{"terminal":"t1","name":"Claude"},"dedupe_key":"t1:a"}]}`)
+		answered <- code
+	}()
+	select {
+	case code := <-answered:
+		if code != http.StatusOK {
+			t.Errorf("status %d", code)
+		}
+	case <-time.After(5 * time.Second):
+		t.Error("the reply waited for the model")
+	}
+	close(model.let)
+	reacting.Wait()
+}
+
+// nowhere : Publishes nothing.
+type nowhere struct{}
+
+func (nowhere) Publish(context.Context, string, string, conversation.Kind, string) error { return nil }

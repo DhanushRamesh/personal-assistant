@@ -616,6 +616,23 @@ func (r *Repository) GetConversation(ctx context.Context, id string) (*chat.Conv
 	return &conversation, nil
 }
 
+// ConversationTitles : See chat.Conversations. One query however many.
+func (r *Repository) ConversationTitles(ctx context.Context, userID string, ids []string) (map[string]string, error) {
+	out := make(map[string]string, len(ids))
+	if len(ids) == 0 {
+		return out, nil
+	}
+	var rows []conversationRow
+	if err := r.db.WithContext(ctx).Select("id", "title").
+		Where("user_id = ? AND id IN ?", userID, ids).Find(&rows).Error; err != nil {
+		return nil, fmt.Errorf("chat: reading conversation titles: %w", err)
+	}
+	for _, row := range rows {
+		out[row.ID] = row.Title
+	}
+	return out, nil
+}
+
 // ListConversations : Returns a user's conversations, most recently used
 // first.
 func (r *Repository) ListConversations(ctx context.Context, userID string, limit int) ([]chat.Conversation, error) {

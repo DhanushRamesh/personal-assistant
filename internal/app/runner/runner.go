@@ -437,6 +437,7 @@ func (r *Runner) promptFor(ctx context.Context, t *chat.Chat) (string, []remind.
 	unsaid, covered := r.missed(ctx, userID)
 
 	prompt := join(standing,
+		r.whereTheyAre(ctx, t, userID),
 		r.known(ctx, userID, &note),
 		r.recalled(ctx, userID, t.Prompt, &note),
 		r.quoted(ctx, userID, t.Prompt, t.ConversationID, &note),
@@ -448,6 +449,37 @@ func (r *Runner) promptFor(ctx context.Context, t *chat.Chat) (string, []remind.
 	r.recordRecalled(ctx, t, note)
 
 	return prompt, covered
+}
+
+// whereTheyAre : What the person has in front of them in the client that
+// asked, when it said, under that client's name. Part of the system
+// prompt rather than the question, so it is neither taken as something
+// they said nor written into the transcript; built once a chat, so every
+// round of it has it.
+func (r *Runner) whereTheyAre(ctx context.Context, t *chat.Chat, userID string) string {
+	if strings.TrimSpace(t.Where) == "" {
+		return ""
+	}
+	return conversation.WhereTheyAre(r.clientName(ctx, userID, t.ClientID), t.Where)
+}
+
+// clientName : What the client that asked is called, or empty when it
+// cannot be told.
+func (r *Runner) clientName(ctx context.Context, userID, clientID string) string {
+	if r.repo == nil || userID == "" || clientID == "" {
+		return ""
+	}
+	clients, err := r.repo.ListClients(ctx, userID, false)
+	if err != nil {
+		r.logger.ErrorContext(ctx, "cannot tell which client asked", slog.Any("error", err))
+		return ""
+	}
+	for _, c := range clients {
+		if c.ID == clientID {
+			return c.Name
+		}
+	}
+	return ""
 }
 
 // join : The parts of a system prompt that are not empty, separated so the

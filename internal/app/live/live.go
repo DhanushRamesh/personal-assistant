@@ -66,6 +66,12 @@ const (
 	// AreaAnnouncements : Something is owed a client to say; it collects
 	// it from /v1/announcements.
 	AreaAnnouncements = "announcements"
+	// AreaPlaces : The places a person keeps, or whether they are
+	// inside one, changed; read /v1/places again.
+	AreaPlaces = "places"
+	// AreaUsage : A model call of theirs was kept; read /v1/usage
+	// again. Said at most once every few seconds a person.
+	AreaUsage = "usage"
 )
 
 // Hearing : A notice of the words heard so far while somebody speaks, as

@@ -19980,3 +19980,250 @@ already been saved, so nothing was lost but the time.
 The rule against this was already written down from the last three
 times. The export menu is exactly where it is tempting to break it,
 because the sequence is known and five taps feel like one action.
+
+## Places are the server's, drawn in the client
+
+Owner, 16 October 2026: *"instead of adding locations in Tasker, I should
+be able to map my geofencing in the server .. I can plot a point and set
+the radius and name that as location .. it should be added as geofence
+and not from Tasker"*. Drawn on the client's canvas (AssistantPlacesFences)
+and approved; built the same day.
+
+- A place is a name, a centre and a radius (20 m to 2 km; 50 m at first, lowered for a supermarket), kept per user
+  on the server (`places`, migration 00054), added, changed and deleted
+  from the client's Places map. `internal/domain/places` holds the type,
+  the validation, the crossing logic and the seed; `internal/app/api/places`
+  serves it. Names are 1 to 60 characters, trimmed, unique per person
+  whatever their case.
+- The endpoints, all authenticated:
+  - `GET /v1/places` -- `{"places":[{"id","name","lat","lng","radius_m",
+    "created_at","updated_at","inside","since"?}]}`, by name. `inside` and
+    `since` come from the latest crossing the server wrote under the
+    place's name; `since` is absent when there has been none.
+  - `POST /v1/places` `{"name","lat","lng","radius_m"}` -- 201 and the
+    place. Every problem is said at once (400); a name already kept is 409.
+  - `PATCH /v1/places/{id}` with any of those fields -- the place.
+  - `DELETE /v1/places/{id}` -- 204.
+  A change to the places is told to clients as area `places`; a crossing
+  as `places` and `events`. PATCH was added to the methods a browser is
+  told it may send.
+- As fixes come in (`events.go`, before settling), each one stored just
+  now is tested against every place, oldest first: inside
+  (`places.Metres`, a haversine, at most the radius) one not entered
+  writes `place.entered`; past the edge by `places.Margin` (50 m) of one
+  entered writes `place.exited`. Source `server`, the fix's device and
+  moment, payload `{"value": name}`, dedupe key
+  `kind:place id:fix unix seconds` so a resent fix cannot write it twice.
+  Places are independent, so two that overlap can both be entered. There
+  is no state table: a place's state is the latest server-sourced
+  crossing under its name, case-insensitive. A fix no later than that
+  crossing is passed over, so a spooled backlog cannot rewrite it. The
+  rules are told the crossing kinds by the same `Arrived` call, and the
+  stays read them back from the store, since they are written first.
+- Renaming a place starts it afresh: its crossings were written under the
+  old name, so the next fix inside enters it under the new one.
+- Tasker's `place.entered` / `place.exited` for a name kept on the server
+  are not stored, answered as seen so the phone deletes them, and logged
+  once per batch with the count. Its profile can be deleted from the phone.
+- Home and Office (`places.Home`, `places.Office`) are made once per
+  person, on the first `GET /v1/places`, at the median of the stays
+  already called home or office, `places.SeedRadius` (150 m) each; one
+  with no stays is skipped. `places_seeded` records that it happened even
+  when nothing was made, so deleting either does not bring it back.
+- A crossing is noticed when the next fix comes: about a minute while
+  moving, up to 15 minutes still -- slower than Android's geofences at
+  best, but never a dropped exit, which Android's were.
+
+### Keeping a place names the stays already in it
+
+Owner, 16 October 2026: *"I should be able to edit it"*, of a stop named
+for the nearest restaurant, done by keeping it as a place. When a place is
+created or changed, every `place.stayed` already written whose `at` lies
+inside it takes its name (`places.Rename`, in `rename.go`; the latest
+`RenameLimit` = 5000 stays; amended in place, so Knows and the day see it
+at once). Stays elsewhere, or already so called, are left; a failure is
+logged and the place kept regardless.
+
+## Every model call's tokens, kept
+
+Owner, 17 October 2026: *"whatever AI call is made .. we will be getting
+input output token usage .. mark it and show in settings page"*. Drawn on
+the client's canvas (SettingsUsage). Built the same day.
+
+- Zoho Platform AI's reply carries usage (`wireUsage`, `client.go`), which
+  was parsed and only logged. Now each request is kept: when, the user,
+  what asked, vendor and model as sent, tokens in and out, how long, how
+  it ended, and the chat and conversation when there is one.
+- **At the one place every call goes through.** `platformai` records each
+  HTTP attempt through `environment.Recorder` (`Config.Recorder`; nil
+  keeps nothing, so the stub and the tests need nothing). One row per
+  attempt: a refused token, a dead connection or a limiter's "slow down"
+  and the retry after it are two rows, both sent. A failed call keeps
+  whatever usage the gateway sent -- a stream cut off, a 200 with nothing
+  usable, an empty reply -- and 0 where it sent none. A failure minting
+  the token is kept too, as failed with 0 tokens.
+- **Who asked is a label on the context** (`environment.Labelled` /
+  `LabelOf`, `label.go`), since `Request` has no user and `Purpose` runs
+  several callers together. A label merges over the one above it: the
+  runner labels the whole chat with user, chat and conversation once
+  (`labelled`, user from the conversation), and each call says only its
+  feature. A tool run inside a chat -- the rule writer, what is coming --
+  inherits whose chat it is. The greeting, written inside a request,
+  takes the user from `authn` (`askedBy` in `cmd/server`).
+- **Feature ids** (stored, never renamed) and their labels (words for the
+  page, in `api/usage`): `chat` Chat answer, `title` Conversation title,
+  `condense` Condensing, `profile` Profile, `vocabulary` Vocabulary,
+  `greeting` Greeting, `rule_writer` Writing a rule (from the rule
+  tools), `coming` What is coming, `noticing` Noticing (the investigating
+  judge, its retirements and superseded memories too), `noticing_writer`
+  Noticing, written (the rule writer the noticing pass uses),
+  `rule_remark` Rule remark (detail: the rule's name, carried on
+  `job.Turn.Name`), `terminal` Terminal (a terminal's news reacted to;
+  detail: the terminal's name and what it did), `other` Other. Anything reaching the model unlabelled
+  is kept as `other`, with one warning in the log per purpose.
+- **Detail**: the caller's (`started early` for the runner's `ahead`, the
+  rule's name); else `tools` whenever the round asked for tools.
+- **ended**: `answered`, `tools`, `failed`, `stopped` (the caller's
+  context ended), `unused`. Decided after the terminal message is sent,
+  not before: a round started early (`ahead`, label `Early`) sits unread
+  in its unbuffered channel until the runner accepts it; dropped, its
+  context is cancelled and either the HTTP call or that send finds out,
+  which is recorded as `unused`. Accepted and read, it is answered or
+  tools like any other round. No row is updated later.
+- **Table** `model_calls` (migration 00055): id `mcl_`+ULID, user_id
+  (nullable, for an `other` nobody could attribute; foreign key to users,
+  cascade), feature, detail, vendor, model, input_tokens, output_tokens,
+  duration_ms, ended, chat_id, conversation_id (CHAR(31): `chat_` and
+  `conv_` are a character longer than the rest; not foreign keys, so a
+  conversation deleted keeps what it cost), at; indexes (user_id, at)
+  and (at). Store: `internal/domain/usage` (inmemory, mysql, storetest).
+  "chat" means feature in chat, title, condense; background is the rest.
+- **Kept ninety days** (`usage.Keep`), dropped by the daily forgetting
+  (`forgetOlderDaily`, which rule history now shares).
+- `GET /v1/usage?days=1|7|30&kind=all|chat|background|failed&limit=N`
+  (authenticated; default days 1 = since midnight in `[assistant]`'s
+  zone, 7 and 30 back from now; limit default 100, at most 500; anything
+  else 400):
+
+  ```
+  {"totals":{"today":{"calls","input","output","chat_calls","background_calls"},
+             "week":{...},"month":{...}},
+   "by_feature":[{"feature","label","calls","input","output"}],
+   "by_model":[{"vendor","model","calls","input","output"}],
+   "calls":[{"id","at","feature","label","detail"?,"vendor","model","input",
+             "output","duration_ms","ended","chat_id"?,"conversation_id"?,
+             "conversation_title"?}],
+   "kinds":{"all","chat","background","failed"}}
+  ```
+
+  by_feature, by_model, calls and kinds are for the `days` window; both
+  groups most input first; calls newest first. Titles are read in one
+  query (`ConversationTitles`). Tokens only; no prices are kept.
+- A new live area, `usage`, is announced when a call is kept, at most
+  once every five seconds a person (`usage.Throttled`; the last of a
+  burst is said when the spell ends).
+
+## Terminals, read and worked by the assistant (planned)
+
+Owner, 17 October 2026: the assistant is to know where the owner is in the
+desktop app, read any terminal, type into one, and hear when one finishes,
+to speak and act on its own. It replaces the rule that it never types into
+a terminal nor sees one's output. Chosen: typing asks before anything runs
+(Claude Code's prompts answered freely); output from every terminal, with
+anything like a key, token or password hidden before it leaves the laptop.
+The client's DEVELOPMENT.md has the four parts. On the server: the client's
+"where I am" taken into the turn's context; terminal events (`terminal.*`)
+received like the phone's, for noticing.
+
+**Part 1, the server's side: built, 17 October 2026.** A prompt may carry
+`where`, plain text, what the owner has in front of them in that client
+right now (the view, the active space, the focused terminal with its name,
+folder, what runs and its last lines; secrets already hidden by the
+client). Optional; absent or blank says nothing.
+
+- **On the wire.** The live prompt:
+  `{"type":"prompt","request":"r1","text":"why did this fail?","spoken":false,"where":"..."}`.
+  `POST /api/chat` takes the same `where` beside `spoken`.
+- **Trimmed and cut to 8 KB, never refused** (`chat.MaxWhereBytes`,
+  `chat.CutWhere`, on a character boundary, keeping the start). Done once,
+  in `asking.Ask`, so both ways in are held to the same.
+- **Kept on the chat** (`chat.Chat.Where`, `asking.Request.Where`) as Channel
+  and Model are, so a chat recovered after a restart is answered as it was
+  asked: column `chats.where_context TEXT NULL` (migration 00056; `where` is
+  MySQL's word). Written on create only; the lifecycle's Update leaves it.
+- **In the system prompt, not the question.** `promptFor` adds it right
+  after the standing part (manner, voice notes, which conversation) as
+  `conversation.WhereTheyAre`:
+  `Where they are in <client's name> right now (shown by the app, not said by them):\n<where>`
+  -- the client's name read from the user's clients, "the app" when it
+  cannot be. Built once a chat, so every round of it, tool rounds included,
+  has it; never in the prompt or history, never written to the transcript.
+  A chat without it is told nothing.
+
+**Part 4, the server's side: built, 17 October 2026.** The assistant
+reacts to a terminal that wants attention.
+
+- **What arrives.** The desktop app posts to `/v1/events`
+  (`source` `desktop`, `device` its hostname) three kinds, read by
+  `event.TerminalOf` (`internal/base/world/event/terminal.go`):
+  `terminal.finished` (a command that ran 10 s or more ended),
+  `terminal.asks` (a bell or a notification -- Claude Code waiting) and
+  `terminal.ended` (the shell exited). Payload `{"terminal": id, "name",
+  "space", "cwd", "command", "seconds", "tail"}`, plus `"text"` for asks
+  and `"exit"` for ended; the tail's secrets are hidden by the app. News
+  with no `terminal` id is stored and not reacted to.
+- **Started without holding the reply.** `events.Handler.Terminals`
+  hands on the terminal news this request stored (not a batch sent again)
+  with the client that sent it (`authn`'s client). `terminal.Reactor`
+  (`internal/app/terminal`) starts one goroutine per piece of news, on a
+  context detached from the request (`WithoutCancel`, 2 minute
+  `Timeout`), and returns at once.
+- **Limited per terminal** (person, client, terminal id): one reaction
+  running at a time, and one started every `Gap` = 30 s. News inside
+  either is dropped, logged (`terminal news dropped`, with why) and noted
+  `held`. `terminal.ended` with exit 0 (or none) and no command is a
+  shell closing in the ordinary way: skipped, not asked about, not noted.
+- **The turn.** The fast model (`[platformai] fast_model`, else `model`),
+  purpose remark, labelled feature `terminal` with the person's user id
+  and detail `<name>, <kind>`. System prompt: their manner with the
+  configured name (`persona.Voice(manner.Current(), [assistant] name)`).
+  The prompt (`terminal.Asking`) gives what happened, the terminal's
+  name, space, folder, command, how long it ran, exit code, the
+  notification's words, when, the time now, the tail (last 8 KB at
+  most), their ordinary day from the standing description, the worth-it
+  and not-worth-it cases, `noticing.Interrupting`, and the instruction to
+  answer with one sentence or `NOTHING`.
+- **Its hands.** Only the device tools whose names hold `terminal`
+  (`list_terminals`, `read_terminal`, `type_into_terminal`), as the
+  person on the direct channel with the sending client's id; never the
+  app's others (opening apps or spaces) -- a reaction nobody asked for
+  does not rearrange the laptop. Up to `Rounds` = 3 tool rounds, then
+  asked once more with no tools. It is told it may type an obvious next
+  step into a shell (which waits for the owner's yes on screen) and must
+  never answer a program's question nor type into Claude Code at all --
+  the app types into Claude Code without asking, so that rule is the
+  prompt's.
+- **Staying silent** is the remarks' convention: the answer `NOTHING`
+  (`prompt.Silence`, read by `prompt.Nothing`; an empty answer counts
+  too). Nothing is published.
+- **Speaking.** A sentence is published to the outbox as `immediate`
+  with `From` the client that sent the news, so only that laptop gets a
+  copy, told at once on `/v1/live` (`announcements`) and said as any
+  owed announcement: held or dropped while locked as the app already
+  does for `immediate` (dropped; 5 minutes; 3 tries; an opening word in
+  front). Sent with no client known, it reaches every client.
+- **Written down.** Every decision is a `remarks` row, reason `terminal`
+  (`notice.Terminal`, the column's second value), label
+  `<kind> <terminal name>`, at the moment the news happened: `said` with
+  the sentence, `declined` (not worth saying), `held` (dropped by the
+  limit, with why) or `failed` (with the error). Knows › Unasked shows
+  them.
+
+**A reaction looks, and never types** (17 October 2026, after part 4 was
+built). The reaction to a terminal's news was given every terminal tool,
+`type_into_terminal` among them, and the app types into Claude Code
+without asking the owner -- right when the owner asked, wrong when nobody
+did. Only the prompt stood between an unprompted reaction and answering
+Claude Code's questions for them. `terminalTools` now leaves out every
+`type_*` tool, so a reaction may list and read terminals and say what it
+found, and the prompt says it cannot type; the owner, told, does the rest.

@@ -183,7 +183,9 @@ func (p *Environment) fromStream(_ context.Context, body io.Reader, status int,
 ) (reply, int, error) {
 	got, err := readStream(body, onText)
 	if err != nil {
-		return reply{}, status, err
+		// What it had said the call cost by then, if anything: a
+		// stream cut off near its end has usually been charged.
+		return reply{Usage: got.usage}, status, err
 	}
 	if !got.seen {
 		return reply{}, status, fmt.Errorf("platformai: the streamed reply was empty")

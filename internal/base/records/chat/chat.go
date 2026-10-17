@@ -29,6 +29,10 @@ const (
 	// MaxResponseBytes : The largest response that can be stored. The column
 	// holding it is a MEDIUMTEXT, which tops out near 16 MiB.
 	MaxResponseBytes = 15 << 20
+	// MaxWhereBytes : The most of a client's Where that is kept. Longer is
+	// cut rather than refused: it is what was on the screen, and the
+	// question asked about it still deserves an answer.
+	MaxWhereBytes = 8 << 10
 )
 
 // StoredPrecision : The precision timestamps are kept at.
@@ -77,6 +81,16 @@ type Chat struct {
 	// Channel : How the prompt arrived, which decides what may be done
 	// about it.
 	Channel Channel
+
+	// Where : What the person had in front of them in the asking client
+	// when they asked, in plain text as the client wrote it: the view,
+	// the active space, the focused terminal and its last lines. Empty
+	// when the client said nothing.
+	//
+	// Given to the model beside the question, never as part of it, and
+	// kept on the chat so one recovered after a restart is answered as it
+	// was asked. Cut to MaxWhereBytes by CutWhere.
+	Where string
 
 	// Model : Which model was asked, copied from the client when the chat
 	// was accepted. The zero value means the server's configured one.
@@ -189,6 +203,21 @@ func New(conversationID string, channel Channel, prompt string) (*Chat, error) {
 		CreatedAt:      created,
 		UpdatedAt:      created,
 	}, nil
+}
+
+// CutWhere : A client's Where as it is kept: trimmed, and cut to
+// MaxWhereBytes on a character boundary, keeping the start, which is
+// where a client puts what matters most.
+func CutWhere(where string) string {
+	where = strings.TrimSpace(where)
+	if len(where) <= MaxWhereBytes {
+		return where
+	}
+	cut := MaxWhereBytes
+	for cut > 0 && !utf8.RuneStart(where[cut]) {
+		cut--
+	}
+	return strings.TrimSpace(where[:cut])
 }
 
 // NewID : Returns a fresh chat identifier.

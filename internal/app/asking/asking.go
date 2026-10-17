@@ -53,6 +53,11 @@ type Request struct {
 	// ConversationID : The conversation to ask in, when the caller names one.
 	ConversationID string
 	Prompt         string
+	// Where : What the person has in front of them in the client right
+	// now, in plain text, given to the model beside the prompt. Optional;
+	// trimmed and cut to chat.MaxWhereBytes here, so every way in is held
+	// to the same.
+	Where string
 }
 
 // Started : A chat that has been accepted and is running.
@@ -112,6 +117,7 @@ func (s *Service) Ask(ctx context.Context, r Request) (*Started, error) {
 		return nil, err
 	}
 	t.Model = r.Model
+	t.Where = chat.CutWhere(r.Where)
 	// Which client asked: a tool that acts on the client itself, such as
 	// switching the conversation it talks in, has no other way to know.
 	t.ClientID = r.ClientID

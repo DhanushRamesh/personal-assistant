@@ -33,6 +33,7 @@ import (
 	"personal-assistant/internal/app/api/authn"
 	"personal-assistant/internal/app/api/httpx"
 	"personal-assistant/internal/base/world/event"
+	"personal-assistant/internal/domain/places"
 )
 
 // maxRequestBody : The largest batch that will be read.
@@ -180,7 +181,42 @@ type Handler struct {
 	naming event.Naming
 	// arrivals : Told which kinds landed, for rules that wait on one.
 	arrivals Arrivals
-	now      func() time.Time
+	// places : The places the person keeps, which fixes are tested
+	// against and whose names Tasker's crossings no longer write.
+	places Places
+	// crossed : Told whose crossings were just written. Optional.
+	crossed func(userID string)
+	// terminals : Told of a terminal's news as it lands. Optional.
+	terminals Terminals
+	now       func() time.Time
+}
+
+// Terminals : Told of the terminal news in a batch, stored just now, and
+// which client sent it, so the assistant can decide whether to say
+// anything there.
+//
+// Must not block. The laptop is answered either way, and a model asked
+// about a build that finished is seconds of work the reply must not wait
+// on.
+type Terminals interface {
+	Terminal(ctx context.Context, userID, clientID string, news []*event.Event)
+}
+
+// Terminals : Sets who is told of a terminal's news. Without one it is
+// stored like any other event and nothing more.
+func (h *Handler) Terminals(t Terminals) *Handler { h.terminals = t; return h }
+
+// Places : The places a person keeps on the server.
+type Places interface {
+	List(ctx context.Context, userID string) ([]places.Place, error)
+}
+
+// Places : Sets the places fixes are tested against, and what to tell
+// when a crossing is written. Without them, crossings come only from
+// whatever device reports them.
+func (h *Handler) Places(p Places, crossed func(userID string)) *Handler {
+	h.places, h.crossed = p, crossed
+	return h
 }
 
 // Naming : Sets what to ask about a place nobody has named. Without
@@ -385,6 +421,14 @@ func (h *Handler) Record(w http.ResponseWriter, r *http.Request) {
 		keep = append(keep, e)
 	}
 
+	kept := h.kept(ctx, user, keep)
+	keep, ignored := unfenced(keep, kept)
+	if len(ignored) > 0 {
+		h.Logger.InfoContext(ctx, "crossings the server keeps itself were ignored",
+			slog.String("source", batch.Source),
+			slog.Int("ignored", len(ignored)))
+	}
+
 	keep, again := h.unrepeated(ctx, user, keep)
 
 	stored, seen, err := h.store.Record(ctx, user, keep)
@@ -393,6 +437,13 @@ func (h *Handler) Record(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	seen = append(seen, again...)
+	// Answered as seen, so the phone deletes them from its spool:
+	// sending them again would be ignored identically.
+	seen = append(seen, ignored...)
+
+	// Before settling, which reads the crossings back from the store
+	// to name the stays inside them.
+	keep = append(keep, h.cross(ctx, user, kept, keep, stored, received)...)
 
 	h.Logger.InfoContext(ctx, "events taken from a device",
 		slog.String("source", batch.Source),
@@ -404,9 +455,111 @@ func (h *Handler) Record(w http.ResponseWriter, r *http.Request) {
 
 	h.settle(ctx, user, keep)
 	h.tell(user, keep)
+	h.react(ctx, stored, keep)
 
 	httpx.WriteJSON(ctx, w, http.StatusOK, BatchResponse{
 		Stored: stored, Seen: seen, Rejected: rejected})
+}
+
+// kept : The places the person keeps, when the batch carries anything
+// they matter to -- a fix to test, or a crossing to ignore. Nil when it
+// does not, or when they cannot be read: better Tasker's crossing kept
+// than every report lost.
+func (h *Handler) kept(ctx context.Context, userID string, batch []*event.Event) []places.Place {
+	if h.places == nil {
+		return nil
+	}
+	needed := false
+	for _, e := range batch {
+		if e.Kind == event.Fixed || e.Kind == event.Entered || e.Kind == event.Exited {
+			needed = true
+			break
+		}
+	}
+	if !needed {
+		return nil
+	}
+	kept, err := h.places.List(ctx, userID)
+	if err != nil {
+		h.Logger.WarnContext(ctx, "cannot read the places they keep", slog.Any("error", err))
+		return nil
+	}
+	return kept
+}
+
+// unfenced : The batch without the crossings another source reports
+// for a place kept on the server, and the dedupe keys of those left
+// out.
+//
+// Owner, 16 October 2026: a place drawn here *"should be added as
+// geofence and not from Tasker"*. The server works out the crossings
+// for a place it keeps from the fixes; Tasker's for the same name
+// would be the same crossing twice, at a slightly different moment,
+// and Android's geofences were the ones that dropped exits. A name
+// the server does not keep passes through unchanged.
+func unfenced(batch []*event.Event, kept []places.Place) ([]*event.Event, []string) {
+	if len(kept) == 0 {
+		return batch, nil
+	}
+	out := batch[:0:0]
+	var ignored []string
+	for _, e := range batch {
+		if (e.Kind == event.Entered || e.Kind == event.Exited) && e.Source != places.Source &&
+			keeps(kept, event.Value(e.Payload)) {
+			ignored = append(ignored, e.DedupeKey)
+			continue
+		}
+		out = append(out, e)
+	}
+	return out, ignored
+}
+
+// keeps : Whether a name is one of the places kept.
+func keeps(kept []places.Place, name string) bool {
+	for _, p := range kept {
+		if places.Same(p.Name, name) {
+			return true
+		}
+	}
+	return false
+}
+
+// cross : Writes the crossings the new fixes in a batch make into and
+// out of the places kept, and returns them.
+//
+// Only the fixes stored just now: one already seen was tested when it
+// first arrived. A failure is logged and the phone answered anyway;
+// the next fix inside or outside makes the crossing then.
+func (h *Handler) cross(ctx context.Context, userID string, kept []places.Place,
+	batch []*event.Event, stored []string, received time.Time) []*event.Event {
+	if len(kept) == 0 || len(stored) == 0 {
+		return nil
+	}
+	fresh := make(map[string]bool, len(stored))
+	for _, k := range stored {
+		fresh[k] = true
+	}
+	var fixes []*event.Event
+	for _, e := range batch {
+		if e.Kind == event.Fixed && fresh[e.DedupeKey] {
+			fixes = append(fixes, e)
+		}
+	}
+	crossings, err := places.Cross(ctx, h.store, userID, kept, fixes, received)
+	if err != nil {
+		h.Logger.ErrorContext(ctx, "cannot work out the crossings", slog.Any("error", err))
+		return nil
+	}
+	for _, c := range crossings {
+		h.Logger.InfoContext(ctx, "a place was crossed",
+			slog.String("kind", c.Kind),
+			slog.String("place", event.Value(c.Payload)),
+			slog.Time("at", c.OccurredAt))
+	}
+	if len(crossings) > 0 && h.crossed != nil {
+		h.crossed(userID)
+	}
+	return crossings
 }
 
 // unrepeated : The events in a batch that are not the same report sent
@@ -494,6 +647,37 @@ func (h *Handler) tell(userID string, taken []*event.Event) {
 		kinds = append(kinds, e.Kind)
 	}
 	h.arrivals.Arrived(userID, kinds)
+}
+
+// react : Hands the terminal news stored just now to whoever reacts to
+// it, with the client that sent it.
+//
+// Only what was stored by this request. A batch sent again is answered
+// as seen and its news was reacted to the first time; reacting again
+// would say the same build finished twice.
+func (h *Handler) react(ctx context.Context, stored []string, taken []*event.Event) {
+	if h.terminals == nil || len(stored) == 0 {
+		return
+	}
+	fresh := make(map[string]bool, len(stored))
+	for _, k := range stored {
+		fresh[k] = true
+	}
+	var news []*event.Event
+	for _, e := range taken {
+		if _, ok := event.TerminalOf(e); ok && fresh[e.DedupeKey] {
+			news = append(news, e)
+		}
+	}
+	if len(news) == 0 {
+		return
+	}
+	caller := authn.Of(ctx)
+	var client string
+	if caller.Client != nil {
+		client = caller.Client.ID
+	}
+	h.terminals.Terminal(ctx, caller.User.ID, client, news)
 }
 
 // settle : Works out which stays have ended, now that new readings have

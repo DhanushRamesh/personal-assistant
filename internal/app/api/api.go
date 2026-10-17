@@ -36,6 +36,7 @@ import (
 	"personal-assistant/internal/app/api/live"
 	"personal-assistant/internal/app/api/memories"
 	"personal-assistant/internal/app/api/middleware"
+	placesapi "personal-assistant/internal/app/api/places"
 	"personal-assistant/internal/app/api/presence"
 	profileapi "personal-assistant/internal/app/api/profile"
 	remarksapi "personal-assistant/internal/app/api/remarks"
@@ -43,6 +44,7 @@ import (
 	rulesapi "personal-assistant/internal/app/api/rules"
 	speechapi "personal-assistant/internal/app/api/speech"
 	toolsapi "personal-assistant/internal/app/api/tools"
+	usageapi "personal-assistant/internal/app/api/usage"
 	vocabularyapi "personal-assistant/internal/app/api/vocabulary"
 	"personal-assistant/internal/app/asking"
 	livehub "personal-assistant/internal/app/live"
@@ -57,7 +59,9 @@ import (
 	"personal-assistant/internal/domain/greet"
 	"personal-assistant/internal/domain/memory"
 	"personal-assistant/internal/domain/persona"
+	"personal-assistant/internal/domain/places"
 	"personal-assistant/internal/domain/remind"
+	"personal-assistant/internal/domain/usage"
 	"personal-assistant/internal/domain/vocabulary"
 )
 
@@ -193,6 +197,18 @@ type Options struct {
 	// Arrivals : Told which kinds of reading have just landed, for
 	// the rules that wait on one rather than on a time. Optional.
 	Arrivals events.Arrivals
+	// Terminals : Told of a terminal's news from the desktop app, to
+	// decide whether to say anything. Optional.
+	Terminals events.Terminals
+
+	// Places : The places the person draws on the client's map, which
+	// their fixes are tested against. Nil keeps none: the listing is
+	// empty and crossings come only from the devices that report them.
+	Places places.Store
+
+	// Usage : Every model call kept, with what it cost, for
+	// /v1/usage. Nil answers with nothing kept.
+	Usage usage.Store
 
 	// Naming : What to ask about a place the person never drew a
 	// geofence around. Optional: without it a stay somewhere new is
@@ -283,12 +299,14 @@ type Server struct {
 	assist        *assist.Handler
 	speech        *speechapi.Handler
 	events        *events.Handler
+	places        *placesapi.Handler
 	memories      *memories.Handler
 	tools         *toolsapi.Handler
 	remarks       *remarksapi.Handler
 	rules         *rulesapi.Handler
 	announcements *announcementsapi.Handler
 	home          *homeapi.Handler
+	usage         *usageapi.Handler
 }
 
 // New : Builds a Server from opts and registers its routes.
@@ -322,13 +340,17 @@ func New(opts Options) *Server {
 		assist:     assist.New(opts.Logger, opts.Chats, opts.Runner, opts.Events),
 		speech:     speechapi.New(opts.Logger, opts.Cut),
 		events: events.New(opts.Logger, opts.DeviceEvents, opts.Now).
-			Naming(opts.Naming).Arrivals(opts.Arrivals),
+			Naming(opts.Naming).Arrivals(opts.Arrivals).Terminals(opts.Terminals).
+			Places(placeKeeper(opts.Places), placesChanged(opts.Live)),
+		places:        placesapi.New(opts.Logger, opts.Places, placeReader(opts.DeviceEvents), opts.Now),
 		memories:      memories.New(opts.Logger, opts.Memories),
 		tools:         toolsapi.New(opts.Logger, opts.Tools),
 		remarks:       remarksapi.New(opts.Logger, opts.Remarks),
 		rules:         rulesapi.New(opts.Logger, opts.Rules, opts.Usually, opts.Trying).Ran(opts.Ran),
 		announcements: announcementsapi.New(opts.Logger, opts.Owed, nil).Notes(opts.Heard),
 		home:          homeapi.New(homeOptions(opts)),
+		usage: usageapi.New(usageapi.Options{Logger: opts.Logger, Store: opts.Usage,
+			Titles: opts.Chats, Location: opts.Location, Now: opts.Now}),
 	}
 	if opts.Answered != nil {
 		s.speech.Records(opts.Answered)
@@ -413,12 +435,14 @@ func (s *Server) routes() {
 		s.assist.Mount(r)
 		s.speech.Mount(r)
 		s.events.Mount(r)
+		s.places.Mount(r)
 		s.memories.Mount(r)
 		s.tools.Mount(r)
 		s.remarks.Mount(r)
 		s.rules.Mount(r)
 		s.announcements.Mount(r)
 		s.home.Mount(r)
+		s.usage.Mount(r)
 	})
 }
 
@@ -447,6 +471,33 @@ func clientsChanged(hub *livehub.Hub) func(http.Handler) http.Handler {
 // touchesClients : Whether a request writes to the clients or their manner.
 func touchesClients(path string) bool {
 	return strings.HasPrefix(path, "/v1/clients") || path == "/v1/personas" || path == "/v1/auth/login"
+}
+
+// placesChanged : Tells a person's clients that whether they are inside
+// one of their places changed; nothing without a hub. A change to the
+// places themselves is told by their store.
+func placesChanged(hub *livehub.Hub) func(userID string) {
+	if hub == nil {
+		return nil
+	}
+	return func(userID string) { hub.AreaChanged(userID, livehub.AreaPlaces) }
+}
+
+// placeKeeper : The places store as the events module reads it, or nil
+// -- a nil store inside an interface is not nil to the handler.
+func placeKeeper(s places.Store) events.Places {
+	if s == nil {
+		return nil
+	}
+	return s
+}
+
+// placeReader : The device events as the places module reads them, or nil.
+func placeReader(s events.Store) places.Reader {
+	if s == nil {
+		return nil
+	}
+	return s
 }
 
 // googleChanged : Tells a person's clients their Google connection changed; nothing without a hub.

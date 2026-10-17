@@ -61,6 +61,9 @@ type inbound struct {
 	ChatID         string `json:"chat_id,omitempty"`
 	// Spoken : For a prompt, whether it was spoken; absent is typed.
 	Spoken bool `json:"spoken,omitempty"`
+	// Where : For a prompt, what the person has in front of them in the
+	// client right now, as plain text; absent says nothing. Cut to 8 KB.
+	Where string `json:"where,omitempty"`
 	// Message : For an mcp message, one MCP message, as JSON-RPC.
 	Message json.RawMessage `json:"message,omitempty"`
 	// Failure : For said, why the announcement was not said; absent when it was.
@@ -265,6 +268,7 @@ func (h *Handler) handle(ctx context.Context, c *websocket.Conn, caller *authn.C
 			ActiveConversationID: caller.Client.ActiveConversationID,
 			ConversationID:       m.ConversationID,
 			Prompt:               m.Text,
+			Where:                m.Where,
 		})
 		if err != nil {
 			_ = send(ctx, c, outbound{Type: "refused", Request: m.Request, Message: refusal(err)})

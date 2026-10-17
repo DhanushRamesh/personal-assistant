@@ -100,6 +100,24 @@ func Whereabouts(id, title string) string {
 		", with the identifier " + id + "."
 }
 
+// WhereTheyAre : What the assistant is told of what the person has in
+// front of them in the client they asked from, so "why did this fail?"
+// needs no terminal named. Shown by the app rather than said, and labelled
+// so, or the model reads it as part of the question. Empty when the client
+// said nothing; a client with no name is "the app".
+func WhereTheyAre(clientName, where string) string {
+	where = strings.TrimSpace(where)
+	if where == "" {
+		return ""
+	}
+	clientName = strings.TrimSpace(clientName)
+	if clientName == "" {
+		clientName = "the app"
+	}
+	return "Where they are in " + clientName +
+		" right now (shown by the app, not said by them):\n" + where
+}
+
 // Heard : What the assistant is told when the words reached it as speech.
 //
 // Only for a spoken turn. Speech-to-text fails differently from typing: it

@@ -159,6 +159,15 @@ and so on, instead of a watcher on a thirty-second tick reading
 thresholds out of `config.ini`. The thresholds are changed by saying
 so now, not by editing a file and restarting.
 
+**A terminal wanting attention** (17 October 2026). The desktop app
+reports a long command finished, a program asking for the owner, or a
+shell ended; a short turn of the fast model, which may read the
+terminal with the app's terminal tools, decides whether that is worth
+one sentence. If it is, the sentence goes as `immediate` to that laptop
+only; if not, it answers `NOTHING` and nothing is said. Either way the
+decision is a row in the remarks (reason `terminal`). One reaction per
+terminal at a time and per 30 seconds.
+
 **The logic and the event object are different things.** Greeting,
 renaming, reminders, situations, leave-by and the diary are *logic*:
 each watches something different and answers one question, *is there
@@ -329,9 +338,11 @@ possible.
 | 2 min | **Watching** — three checks over what the devices reported: somebody trying twice to reach you, a charger doing nothing, and a device that reports every few minutes and has stopped |
 | an hour | **Profile** — a standing description of the person, from what they said, what their devices reported, and what they had planned. Three parts, written one model call each; a part that fails keeps what it said last time |
 | a day | **Vocabulary** — the proper nouns they actually say, fed to both speech engines |
-| a day | **Forgetting** — raw position readings older than a week |
+| a day | **Forgetting** — raw position readings older than a week, rule history older than a month, model calls older than ninety days |
+| always | **Usage** — every request sent to a model kept with its tokens in and out, who asked (chat answer, title, condense, profile, vocabulary, greeting, rule writer, coming, noticing and its writer, rule remark), the model, how long and how it ended; retries and failures included. Read by the client's Settings › Usage from `/v1/usage` |
 | always | **Events** — the phone reports what it noticed: battery, calls, apps, music, screen, places |
 | always | **Places** — raw fixes settled into arrivals, stays and departures |
+| always | **Drawn places** — each new fix tested against the places drawn on the client's map (`/v1/places`); inside writes `place.entered`, past the edge by 50 m writes `place.exited`, both as source `server`. Tasker's crossings for those names are ignored |
 | 30 s | **Errands** — what is owed to the phone, got there in order and retried |
 
 ---
@@ -635,7 +646,8 @@ Kept here so it is not rediscovered.
   label, and `Clear` dismisses by label. Whether Android removes
   one or both is untested.
 - A repeating phone alarm cannot be cancelled or moved from here.
-- Geofence crossings are missed, not absent. Over five days:
+- Geofence crossings are missed, not absent -- Tasker's, which a
+  place drawn on the server's map now replaces for its name. Over five days:
   entered home 4 against exited home 5, entered office 3 against
   exited office 3. The note here said `place.entered home` never
   fires, which the events disprove — it fires and sometimes does

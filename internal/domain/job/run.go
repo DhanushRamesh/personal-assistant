@@ -118,6 +118,9 @@ type Readings interface {
 type Turn struct {
 	// UserID : Whose rule it is.
 	UserID string
+	// Name : What the rule is called, for the record of what its
+	// model calls cost.
+	Name string
 	// Already : What the earlier steps of this sequence did.
 	Already []Ran
 	// Before : The sentence this rule last said.
@@ -688,7 +691,7 @@ func (r *Runner) Try(ctx context.Context, j Job) Trial {
 	var already []Ran
 	for _, act := range j.Perform {
 		done, err := r.Doer.Do(ctx,
-			Turn{UserID: j.UserID, Already: already, Before: j.Said,
+			Turn{UserID: j.UserID, Name: j.Name, Already: already, Before: j.Said,
 				Worth: j.Worth(), Anywhere: j.Anywhere, Trying: true}, act)
 		out.Acts = append(out.Acts, act)
 
@@ -872,7 +875,7 @@ func (r *Runner) one(ctx context.Context, j Job, now time.Time, pass *Pass) {
 		}
 		at := r.clock()
 		done, err := r.Doer.Do(ctx,
-			Turn{UserID: j.UserID, Already: already, Before: j.Said,
+			Turn{UserID: j.UserID, Name: j.Name, Already: already, Before: j.Said,
 				Worth: j.Worth(), Anywhere: j.Anywhere}, act)
 		note := Tried{
 			Do: Task(act.Do), Use: act.Use, Came: Went,
