@@ -114,15 +114,26 @@ func lookUp(searcher search.Searcher) tool.Tool {
 			"And anything that has changed since you were trained, which is most of what is " +
 			"worth knowing: prices, scores, who holds an office, whether a place is open, " +
 			"what a film is showing at. " +
+			"Never say that something in the world does not exist, has not happened, has not " +
+			"been released or has not been announced without searching first: that is a " +
+			"statement about the world as it was when you were trained, and you cannot tell " +
+			"how long ago that was. Asked how a film was, whether a thing is out, who holds a " +
+			"job, what something costs now -- search, then answer. " +
+			"Where the search disagrees with what you remember, the search is right and you " +
+			"are out of date. Say what it found rather than doubting it; a page you have not " +
+			"heard of is not a reason to dismiss what several of them agree on. " +
 			"If you find yourself about to answer from memory about the world, search instead " +
 			"-- being out of date sounds exactly like being wrong, and they cannot tell which " +
 			"you are. " + keepLooking,
 		Avoid: "Not for anything about them. Their day, their diary, their calls, where they " +
 			"were, what they asked you to remember: those have their own tools and the web " +
 			"does not know any of it. " +
-			"Not for arithmetic, for what a word means, or for anything you can simply answer " +
-			"-- searching to confirm what you already know spends seconds they are waiting " +
-			"through. " +
+			"Not for arithmetic, for what a word means, or for anything that cannot have " +
+			"changed since you were trained -- searching to confirm what is still true spends " +
+			"seconds they are waiting through. That is a narrow list: how a word is spelt, how " +
+			"a thing works, what happened in a year that is over. A film, a price, a score, a " +
+			"person's job, whether something exists yet, and anything with a date on it are " +
+			"all on the other side of it. " +
 			"And not to confirm what the first search already told you: where it answered, " +
 			"that is the answer, and asking again to be sure spends their seconds on nothing. " +
 			"Searching again because you have not got the answer yet is a different thing " +

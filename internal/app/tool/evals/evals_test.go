@@ -264,6 +264,11 @@ var cases = []eval{
 	// The world rather than their life. Being out of date sounds
 	// exactly like being wrong, and they cannot tell which it is.
 	{Say: "who won the cricket last night", Tool: []string{"web_search"}},
+	// Answered from training instead, on 17 October: "Jailer 2 has not
+	// been released, sir -- Jailer came out in 2023 and there is no
+	// sequel announced." Which was true when it was trained and is the
+	// exact shape the web rule is for.
+	{Say: "how was the movie Jailer 2", Tool: []string{"web_search"}},
 	{Say: "what time does Phoenix Marketcity close today", Tool: []string{"web_search"}},
 	{Say: "is it going to rain in Chennai tomorrow", Tool: []string{"web_search"}},
 

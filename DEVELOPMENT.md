@@ -20334,3 +20334,24 @@ past its edge, timed at the first; the first may be the last fix of an
 earlier batch (`Before`, read back from the store). A lone stray leaves
 nothing; a real leaving is still seen within a minute or two, as the
 phone reports every 20 to 100 s once it moves. Entering still takes one.
+
+**Never say a thing has not happened without looking** (owner, 17
+October 2026: *"why is it not using web search by default!! in fact when
+I ask something I prefer web search coz I get the latest news"*). Asked
+how Jailer 2 was, it answered that the film had not been released and
+no sequel was announced -- true when it was trained -- and, told
+otherwise, searched and then dismissed what it found as fan sites.
+`web_search` had always said to search rather than answer from memory
+about the world; what beat it was the line beside it, *not for anything
+you can simply answer*, since a thing you are sure of feels simple. So
+the rule is now a ban on the sentence, not a judgement: never say
+something does not exist, has not happened, has not been released or
+has not been announced without searching first, and where the search
+disagrees with memory the search is right. What may still be answered
+from memory is written out and narrow -- spelling, how a thing works, a
+year that is over -- with films, prices, scores, jobs and anything
+carrying a date on the other side of it. The case is in the tool suite;
+the memory cases held, 8 of 8 and 3 of 3, so the wider rule bought no
+over-reach ([[measure-a-description-with-evals]], and
+[[ban-the-word-dont-state-the-principle]] for why a banned sentence
+beats a principle).
