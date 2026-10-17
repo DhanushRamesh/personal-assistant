@@ -20355,3 +20355,38 @@ the memory cases held, 8 of 8 and 3 of 3, so the wider rule bought no
 over-reach ([[measure-a-description-with-evals]], and
 [[ban-the-word-dont-state-the-principle]] for why a banned sentence
 beats a principle).
+
+**A saying is three or four words** (owner, 17 October 2026: *"the
+transient message has to be short coz while announcing it might take
+more time"*, then *"maximum 3 to 4 words"*). Measured on 136 real
+sayings from 16 and 17 October, through `speech.Saying`'s fitted
+`690ms + 57.27ms per character`: a median of 48 characters, **3.44
+seconds** to speak, 69% of them over three seconds, and the worst
+*"telling Claude Code in PA - Claude to check what the 20,332-byte
+history message contains"* at **5.79 seconds**. The narration is not
+covering the wait, it is added to it: `turns.answered` holds the
+answer behind the sentence (`if (updating) await updating.said`), so a
+turn of about eight seconds became eleven and a half.
+
+Two numbers were being given for the same thing -- the schema said
+twelve to twenty words, the description under ten -- and the model
+followed neither. It followed the **examples**, which were eight and
+eleven words long, exactly as `saidWhile`'s own comment says it would.
+So both numbers now say three or four words and both examples were cut
+to match: `"reading your diary"` and `"creating the event"`. The
+description also forbids repeating what is being sent, which is what
+produced the whole `telling Claude Code in PAC to <the entire
+instruction>` family.
+
+Measured after: 8 of 8 arrive with a sentence, none poor, mean **1.96
+seconds** and worst 2.29 -- *"checking your battery"*, *"looking for
+Amma"*, *"checking tomorrow's diary"*. Tool choice is unchanged; the
+one case that fails beside it, "do you remember anything about my
+shopping list", fails on the old wording too, twice in three runs.
+
+Not yet enforced in code, which [[code-before-prompt]] says it should
+be. A four-word cut mangles 46% of real sayings -- "telling Claude
+Code in", "checking your calendar for" -- so trimming is not the
+enforcement. Refusing to **speak** one that is over the cap is: the
+screen can carry a long line for nothing, and silence costs nothing
+either. That goes in with the announcing, which is still off.

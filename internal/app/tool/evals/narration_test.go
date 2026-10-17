@@ -56,8 +56,8 @@ func TestWhatTheNarrationCosts(t *testing.T) {
 		switch {
 		case said == "":
 			missing = append(missing, say)
-		case len(strings.Fields(said)) < 6:
-			poor = append(poor, fmt.Sprintf("%-40s too short: %q", say, said))
+		case len(strings.Fields(said)) > 4:
+			poor = append(poor, fmt.Sprintf("%-40s too long (%d words): %q", say, len(strings.Fields(said)), said))
 		case strings.HasSuffix(said, "?"):
 			poor = append(poor, fmt.Sprintf("%-40s a question: %q", say, said))
 		default:
@@ -67,6 +67,7 @@ func TestWhatTheNarrationCosts(t *testing.T) {
 
 	fmt.Printf("\n  narration: %d of %d arrived with a sentence, %d of those were poor\n",
 		len(mustNarrate)-len(missing), len(mustNarrate), len(poor))
+	fmt.Printf("  a saying is read aloud with the answer waiting behind it, so three or four words is the whole budget\n")
 	for _, p := range append(missing, poor...) {
 		fmt.Printf("      %s\n", p)
 	}

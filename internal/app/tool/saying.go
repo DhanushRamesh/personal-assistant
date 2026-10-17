@@ -44,9 +44,10 @@ func saidWhile(address string) Property {
 	_ = second
 	return Property{
 		Type: "string",
-		Description: "One sentence, present tense, twelve to twenty words, saying what you are " +
-			"about to do with this call -- read aloud while it runs. Name the thing, not the tool: " +
-			strconv.Quote("reading your diary for tomorrow morning and the rest of the week"+end) + ".",
+		Description: "Three or four words, present tense, saying what you are about to do with " +
+			"this call -- read aloud while it runs, so each word is one the person waits through. " +
+			"Name the thing, not the tool, and never repeat what you are sending: " +
+			strconv.Quote("reading your diary"+end) + ".",
 	}
 }
 
@@ -117,15 +118,15 @@ func TakeSaying(args json.RawMessage) (string, json.RawMessage) {
 // model returned calls without it. This says it again where the examples
 // are read.
 func NarratedDescription(description, address string) string {
-	example := "creating the event on the twenty-second of August"
+	example := "creating the event"
 	if address != "" {
 		example += ", " + address
 	}
 	return strings.TrimSpace(description) + " " + strings.Join([]string{
 		"Every call also takes " + strconv.Quote(Saying) + ", which the examples above leave out but you must always include:",
-		"one short present-tense sentence, under ten words, saying what this call is about to do.",
-		"It is read aloud while the call runs so the person is not waiting in silence.",
+		"three or four words, present tense, saying what this call is about to do.",
+		"It is read aloud while the call runs, and the answer waits behind it, so every word is one the person waits through.",
 		"For instance " + strconv.Quote(`"`+Saying+`": `+strconv.Quote(example)) + ".",
-		"Name the thing, not the tool, and never claim it has worked.",
+		"Name the thing, not the tool, never repeat what you are sending, and never claim it has worked.",
 	}, " ")
 }
