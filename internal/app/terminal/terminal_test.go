@@ -347,7 +347,7 @@ func TestTheAskingSaysWhatHappenedAndHowToStayQuiet(t *testing.T) {
 	got := terminal.Asking(event.Terminal{Kind: event.TerminalEnded, ID: "t", Name: "Server", Space: "PAC",
 		Folder: "/home/x", Command: "npm run dev", Seconds: 3700, Exit: &exit, Tail: "Error: boom"},
 		time.Date(2026, 10, 17, 9, 30, 0, 0, time.UTC), time.Date(2026, 10, 17, 9, 31, 0, 0, time.UTC),
-		time.UTC, "", []string{"read_terminal"})
+		time.UTC, "", []string{"read_terminal"}, "")
 	for _, want := range []string{"Terminal: Server", "Space: PAC", "Folder: /home/x", "Command: npm run dev",
 		"1 hour 1 minute 40 seconds", "Exit code: 1", "Error: boom", "Saturday 17 October 2026, 9:31 am",
 		"read_terminal", "You cannot type into a terminal from here", "end with one short question offering it",
@@ -364,15 +364,16 @@ func TestClaudeCodesRecordIsWeighedWhenItAsks(t *testing.T) {
 	at := time.Date(2026, 10, 17, 9, 30, 0, 0, time.UTC)
 	got := terminal.Asking(event.Terminal{Kind: event.TerminalAsks, ID: "t", Name: "PAC", Command: "claude",
 		Conversation: "They last asked Claude Code:\nfix the crossings\n\nWhat it said since:\nDelete the false ones, or keep them?"},
-		at, at, time.UTC, "", nil)
+		at, at, time.UTC, "", nil, "They want pushes held until they say.")
 	for _, want := range []string{"its own record of the conversation", "Delete the false ones, or keep them?", "which answer you would choose",
 		"done with its turn", "offering to tell Claude Code to do it", "a yes is typed into Claude Code",
-		"the next prompt Claude Code itself suggests"} {
+		"the next prompt Claude Code itself suggests",
+		"as they would themselves", "They want pushes held until they say.", "you do not answer Claude Code for them"} {
 		if !strings.Contains(got, want) {
 			t.Errorf("the prompt does not say %q:\n%s", want, got)
 		}
 	}
-	plain := terminal.Asking(event.Terminal{Kind: event.TerminalAsks, ID: "t", Name: "PAC"}, at, at, time.UTC, "", nil)
+	plain := terminal.Asking(event.Terminal{Kind: event.TerminalAsks, ID: "t", Name: "PAC"}, at, at, time.UTC, "", nil, "")
 	if strings.Contains(plain, "its own record") {
 		t.Errorf("a record with none sent:\n%s", plain)
 	}

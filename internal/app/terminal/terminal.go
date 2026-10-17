@@ -86,6 +86,13 @@ type Reactor struct {
 	// Usually : The shape of their ordinary day, from the standing
 	// description. Nil or empty leaves it out.
 	Usually func(ctx context.Context, userID string) string
+	// Knowing : What the assistant knows of them that bears on what Claude
+	// Code is doing -- who they are, what they have said to remember,
+	// what is on their calendar -- for the turns of Claude Code it judges
+	// as they would (owner, 17 October 2026: *"it should be like me
+	// talking to Claude .. it has all the knowledge about me, my spaces,
+	// my schedule"*). Nil, or empty, leaves it out.
+	Knowing func(ctx context.Context, userID string, t event.Terminal) string
 	// Tools : The tools their devices offer now. Only those for
 	// terminals are offered to the model. Nil offers none.
 	Tools func(userID string) []tool.Tool
@@ -203,7 +210,11 @@ func (r *Reactor) react(ctx context.Context, userID, clientID string, at time.Ti
 	if r.Usually != nil {
 		usually = r.Usually(ctx, userID)
 	}
-	ask := Asking(t, at, r.now(), r.Location, usually, names(tools))
+	var known string
+	if r.Knowing != nil && t.Conversation != "" {
+		known = r.Knowing(ctx, userID, t)
+	}
+	ask := Asking(t, at, r.now(), r.Location, usually, names(tools), known)
 
 	answer, err := r.converse(ctx, userID, clientID, ask, tools)
 	if err != nil {
@@ -379,7 +390,7 @@ func (r *Reactor) specs(tools []tool.Tool) ([]environment.ToolSpec, map[string]t
 // Asking : What the model is asked about one terminal's news.
 //
 // Exported so a test, and anybody reading, can see the whole of it.
-func Asking(t event.Terminal, at, now time.Time, where *time.Location, usually string, tools []string) string {
+func Asking(t event.Terminal, at, now time.Time, where *time.Location, usually string, tools []string, known string) string {
 	if where == nil {
 		where = time.UTC
 	}
@@ -428,6 +439,22 @@ func Asking(t event.Terminal, at, now time.Time, where *time.Location, usually s
 				"If the record does not settle it, say what it hinges on, and offer nothing. They answer aloud; a yes is typed into Claude Code for them.",
 			),
 			cut(t.Conversation, MaxConversation),
+		)
+	}
+
+	var them string
+	if strings.TrimSpace(known) != "" {
+		them = prompt.Block(
+			prompt.Text(
+				"You work with Claude Code for them, as they would themselves -- with what you know of them that Claude Code does not.",
+				"What you know of them that bears on this: who they are, what they have asked you to remember and decided, what the space holds, what is on their calendar.",
+			),
+			strings.TrimSpace(known),
+			prompt.Text(
+				"Weigh what Claude Code did, what it asks and the next step against this, as they would: a decision they have made, a way they like to work, a meeting soon.",
+				"Where it settles the question or bears on the next step, say so in a few words -- \"you said to hold pushes\", \"your call is in ten minutes\".",
+				"The choice stays theirs: you recommend and offer; you do not answer Claude Code for them.",
+			),
 		)
 	}
 
@@ -489,6 +516,7 @@ func Asking(t event.Terminal, at, now time.Time, where *time.Location, usually s
 		prompt.Lines(facts...),
 		output,
 		record,
+		them,
 		prompt.Text(
 			"Usually worth saying: a command that ran a while and finished -- they asked to hear whenever one is done, even in the terminal they are looking at -- with whether it worked and, when it did not, the gist of why in a few words;",
 			"a program waiting for them, such as Claude Code asking something or done with its work;",
