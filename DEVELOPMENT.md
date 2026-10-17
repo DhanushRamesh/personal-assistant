@@ -20538,3 +20538,50 @@ second test pins down.
 
 The first test was run against the old code before being believed:
 *"a turn with a call and its answer became 1 messages, want 2."*
+
+### The five, inside somebody else's loop
+
+The second day of the spike, and the question a migration turns on.
+One check each against the real gateway, in `cmd/spike-five`.
+
+	1  holding a spoken answer      yes, outside the agent
+	2  an aside beside the answer   yes, outside the agent
+	3  tools deferred past fifty    yes, and Eino serves it
+	4  the clock after the history  yes, and Eino serves it
+	5  say it again, shorter        yes, outside the agent
+
+**Deferred tools work, which I did not expect.** `ToolsNodeConfig` has
+an `UnknownToolsHandler`, and it is handed the name *and* the
+arguments. So a tool can be named in the prompt, bound nowhere, and
+executed when the model asks for it. Only `time_now` was bound:
+
+	answer: Sunday is clear, sir.
+	unknown handler ran calendar_events {"day": "2026-10-18"}
+
+That is the deferred scheme exactly -- names always, schemas on
+demand -- and it falls out of a hook that is already there.
+
+**The clock goes in as a turn.** `MessageModifier` runs before every
+model call and appends after the history, which is the placement that
+beat the system prompt. Asked the time with no clock tool bound, it
+answered from the appended turn. It also said *"Ten past five, sir"*
+when it was **5:18**, which the placement does not explain and which
+wants looking at before anything rests on it.
+
+**The other three never enter the agent.** Holding is `Generate` plus
+a timer, and on this run the answer took longer than the 2.5 second
+cap and was let go, exactly as the runner does. An aside is a second
+call on the `Environment`, measured running beside the answer: answer
+3.598s, aside 2.177s, wall clock 3.598s. Saying it shorter is asking
+again with the answer in the history -- 76 words became 16.
+
+#### So what would it actually buy
+
+Eino's loop, and two hooks that happen to fit. Everything else in the
+runner is written either way, now against somebody else's lifecycle
+rather than our own. Against that: Eino and **25 indirect
+dependencies**, and the gateway adapter to keep, which is the piece
+that was never the problem.
+
+Nothing here says do not. It says the saving is the loop, and the loop
+is the part that already works.
