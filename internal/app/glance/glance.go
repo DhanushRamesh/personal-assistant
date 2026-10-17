@@ -113,6 +113,8 @@ func Asking(question, clientName, where string, spoken bool) string {
 			"Tell them simply what they are looking at: what it is, and what it says or means.",
 			"Lead with whatever needs them, if anything does: an error, a failure, a program waiting for an answer -- and what it is asking.",
 			"Plain words, as a colleague glancing over their shoulder would put it: two or three short sentences at most.",
+			"A long answer -- Claude Code's, say -- is retold by what it comes to: what was done, what changed, what is left.",
+			"When something is asking them to decide -- a question at the end of Claude Code's answer, a choice on its screen -- say plainly what it asks and which answer you would choose, with the reason in a few words, judged from everything in front of you, its record of the conversation included. If that does not settle it, say what it hinges on. One sentence more for this is fine.",
 			"Never read out a path, a long command, a hidden value or an error word for word; say what it means.",
 			"Say only what is in front of you. If it is empty, or cannot be told from this, say so in one sentence.",
 		),

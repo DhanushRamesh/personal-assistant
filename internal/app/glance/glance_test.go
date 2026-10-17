@@ -52,7 +52,8 @@ func TestALookIsOneCallAndIsWrittenDown(t *testing.T) {
 	if feature != environment.FeatureGlance {
 		t.Errorf("labelled %q", feature)
 	}
-	for _, want := range []string{"What am I seeing?", "in Laptop right now", "error TS2304", "said aloud", "Lead with whatever needs them"} {
+	for _, want := range []string{"What am I seeing?", "in Laptop right now", "error TS2304", "said aloud", "Lead with whatever needs them",
+		"which answer you would choose"} {
 		if !strings.Contains(asked, want) {
 			t.Errorf("the prompt does not say %q:\n%s", want, asked)
 		}

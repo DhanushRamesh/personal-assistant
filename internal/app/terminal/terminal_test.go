@@ -329,3 +329,21 @@ func TestTheAskingSaysWhatHappenedAndHowToStayQuiet(t *testing.T) {
 		}
 	}
 }
+
+// Claude Code's record goes in front of the model with its asking, with
+// the advice to weigh its question; nothing of it otherwise.
+func TestClaudeCodesRecordIsWeighedWhenItAsks(t *testing.T) {
+	at := time.Date(2026, 10, 17, 9, 30, 0, 0, time.UTC)
+	got := terminal.Asking(event.Terminal{Kind: event.TerminalAsks, ID: "t", Name: "PAC", Command: "claude",
+		Conversation: "They last asked Claude Code:\nfix the crossings\n\nWhat it said since:\nDelete the false ones, or keep them?"},
+		at, at, time.UTC, "", nil)
+	for _, want := range []string{"its own record of the conversation", "Delete the false ones, or keep them?", "which answer you would choose", "you are advising"} {
+		if !strings.Contains(got, want) {
+			t.Errorf("the prompt does not say %q:\n%s", want, got)
+		}
+	}
+	plain := terminal.Asking(event.Terminal{Kind: event.TerminalAsks, ID: "t", Name: "PAC"}, at, at, time.UTC, "", nil)
+	if strings.Contains(plain, "its own record") {
+		t.Errorf("a record with none sent:\n%s", plain)
+	}
+}

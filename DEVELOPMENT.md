@@ -20258,6 +20258,20 @@ question and answer are then written into the client's conversation
 (`announcement.Writer.Glanced`), so what is asked next goes on from it.
 Its calls are counted in Settings › Usage as "What am I seeing".
 
+**Claude Code's own record is weighed** (owner, 17 October 2026:
+*"sometimes Claude Code gives a large response .. I might ask what it
+says, it should say in simple words, and if the response asks questions
+it should assess and say me the best decision, since it has the full
+conversation info"*). The desktop app reads Claude Code's record of the
+conversation (its `.jsonl`) and sends a digest of it: with "what am I
+seeing" on a Claude Code terminal, and as `conversation` on its
+`terminal.asks` news (`event.Terminal.Conversation`, within the 16 KB a
+payload may be). The glance retells a long answer by what it comes to,
+and both it and the reaction, when Claude Code asks something, say what
+it asks and which answer they would choose, with the reason, judged from
+the record -- advising; the choice stays the owner's, and the reaction
+still cannot type.
+
 **Leaving takes two fixes** (owner, 17 October 2026: *"I literally was in
 home .. and in home till now .. but it showed moving"*). On the night of
 16 October the phone twice reported the same point, 235 m east of home --

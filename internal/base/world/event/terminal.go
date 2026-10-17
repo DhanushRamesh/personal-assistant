@@ -49,6 +49,10 @@ type Terminal struct {
 	Text string
 	// Tail : Its last lines of output.
 	Tail string
+	// Conversation : Claude Code's own record of the conversation in it,
+	// sent with its asking: what was asked of it, what it did, what it
+	// said. Empty for anything else.
+	Conversation string
 }
 
 // TerminalOf : The news an event carries, when it is a terminal's.
@@ -75,6 +79,7 @@ func TerminalOf(e *Event) (Terminal, bool) {
 		Exit     *int     `json:"exit"`
 		Text     string   `json:"text"`
 		Tail     string   `json:"tail"`
+		Conv     string   `json:"conversation"`
 	}
 	if len(e.Payload) > 0 {
 		if err := json.Unmarshal(e.Payload, &p); err != nil {
@@ -91,6 +96,8 @@ func TerminalOf(e *Event) (Terminal, bool) {
 		Exit:    p.Exit,
 		Text:    strings.TrimSpace(p.Text),
 		Tail:    strings.TrimRight(p.Tail, " \n\t"),
+
+		Conversation: strings.TrimSpace(p.Conv),
 	}
 	if p.Seconds != nil {
 		t.Seconds = *p.Seconds

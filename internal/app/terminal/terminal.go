@@ -53,6 +53,10 @@ const Rounds = 3
 // build that finished is old news.
 const Timeout = 2 * time.Minute
 
+// MaxConversation : The most of Claude Code's record put in front of the
+// model. The app sends about eight thousand characters.
+const MaxConversation = 12 << 10
+
 // MaxTail : The most of a terminal's last lines put in front of the
 // model, kept from the end. The app sends about forty lines; this only
 // stops one very wide line from filling the prompt.
@@ -402,6 +406,18 @@ func Asking(t event.Terminal, at, now time.Time, where *time.Location, usually s
 			tail)
 	}
 
+	var record string
+	if t.Conversation != "" {
+		record = prompt.Block(
+			prompt.Text(
+				"It is Claude Code, and this is its own record of the conversation, newest last, secrets hidden: what they asked of it, what it did and what it said.",
+				"If it is asking them something -- a question at the end of what it said, or a choice on its screen -- say plainly what it asks and which answer you would choose, with the reason in a few words, judged from this record.",
+				"If the record does not settle it, say what it hinges on. The choice stays theirs: you are advising, not answering it.",
+			),
+			cut(t.Conversation, MaxConversation),
+		)
+	}
+
 	var ordinary string
 	if strings.TrimSpace(usually) != "" {
 		ordinary = prompt.Block(
@@ -441,6 +457,7 @@ func Asking(t event.Terminal, at, now time.Time, where *time.Location, usually s
 		),
 		prompt.Lines(facts...),
 		output,
+		record,
 		prompt.Text(
 			"Usually worth saying: a command that ran a while and finished -- they asked to hear whenever one is done, even in the terminal they are looking at -- with whether it worked and, when it did not, the gist of why in a few words;",
 			"a program waiting for them, such as Claude Code asking something or done with its work;",

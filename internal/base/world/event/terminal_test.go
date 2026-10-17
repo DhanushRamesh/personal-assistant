@@ -15,12 +15,13 @@ func terminalEvent(kind, payload string) *event.Event {
 func TestATerminalsNewsIsRead(t *testing.T) {
 	got, ok := event.TerminalOf(terminalEvent(event.TerminalFinished, `{"terminal":"t1","name":"Server",
 		"space":"Personal assistant","cwd":"/home/x","command":"npm run build","seconds":84,
-		"tail":"done\n\n","value":"unknown"}`))
+		"tail":"done\n\n","conversation":" They last asked Claude Code: fix it ","value":"unknown"}`))
 	if !ok {
 		t.Fatal("not read")
 	}
 	if got.ID != "t1" || got.Name != "Server" || got.Space != "Personal assistant" || got.Folder != "/home/x" ||
-		got.Command != "npm run build" || got.Seconds != 84 || got.Tail != "done" || got.Exit != nil {
+		got.Command != "npm run build" || got.Seconds != 84 || got.Tail != "done" || got.Exit != nil ||
+		got.Conversation != "They last asked Claude Code: fix it" {
 		t.Fatalf("read as %+v", got)
 	}
 }
