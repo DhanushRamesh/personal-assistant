@@ -145,15 +145,15 @@ func TestASentenceIsAnnouncedToTheLaptopThatSentIt(t *testing.T) {
 	}
 }
 
-// Silence is an answer: nothing is announced, and the decision is still
-// written down so the owner can see it was made.
+// Silence is an answer for news that is judged: nothing is announced, and
+// the decision is still written down so the owner can see it was made.
 func TestNothingWorthSayingAnnouncesNothing(t *testing.T) {
 	clock := &clock{at: time.Date(2026, 10, 17, 9, 31, 0, 0, time.UTC)}
 	m := &model{answer: saying(prompt.Silence + ".")}
 	r, p, n := reactor(m, clock)
 
 	r.Terminal(context.Background(), "usr_A", "cli_laptop",
-		[]*event.Event{news(event.TerminalFinished, "t1", `,"command":"ls -la","seconds":11`)})
+		[]*event.Event{news(event.TerminalEnded, "t1", `,"exit":1,"command":"npm run dev"`)})
 	r.Wait()
 
 	if len(p.out) != 0 {
@@ -161,6 +161,34 @@ func TestNothingWorthSayingAnnouncesNothing(t *testing.T) {
 	}
 	if len(n.kept) != 1 || n.kept[0].Outcome != notice.Declined {
 		t.Fatalf("noted %+v", n.kept)
+	}
+}
+
+// A command finished, and Claude Code done, are said every time: silence
+// from the model is put in plain words, and neither is held for the gap.
+func TestAFinishedCommandAndClaudeCodeDoneAreAlwaysSaid(t *testing.T) {
+	clock := &clock{at: time.Date(2026, 10, 17, 9, 31, 0, 0, time.UTC)}
+	m := &model{answer: saying(prompt.Silence)}
+	r, p, _ := reactor(m, clock)
+
+	r.Terminal(context.Background(), "usr_A", "cli_laptop", []*event.Event{
+		news(event.TerminalFinished, "t1", `,"command":"ls -la","seconds":11`),
+	})
+	r.Wait()
+	clock.move(time.Second)
+	r.Terminal(context.Background(), "usr_A", "cli_laptop", []*event.Event{
+		news(event.TerminalAsks, "t1", `,"command":"claude","conversation":"They last asked Claude Code: fix it"`),
+	})
+	r.Wait()
+	want := []string{
+		"cli_laptop|usr_A|immediate|ls -la finished in Server, after 11 seconds.",
+		"cli_laptop|usr_A|immediate|Claude Code in Server is done and waiting for you.",
+	}
+	if strings.Join(p.out, "\n") != strings.Join(want, "\n") {
+		t.Fatalf("published %q", p.out)
+	}
+	if !strings.Contains(m.asked[0].Prompt, "Never answer "+prompt.Silence) {
+		t.Errorf("not told it is always said:\n%s", m.asked[0].Prompt)
 	}
 }
 
@@ -194,7 +222,7 @@ func TestATerminalIsReactedToOnceEveryGap(t *testing.T) {
 	r, _, n := reactor(m, clock)
 
 	r.Terminal(context.Background(), "usr_A", "cli_laptop", []*event.Event{
-		news(event.TerminalFinished, "t1", `,"command":"make"`),
+		news(event.TerminalEnded, "t1", `,"exit":1,"command":"make"`),
 	})
 	r.Wait()
 	clock.move(terminal.Gap - time.Second)
@@ -232,7 +260,7 @@ func TestOneReactionRunsForATerminalAtATime(t *testing.T) {
 	m := &model{answer: saying(prompt.Silence), released: make(chan struct{})}
 	r, _, _ := reactor(m, clock)
 
-	r.Terminal(context.Background(), "usr_A", "cli_laptop", []*event.Event{news(event.TerminalFinished, "t1", ``)})
+	r.Terminal(context.Background(), "usr_A", "cli_laptop", []*event.Event{news(event.TerminalEnded, "t1", `,"exit":1`)})
 	// Past the gap, but the first is still running.
 	clock.move(terminal.Gap + time.Minute)
 	r.Terminal(context.Background(), "usr_A", "cli_laptop", []*event.Event{news(event.TerminalAsks, "t1", ``)})
@@ -337,7 +365,8 @@ func TestClaudeCodesRecordIsWeighedWhenItAsks(t *testing.T) {
 	got := terminal.Asking(event.Terminal{Kind: event.TerminalAsks, ID: "t", Name: "PAC", Command: "claude",
 		Conversation: "They last asked Claude Code:\nfix the crossings\n\nWhat it said since:\nDelete the false ones, or keep them?"},
 		at, at, time.UTC, "", nil)
-	for _, want := range []string{"its own record of the conversation", "Delete the false ones, or keep them?", "which answer you would choose", "you are advising"} {
+	for _, want := range []string{"its own record of the conversation", "Delete the false ones, or keep them?", "which answer you would choose",
+		"done with its turn", "offering to tell Claude Code to do it", "a yes is typed into Claude Code"} {
 		if !strings.Contains(got, want) {
 			t.Errorf("the prompt does not say %q:\n%s", want, got)
 		}

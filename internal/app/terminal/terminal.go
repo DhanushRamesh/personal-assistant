@@ -129,6 +129,10 @@ func (r *Reactor) Terminal(ctx context.Context, userID, clientID string, news []
 		}
 		at := e.OccurredAt
 		key := userID + "\x00" + clientID + "\x00" + t.ID
+		// Said every time: never held for the gap, each its own.
+		if Always(t) {
+			key += "\x00" + t.Kind + "\x00" + at.String()
+		}
 		if why := r.claim(key); why != "" {
 			r.Logger.InfoContext(ctx, "terminal news dropped",
 				slog.String("kind", t.Kind), slog.String("terminal", t.Name), slog.String("why", why))
@@ -207,6 +211,9 @@ func (r *Reactor) react(ctx context.Context, userID, clientID string, at time.Ti
 			slog.String("terminal", t.Name), slog.Any("error", err))
 		r.note(ctx, userID, at, t, notice.Failed, "", err.Error())
 		return
+	}
+	if prompt.Nothing(answer) && Always(t) {
+		answer = plainly(t)
 	}
 	if prompt.Nothing(answer) {
 		r.Logger.InfoContext(ctx, "a terminal's news was not worth saying",
@@ -408,11 +415,16 @@ func Asking(t event.Terminal, at, now time.Time, where *time.Location, usually s
 
 	var record string
 	if t.Conversation != "" {
+		// Owner, 17 October 2026, choosing "done + next step": what it
+		// did, then the best next step, offered -- a yes is typed into
+		// Claude Code by the turn that hears it, the one terminal typed
+		// into.
 		record = prompt.Block(
 			prompt.Text(
-				"It is Claude Code, and this is its own record of the conversation, newest last, secrets hidden: what they asked of it, what it did and what it said.",
-				"If it is asking them something -- a question at the end of what it said, or a choice on its screen -- say plainly what it asks and which answer you would choose, with the reason in a few words, judged from this record.",
-				"If the record does not settle it, say what it hinges on. The choice stays theirs: you are advising, not answering it.",
+				"It is Claude Code, done with its turn and waiting for them, and this is its own record of the conversation, newest last, secrets hidden: what they asked of it, what it did and what it said.",
+				"Say in a sentence or two what it did, by what it comes to -- what changed, whether it worked -- then the best next step, judged from the whole record, and end with one short question offering to tell Claude Code to do it.",
+				"If it asked them something -- a question at the end of what it said, or a choice on its screen -- say plainly what it asks and which answer you would choose, with the reason in a few words, and offer to give Claude Code that answer.",
+				"If the record does not settle it, say what it hinges on, and offer nothing. They answer aloud; a yes is typed into Claude Code for them.",
 			),
 			cut(t.Conversation, MaxConversation),
 		)
@@ -449,15 +461,30 @@ func Asking(t event.Terminal, at, now time.Time, where *time.Location, usually s
 		"When a command has finished and there is an obvious next step you could take for them, end with one short question offering it.",
 		"Offer only what you can do: explain an error or what the output means, look closer at a terminal, or -- where Claude Code is open in one -- ask Claude Code to do it. You read every terminal but type only into Claude Code: never offer to run a command in a shell; a command they should run, say plainly for them to run.",
 		"They answer aloud, without your name, so offer one thing only, said so it cannot be read two ways.",
-		"No question when no step follows naturally, and never one offering to answer a program's question for them.",
+		"No question when no step follows naturally, and never one offering to answer a program's question for them -- Claude Code's, which you may offer to answer, aside.",
 	)
+
+	// Owner, 17 October 2026: *"whenever a terminal command runs, when it
+	// ends it should announce to me"*, every one the app sends (10 s or
+	// more), always; and Claude Code done, always.
+	deciding := prompt.Text(
+		"You are deciding whether to tell them, and then, only if you are, writing the one sentence they will hear.",
+		"The deciding is the part that matters. Saying nothing is always available, costs them nothing, and is right whenever hearing it would not change what they do next.",
+	)
+	silence := "If it is not worth saying, answer with " + prompt.Silence + "."
+	if Always(t) {
+		deciding = prompt.Text(
+			"They asked to hear this every time, so it is always said: write what they will hear.",
+			"Never answer "+prompt.Silence+" here.",
+		)
+		silence = ""
+	}
 
 	return prompt.Block(
 		prompt.Text(
 			"Something has just happened in one of the terminals on their laptop, in the desktop app.",
-			"You are deciding whether to tell them, and then, only if you are, writing the one sentence they will hear.",
-			"The deciding is the part that matters. Saying nothing is always available, costs them nothing, and is right whenever hearing it would not change what they do next.",
 		),
+		deciding,
 		prompt.Lines(facts...),
 		output,
 		record,
@@ -479,9 +506,32 @@ func Asking(t event.Terminal, at, now time.Time, where *time.Location, usually s
 			"Never read out a path, a command line, a hidden value or an error word for word; say what it means. A short command you offer to run is the one exception.",
 			"Say only what is in front of you or what you looked up, and nothing you have worked out around it.",
 		),
-		prompt.Text("Answer with the sentence, and the question if there is one, and nothing else.",
-			"If it is not worth saying, answer with "+prompt.Silence+"."),
+		prompt.Text("Answer with the sentence, and the question if there is one, and nothing else.", silence),
 	)
+}
+
+// Always : Whether this news is said every time, whatever the model makes
+// of it: a command that finished -- the app sends only those of 10 s or
+// more -- and Claude Code done with its turn, sent with its record.
+func Always(t event.Terminal) bool {
+	return t.Kind == event.TerminalFinished || (t.Kind == event.TerminalAsks && t.Conversation != "")
+}
+
+// plainly : What is said when the model said nothing of news that is
+// always said.
+func plainly(t event.Terminal) string {
+	where := cmp.Or(t.Name, "a terminal")
+	if t.Kind == event.TerminalAsks {
+		return "Claude Code in " + where + " is done and waiting for you."
+	}
+	what := "A command"
+	if t.Command != "" && utf8.RuneCountInString(t.Command) <= 30 {
+		what = t.Command
+	}
+	if t.Seconds > 0 {
+		return what + " finished in " + where + ", after " + lasted(t.Seconds) + "."
+	}
+	return what + " finished in " + where + "."
 }
 
 // happened : The news in words.

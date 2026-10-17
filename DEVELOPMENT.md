@@ -20289,6 +20289,20 @@ terminal reaction's follow-up question offers only what the assistant
 can do -- explain, look closer, or ask Claude Code -- and never a shell
 command to run.
 
+**A finished command and Claude Code done are said every time** (owner,
+17 October 2026: *"whenever a terminal command runs, when it ends it
+should announce to me .. if it's Claude Code it should proactively say
+what to do next"*, choosing *"10 s or more, always"* and *"done + next
+step"*). `terminal.Always`: a `terminal.finished` (the app sends those of
+10 s or more) and a `terminal.asks` carrying Claude Code's record are
+never left unsaid -- the prompt says so, a silence from the model is put
+plainly (`plainly`: "npm run build finished in Shell, after 2 minutes."),
+and neither is held for the Gap. For Claude Code the sentence is what it
+did, then the best next step from its whole record, ending in a question
+offering to tell Claude Code to do it (or to give it the answer to what
+it asked); a yes is typed into Claude Code by the turn that hears it.
+Everything else -- a shell ending, a bell elsewhere -- is still judged.
+
 **Leaving takes two fixes** (owner, 17 October 2026: *"I literally was in
 home .. and in home till now .. but it showed moving"*). On the night of
 16 October the phone twice reported the same point, 235 m east of home --
