@@ -20357,6 +20357,30 @@ stays, since a correction makes sense only beside what it corrects; so
 does one whose caller hung up. The 264 already kept -- of 448 stopped --
 were deleted the same day, after a dump of their rows.
 
+**The screen is background; the latest exchange comes first** (owner,
+17 October 2026, after "Which number?" -- asked of "tap Build number
+seven times" -- was answered by typing 1 into Claude Code, whose screen
+showed numbered choices: *"the conversation will be a mix of various
+unrelated topics .. it should refer to the latest message and answer
+accordingly"*). The Where block now ends with `conversation.Background`:
+it is for a question about the screen; what they say follows from the
+latest exchange unless they point at the screen; nothing is typed or
+chosen on a terminal because of what it shows, only when asked.
+
+**Readings foreseen, measured before they are fetched** (owner, 17
+October 2026, choosing to build it and *"show the numbers before
+switching it on"*). `internal/app/foresight` guesses from a question's
+meaning -- against written examples and the person's own past questions
+answered with that tool (`FirstTools`), and a short follow-up to a turn
+that used it -- whether it needs the calendar (7 days), the reminders or
+today's places. With `[assistant] foreseeing = true` they are fetched
+before the model is asked and put in the prompt, and the answer is not
+sent back to look again; with it false, the default, each guess is only
+logged ("foreseen"), to be measured against what the turn actually
+used. Measured on three weeks of spoken questions as it would have run
+then: calendar 67% foreseen, reminders 60%, places 75%, fetched on 14%
+of turns.
+
 **Leaving takes two fixes** (owner, 17 October 2026: *"I literally was in
 home .. and in home till now .. but it showed moving"*). On the night of
 16 October the phone twice reported the same point, 235 m east of home --

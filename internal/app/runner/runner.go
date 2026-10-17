@@ -7,6 +7,7 @@ package runner
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"log/slog"
@@ -20,6 +21,7 @@ import (
 	"personal-assistant/internal/base/records/conversation"
 	"personal-assistant/internal/base/thinking/environment"
 	"personal-assistant/internal/base/thinking/llm"
+	"personal-assistant/internal/base/thinking/prompt"
 	"personal-assistant/internal/base/world/announce"
 	"personal-assistant/internal/base/world/events"
 	"personal-assistant/internal/domain/memory"
@@ -27,6 +29,7 @@ import (
 	"personal-assistant/internal/domain/remind"
 	// Aliased: aside.go already has a speech of its own, which is the one
 	// being spoken rather than the one that was heard.
+	"personal-assistant/internal/app/foresight"
 	"personal-assistant/internal/app/tool"
 	utterance "personal-assistant/internal/base/world/speech"
 )
@@ -125,6 +128,12 @@ type Options struct {
 	// Away : The tools a person's own devices offer while connected, added
 	// to Tools for that person's chats. Nil adds none.
 	Away Away
+	// Foresight : Guesses the readings a question needs, so they can be
+	// fetched ahead. Nil guesses nothing.
+	Foresight Foresight
+	// Foreseeing : Whether what Foresight guesses is fetched ahead. Off,
+	// it is only logged, to be measured before it is turned on.
+	Foreseeing bool
 	// Memory : What the assistant has been asked to remember. Nil remembers
 	// nothing, which is how it behaved before there was anywhere to keep
 	// anything.
@@ -175,6 +184,15 @@ type Runner struct {
 	cut             *utterance.Cut
 	tools           *tool.Registry
 	away            Away
+	foresight       Foresight
+	foreseeing      bool
+	// foreseen : The chats given a reading ahead, so their answer is not
+	// sent back to look for it.
+	foreseen sync.Map
+	// lastTools : The tools the last turn of each conversation used, and
+	// when it ended, for a follow-up to be given them again.
+	lastToolsMu sync.Mutex
+	lastTools   map[string]usedTools
 	// chatTools : Each running chat's tools -- Tools with what the
 	// person's devices offer -- by chat id, for as long as it runs.
 	chatTools sync.Map
@@ -260,6 +278,9 @@ func New(opts Options) (*Runner, error) {
 		announcer:       opts.Announcer,
 		tools:           opts.Tools,
 		away:            opts.Away,
+		foresight:       opts.Foresight,
+		foreseeing:      opts.Foreseeing,
+		lastTools:       map[string]usedTools{},
 		memory:          opts.Memory,
 		now:             opts.Now,
 		recently:        opts.Recently,
@@ -442,7 +463,8 @@ func (r *Runner) promptFor(ctx context.Context, t *chat.Chat) (string, []remind.
 	quoted := r.quoted(ctx, userID, t.Prompt, t.ConversationID, &note)
 	justSaid := r.justSaid(ctx, userID)
 	prefetched := r.prefetch(ctx, t, &note)
-	prompt := join(standing, where, known, recalled, quoted, justSaid, prefetched, unsaid)
+	foreseen := r.foresee(ctx, t, userID, &note)
+	prompt := join(standing, where, known, recalled, quoted, justSaid, prefetched, foreseen, unsaid)
 
 	// What the system prompt is made of, in bytes: the parts that are not
 	// the manner are the ones that change from turn to turn, and the ones
@@ -451,7 +473,7 @@ func (r *Runner) promptFor(ctx context.Context, t *chat.Chat) (string, []remind.
 		slog.Int("standing", len(standing)), slog.Int("where", len(where)),
 		slog.Int("known", len(known)), slog.Int("recalled", len(recalled)),
 		slog.Int("quoted", len(quoted)), slog.Int("just_said", len(justSaid)),
-		slog.Int("prefetched", len(prefetched)), slog.Int("unsaid", len(unsaid)),
+		slog.Int("prefetched", len(prefetched)), slog.Int("foreseen", len(foreseen)), slog.Int("unsaid", len(unsaid)),
 		slog.Int("whole", len(prompt)), slog.Duration("took", time.Since(started)))
 
 	note.TookMS = time.Since(started).Milliseconds()
@@ -763,4 +785,92 @@ func (r *Runner) clock() []environment.Turn {
 		{Role: environment.RoleUser, Text: conversation.Now(r.now())},
 		{Role: environment.RoleAssistant, Text: conversation.Acknowledged},
 	}
+}
+
+// Foresight : Guesses the readings a question needs (see internal/app/foresight).
+type Foresight interface {
+	Foresee(ctx context.Context, userID, question string, previous []string) []foresight.Call
+}
+
+// usedTools : The tools a turn used, and when it ended.
+type usedTools struct {
+	tools []string
+	at    time.Time
+}
+
+// FollowUpWithin : How soon after a turn the next is taken as following it.
+const FollowUpWithin = 10 * time.Minute
+
+// foresee : The readings this question looks like it needs, fetched ahead
+// and put in the prompt as the prefetched ones are -- when foreseeing is
+// on. Off, what would have been fetched is logged, to be measured first
+// (owner, 17 October 2026: *"show the numbers before switching it on"*).
+func (r *Runner) foresee(ctx context.Context, t *chat.Chat, userID string, note *chat.Recalled) string {
+	if userID == "" {
+		userID = r.callerFor(ctx, t).UserID
+	}
+	if r.foresight == nil || r.tools == nil {
+		return ""
+	}
+	var previous []string
+	r.lastToolsMu.Lock()
+	if last, ok := r.lastTools[t.ConversationID]; ok && r.now().Sub(last.at) <= FollowUpWithin {
+		previous = last.tools
+	}
+	r.lastToolsMu.Unlock()
+
+	calls := r.foresight.Foresee(ctx, userID, t.Prompt, previous)
+	names := make([]string, 0, len(calls))
+	for _, c := range calls {
+		names = append(names, fmt.Sprintf("%s %.2f%s", c.Tool, c.Score, map[bool]string{true: " follow-up"}[c.FollowUp]))
+	}
+	r.logger.InfoContext(ctx, "foreseen", slog.Any("tools", names), slog.Bool("fetched", r.foreseeing && len(calls) > 0))
+	if !r.foreseeing || len(calls) == 0 {
+		return ""
+	}
+
+	caller := r.callerFor(ctx, t)
+	var b strings.Builder
+	for _, c := range calls {
+		x, ok := r.tools.Get(c.Tool)
+		if !ok || !x.Reaches(t.Channel) {
+			continue
+		}
+		started := time.Now()
+		result := r.tools.Call(ctx, c.Tool, tool.Invocation{Caller: caller, Args: json.RawMessage(c.Args)})
+		if result.Outcome == conversation.OutcomeFailed {
+			r.logger.WarnContext(ctx, "a foreseen reading would not run", slog.String("tool", c.Tool), slog.String("why", result.Content))
+			continue
+		}
+		note.Tools = append(note.Tools, chat.RecalledTool{Name: c.Tool, Content: strings.TrimSpace(result.Content), TookMS: time.Since(started).Milliseconds()})
+		if b.Len() > 0 {
+			b.WriteString("\n\n")
+		}
+		b.WriteString(c.Tool + " returned, just now, called with " + c.Args + ":\n" + strings.TrimSpace(result.Content))
+	}
+	if b.Len() == 0 {
+		return ""
+	}
+	r.foreseen.Store(t.ID, true)
+	return prompt.Text("Read ahead, because the question looked like it would need it; call the tool again if it needs a different stretch or more.") + "\n\n" + b.String()
+}
+
+// usedBy : Keeps the tools a finished turn used, for the next one.
+func (r *Runner) usedBy(ctx context.Context, t *chat.Chat) {
+	if t.ConversationID == "" {
+		return
+	}
+	said, err := r.messages.ByChat(context.WithoutCancel(ctx), t.ID)
+	if err != nil {
+		return
+	}
+	var tools []string
+	for _, m := range said {
+		for _, c := range m.ToolCalls {
+			tools = append(tools, c.Name)
+		}
+	}
+	r.lastToolsMu.Lock()
+	r.lastTools[t.ConversationID] = usedTools{tools: tools, at: r.now()}
+	r.lastToolsMu.Unlock()
 }

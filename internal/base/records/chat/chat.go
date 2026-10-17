@@ -346,3 +346,9 @@ func (t *Chat) transitionTo(next Status) error {
 // a person being around and not about what any watcher does with
 // that.
 const Active = 28 * 24 * time.Hour
+
+// Asked : A past question and the tool its answer reached for first.
+type Asked struct {
+	Prompt string
+	Tool   string
+}

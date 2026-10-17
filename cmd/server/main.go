@@ -30,6 +30,7 @@ import (
 	"personal-assistant/internal/app/api/presence"
 	"personal-assistant/internal/app/away"
 	"personal-assistant/internal/app/elsewhere"
+	"personal-assistant/internal/app/foresight"
 	"personal-assistant/internal/app/glance"
 	"personal-assistant/internal/app/live"
 	"personal-assistant/internal/app/noticing"
@@ -578,8 +579,12 @@ func run() error {
 		Cut:           cutOff,
 		Tools:         tools,
 		Away:          devices,
-		Memory:        remembering,
-		Now:           cfg.Assistant.Now,
+		Foresight: &foresight.Seer{
+			Embed: remembering.Embedder, Past: chats, Logger: logger.Logger, Now: cfg.Assistant.Now,
+		},
+		Foreseeing: cfg.Assistant.Foreseeing,
+		Memory:     remembering,
+		Now:        cfg.Assistant.Now,
 		Recently: &remind.Recently{
 			Store:    reminderStore,
 			Location: cfg.Assistant.Location,

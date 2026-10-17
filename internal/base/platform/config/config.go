@@ -134,6 +134,12 @@ type Assistant struct {
 	// it is measured and the algorithmic one has to beat something.
 	Greeting string
 
+	// Foreseeing : Whether the readings a question looks like it needs
+	// are fetched before the model is asked (internal/app/foresight).
+	// Off by default: until it is turned on, what would have been fetched
+	// is only logged, to be measured first (owner, 17 October 2026).
+	Foreseeing bool
+
 	// Alarms : Whether a reminder also puts an alarm on the phone.
 	//
 	// On by default, and separable on purpose. Owner, 6 October
@@ -628,12 +634,13 @@ func Load(path string, lookup Lookup) (Config, error) {
 			AutoMigrate:     l.boolean("database", "auto_migrate", true),
 		},
 		Assistant: Assistant{
-			Name:     l.str("assistant", "name", ""),
-			Greeting: l.str("assistant", "greeting", "plain"),
-			Alarms:   l.boolean("assistant", "alarms", true),
-			Persona:  l.str("assistant", "persona", ""),
-			Timezone: l.str("assistant", "timezone", ""),
-			Location: l.location("assistant", "timezone"),
+			Name:       l.str("assistant", "name", ""),
+			Greeting:   l.str("assistant", "greeting", "plain"),
+			Foreseeing: l.boolean("assistant", "foreseeing", false),
+			Alarms:     l.boolean("assistant", "alarms", true),
+			Persona:    l.str("assistant", "persona", ""),
+			Timezone:   l.str("assistant", "timezone", ""),
+			Location:   l.location("assistant", "timezone"),
 		},
 		HomeAssistant: HomeAssistant{
 			URL:             l.str("homeassistant", "url", ""),

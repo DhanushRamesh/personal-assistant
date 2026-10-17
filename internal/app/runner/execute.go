@@ -192,6 +192,10 @@ func (r *Runner) consume(runCtx, ctx context.Context, t *chat.Chat, systemPrompt
 		pressed = true
 		r.logger.InfoContext(ctx, "said in passing: not sent back to look")
 	}
+	// Given a reading ahead, it has looked: not sent back to look again.
+	if _, ok := r.foreseen.LoadAndDelete(t.ID); ok {
+		pressed = true
+	}
 
 	// What has been said beside this turn, so each round's sentence
 	// follows the last rather than landing on top of it.
@@ -1231,6 +1235,7 @@ func (r *Runner) finishWith(ctx context.Context, t *chat.Chat, aloud *speech, tr
 
 	_ = r.save(ctx, t)
 	r.recordOutcome(ctx, t)
+	r.usedBy(ctx, t)
 	r.settleAside(ctx, t, aloud)
 	r.announceOutcome(t)
 }

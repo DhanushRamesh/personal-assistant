@@ -737,3 +737,32 @@ func (r *Repository) Unfinished(ctx context.Context, conversationID string) ([]s
 	}
 	return ids, nil
 }
+
+// FirstTools : The person's questions since a time, each with the tool its
+// answer reached for first; questions answered without one are left out.
+// For guessing what a new question will need (see internal/app/foresight).
+func (r *Repository) FirstTools(ctx context.Context, userID string, since time.Time) ([]chat.Asked, error) {
+	var rows []struct {
+		Prompt string
+		Calls  *string
+	}
+	err := r.db.WithContext(ctx).Raw(`
+		SELECT c.prompt AS prompt,
+		       (SELECT m.tool_calls FROM messages m
+		         WHERE m.chat_id = c.id AND m.tool_calls IS NOT NULL AND m.tool_calls NOT IN ('null', '[]')
+		         ORDER BY m.seq LIMIT 1) AS calls
+		  FROM chats c JOIN conversations v ON v.id = c.conversation_id
+		 WHERE v.user_id = ? AND c.created_at >= ? AND c.status = 'completed'`, userID, since).Scan(&rows).Error
+	if err != nil {
+		return nil, fmt.Errorf("chat: reading past questions: %w", err)
+	}
+	out := make([]chat.Asked, 0, len(rows))
+	for _, x := range rows {
+		calls := toToolCalls(x.Calls)
+		if len(calls) == 0 {
+			continue
+		}
+		out = append(out, chat.Asked{Prompt: x.Prompt, Tool: calls[0].Name})
+	}
+	return out, nil
+}
