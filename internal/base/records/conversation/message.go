@@ -544,13 +544,17 @@ func ForModel(messages []Message) []Message {
 		}
 	}
 
+	// Whether the explanation has been given. Once, at the oldest
+	// withdrawn result, so it is read before any of the short ones.
+	explained := false
+
 	kept := make([]Message, 0, len(messages))
 	for _, m := range messages {
 		if m.empty() {
 			continue
 		}
 		m.Content = forModelContent(m)
-		m.ToolResults = withdrawn(m.ToolResults)
+		m.ToolResults = withdrawn(m.ToolResults, &explained)
 
 		// Only prose is joined. A message carrying tool calls or results has
 		// no words to append to and must not be merged into the message
@@ -641,17 +645,41 @@ func announcedAs(kind Kind, when string) string {
 //
 // Only history is touched. Results from the turn being answered are
 // added after this and are exactly what the model is meant to use.
-func withdrawn(results []ToolResult) []ToolResult {
+func withdrawn(results []ToolResult, said *bool) []ToolResult {
 	if len(results) == 0 {
 		return results
 	}
 	out := make([]ToolResult, len(results))
 	copy(out, results)
 	for i := range out {
-		out[i].Content = "[" + out[i].Name + " ran here. What it returned is not shown: it was " +
-			"true then and may not be now. Call it again if you need to know.]"
+		out[i].Content = Withdrawn(out[i].Name, !*said)
+		*said = true
 	}
 	return out
+}
+
+// Withdrawn : The line standing in for a result the history no longer
+// carries, said in full the first time and briefly after that.
+//
+// Measured on a real conversation: 978 messages in the window, 104 of
+// them answers from tools, and the one sentence explaining the
+// withdrawal was repeated at every one of them -- 13,045 characters,
+// about 3,261 tokens, on every turn, saying the same thing a hundred
+// and four times. It is the largest repeated text in the window and
+// the reason this is a function rather than a constant.
+//
+// The first still has to carry the whole explanation, because nothing
+// else in the prompt gives one: a line saying only that a tool ran is
+// read as a tool that returned nothing, and a model told nothing
+// returned will say so. So the first says what the shape means and
+// that the rest mean the same.
+func Withdrawn(name string, explain bool) string {
+	if explain {
+		return "[" + name + " ran here. What a tool returned is not kept in the history: it was " +
+			"true then and may not be now, so call it again if you need to know. Every line " +
+			"below in this shape means the same thing.]"
+	}
+	return "[" + name + " ran here.]"
 }
 
 // ForPerson : The messages a person sees, oldest first.

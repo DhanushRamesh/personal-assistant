@@ -20728,3 +20728,67 @@ nothing searches it.
 instructions and preferences -- how to answer, what has been noticed.
 They do not go stale, and they are in front of the model on every
 single turn, where 26 characters each is a per-turn tax for nothing.
+
+**Busy is said as busy** (17 October 2026). Five spoken turns of "How
+do you say so?" failed in two minutes with the gateway's "You have made
+too many requests continuously" -- a 400 -- still refused after the two
+waits, and were said to be "The server would not accept that request":
+the owner's question turned away. Our own calls were few that minute;
+the account's limit is shared with everything else using these
+credentials, a spike run against the gateway among them. A 400 that is
+being told to slow down is now classified rate_limited, its status kept
+in the detail, and said "The server is busy just now. Ask me again in a
+moment." The desktop app now says a failed spoken turn's sentence aloud
+instead of nothing (owner: *"if it's too many requests, it should say
+that at least rather than being silent"*).
+
+### The same sentence, a hundred and four times
+
+A chat call carries 39,852 tokens on average and never fewer than
+34,449. Weighing where they go turned up something simpler than a
+redesign.
+
+Every tool result is already withdrawn from the history --
+`ForModel` replaces it with a line saying the tool ran and to call it
+again. That line was 125 characters, and a real conversation carries
+a hundred and four of them:
+
+	conv_01M4RJAB   978 messages in the window
+	  sent        73,035 chars  ~18,258 tokens
+	    of which  13,045 chars  were the withdrawal lines
+
+Thirteen thousand characters, on every turn, saying the same thing a
+hundred and four times. It was the largest repeated text in the
+window, larger than any tool's description.
+
+So it is said once now, at the oldest one, where it is read before any
+of the short ones, and the rest are `[event_recent ran here.]`
+
+	                before     after
+	conv_01M4RJAB  18,258 →  15,632 tokens
+	conv_01M50348  13,489 →  10,803 tokens
+
+About 2,650 tokens a turn, and nothing is lost: the explanation is
+still there, once, and still says that every line below in that shape
+means the same.
+
+The first one has to carry it. A line saying only that a tool ran
+reads as a tool that returned nothing, and a model told nothing was
+returned will say so.
+
+`TestAStaleAnswerIsNotRepeated` is the eval that guards exactly this
+-- whether a stale answer in the window gets recited instead of looked
+up again -- and it holds: **5 of 5 looked it up, 0 recited the old
+one**.
+
+#### What this corrects
+
+The plan before this was to keep tool results out of the conversation
+in a store. That was measured against what a conversation **stores**
+-- results are 51% of it -- and not against what it **sends**, where
+they had been withdrawn all along. The store is still worth having for
+the rounds within a single turn, where results are sent whole, but it
+is worth a thousand tokens on a heavy turn rather than half the
+prompt. The weigher is committed so the next guess gets checked first:
+
+	go run -tags spike ./cmd/spike-prompt/ <conversation-id>

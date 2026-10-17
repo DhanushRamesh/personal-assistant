@@ -216,8 +216,58 @@ func TestOldToolResultsAreWithdrawn(t *testing.T) {
 	if !strings.Contains(results[0].Content, "reminder_list") {
 		t.Errorf("content = %q, want the tool named", results[0].Content)
 	}
-	if !strings.Contains(results[0].Content, "Call it again") {
+	if !strings.Contains(strings.ToLower(results[0].Content), "call it again") {
 		t.Errorf("content = %q, want it to say to look again", results[0].Content)
+	}
+}
+
+// The explanation is given once and not at every withdrawn result.
+//
+// Measured on a real conversation: 978 messages in the window, 104 of
+// them answers from tools, and the sentence explaining the withdrawal
+// was repeated at every one -- 13,045 characters on every turn, saying
+// the same thing a hundred and four times.
+func TestTheWithdrawalIsExplainedOnce(t *testing.T) {
+	var said []conversation.Message
+	for i := range 5 {
+		said = append(said,
+			conversation.Message{Seq: i*2 + 1, Role: conversation.Assistant, ChatID: "chat_1",
+				ToolCalls: []conversation.ToolCall{{ID: "c", Name: "reminder_list"}}},
+			conversation.Message{Seq: i*2 + 2, Role: conversation.Tool, ChatID: "chat_1",
+				ToolResults: []conversation.ToolResult{{ID: "c", Name: "reminder_list", Content: "Tablets at nine."}}},
+		)
+	}
+
+	var results []conversation.ToolResult
+	for _, m := range conversation.ForModel(said) {
+		results = append(results, m.ToolResults...)
+	}
+	if len(results) != 5 {
+		t.Fatalf("%d results, want 5", len(results))
+	}
+
+	explained := 0
+	total := 0
+	for _, r := range results {
+		total += len(r.Content)
+		if strings.Contains(r.Content, "not kept in the history") {
+			explained++
+		}
+		if !strings.Contains(r.Content, "reminder_list") {
+			t.Errorf("a line does not name its tool: %q", r.Content)
+		}
+	}
+	if explained != 1 {
+		t.Errorf("the explanation appears %d times, want once", explained)
+	}
+	if first := results[0].Content; !strings.Contains(first, "not kept in the history") {
+		t.Errorf("the explanation is not on the oldest one, where it is read first: %q", first)
+	}
+	// Five results used to cost five explanations. The point of the
+	// change is that they no longer do, and this is the number.
+	t.Logf("five withdrawn results cost %d characters, was %d", total, 5*205)
+	if total > 2*205 {
+		t.Errorf("five withdrawn results cost %d characters, want nearer one explanation", total)
 	}
 }
 
