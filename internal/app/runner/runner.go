@@ -436,14 +436,23 @@ func (r *Runner) promptFor(ctx context.Context, t *chat.Chat) (string, []remind.
 
 	unsaid, covered := r.missed(ctx, userID)
 
-	prompt := join(standing,
-		r.whereTheyAre(ctx, t, userID),
-		r.known(ctx, userID, &note),
-		r.recalled(ctx, userID, t.Prompt, &note),
-		r.quoted(ctx, userID, t.Prompt, t.ConversationID, &note),
-		r.justSaid(ctx, userID),
-		r.prefetch(ctx, t, &note),
-		unsaid)
+	where := r.whereTheyAre(ctx, t, userID)
+	known := r.known(ctx, userID, &note)
+	recalled := r.recalled(ctx, userID, t.Prompt, &note)
+	quoted := r.quoted(ctx, userID, t.Prompt, t.ConversationID, &note)
+	justSaid := r.justSaid(ctx, userID)
+	prefetched := r.prefetch(ctx, t, &note)
+	prompt := join(standing, where, known, recalled, quoted, justSaid, prefetched, unsaid)
+
+	// What the system prompt is made of, in bytes: the parts that are not
+	// the manner are the ones that change from turn to turn, and the ones
+	// to look at when a turn is slower than it was.
+	r.logger.InfoContext(ctx, "system prompt composed",
+		slog.Int("standing", len(standing)), slog.Int("where", len(where)),
+		slog.Int("known", len(known)), slog.Int("recalled", len(recalled)),
+		slog.Int("quoted", len(quoted)), slog.Int("just_said", len(justSaid)),
+		slog.Int("prefetched", len(prefetched)), slog.Int("unsaid", len(unsaid)),
+		slog.Int("whole", len(prompt)), slog.Duration("took", time.Since(started)))
 
 	note.TookMS = time.Since(started).Milliseconds()
 	r.recordRecalled(ctx, t, note)

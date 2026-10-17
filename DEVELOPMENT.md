@@ -20272,6 +20272,14 @@ it asks and which answer they would choose, with the reason, judged from
 the record -- advising; the choice stays the owner's, and the reaction
 still cannot type.
 
+**What a request is made of is logged at info** (owner, 17 October 2026,
+asking for speed). A spoken turn's time is the model's first word, 3.5
+to 5 s a round over about 38,000 tokens, and two rounds when a tool
+runs. "platform ai request" (context, tools, messages, in bytes) and
+"system prompt composed" (each part of the system prompt, and how long
+composing it took) are now info lines, so what to cut next is read from
+real turns rather than estimated.
+
 **Leaving takes two fixes** (owner, 17 October 2026: *"I literally was in
 home .. and in home till now .. but it showed moving"*). On the night of
 16 October the phone twice reported the same point, 235 m east of home --

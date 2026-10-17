@@ -483,8 +483,9 @@ func (p *Environment) attemptOnce(ctx context.Context, ask environment.Request, 
 	// they were spent on, and there is no caching here -- the manner
 	// and every tool's description are sent again on every call. This
 	// says which of the three is growing, which is the question when a
-	// turn gets slower.
-	p.logger.DebugContext(ctx, "platform ai request",
+	// turn gets slower. Kept at info (owner, 17 October 2026, asking for
+	// speed): what to cut is read from here, not guessed.
+	p.logger.InfoContext(ctx, "platform ai request",
 		slog.Int("context_bytes", len(context)),
 		slog.Int("tools_bytes", toolBytes(tools)),
 		slog.Int("tool_count", len(tools)),
