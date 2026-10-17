@@ -101,10 +101,30 @@ func TestAWobbleAtTheEdgeDoesNotLeave(t *testing.T) {
 	if out := places.Crossed(user, []places.Place{home}, inside, wobble, t0); len(out) != 0 {
 		t.Fatalf("a wobble within the margin crossed: %v", kinds(out))
 	}
-	gone := append(wobble, fix(t, home, 15, 150+places.Margin+20))
+	gone := append(wobble, fix(t, home, 15, 150+places.Margin+20), fix(t, home, 16, 150+places.Margin+80))
 	out := places.Crossed(user, []places.Place{home}, inside, gone, t0)
 	if got := kinds(out); len(got) != 1 || got[0] != "place.exited Home" {
 		t.Fatalf("crossings = %v, want one exit", got)
+	}
+	// Timed at the first of the two out past the edge.
+	if !out[0].OccurredAt.Equal(t0.Add(15 * time.Minute)) {
+		t.Errorf("left at %v, want the first fix out", out[0].OccurredAt)
+	}
+}
+
+// One fix far out between fixes at home is the phone's cached reading,
+// not a step out of the door: it leaves nothing (16 October, twice in
+// the night, the same point 235 m east).
+func TestALoneStrayFixDoesNotLeave(t *testing.T) {
+	inside := map[string]places.Standing{home.ID: {Inside: true, Since: t0.Add(-time.Hour)}}
+	night := []*event.Event{fix(t, home, 0, 5), fix(t, home, 4, 235), fix(t, home, 7, 3), fix(t, home, 25, 235), fix(t, home, 41, 4)}
+	if out := places.Crossed(user, []places.Place{home}, inside, night, t0); len(out) != 0 {
+		t.Fatalf("a lone stray fix crossed: %v", kinds(out))
+	}
+	// The first of the two may have come in an earlier batch.
+	out := places.Crossed(user, []places.Place{home}, inside, []*event.Event{fix(t, home, 10, 400)}, t0, fix(t, home, 8, 300))
+	if got := kinds(out); len(got) != 1 || got[0] != "place.exited Home" || !out[0].OccurredAt.Equal(t0.Add(8*time.Minute)) {
+		t.Fatalf("crossings = %v at %v, want an exit at the earlier fix", got, out)
 	}
 }
 
@@ -119,7 +139,7 @@ func TestTheMarginDoesNotEnter(t *testing.T) {
 // Fixes are taken in the order they happened, not the order they came.
 func TestFixesAreTakenInOrder(t *testing.T) {
 	out := places.Crossed(user, []places.Place{home}, nil, []*event.Event{
-		fix(t, home, 20, 0), fix(t, home, 10, 900), fix(t, home, 0, 0),
+		fix(t, home, 20, 0), fix(t, home, 15, 950), fix(t, home, 10, 900), fix(t, home, 0, 0),
 	}, t0)
 	want := []string{"place.entered Home", "place.exited Home", "place.entered Home"}
 	if got := kinds(out); strings.Join(got, "|") != strings.Join(want, "|") {

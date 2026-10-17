@@ -105,23 +105,39 @@ func Latest(crossings []event.Event, name string) Standing {
 // Inside the radius enters; out past it by Margin leaves; anywhere
 // between changes nothing, which is what keeps a phone at the gate
 // from coming and going.
+//
+// Leaving takes two fixes in a row out past it, and is timed at the
+// first. One alone is the phone's cached network reading as often as it
+// is a step out of the door: on 16 October the same point 235 m east of
+// home came back twice in the night, between fixes at home, and each
+// wrote Home left and entered again (owner: *"I literally was in home
+// .. and in home till now .. but it showed moving"*). Someone who has
+// really left sends another fix within a minute or two, as the phone
+// reports every 20 to 100 s once it moves. `before` are fixes already
+// taken, newest last, that may be the first of the two; they cross
+// nothing themselves.
 func Crossed(userID string, kept []Place, standing map[string]Standing,
-	fixes []*event.Event, received time.Time) []*event.Event {
+	fixes []*event.Event, received time.Time, before ...*event.Event) []*event.Event {
 	type reading struct {
 		e        *event.Event
 		lat, lng float64
+		earlier  bool
 	}
 	var readings []reading
-	for _, e := range fixes {
-		if e == nil {
-			continue
+	add := func(es []*event.Event, earlier bool) {
+		for _, e := range es {
+			if e == nil {
+				continue
+			}
+			f, ok := event.ReadFix(*e)
+			if !ok {
+				continue
+			}
+			readings = append(readings, reading{e: e, lat: f.Lat, lng: f.Lon, earlier: earlier})
 		}
-		f, ok := event.ReadFix(*e)
-		if !ok {
-			continue
-		}
-		readings = append(readings, reading{e: e, lat: f.Lat, lng: f.Lon})
 	}
+	add(before, true)
+	add(fixes, false)
 	sort.SliceStable(readings, func(i, j int) bool {
 		return readings[i].e.OccurredAt.Before(readings[j].e.OccurredAt)
 	})
@@ -129,32 +145,52 @@ func Crossed(userID string, kept []Place, standing map[string]Standing,
 	var out []*event.Event
 	for _, p := range kept {
 		now := standing[p.ID]
-		for _, r := range readings {
+		// out : The first of the fixes in a row out past the edge, while inside.
+		var outFirst *reading
+		for i := range readings {
+			r := &readings[i]
 			if !now.Since.IsZero() && !r.e.OccurredAt.After(now.Since) {
 				continue
 			}
-			kind := ""
+			var kind string
+			at := r.e
 			switch {
-			case !now.Inside && p.Inside(r.lat, r.lng):
+			case !now.Inside:
+				outFirst = nil
+				if r.earlier || !p.Inside(r.lat, r.lng) {
+					continue
+				}
 				kind = event.Entered
-			case now.Inside && p.Outside(r.lat, r.lng):
-				kind = event.Exited
+			case p.Outside(r.lat, r.lng):
+				if outFirst == nil {
+					outFirst = r
+					continue
+				}
+				if r.earlier {
+					continue
+				}
+				kind, at = event.Exited, outFirst.e
+				outFirst = nil
 			default:
+				outFirst = nil
 				continue
 			}
-			e, err := event.New(userID, Source, r.e.Device, kind, r.e.OccurredAt,
-				later(received, r.e.OccurredAt), named(p.Name), key(kind, p.ID, r.e.OccurredAt))
+			e, err := event.New(userID, Source, r.e.Device, kind, at.OccurredAt,
+				later(received, at.OccurredAt), named(p.Name), key(kind, p.ID, at.OccurredAt))
 			if err != nil {
 				// Unreachable for a fix that was itself stored, and not
 				// worth the other places' crossings if it ever is.
 				continue
 			}
 			out = append(out, e)
-			now = Standing{Inside: kind == event.Entered, Since: r.e.OccurredAt}
+			now = Standing{Inside: kind == event.Entered, Since: at.OccurredAt}
 		}
 	}
 	return out
 }
+
+// Before : How many fixes before a batch are read, for the first of two in a row out past a place's edge.
+const Before = 2
 
 // Cross : Works out and writes the crossings a batch of new fixes
 // makes into and out of the places somebody keeps, and returns those
@@ -176,7 +212,7 @@ func Cross(ctx context.Context, events Events, userID string, kept []Place,
 		}
 		standing[p.ID] = s
 	}
-	crossed := Crossed(userID, kept, standing, fixes, received)
+	crossed := Crossed(userID, kept, standing, fixes, received, earlier(ctx, events, userID, fixes)...)
 	if len(crossed) == 0 {
 		return nil, nil
 	}
@@ -225,4 +261,28 @@ func named(name string) json.RawMessage {
 		return json.RawMessage(`{"value":""}`)
 	}
 	return json.RawMessage(bytes.TrimSpace(buf.Bytes()))
+}
+
+// earlier : The fixes just before a batch's first, newest last; none when
+// they cannot be read, which only makes leaving wait for one more fix.
+func earlier(ctx context.Context, events Events, userID string, fixes []*event.Event) []*event.Event {
+	var first time.Time
+	for _, e := range fixes {
+		if e != nil && e.Kind == event.Fixed && (first.IsZero() || e.OccurredAt.Before(first)) {
+			first = e.OccurredAt
+		}
+	}
+	if first.IsZero() {
+		return nil
+	}
+	got, err := events.Recent(ctx, userID, event.Query{Kind: event.Fixed, Until: first.Add(-time.Millisecond), Limit: Before})
+	if err != nil {
+		return nil
+	}
+	out := make([]*event.Event, 0, len(got))
+	for i := len(got) - 1; i >= 0; i-- {
+		e := got[i]
+		out = append(out, &e)
+	}
+	return out
 }

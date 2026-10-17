@@ -20227,3 +20227,13 @@ did. Only the prompt stood between an unprompted reaction and answering
 Claude Code's questions for them. `terminalTools` now leaves out every
 `type_*` tool, so a reaction may list and read terminals and say what it
 found, and the prompt says it cannot type; the owner, told, does the rest.
+
+**Leaving takes two fixes** (owner, 17 October 2026: *"I literally was in
+home .. and in home till now .. but it showed moving"*). On the night of
+16 October the phone twice reported the same point, 235 m east of home --
+its cached network reading -- between fixes at home, and each wrote Home
+left and entered again. Leaving a place now takes two fixes in a row out
+past its edge, timed at the first; the first may be the last fix of an
+earlier batch (`Before`, read back from the store). A lone stray leaves
+nothing; a real leaving is still seen within a minute or two, as the
+phone reports every 20 to 100 s once it moves. Entering still takes one.

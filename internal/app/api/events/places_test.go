@@ -96,7 +96,12 @@ func TestFixesCrossThePlacesKept(t *testing.T) {
 		t.Fatalf("a fix within the margin crossed: %v", got)
 	}
 
-	leaving := `{"source":"tasker","device":"pixel","events":[` + fixAt(home, "f4", 15, 260) + `]}`
+	// One fix out leaves nothing yet; the next, in a batch of its own, does -- the first read back from the store.
+	post(t, e, `{"source":"tasker","device":"pixel","events":[`+fixAt(home, "f4", 15, 260)+`]}`)
+	if got := crossings(store, e.User.ID); len(got) != 1 {
+		t.Fatalf("one fix out left: %v", got)
+	}
+	leaving := `{"source":"tasker","device":"pixel","events":[` + fixAt(home, "f5", 14, 400) + `]}`
 	post(t, e, leaving)
 	post(t, e, leaving)
 	got := crossings(store, e.User.ID)
