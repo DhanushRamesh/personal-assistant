@@ -20642,3 +20642,46 @@ Twenty-five calls through it during this run, loopback only.
 
 It is worth more than the spike it was written for. Anything that
 speaks OpenAI can now be measured against this gateway.
+
+### Framing measured on the real store, and not adopted
+
+The twelve-memory set said framing wins. The twenty-two real ones say
+it does not.
+
+One question per memory, written by a model and told deliberately not
+to reuse the memory's distinctive words -- a question that echoes the
+memory measures nothing. Then the same memories reframed, category,
+place and time put back in, and the same questions asked again.
+
+	                        first      in the top three
+	as written today        16/22      20/22
+	framed when written     15/22      20/22
+
+	framing fixed 1, broke 2
+
+**It dilutes a short memory.** The median memory went from 84
+characters to 183. The two it broke are the two shortest and most
+specific:
+
+	was   Location: Lives in Chennai.
+	now   Location: This person lives in Chennai, India, which is a
+	      city in the state of Tamil Nadu ...
+
+Asked *"Where do I stay?"*, the short one wins. India and Tamil Nadu
+are true, and they pull the vector away from the question. A memory's
+embedding is an average, and padding a tight sentence with context
+averages the point out of it.
+
+So `memory_remember` is unchanged. The real memories are already
+written tightly, which is the tool description already working.
+
+**What it fixed is worth keeping in mind.** The one it won --
+*"Where is Alekhya right now?"* -- was won by a **date**, not by
+category or place. That is the half Zep's temporal graph is about, and
+the half that asking "what makes this expire" has been circling. A
+memory knowing when it was true is a different feature from a memory
+being easier to find, and it is the one still worth building.
+
+**And the method is the finding.** A twelve-case benchmark said do it;
+the real store said do not. Both were measured the same way, and only
+one of them is his.
