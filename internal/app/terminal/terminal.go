@@ -440,12 +440,15 @@ func Asking(t event.Terminal, at, now time.Time, where *time.Location, usually s
 
 	// Owner, 17 October 2026: *"when the terminal process is done it
 	// should announce and ask a follow-up proactive question"*. The
-	// question is answered aloud with no wake word, and a bare yes lets
-	// the next command run without its card -- so it offers one thing,
-	// plainly enough that the yes cannot mean two.
+	// question is answered aloud with no wake word. Only what the
+	// assistant can do is offered: every terminal may be read, and only
+	// Claude Code typed into (owner, same day: *"it can read all
+	// terminals but can write only to Claude terminal"*) -- so never a
+	// shell command to run.
 	offering := prompt.Text(
-		"When a command has finished and there is an obvious next step you could take for them -- the tests after a build, the build again after a fix, explaining an error -- end with one short question offering it.",
-		"They answer aloud, without your name, and a yes lets you do exactly that and nothing else, so offer one thing only and say it so it cannot be read two ways: a short command as it is typed (npm test), a longer one by what it does.",
+		"When a command has finished and there is an obvious next step you could take for them, end with one short question offering it.",
+		"Offer only what you can do: explain an error or what the output means, look closer at a terminal, or -- where Claude Code is open in one -- ask Claude Code to do it. You read every terminal but type only into Claude Code: never offer to run a command in a shell; a command they should run, say plainly for them to run.",
+		"They answer aloud, without your name, so offer one thing only, said so it cannot be read two ways.",
 		"No question when no step follows naturally, and never one offering to answer a program's question for them.",
 	)
 

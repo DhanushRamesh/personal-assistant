@@ -20280,6 +20280,15 @@ runs. "platform ai request" (context, tools, messages, in bytes) and
 composing it took) are now info lines, so what to cut next is read from
 real turns rather than estimated.
 
+**It types only into Claude Code** (owner, 17 October 2026: *"it can
+read all terminals but can write only to Claude terminal .. remove
+whatever you did and just keep only this"*). This replaces "ask before
+running" and the spoken yes that let one command run. The desktop app's
+`type_into_terminal` refuses any terminal not running Claude Code; the
+terminal reaction's follow-up question offers only what the assistant
+can do -- explain, look closer, or ask Claude Code -- and never a shell
+command to run.
+
 **Leaving takes two fixes** (owner, 17 October 2026: *"I literally was in
 home .. and in home till now .. but it showed moving"*). On the night of
 16 October the phone twice reported the same point, 235 m east of home --
