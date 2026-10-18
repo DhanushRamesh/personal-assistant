@@ -66,10 +66,33 @@ const (
 	// the embedder ever sees them. Seven of the eighty-eight tools are
 	// past that line.
 	questioned
+	// leading : The first sentence of what it does, and the questions
+	// it is for.
+	//
+	// calendar_events says what it does in one line and then spends
+	// three hundred characters on which calendars it reads and which it
+	// may change -- machinery the model needs and a ranking does not.
+	// Asked "do I have anything tomorrow" it came 25th while
+	// reminder_list, which is 108 characters and nearly all example,
+	// came 1st.
+	leading
+	// onlyAsked : The questions it is for, and nothing else.
+	onlyAsked
+	// withArguments : What it does, the questions it is for, and the
+	// names of what it takes.
+	//
+	// The reference implementations put the parameter schema in the
+	// text they rank on, and this does not. Whether that helps here is
+	// a question about these tools rather than about the method: a
+	// parameter called "days" or "query" may be the word that tells a
+	// diary from a search, or may be noise that every tool shares.
+	withArguments
 )
 
 func (w written) String() string {
-	return [...]string{"purpose + usewhen + avoid", "purpose only", "purpose + usewhen", "purpose + the questions it is for"}[w]
+	return [...]string{"purpose + usewhen + avoid", "purpose only", "purpose + usewhen",
+		"purpose + the questions it is for", "first line + the questions", "the questions alone",
+		"purpose + questions + argument names"}[w]
 }
 
 // reachable : Every tool that reaches a real request, server and laptop
@@ -85,12 +108,29 @@ func reachable(t *testing.T, how written) (names []string, text []string) {
 			say = x.Description()
 		case reaching:
 			say = strings.TrimSpace(x.Purpose + " " + x.UseWhen)
-		case questioned:
+		case questioned, leading, onlyAsked, withArguments:
 			qs := make([]string, 0, len(x.Examples))
 			for _, e := range x.Examples {
 				qs = append(qs, e.Ask)
 			}
-			say = strings.TrimSpace(x.Purpose + " " + strings.Join(qs, ". "))
+			head := strings.TrimSpace(x.Purpose)
+			switch how {
+			case leading:
+				if cut := strings.Index(head, ". "); cut > 0 {
+					head = head[:cut+1]
+				}
+			case onlyAsked:
+				head = ""
+			}
+			say = strings.TrimSpace(head + " " + strings.Join(qs, ". "))
+			if how == withArguments && len(x.Params.Properties) > 0 {
+				args := make([]string, 0, len(x.Params.Properties))
+				for name, p := range x.Params.Properties {
+					args = append(args, name+" "+first(p.Description, 60))
+				}
+				sort.Strings(args)
+				say = strings.TrimSpace(say + " Takes: " + strings.Join(args, ", "))
+			}
 		}
 		names = append(names, x.Name)
 		text = append(text, strings.TrimSpace(x.Name+". "+say))
@@ -135,7 +175,7 @@ func wanted(c eval) map[string]bool {
 // request today, and which gets the right tool in front of the model on
 // every case where the answer is one of its twenty-five.
 func TestWhetherTheRightToolIsNearTheQuestion(t *testing.T) {
-	for _, how := range []written{whole, saying, reaching, questioned} {
+	for _, how := range []written{questioned, withArguments} {
 		rank(t, how)
 	}
 }
@@ -246,7 +286,7 @@ func rank(t *testing.T, how written) {
 	if len(took) > 0 {
 		fmt.Printf("\n  embedding one question: median %v\n", took[len(took)/2].Round(time.Millisecond))
 	}
-	if len(misses) > 0 && how == questioned {
+	if len(misses) > 0 && how == leading {
 		fmt.Printf("\n  outside the nearest %d (%d):\n", ns[len(ns)-1], len(misses))
 		for _, m := range misses {
 			fmt.Printf("    %s\n", m)

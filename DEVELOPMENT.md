@@ -20912,3 +20912,38 @@ said is what a bare answer is answering.
 logged after `http.Do` returns, not when it is sent, so the gap in the
 log is the gateway's: tools chosen at 20:22:27.931, first byte back at
 20:23:55. The picker spent 29 ms.
+
+**A tool is ranked on its arguments as well** (18 October 2026, from
+guidance the owner brought on how tool retrieval is done elsewhere:
+convert name, description *and parameter specifications* into the text
+you search).
+
+We were not using the parameters. Measured over the same 91 questions:
+
+| nearest N | without the arguments | with them |
+| --- | --- | --- |
+| 5 | 82% | **88%** |
+| 10 | 92% | **95%** |
+| 15 | 96% | **97%** |
+| 20 | **98%** | 97% |
+
+One point worse at twenty and six better at five, which is the right
+trade: twenty is not where a request gets smaller, ten is.
+
+The owner's own question is the example. Asked *"do I have anything
+tomorrow"*, `calendar_events` came **26th of 88** without the arguments
+and **15th** with -- inside what gets sent. *"what have I got on
+tomorrow"* went 29th to 18th. A tool that takes `from`, `to` and `days`
+looks like a question about tomorrow; a sentence about reading
+calendars does not.
+
+Each argument contributes its name and sixty characters of what it is
+for, sorted -- a map's order is not stable, and a vector that moves
+between restarts can be neither cached nor compared.
+
+**What this does not fix.** The scores are still crammed together:
+0.093 between the best tool and the twentieth, on a scale where
+everything sits near 0.5. `web_search` and `reminder_list` still beat
+the diary for a question about the diary. That is the embedding model,
+not the text, and `bge-m3` is downloading to find out whether a bigger
+one separates them.

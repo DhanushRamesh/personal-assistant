@@ -233,3 +233,28 @@ func TestWhatIsSearchedWithCarriesTheTurnBefore(t *testing.T) {
 		t.Errorf("with nothing before = %q", got)
 	}
 }
+
+// TestWhatAToolIsRankedOnIncludesItsArguments : Measured over the tool
+// suite's 91 questions: with the argument names the right tool is in
+// the nearest five on 88% rather than 82%, and the nearest ten on 95%
+// rather than 92%.
+func TestWhatAToolIsRankedOnIncludesItsArguments(t *testing.T) {
+	got := nearest.Text(tool.Tool{
+		Name: "calendar_events", Purpose: "Read events.",
+		Examples: []tool.Example{{Ask: "what have I got on"}},
+		Params: tool.Schema{Properties: map[string]tool.Property{
+			"days": {Description: "How many days ahead to read."},
+			"from": {Description: "The first day, as a date."},
+		}},
+	})
+	for _, want := range []string{"days", "from", "what have I got on", "Read events"} {
+		if !strings.Contains(got, want) {
+			t.Errorf("%q is missing from %q", want, got)
+		}
+	}
+	// Sorted, since a map's order is not stable and a vector that
+	// moves between restarts cannot be cached or compared.
+	if strings.Index(got, "days") > strings.Index(got, "from") {
+		t.Errorf("the arguments are not in a fixed order: %q", got)
+	}
+}
