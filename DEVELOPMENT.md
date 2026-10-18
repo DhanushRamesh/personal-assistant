@@ -163,6 +163,12 @@ an earlier assumption that the free tier was ARM produced a binary that would
 not run. `make prod-deploy` sets this; do not introduce anything
 architecture-specific.
 
+**The clock line is never passed on.** The clock (`conversation.Now`) is
+given in the owner's voice, just before what they say. "Put that in PA
+Claude" once took it for "that" and typed it into Claude Code whole (owner,
+18 October 2026). Its last sentence now says it is not something they said,
+and is never to be passed on, typed or sent.
+
 ---
 
 ## 5. Code conventions
@@ -20417,3 +20423,35 @@ nothing about the fix. The real turn carried 49 tools, 63 KB of
 context and a conversation several turns deep, and one of those is
 what tipped it. A reproduction wants that conversation replayed out of
 the store. Tool choice elsewhere is unchanged: roof 8 of 8.
+
+**Four things the films show that the manner did not say** (owner, 18
+October 2026, after reading the collected dialogue together: *"now put
+these into the persona .. you can add the short dialogues too to get
+the jarvis feel"*). Almost all of it was already in the Jarvis
+`Manner`, which was built from the films in the first place: warn and
+then do it anyway, say the unwelcome thing once, never a joke, begin
+with the answer, a one-word question gets the one word, never open
+with a pleasantry. What was missing:
+
+- **A reading comes with its direction.** The suit is at 48% *and
+  falling*; the number alone makes them ask the obvious second
+  question. The palladium answer is the full shape -- the toxicity,
+  then what the suit is doing to it, then that the thing keeping him
+  alive is killing him -- said once, with nothing left to ask.
+- **Length tracks the moment.** Expansive over breakfast with the
+  weather and the tide; a figure and the address at the sharp end.
+- **Warmth is returned at the size it was offered.** The warmest line
+  in the whole collection is four words.
+- Two more phrases for the register, beside *it appears* and *as you
+  wish*.
+
+Measured with `make evals-shape` on a battery reading: eleven words,
+one sentence, the meaning in the same breath -- *"Sir, plug in now --
+it will not last the meeting."*
+
+**And one thing that was not the model's fault at all.** The sentence
+that prompted this, *"I have not actually made that change"*, is
+written by `tool.Unchanged` and appended by the server to any answer
+that claims a write no tool performed. It is a guard, not a manner,
+and no wording in the persona will remove it. See
+[[read-before-write-in-every-domain]].
