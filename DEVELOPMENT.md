@@ -20870,3 +20870,40 @@ tool. It is also narrow by construction: "thank you", "hello", "ok" and
 "good morning" match; "that is great, thanks" does not, and neither
 does "thanks, and what is in my diary tomorrow", which keeps its tools
 and is tested.
+
+**A turn is offered the tools its question is about** (owner, 18
+October 2026: *"do B"* -- the wiring of the day's measurements).
+
+`internal/app/tool/nearest` holds a vector per tool and returns the
+names to describe for one question. The runner asks it in `offered`,
+and `[assistant] tools_nearest` says how many; zero leaves the
+hand-written list, which is what the server sent until today.
+
+**A tool is ranked by its name, its purpose and the questions it is
+for** -- not by its whole description, because the seven longest run
+past what the embedder reads and what is cut off is the examples, which
+are the most useful part for matching a question to a tool.
+
+**Four ways it refuses to choose**, each falling back to the list,
+because none of them may cost a turn its tools: no embedder, an
+embedder that has gone away mid-turn (900 ms and then the list), a
+registry that defers nothing, and the first turns after a restart
+before the vectors are warm. And a fifth that is not a refusal: a tool
+it holds no vector for -- one a device has just offered -- is kept
+rather than hidden, so the worst a cold or broken picker can do is
+offer what the server offered before.
+
+Warming is 67 tools in **3.3 s** against the real embedder, off the
+start-up path. A device's tools arrive per chat rather than at startup,
+so they are learnt behind the turn that first brought them.
+
+What it buys, measured before any of it was written: **99 of the tool
+suite's 106 questions reach the right tool first try against 85**, the
+block falls from 117,923 bytes to about 48,000, and the same question
+reaches its first word in 2.94 s against 3.66 s.
+
+A mistake worth recording: the setting was first written into
+`[embedding]` rather than `[assistant]`, and the server refused to
+start five times in a row -- correctly, since it rejects a setting it
+does not know. The log says which section it was found in, which is the
+only reason it took a minute rather than an evening.

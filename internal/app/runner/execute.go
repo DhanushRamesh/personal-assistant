@@ -265,7 +265,7 @@ func (r *Runner) consume(runCtx, ctx context.Context, t *chat.Chat, systemPrompt
 		// rounds must answer from what it gathered, and saying what it
 		// managed is better than being cut off mid-chain with nothing to
 		// show for the work that already ran.
-		tools := r.offered(t, revealed)
+		tools := r.offered(ctx, t, revealed)
 		// And nothing at all for a hello. persona.InPassing has already
 		// decided this is thanks, a hold, an acknowledgement or a
 		// greeting -- it is what stops the answer being sent back to
