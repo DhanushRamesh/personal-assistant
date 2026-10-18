@@ -97,6 +97,22 @@ type chatRequest struct {
 	// to seven seconds, and reasoning nobody reads would be the whole
 	// of it.
 	Thinking string `json:"reasoning_effort,omitempty"`
+	// Choice : Whether the model may answer in prose or must call a
+	// tool, as tool_choice. Empty leaves it free, and empty is the
+	// only thing this gateway accepts.
+	//
+	// Asked for on 18 October 2026, because five times that day the
+	// round after a send-back was told to use a tool, had the right
+	// one in front of it, and answered from memory anyway. Every form
+	// is refused: a bare string with "Invalid JSON format in request
+	// body", and every object shape -- Anthropic's {"type":"any"},
+	// OpenAI's {"type":"function",…} -- with "Unexpected key found in
+	// request body".
+	//
+	// Kept, with the evidence, so the next person does not spend an
+	// evening finding it out again. TestWhetherTheGatewayCanBeToldToUseATool
+	// re-asks in one command if the gateway ever gains it.
+	Choice json.RawMessage `json:"tool_choice,omitempty"`
 }
 
 // chatResponse : The reply to a chat call. Content is either a plain string or
@@ -457,6 +473,7 @@ func (p *Environment) attemptOnce(ctx context.Context, ask environment.Request, 
 		Tools:    tools,
 		Stream:   Streaming,
 		Thinking: thinking(p.cfg.Thinking, ask.Purpose),
+		Choice:   json.RawMessage(ask.MustUseTool),
 	})
 	if err != nil {
 		return reply{}, 0, fmt.Errorf("platformai: building chat request: %w", err)

@@ -223,6 +223,11 @@ type Request struct {
 	// Purpose : Why this is being asked. The zero value is the person's own
 	// question.
 	Purpose Purpose
+	// MustUseTool : Whether this round may answer in prose, as the
+	// provider's own word for it. Empty leaves it free.
+	//
+	// For the round after an answer was sent back to look.
+	MustUseTool string
 	// SystemPrompt : How the assistant is told to answer. Empty leaves it to
 	// whatever the environment is configured with.
 	//

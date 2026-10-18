@@ -21182,3 +21182,40 @@ The lesson is not that the model broke a rule. Two instructions
 disagreed and the nearer one was obeyed, which is what should happen.
 Every rule written beside a tool is read against the persona, and a new
 parameter is a new chance to contradict it.
+
+**The gateway will not let a round be told it must call a tool** (18
+October 2026, the question asked twice and finally answered).
+
+Five times that day the round after a send-back was told to use a tool,
+had the right one ranked first and offered, and answered from memory
+anyway: the terminal, the marriage question, "look again", and both
+halves of the earbuds exchange. The instruction is advice and the model
+declines it, so the only thing that would make it a rule is
+`tool_choice`.
+
+`make evals-mustcall` asks the gateway directly. Every form is refused:
+
+| sent | answer |
+| --- | --- |
+| nothing | called `calendar_events` |
+| `"auto"`, `"required"` | **Invalid JSON format in request body** |
+| `{"type":"any"}`, `{"type":"auto"}` | **Unexpected key found in request body** |
+| `{"type":"tool","name":…}` | **Unexpected key** |
+| `{"type":"function","function":{…}}` | **Unexpected key** |
+
+So the door is shut. There is no way through this gateway to require a
+tool call, and the field is kept only so that the next person does not
+spend an evening rediscovering it -- `environment.Request.MustUseTool`
+is never set, and `omitempty` keeps it off the wire.
+
+**What that means for this class of fault.** At the model layer, words
+are all there is. The remaining levers are all on our side of the call:
+what is offered (the picker), what has expired (`Lately`), what the
+tool itself does before the model sees it (`events.Moving`,
+`compared`), and what the server refuses to send afterwards
+(`tool.Unchanged`). Those have worked every time this evening. The
+rules written into prompts have failed five times.
+
+That is the thing to remember the next time something is answered
+wrongly: ask what the server can decide, before writing another
+sentence for the model to weigh.
