@@ -14,6 +14,7 @@ import (
 	"os/signal"
 	"personal-assistant/internal/base/records/client"
 	"personal-assistant/internal/base/records/store"
+	"reflect"
 	"runtime/debug"
 	"slices"
 	"strconv"
@@ -70,6 +71,7 @@ import (
 	"personal-assistant/internal/base/thinking/prompt"
 	"personal-assistant/internal/base/thinking/search"
 	"personal-assistant/internal/base/thinking/search/firecrawl"
+	"personal-assistant/internal/base/thinking/search/tavily"
 	"personal-assistant/internal/base/thinking/search/tinyfish"
 	"personal-assistant/internal/base/world/alarm"
 	"personal-assistant/internal/base/world/announce"
@@ -1576,7 +1578,9 @@ func searchingFast(cfg config.Config, logger *slog.Logger) search.Service {
 	// be slower. It is the fallback instead: for TinyFish's thirty
 	// a minute, and for its being down.
 	quick := tinyfish.New(string(cfg.Search.TinyFish), cfg.Search.Quick)
-	spare := firecrawl.New(string(cfg.Search.Firecrawl), cfg.Search.Patient)
+	spare := fallingBack(cfg, logger,
+		tavily.New(string(cfg.Search.Tavily), cfg.Search.Quick),
+		firecrawl.New(string(cfg.Search.Firecrawl), cfg.Search.Patient))
 
 	switch {
 	case quick == nil && spare == nil:
@@ -1593,6 +1597,40 @@ func searchingFast(cfg config.Config, logger *slog.Logger) search.Service {
 		Within: cfg.Search.Quick, Rested: cfg.Search.Rested,
 		Now: cfg.Assistant.Now, Logger: logger,
 	}
+}
+
+// fallingBack : Two services as one, or whichever of them exists.
+//
+// A Pair is itself a Service, so three services are two Pairs: TinyFish
+// first, and behind it Tavily then Firecrawl. Each nil is checked
+// rather than wrapped, because a typed nil inside a Pair satisfies the
+// interface and then fails on every call.
+//
+// Tavily before Firecrawl because Firecrawl's five hundred a month is
+// the scarcer allowance and Tavily's thousand is, at this person's two
+// to four searches a day, effectively uncapped.
+func fallingBack(cfg config.Config, logger *slog.Logger, first, then search.Service) search.Service {
+	switch {
+	case isNil(first) && isNil(then):
+		return nil
+	case isNil(then):
+		return first
+	case isNil(first):
+		return then
+	}
+	return &search.Pair{
+		Quick: first, Spare: then,
+		Within: cfg.Search.Quick, Rested: cfg.Search.Rested,
+		Now: cfg.Assistant.Now, Logger: logger,
+	}
+}
+
+// isNil : Whether a service is really absent.
+//
+// A *tavily.Client that is nil is not an untyped nil, so `s == nil` is
+// false for it and every call would go to a method on a nil receiver.
+func isNil(s search.Service) bool {
+	return s == nil || reflect.ValueOf(s).IsNil()
 }
 
 // comingDiary : The diary as the look-ahead wants it, or nothing when

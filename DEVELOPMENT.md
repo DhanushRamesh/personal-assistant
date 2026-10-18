@@ -20966,3 +20966,48 @@ adding them to every question, which is the fixed list this replaced.
 
 Beside the nearest and not instead of one of them, so asking for ten
 still ranks ten deep.
+
+**Tavily behind web_search** (owner, 18 October 2026, after looking at
+the free search services and the MCP servers that wrap them: *"yes add
+tavily behind web_search."*).
+
+Not an MCP server, and that was the thing worth settling first. MCP is
+a way to call a search, not a way to get one free; it would have added
+a process, a hop and nine tools to a registry we spent the evening
+cutting to thirteen, and brought its own tool description after a day
+spent measuring how much descriptions matter.
+
+**The deciding number was his own usage.** Thirty-three web searches in
+the whole history of this server, two to four on a busy day -- about
+ninety a month against Tavily's thousand free credits. Quota is not a
+constraint for this person and neither is price, so the only questions
+left were quality, speed and where the questions go.
+
+**Three services, two Pairs.** A `search.Pair` is itself a
+`search.Service`, so TinyFish stays in front and behind it sits Tavily
+then Firecrawl. Tavily before Firecrawl because Firecrawl's five
+hundred a month is the scarcer allowance of the two that count.
+
+What Tavily returns is cleaned page text rather than a list of links,
+which is what a model about to answer actually wants. A basic search is
+asked for explicitly: it costs one credit, and their `auto_parameters`
+costs two because it may choose the dearer depth for you.
+
+**Two things their API does differently.** It has no "last N days" --
+`Ask.Days` becomes a `start_date`, because "the last three days" is
+what was asked and "the last week" is not. And `/extract` answers 200
+with everything in `failed_results` when nothing could be fetched, so
+both arrays are read: a reader handed an empty list and no error would
+say the pages were blank rather than that they could not be had.
+
+**432 and 429 are told apart from a fault**, and become
+`search.ErrSpent`, which is what makes the Pair rest a service rather
+than ask it again.
+
+`isNil` is there because a `*tavily.Client` that is nil is not an
+untyped nil: inside a Pair it would satisfy the interface and fail on
+every call.
+
+Off until a key is set. `[search] tavily_key` is in `config.ini`,
+commented. `config.example.ini` has no `[search]` section at all, which
+predates this.

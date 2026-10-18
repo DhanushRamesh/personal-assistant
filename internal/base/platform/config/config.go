@@ -206,6 +206,15 @@ type Search struct {
 	// waiting and when the quick one cannot answer. 2.62s, and no
 	// monthly count at all.
 	TinyFish logging.Secret
+	// Tavily : The one built for answering a model -- cleaned page
+	// text rather than a list of links. A thousand credits a month
+	// free, against thirty-three searches in this server's whole
+	// history, so it is free at this rate by a wide margin; when they
+	// are gone it refuses rather than bills.
+	//
+	// Asked after TinyFish and before Firecrawl: it is the newest and
+	// least measured here, and TinyFish has no allowance to spend.
+	Tavily logging.Secret
 	// Quick : How long the quick one gets before the other is asked
 	// instead. Short: a turn is cut at thirty seconds and a service
 	// that hangs must cost its slice and no more.
@@ -692,6 +701,7 @@ func Load(path string, lookup Lookup) (Config, error) {
 		Search: Search{
 			Firecrawl: logging.Secret(l.str("search", "firecrawl_key", "")),
 			TinyFish:  logging.Secret(l.str("search", "tinyfish_key", "")),
+			Tavily:    logging.Secret(l.str("search", "tavily_key", "")),
 			Quick:     l.duration("search", "quick_timeout", 6*time.Second),
 			Patient:   l.duration("search", "patient_timeout", 30*time.Second),
 			Rested:    l.duration("search", "rested", time.Hour),
