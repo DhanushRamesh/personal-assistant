@@ -49,6 +49,9 @@ type Terminal struct {
 	Text string
 	// Tail : Its last lines of output.
 	Tail string
+	// Shared : Another terminal open on the laptop has the same name, so
+	// the name alone does not say which; the space does.
+	Shared bool
 	// Conversation : Claude Code's own record of the conversation in it,
 	// sent with its asking: what was asked of it, what it did, what it
 	// said. Empty for anything else.
@@ -80,6 +83,7 @@ func TerminalOf(e *Event) (Terminal, bool) {
 		Text     string   `json:"text"`
 		Tail     string   `json:"tail"`
 		Conv     string   `json:"conversation"`
+		Shared   bool     `json:"shared"`
 	}
 	if len(e.Payload) > 0 {
 		if err := json.Unmarshal(e.Payload, &p); err != nil {
@@ -98,6 +102,7 @@ func TerminalOf(e *Event) (Terminal, bool) {
 		Tail:    strings.TrimRight(p.Tail, " \n\t"),
 
 		Conversation: strings.TrimSpace(p.Conv),
+		Shared:       p.Shared,
 	}
 	if p.Seconds != nil {
 		t.Seconds = *p.Seconds

@@ -61,3 +61,11 @@ func TestAShellClosingCleanlyIsOrdinary(t *testing.T) {
 		t.Error("a finished command was taken for a shell closing")
 	}
 }
+
+// The app says when another terminal has the same name.
+func TestATerminalsSharedNameIsRead(t *testing.T) {
+	got, ok := event.TerminalOf(&event.Event{Kind: event.TerminalAsks, Payload: []byte(`{"terminal":"t1","name":"Claude","space":"Defter","shared":true}`)})
+	if !ok || !got.Shared {
+		t.Errorf("read %+v, %v", got, ok)
+	}
+}

@@ -392,6 +392,9 @@ func Asking(t event.Terminal, at, now time.Time, where *time.Location, usually s
 	}
 	add("Terminal", t.Name)
 	add("Space", t.Space)
+	if t.Shared {
+		add("Its name", "another terminal has the same name, so it is not enough on its own")
+	}
 	add("Folder", t.Folder)
 	add("Command", t.Command)
 	if t.Seconds > 0 {
@@ -450,6 +453,12 @@ func Asking(t event.Terminal, at, now time.Time, where *time.Location, usually s
 		)
 	}
 
+	// What they answer goes to the terminal named, so it is named as it
+	// is called, with its space where the name is shared.
+	naming := prompt.Text(
+		"Name the terminal exactly as it is called: " + strconv.Quote(Called(t)) + ".",
+	)
+
 	// Owner, 17 October 2026: *"when the terminal process is done it
 	// should announce and ask a follow-up proactive question"*. The
 	// question is answered aloud with no wake word. Only what the
@@ -500,6 +509,7 @@ func Asking(t event.Terminal, at, now time.Time, where *time.Location, usually s
 		ordinary,
 		looking,
 		offering,
+		naming,
 		noticing.Interrupting,
 		prompt.Text(
 			"Say it as one short spoken sentence in your own manner: what happened and where, by the terminal's or the space's name, then the one thing worth knowing; then the question, if you are offering a step.",
@@ -520,7 +530,7 @@ func Always(t event.Terminal) bool {
 // plainly : What is said when the model said nothing of news that is
 // always said.
 func plainly(t event.Terminal) string {
-	where := cmp.Or(t.Name, "a terminal")
+	where := Called(t)
 	if t.Kind == event.TerminalAsks {
 		return "Claude Code in " + where + " is done and waiting for you."
 	}
@@ -532,6 +542,17 @@ func plainly(t event.Terminal) string {
 		return what + " finished in " + where + ", after " + lasted(t.Seconds) + "."
 	}
 	return what + " finished in " + where + "."
+}
+
+// Called : The terminal as it is to be said: its name, and its space when
+// another terminal shares the name (owner, 18 October 2026: *"what if the
+// same name is for both terminals? .. yes, add the space"*).
+func Called(t event.Terminal) string {
+	name := cmp.Or(t.Name, "a terminal")
+	if t.Shared && t.Space != "" {
+		return name + " in " + t.Space
+	}
+	return name
 }
 
 // happened : The news in words.

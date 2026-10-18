@@ -376,3 +376,22 @@ func TestClaudeCodesRecordIsWeighedWhenItAsks(t *testing.T) {
 		t.Errorf("a record with none sent:\n%s", plain)
 	}
 }
+
+// A terminal whose name another shares is named with its space, in the
+// prompt and in what is said when the model says nothing; one of its own
+// name is named alone.
+func TestASharedNameIsSaidWithItsSpace(t *testing.T) {
+	shared := event.Terminal{Kind: event.TerminalAsks, ID: "t1", Name: "Claude", Space: "Defter", Shared: true}
+	if got := terminal.Called(shared); got != "Claude in Defter" {
+		t.Errorf("called %q", got)
+	}
+	ask := terminal.Asking(shared, time.Time{}, time.Now(), nil, "", nil)
+	if !strings.Contains(ask, `Name the terminal exactly as it is called: "Claude in Defter".`) ||
+		!strings.Contains(ask, "another terminal has the same name") {
+		t.Errorf("the ask does not name it with its space:\n%s", ask)
+	}
+	alone := event.Terminal{Kind: event.TerminalAsks, ID: "t2", Name: "PAC", Space: "Jarvis"}
+	if got := terminal.Called(alone); got != "PAC" {
+		t.Errorf("called %q", got)
+	}
+}

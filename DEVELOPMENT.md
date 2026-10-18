@@ -176,6 +176,14 @@ chat was made once answered, so it showed as taking 0.0 s, though the
 glance took about 3 s. It now starts at the moment the question came in
 (`Glanced`'s `askedAt`), and the time shown is the time it took.
 
+**A terminal whose name another shares is named with its space** (owner,
+18 October 2026: *"what if the same name is for both terminals? .. yes,
+add the space"*). The desktop app marks a terminal's news `shared` when
+another open terminal has the same name. The announcer is then told to name
+it as `Called` gives it, "Claude in Defter", and says the same in its plain
+fallback. The rule to name the terminal exactly as it is called applies to
+every reaction; it had been lost in the revert of the same day.
+
 **Six of the laptop's tools are described on every turn** (owner, 18
 October 2026: *"yes, put them back"*). These are `read_terminal`,
 `type_into_terminal`, `list_terminals`, `list_spaces`, `open_space` and
