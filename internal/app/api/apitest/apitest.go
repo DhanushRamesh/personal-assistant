@@ -135,6 +135,8 @@ type Options struct {
 	Arrivals eventsapi.Arrivals
 	// Terminals : Told of a terminal's news. Nil tells nobody.
 	Terminals eventsapi.Terminals
+	// Noted : Told of the lines written in a space's notes. Nil tells nobody.
+	Noted eventsapi.Noted
 	// Places : The places the person draws. Nil selects an empty store
 	// kept in memory.
 	Places places.Store
@@ -287,6 +289,7 @@ func NewWith(t *testing.T, opts Options) *Env {
 			Now:              opts.Now,
 			Arrivals:         opts.Arrivals,
 			Terminals:        opts.Terminals,
+			Noted:            opts.Noted,
 			Memories:         opts.Memories,
 			Tools:            opts.Tools,
 			Announcements:    opts.Announcements,

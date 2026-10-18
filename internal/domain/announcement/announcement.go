@@ -270,7 +270,8 @@ func (w *Writer) HeardBy(ctx context.Context, userID string, c *client.Client, k
 // Glanced : Notes a "what am I seeing" asked on a client and answered in
 // one quick call, in the conversation that client is talking in, so what
 // is asked next goes on from it. Written as a question and its answer,
-// not as something said unasked: it was asked.
+// not as something said unasked: it was asked -- and as a finished chat,
+// so it is shown with the turns.
 func (w *Writer) Glanced(ctx context.Context, userID string, c *client.Client, asked, said string) {
 	if w == nil || c == nil || w.Clients == nil || w.Conversations == nil {
 		return
@@ -284,8 +285,26 @@ func (w *Writer) Glanced(ctx context.Context, userID string, c *client.Client, a
 		w.warn(ctx, "cannot tell which conversation the glance was in", err)
 		return
 	}
+	// A chat of its own, finished as it is made, so the conversation shows
+	// it as a turn: written as two messages and nothing else, it was in
+	// what the model reads and in no screen (owner, 18 October 2026: *"it
+	// responded well, but why didn't I find it in the conversation?"*).
+	var chatID string
+	if t, err := chat.New(id, chat.ChannelDirect, asked); err == nil {
+		t.ClientID = c.ID
+		if err := t.Start(); err == nil {
+			if err := t.Complete(said); err == nil {
+				if err := w.Clients.Create(ctx, t); err == nil {
+					chatID = t.ID
+				} else {
+					w.warn(ctx, "cannot keep a glance as a chat", err)
+				}
+			}
+		}
+	}
 	at := w.clock()
 	for _, m := range []conversation.Message{conversation.Said(id, asked, at), conversation.Answered(id, said, at)} {
+		m.ChatID = chatID
 		if _, err := w.Conversations.Append(ctx, m); err != nil {
 			w.warn(ctx, "cannot write down a glance", err)
 			return

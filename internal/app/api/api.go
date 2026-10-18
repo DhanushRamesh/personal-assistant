@@ -201,6 +201,9 @@ type Options struct {
 	// Terminals : Told of a terminal's news from the desktop app, to
 	// decide whether to say anything. Optional.
 	Terminals events.Terminals
+	// Noted : Told of the lines written in a space's notes on the desktop
+	// app, to offer for their tasks or calendar. Optional.
+	Noted events.Noted
 
 	// Places : The places the person draws on the client's map, which
 	// their fixes are tested against. Nil keeps none: the listing is
@@ -346,7 +349,7 @@ func New(opts Options) *Server {
 		assist:     assist.New(opts.Logger, opts.Chats, opts.Runner, opts.Events),
 		speech:     speechapi.New(opts.Logger, opts.Cut),
 		events: events.New(opts.Logger, opts.DeviceEvents, opts.Now).
-			Naming(opts.Naming).Arrivals(opts.Arrivals).Terminals(opts.Terminals).
+			Naming(opts.Naming).Arrivals(opts.Arrivals).Terminals(opts.Terminals).Noted(opts.Noted).
 			Places(placeKeeper(opts.Places), placesChanged(opts.Live)),
 		places:        placesapi.New(opts.Logger, opts.Places, placeReader(opts.DeviceEvents), opts.Now),
 		memories:      memories.New(opts.Logger, opts.Memories),

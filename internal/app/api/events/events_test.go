@@ -777,6 +777,41 @@ func TestATerminalsNewsIsHandedOnOnceWithItsClient(t *testing.T) {
 	}
 }
 
+// notedLines : Remembers the lines of notes it was handed.
+type notedLines struct {
+	mu    sync.Mutex
+	kinds []string
+}
+
+func (n *notedLines) Noted(_ context.Context, _, _ string, news []*event.Event) {
+	n.mu.Lock()
+	defer n.mu.Unlock()
+	for _, e := range news {
+		n.kinds = append(n.kinds, e.Kind)
+	}
+}
+
+// A line of notes is handed on to be offered, once, and a terminal's news
+// beside it still goes to the terminals.
+func TestALineOfNotesIsHandedOnOnce(t *testing.T) {
+	heard := &reactedTo{}
+	lines := &notedLines{}
+	e := apitest.NewWith(t, apitest.Options{DeviceEvents: inmemory.New(), Terminals: heard, Noted: lines})
+	body := `{"source":"desktop","device":"laptop","events":[
+		{"kind":"note.added","occurred_at":"2026-10-18T07:00:00Z","payload":{"space":"Home","line":"call Ravi Friday 4pm"},"dedupe_key":"n1"},
+		{"kind":"terminal.asks","occurred_at":"2026-10-18T07:00:01Z","payload":{"terminal":"t1","name":"PAC"},"dedupe_key":"t1:a"}]}`
+
+	post(t, e, body)
+	post(t, e, body)
+
+	if len(lines.kinds) != 1 || lines.kinds[0] != "note.added" {
+		t.Errorf("notes handed on %v", lines.kinds)
+	}
+	if len(heard.kinds) != 1 || heard.kinds[0] != "terminal.asks" {
+		t.Errorf("terminals handed on %v", heard.kinds)
+	}
+}
+
 // slow : A model that does not answer until it is let go.
 type slow struct{ let chan struct{} }
 

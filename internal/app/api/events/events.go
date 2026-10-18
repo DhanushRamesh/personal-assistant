@@ -188,7 +188,9 @@ type Handler struct {
 	crossed func(userID string)
 	// terminals : Told of a terminal's news as it lands. Optional.
 	terminals Terminals
-	now       func() time.Time
+	// noted : Told of the lines written in a space's notes as they land. Optional.
+	noted Noted
+	now   func() time.Time
 }
 
 // Terminals : Told of the terminal news in a batch, stored just now, and
@@ -205,6 +207,17 @@ type Terminals interface {
 // Terminals : Sets who is told of a terminal's news. Without one it is
 // stored like any other event and nothing more.
 func (h *Handler) Terminals(t Terminals) *Handler { h.terminals = t; return h }
+
+// Noted : Told of the lines of notes in a batch, stored just now, and
+// which client sent them, to offer for their tasks or calendar. Must not
+// block, as Terminals must not.
+type Noted interface {
+	Noted(ctx context.Context, userID, clientID string, news []*event.Event)
+}
+
+// Noted : Sets who is told of the lines written in a space's notes.
+// Without one they are stored like any other event and nothing more.
+func (h *Handler) Noted(n Noted) *Handler { h.noted = n; return h }
 
 // Places : The places a person keeps on the server.
 type Places interface {
@@ -656,20 +669,26 @@ func (h *Handler) tell(userID string, taken []*event.Event) {
 // as seen and its news was reacted to the first time; reacting again
 // would say the same build finished twice.
 func (h *Handler) react(ctx context.Context, stored []string, taken []*event.Event) {
-	if h.terminals == nil || len(stored) == 0 {
+	if (h.terminals == nil && h.noted == nil) || len(stored) == 0 {
 		return
 	}
 	fresh := make(map[string]bool, len(stored))
 	for _, k := range stored {
 		fresh[k] = true
 	}
-	var news []*event.Event
+	var news, lines []*event.Event
 	for _, e := range taken {
-		if _, ok := event.TerminalOf(e); ok && fresh[e.DedupeKey] {
+		if !fresh[e.DedupeKey] {
+			continue
+		}
+		if _, ok := event.TerminalOf(e); ok {
 			news = append(news, e)
 		}
+		if _, ok := event.NoteOf(e); ok {
+			lines = append(lines, e)
+		}
 	}
-	if len(news) == 0 {
+	if len(news) == 0 && len(lines) == 0 {
 		return
 	}
 	caller := authn.Of(ctx)
@@ -677,7 +696,12 @@ func (h *Handler) react(ctx context.Context, stored []string, taken []*event.Eve
 	if caller.Client != nil {
 		client = caller.Client.ID
 	}
-	h.terminals.Terminal(ctx, caller.User.ID, client, news)
+	if h.terminals != nil && len(news) > 0 {
+		h.terminals.Terminal(ctx, caller.User.ID, client, news)
+	}
+	if h.noted != nil && len(lines) > 0 {
+		h.noted.Noted(ctx, caller.User.ID, client, lines)
+	}
 }
 
 // settle : Works out which stays have ended, now that new readings have

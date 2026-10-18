@@ -78,6 +78,7 @@ var Labels = map[environment.Feature]string{
 	environment.FeatureNoticingWriter: "Noticing, written",
 	environment.FeatureRuleRemark:     "Rule remark",
 	environment.FeatureTerminal:       "Terminal",
+	environment.FeatureNote:           "Notes",
 	environment.FeatureGlance:         "What am I seeing",
 	environment.FeatureOther:          "Other",
 }

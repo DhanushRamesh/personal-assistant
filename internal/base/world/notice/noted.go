@@ -61,6 +61,10 @@ const Immediate Reason = "immediate"
 // decision to stay quiet about it can be seen.
 const Terminal Reason = "terminal"
 
+// Note : A line written in a space's notes on the laptop, offered for
+// their tasks or their calendar when it is either. From 18 October 2026.
+const Note Reason = "note"
+
 // Noted : One thing the assistant considered saying.
 type Noted struct {
 	// UserID : Whose it was.

@@ -361,4 +361,16 @@ func TestAGlanceIsWrittenAsAQuestionAndItsAnswer(t *testing.T) {
 		said[0].Content != "What am I seeing?" || said[1].Content != "The build failed in Shell." {
 		t.Fatalf("wrote %+v", said)
 	}
+	// And kept as a finished chat both belong to, so the conversation shows it with the turns.
+	if said[0].ChatID == "" || said[1].ChatID != said[0].ChatID {
+		t.Fatalf("the glance belongs to no chat: %q, %q", said[0].ChatID, said[1].ChatID)
+	}
+	turn, err := repo.Get(context.Background(), said[0].ChatID)
+	if err != nil {
+		t.Fatalf("reading its chat: %v", err)
+	}
+	if turn.Status != chat.StatusCompleted || turn.Prompt != "What am I seeing?" || turn.Response != "The build failed in Shell." ||
+		turn.ConversationID != got.ActiveConversationID || turn.ClientID != laptop.ID {
+		t.Errorf("kept as %+v", turn)
+	}
 }

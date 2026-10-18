@@ -163,6 +163,30 @@ an earlier assumption that the free tier was ARM produced a binary that would
 not run. `make prod-deploy` sets this; do not introduce anything
 architecture-specific.
 
+**A glance is kept as a finished chat** (owner, 18 October 2026: *"it
+responded well, but why didn't I find it in the conversation?"*).
+`Writer.Glanced` wrote the question and its answer as two messages with
+no chat. The model read them, but the conversation shows chats and
+announcements, so the screen showed neither. Now it also makes a chat,
+started and completed as it is made, that both messages belong to, and
+the glance is shown with the turns.
+
+**A line written in a space's notes is offered for tasks or the calendar**
+(owner, 18 October 2026: *"the notes I keep in a space can be added to
+tasks, or if it's like an event, added to the calendar"*; *"both, start
+with 1"*). The desktop app sends each new line as `note.added` once the
+writing has settled. `noted.Offerer` asks the fast model, with no tools,
+whether the line is:
+- something at a time, offered for the calendar,
+- a thing to do, offered for Google Tasks,
+- or neither (`NOTHING`), which is left.
+
+The offer is a question, announced to the laptop that wrote the line, and
+recorded as a remark with the reason `note`. A yes is answered by the
+ordinary chat, with `calendar_add` or `task_add`. Plain backlog for the
+project the space is for is left alone, so that not every line becomes an
+announcement.
+
 **The clock line is never passed on.** The clock (`conversation.Now`) is
 given in the owner's voice, just before what they say. "Put that in PA
 Claude" once took it for "that" and typed it into Claude Code whole (owner,
