@@ -157,6 +157,10 @@ evals-wondering: ## Ask the real judge what it would write, keeping nothing (cos
 	@go test ./internal/app/noticing/evals/ -tags evals -count=1 -v -timeout 10m \
 		-run TestWhatHeWouldWriteIfHeCould $(ARGS)
 
+.PHONY: evals-searching
+evals-searching: ## Ask all three searches the same real questions, side by side (costs real searches)
+	@go test ./internal/base/thinking/search/evals/ -tags evals -count=1 -v -timeout 10m $(ARGS)
+
 .PHONY: evals-toolcost
 evals-toolcost: ## What the tool block costs in time, at three sizes (costs API calls; EVAL_SPINS=9)
 	@go test ./internal/app/tool/evals/ -tags evals -count=1 -v -timeout 20m \

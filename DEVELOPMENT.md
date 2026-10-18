@@ -21011,3 +21011,38 @@ every call.
 Off until a key is set. `[search] tavily_key` is in `config.ini`,
 commented. `config.example.ini` has no `[search]` section at all, which
 predates this.
+
+**Tavily is not the best, so it stays the fallback** (owner, having
+added the key: *"use tavily if its the best."* It is not).
+
+`make evals-searching` asks all three the same five real questions --
+the two that were answered from memory this morning, two about now, and
+one about a place -- and prints what each came back with.
+
+| | median | worst | failed |
+| --- | --- | --- | --- |
+| firecrawl | **936 ms** | 1.59 s | 0 |
+| tinyfish | 1.51 s | 3.26 s | 0 |
+| tavily | **2.49 s** | 3.09 s | 0 |
+
+**It is the slowest of the three, by a wide margin**, and its answers
+are not better for it. Asked for tomorrow's weather it returned a raw
+JSON blob -- `{'location': {'name': 'Chennai', 'region': …` -- as its
+first result and a Delhi forecast as its second, where the other two
+gave readable Chennai forecasts. Asked the mall's hours it gave
+"Standard operating hours are d…" where both others surfaced "Mall
+timings: 10:00 AM - 10:00 PM" verbatim.
+
+All three got the chief minister right, which was the question that
+started this.
+
+So nothing is promoted. The order stands: TinyFish first because it is
+quick enough and has no allowance at all; Tavily behind it as a free,
+independent fallback; Firecrawl last because its five hundred a month
+is the scarcest thing in the chain -- though it is, on this showing,
+the fastest of the three, which is worth remembering if the order is
+ever revisited.
+
+Five questions and one run, so the snippet problems are the finding and
+the milliseconds are an impression. The gap is wide enough to act on
+either way.
