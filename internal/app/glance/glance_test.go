@@ -7,6 +7,7 @@ import (
 	"log/slog"
 	"strings"
 	"testing"
+	"time"
 
 	"personal-assistant/internal/app/glance"
 	"personal-assistant/internal/base/records/client"
@@ -15,7 +16,7 @@ import (
 
 type notes struct{ asked, said, client string }
 
-func (n *notes) Glanced(_ context.Context, _ string, c *client.Client, asked, said string) {
+func (n *notes) Glanced(_ context.Context, _ string, c *client.Client, asked, said string, _ time.Time) {
 	n.asked, n.said, n.client = asked, said, c.ID
 }
 

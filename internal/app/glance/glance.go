@@ -38,7 +38,7 @@ var ErrNothingShown = errors.New("glance: the app said nothing of what is on its
 // Notes : Where the exchange is written, in the conversation the client
 // is talking in.
 type Notes interface {
-	Glanced(ctx context.Context, userID string, c *client.Client, asked, said string)
+	Glanced(ctx context.Context, userID string, c *client.Client, asked, said string, askedAt time.Time)
 }
 
 // Glancer : Answers "what am I seeing" in one call of the model.
@@ -85,7 +85,7 @@ func (g *Glancer) Look(ctx context.Context, userID string, c *client.Client, que
 	g.Logger.InfoContext(ctx, "said what they are looking at",
 		slog.Duration("took", time.Since(started)), slog.Int("shown", len(where)))
 	if g.Notes != nil {
-		g.Notes.Glanced(context.WithoutCancel(ctx), userID, c, question, said)
+		g.Notes.Glanced(context.WithoutCancel(ctx), userID, c, question, said, started)
 	}
 	return said, nil
 }

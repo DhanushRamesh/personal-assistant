@@ -171,6 +171,11 @@ announcements, so the screen showed neither. Now it also makes a chat,
 started and completed as it is made, that both messages belong to, and
 the glance is shown with the turns.
 
+The same day: *"how is it so fast, is it not reaching the server?"*. The
+chat was made once answered, so it showed as taking 0.0 s, though the
+glance took about 3 s. It now starts at the moment the question came in
+(`Glanced`'s `askedAt`), and the time shown is the time it took.
+
 **A line written in a space's notes is offered for tasks or the calendar**
 (owner, 18 October 2026: *"the notes I keep in a space can be added to
 tasks, or if it's like an event, added to the calendar"*; *"both, start

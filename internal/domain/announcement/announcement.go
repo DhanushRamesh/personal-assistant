@@ -272,7 +272,7 @@ func (w *Writer) HeardBy(ctx context.Context, userID string, c *client.Client, k
 // is asked next goes on from it. Written as a question and its answer,
 // not as something said unasked: it was asked -- and as a finished chat,
 // so it is shown with the turns.
-func (w *Writer) Glanced(ctx context.Context, userID string, c *client.Client, asked, said string) {
+func (w *Writer) Glanced(ctx context.Context, userID string, c *client.Client, asked, said string, askedAt time.Time) {
 	if w == nil || c == nil || w.Clients == nil || w.Conversations == nil {
 		return
 	}
@@ -292,7 +292,15 @@ func (w *Writer) Glanced(ctx context.Context, userID string, c *client.Client, a
 	var chatID string
 	if t, err := chat.New(id, chat.ChannelDirect, asked); err == nil {
 		t.ClientID = c.ID
+		// From when it was asked, so the time it took shows: made once answered, it showed 0.0 s (owner, 18 October 2026:
+		// *"how is it so fast, is it not reaching the server?"*).
+		if !askedAt.IsZero() {
+			t.CreatedAt = askedAt.UTC().Truncate(chat.StoredPrecision)
+			t.UpdatedAt = t.CreatedAt
+		}
 		if err := t.Start(); err == nil {
+			started := t.CreatedAt
+			t.StartedAt = &started
 			if err := t.Complete(said); err == nil {
 				if err := w.Clients.Create(ctx, t); err == nil {
 					chatID = t.ID

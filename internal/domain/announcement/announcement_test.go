@@ -349,8 +349,9 @@ func TestAGlanceIsWrittenAsAQuestionAndItsAnswer(t *testing.T) {
 	w, repo, user := writer(t)
 	laptop := registerClient(t, repo, user.ID, "laptop", chat.ChannelDirect)
 
-	w.Glanced(context.Background(), user.ID, laptop, "What am I seeing?", "The build failed in Shell.")
-	w.Glanced(context.Background(), user.ID, laptop, " ", "Nothing asked is nothing written.")
+	asked := time.Now().Add(-3 * time.Second)
+	w.Glanced(context.Background(), user.ID, laptop, "What am I seeing?", "The build failed in Shell.", asked)
+	w.Glanced(context.Background(), user.ID, laptop, " ", "Nothing asked is nothing written.", asked)
 
 	got := reread(t, repo, user.ID, laptop.ID)
 	said, err := repo.All(context.Background(), got.ActiveConversationID)
@@ -372,5 +373,9 @@ func TestAGlanceIsWrittenAsAQuestionAndItsAnswer(t *testing.T) {
 	if turn.Status != chat.StatusCompleted || turn.Prompt != "What am I seeing?" || turn.Response != "The build failed in Shell." ||
 		turn.ConversationID != got.ActiveConversationID || turn.ClientID != laptop.ID {
 		t.Errorf("kept as %+v", turn)
+	}
+	// From when it was asked to when it was answered: it took its three seconds, not none.
+	if turn.FinishedAt == nil || turn.FinishedAt.Sub(turn.CreatedAt) < 2*time.Second {
+		t.Errorf("asked at %v and answered at %v", turn.CreatedAt, turn.FinishedAt)
 	}
 }
