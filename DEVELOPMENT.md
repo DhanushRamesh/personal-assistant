@@ -20873,3 +20873,42 @@ the bytes.
 So the order is the reverse of what it looked like: the picker is not
 waiting on the laptop's tools, the laptop's tools are waiting on the
 picker.
+
+**One engine, two stores** (owner, 18 October 2026, asked which part of
+the embedding should be separate for client and server: *"separate
+stores, one engine"*).
+
+The picker is back, with the two things the evening taught, and off by
+default.
+
+**Two stores.** The server's own tools are fixed at a build and
+embedded once at startup. A device's come and go with the laptop,
+arrive per chat, and change whenever the client's own source does.
+Mixed into one map a laptop that is away leaves its tools ranked
+against questions it cannot answer, and nothing can be cleared without
+clearing the lot. `Forget(Device)` drops one side; what it no longer
+holds is kept rather than hidden, as everything unranked is.
+
+**What is searched with is the question and the line before it.** Owner,
+on "say Deepika's birthday" / "are you sure, sir?" / "yes": *"this yes
+separately won't have meaning, then how will embedding give the correct
+tool?"* He is right, and measured against the real embedder:
+
+| searched with | calendar_events lands at |
+| --- | --- |
+| the question itself | #1 |
+| a bare "yes", alone | **#75 of 88** |
+| "yes" with what was just said | #4 |
+| "yes" with both turns | #2 |
+
+Alone it finds `place_near` and `call_offer`. The fix costs nothing --
+the same one call over a longer string -- and the line before is
+trimmed to 300 characters so a long answer cannot drown the question.
+It is the assistant's own last words and not the person's: what the
+person said before is usually another subject, while what the assistant
+said is what a bare answer is answering.
+
+**And the 94-second turn was not this.** `"platform ai request"` is
+logged after `http.Do` returns, not when it is sent, so the gap in the
+log is the gateway's: tools chosen at 20:22:27.931, first byte back at
+20:23:55. The picker spent 29 ms.

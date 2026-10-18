@@ -210,6 +210,14 @@ func (r *Runner) consume(runCtx, ctx context.Context, t *chat.Chat, systemPrompt
 	// true for about forty seconds.
 	revealed := r.alreadyDescribed(window.Messages)
 
+	// What was said just before, which is searched with alongside the
+	// question when the tools are chosen by meaning. Half of what a
+	// person says carries no subject of its own -- a bare "yes", "the
+	// other one" -- and a vector of a word that means nothing finds
+	// nothing: measured 18 October 2026, "yes" alone put the diary
+	// 75th of 88 tools and 4th with the line before it.
+	said := lastSaid(window.Messages)
+
 	// What the person's own devices offer, taken as the chat begins and
 	// described in full.
 	//
@@ -277,7 +285,7 @@ func (r *Runner) consume(runCtx, ctx context.Context, t *chat.Chat, systemPrompt
 		// rounds must answer from what it gathered, and saying what it
 		// managed is better than being cut off mid-chain with nothing to
 		// show for the work that already ran.
-		tools := r.offered(t, revealed)
+		tools := r.offered(ctx, t, revealed, said)
 		if worked >= MaxToolHops-1 {
 			if len(tools) > 0 {
 				r.logger.WarnContext(ctx, "the tool chain ran long, so the last round is asked without tools",
@@ -1413,4 +1421,19 @@ func laptopConnected(tools []string) string {
 		"The laptop changes all the time -- an app closed, a space switched -- so look again with these tools " +
 		"each time, never answering from what an earlier turn found; and to open something, call the tool that " +
 		"opens it rather than deciding first that it is open."
+}
+
+// lastSaid : The assistant's own last words in this window, or empty.
+//
+// Its own and not theirs: what the person said before is usually
+// another subject, while what the assistant said is what a bare answer
+// is answering.
+func lastSaid(messages []conversation.Message) string {
+	for i := len(messages) - 1; i >= 0; i-- {
+		m := messages[i]
+		if m.Role == conversation.Assistant && strings.TrimSpace(m.Content) != "" {
+			return m.Content
+		}
+	}
+	return ""
 }

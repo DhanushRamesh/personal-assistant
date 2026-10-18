@@ -143,6 +143,18 @@ type Assistant struct {
 	// is the assistant saying something, and an alarm is a noise
 	// the phone makes when the assistant is not running.
 	Alarms bool
+	// ToolsNearest : How many tools a question is shown in full,
+	// chosen by what the question means.
+	//
+	// Zero leaves the hand-written list of twenty-five, which is what
+	// the server sent until 18 October 2026. Twenty reached the right
+	// tool first try on 99 of the tool suite's 106 questions, against
+	// 85 for the list and 102 for describing all eighty-eight -- and
+	// twenty rather than fifty is about 0.71s off every model call.
+	//
+	// Needs an embedding server. Without one, or before the vectors
+	// are warm, every turn falls back to the list.
+	ToolsNearest int
 
 	// Persona : The manner it starts in, as a persona identifier. The
 	// setting can be changed while the server runs and returns here when it
@@ -631,9 +643,11 @@ func Load(path string, lookup Lookup) (Config, error) {
 			Name:     l.str("assistant", "name", ""),
 			Greeting: l.str("assistant", "greeting", "plain"),
 			Alarms:   l.boolean("assistant", "alarms", true),
-			Persona:  l.str("assistant", "persona", ""),
-			Timezone: l.str("assistant", "timezone", ""),
-			Location: l.location("assistant", "timezone"),
+
+			ToolsNearest: l.integer("assistant", "tools_nearest", 0),
+			Persona:      l.str("assistant", "persona", ""),
+			Timezone:     l.str("assistant", "timezone", ""),
+			Location:     l.location("assistant", "timezone"),
 		},
 		HomeAssistant: HomeAssistant{
 			URL:             l.str("homeassistant", "url", ""),

@@ -49,6 +49,7 @@ import (
 	mailtool "personal-assistant/internal/app/tool/mail"
 	mapstool "personal-assistant/internal/app/tool/maps"
 	"personal-assistant/internal/app/tool/memories"
+	"personal-assistant/internal/app/tool/nearest"
 	placestool "personal-assistant/internal/app/tool/places"
 	"personal-assistant/internal/app/tool/reminders"
 	"personal-assistant/internal/app/tool/rules"
@@ -564,6 +565,13 @@ func run() error {
 	// to that person's chats while it stays connected.
 	devices := away.NewSet(logger.Logger)
 
+	// Which tools a question is shown in full, chosen by what it means
+	// rather than by a list written in advance. Nil where there is no
+	// embedder or the setting is off, and a nil picker leaves every
+	// turn with the list, which is what the server sent until 18
+	// October 2026.
+	picking := picker(cfg, registry, logger.Logger)
+
 	chatRunner, err := runner.New(runner.Options{
 		Repository:    chats,
 		Messages:      chats,
@@ -575,6 +583,8 @@ func run() error {
 		Changes:       liveHub,
 		HistoryLimits: historyLimits(cfg, logger.Logger),
 		AssistantName: cfg.Assistant.Name,
+		Picker:        picking,
+		ToolsNearest:  cfg.Assistant.ToolsNearest,
 		Persona:       manner,
 		Announcer:     voices,
 		Cut:           cutOff,
@@ -1777,6 +1787,43 @@ func aside(cfg config.Config, logger *slog.Logger) runner.Aside {
 
 	logger.Info("saying what is being done", slog.String("through", said.Describe()))
 	return said
+}
+
+// picker : What chooses a turn's tools, warmed in the background.
+//
+// Warming is thirty-odd calls to the embedding server and takes the
+// better part of a minute on this machine, so it does not hold up a
+// start: turns that arrive before it is ready fall back to the
+// hand-written list, which is what they got before this existed.
+//
+// The person's own devices offer tools too, and those arrive per chat
+// rather than at startup. They are embedded the first time they are
+// seen and kept; until then they are offered whatever the ranking
+// says, since [nearest.Picker.Keep] never ranks out what it cannot
+// rank.
+func picker(cfg config.Config, registry *tool.Registry, logger *slog.Logger) *nearest.Picker {
+	if cfg.Assistant.ToolsNearest <= 0 || registry == nil {
+		return nil
+	}
+	e := embedder(cfg, logger)
+	if e == nil || !e.Available() {
+		logger.Warn("no embedding server, so a turn's tools are the usual list",
+			slog.Int("tools_nearest", cfg.Assistant.ToolsNearest))
+		return nil
+	}
+	p := &nearest.Picker{Embed: e, Logger: logger}
+	go logging.Surviving(context.Background(), logger, "learning what the tools are for", func() {
+		began := time.Now()
+		added, err := p.Warm(context.Background(), nearest.Server, registry.All())
+		if err != nil {
+			logger.Warn("cannot learn what all the tools are for",
+				slog.Int("learnt", added), slog.Any("error", err))
+			return
+		}
+		logger.Info("learnt what the tools are for",
+			slog.Int("tools", added), slog.Duration("took", time.Since(began)))
+	})
+	return p
 }
 
 // embedder : What turns text into vectors.
