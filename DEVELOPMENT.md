@@ -21078,3 +21078,37 @@ cannot live in a turn; it costs 4 to 110 credits a time against a
 thousand a month; and it cannot see his diary, his memories or his
 devices, which is the one thing a research agent here can do that no
 vendor's can.
+
+**The battery rate is worked out here, not in the model's head**
+(owner, 18 October 2026, shown an answer of twelve hours to a charge
+that took forty-five minutes: *"its wrong."*).
+
+Two faults in one answer, and both are the same mistake.
+
+**It measured the wrong window.** It asked for two readings --
+`{"kind":"battery.level","limit":2}` -- and got 23% at 22:35 and 24% at
+22:47. The phone was plugged in at **22:46**. Eleven of those twelve
+minutes were it draining, so what it measured was the discharge rate.
+The true rate, from the readings either side, was **one percent every
+thirty-five seconds**: about forty-five minutes to full.
+
+**And the arithmetic was wrong anyway.** On its own figure of twelve
+minutes a percent with 76% to go, that is 912 minutes -- **15.2 hours**
+-- and it said twelve.
+
+So `events.Moving` does it. Asked anything about `battery.level`,
+`event_recent` now appends a finished sentence: which way it is going,
+how long a percent takes, and how long to full or empty. Twelve
+readings whatever the caller asked for, only those since the last plug
+or unplug, and only those a minute past it -- a phone jumps a percent
+or two the moment it is connected, and that jump is not a rate.
+
+Nothing is said when it cannot be said honestly: fewer than two
+readings since the state changed, or no movement between them. The
+model still has the readings and can describe what it sees.
+
+This is [[a-span-is-said-not-counted]] again, in a second place. Handed
+two figures and a subtraction, a model does the subtraction in its head
+and gets it wrong. `events.Span` renders a duration the way somebody
+says it -- "45 minutes", "2 hours", "15.2 hours" -- so the division
+never reaches the model at all.

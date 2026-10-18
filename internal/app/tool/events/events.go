@@ -444,7 +444,14 @@ func recent(reader Reader, clock Clock) tool.Tool {
 				return tool.OK(Nothing(ctx, reader, in.Caller.UserID, q, over) +
 					Besides(ctx, reader, in.Caller.UserID, q, over))
 			}
-			return tool.OK(describe(found, q, over, where) +
+			// And, where the battery was asked about, how it is
+			// moving -- worked out here rather than left to be
+			// divided in somebody's head. See Moving.
+			rate := ""
+			if asksBattery(kind) {
+				rate = Moving(ctx, reader, in.Caller.UserID, clock.now())
+			}
+			return tool.OK(describe(found, q, over, where) + rate +
 				Besides(ctx, reader, in.Caller.UserID, q, over))
 		},
 	}
@@ -772,4 +779,14 @@ func sameDay(a, b time.Time) bool {
 	ay, am, ad := a.Date()
 	by, bm, bd := b.Date()
 	return ay == by && am == bm && ad == bd
+}
+
+// asksBattery : Whether this question was about the battery level.
+//
+// The family as well as the kind, since "battery" and "battery." both
+// reach it, and a question about the level is the only one where a
+// rate is the answer.
+func asksBattery(kind string) bool {
+	kind = strings.TrimSpace(kind)
+	return kind == Battery || kind == "battery" || kind == "battery."
 }
