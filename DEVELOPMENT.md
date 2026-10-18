@@ -20693,3 +20693,52 @@ call record now keeps the answer that was thrown away (`Call.Draft`).
 All 642 historical cases have the question and no answer, so a judge
 that wants to read what it is doubting could not have been measured at
 all.
+
+**Choosing tools by what the question means beats the hand-written
+twenty-five** (owner, 18 October 2026: *"can we reduce the tools size
+and we should add dynamic tool injection to get at most accuracy and
+fast response .. maybe we can use a model for that like a RAG
+model"*).
+
+Dynamic injection already existed: 25 tools in `hot` are described in
+full, the rest are names the model can ask about with `tool_describe`.
+What was hand-written was *which* 25 -- the same guess for "what is in
+my diary" and "fix the microphone".
+
+`make evals-nearest` measures the alternative without a gateway call.
+Every one of the 106 cases in the tool suite already names the tool a
+right first move would reach for; 91 of them name one. Embed the
+question, embed all 88 tools that reach a real request -- 59 of the
+server's and the laptop's 29, kept as a fixture regenerated from the
+client's MCP source -- and ask where the right one ranks.
+
+| nearest N | right tool is there |
+| --- | --- |
+| 5 | 82% |
+| 10 | **91%** |
+| 15 | 93% |
+| 20 | **96%** |
+| 25 | 96% |
+| `hot`, the 25 described today | **79%** |
+
+**Ten chosen by meaning beat twenty-five chosen in advance**, and
+twenty get 96%. Embedding a question costs 36 ms against a round's
+4,500. Tools are 117,923 bytes of a 196,382-byte request, so describing
+twenty rather than fifty takes about a third off the whole thing.
+
+**What it does not say** is whether the model then picks right. This
+measures only whether the right tool was in front of it, which is the
+half that can be computed. Fewer distractors may help or hurt, and that
+wants the tool suite run both ways.
+
+**The four it cannot find are descriptions, not retrieval.** *"who is
+the chief minister of Tamil Nadu"* puts `web_search` at #78: nothing in
+that tool's own words looks like a general-knowledge question. The same
+blindness is what made it answer the Jailer 2 question from memory, so
+fixing the description would lift the model's own choosing as well as
+the ranking.
+
+The registry the evals build now carries every domain the server has,
+including coming, web, maps and calling. Without them the first run
+scored a 82% ceiling and reported sixteen misses that were tools never
+offered to the ranking at all.

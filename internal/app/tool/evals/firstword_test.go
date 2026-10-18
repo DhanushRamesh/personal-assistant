@@ -16,13 +16,17 @@ import (
 
 	"personal-assistant/internal/app/tool"
 	"personal-assistant/internal/app/tool/calendar"
+	callingtool "personal-assistant/internal/app/tool/calling"
+	comingtool "personal-assistant/internal/app/tool/coming"
 	"personal-assistant/internal/app/tool/conversations"
 	"personal-assistant/internal/app/tool/events"
 	"personal-assistant/internal/app/tool/mail"
+	mapstool "personal-assistant/internal/app/tool/maps"
 	"personal-assistant/internal/app/tool/memories"
 	"personal-assistant/internal/app/tool/places"
 	"personal-assistant/internal/app/tool/reminders"
 	"personal-assistant/internal/app/tool/tasks"
+	webtool "personal-assistant/internal/app/tool/web"
 	"personal-assistant/internal/base/platform/config"
 	"personal-assistant/internal/base/records/chat"
 	"personal-assistant/internal/base/thinking/embed"
@@ -60,26 +64,7 @@ func harness(t *testing.T) (*platformai.Environment, []environment.ToolSpec, con
 		t.Skip("no real environment configured, so there is nothing to ask")
 	}
 
-	recall := &memory.Recall{Store: inmemory.New(), Embedder: embed.Fake{}}
-	registry, err := tool.NewRegistry(slices.Concat(
-		conversations.All(nil),
-		memories.All(recall),
-		reminders.All(remindmemory.New(), reminders.Clock{Location: time.UTC}, nil),
-		events.Tools(eventmemory.New(), events.Clock{Location: time.UTC}),
-		calendar.All(nil, calendar.Clock{Location: time.UTC}),
-		tasks.All(nil, tasks.Clock{Location: time.UTC}),
-		mail.All(nil, mail.Clock{Location: time.UTC}),
-		places.Tools(nil, places.Clock{Location: time.UTC}),
-	)...)
-	if err != nil {
-		t.Fatalf("NewRegistry: %v", err)
-	}
-	// Without it the registry defers nothing and offers everything,
-	// which is not what a request carries. The server adds it the
-	// same way.
-	if err := registry.Add(tool.Describing(registry)); err != nil {
-		t.Fatalf("adding tool_describe: %v", err)
-	}
+	registry := registered(t)
 
 	env, err := platformai.New(platformai.Config{
 		ClientID: cfg.PlatformAI.ClientID, ClientSecret: cfg.PlatformAI.ClientSecret,
@@ -283,4 +268,38 @@ func TestWhereTheFloorIs(t *testing.T) {
 	round("refused before any model runs", "anthropic", "no-such-model-at-all", nil)
 	round("the real model, no tools", cfg.PlatformAI.Vendor, cfg.PlatformAI.Model, nil)
 	fmt.Println()
+}
+
+// registered : Every tool the server itself offers, built the way the
+// server builds it.
+//
+// Its own function because more than one eval wants the whole list and
+// not the handful a request happens to describe.
+func registered(t *testing.T) *tool.Registry {
+	t.Helper()
+	recall := &memory.Recall{Store: inmemory.New(), Embedder: embed.Fake{}}
+	registry, err := tool.NewRegistry(slices.Concat(
+		conversations.All(nil),
+		memories.All(recall),
+		reminders.All(remindmemory.New(), reminders.Clock{Location: time.UTC}, nil),
+		events.Tools(eventmemory.New(), events.Clock{Location: time.UTC}),
+		calendar.All(nil, calendar.Clock{Location: time.UTC}),
+		tasks.All(nil, tasks.Clock{Location: time.UTC}),
+		mail.All(nil, mail.Clock{Location: time.UTC}),
+		places.Tools(nil, places.Clock{Location: time.UTC}),
+		comingtool.Tools(nothingComing{}, comingtool.Clock{Location: time.UTC}),
+		webtool.Tools(quietWeb{}),
+		mapstool.Tools(flatEarth{}, eventmemory.New(), mapstool.Clock{Location: time.UTC}),
+		callingtool.Tools(eventmemory.New(), noPhone{}, nothingSaid{}, noPhone{}, time.Now),
+	)...)
+	if err != nil {
+		t.Fatalf("NewRegistry: %v", err)
+	}
+	// Without it the registry defers nothing and offers everything,
+	// which is not what a request carries. The server adds it the
+	// same way.
+	if err := registry.Add(tool.Describing(registry)); err != nil {
+		t.Fatalf("adding tool_describe: %v", err)
+	}
+	return registry
 }

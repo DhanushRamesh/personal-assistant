@@ -157,6 +157,11 @@ evals-wondering: ## Ask the real judge what it would write, keeping nothing (cos
 	@go test ./internal/app/noticing/evals/ -tags evals -count=1 -v -timeout 10m \
 		-run TestWhatHeWouldWriteIfHeCould $(ARGS)
 
+.PHONY: evals-nearest
+evals-nearest: ## Whether the right tool is near the question by meaning, against the hand-written 25 (no API calls)
+	@go test ./internal/app/tool/evals/ -tags evals -count=1 -v -timeout 10m \
+		-run TestWhetherTheRightToolIsNearTheQuestion $(ARGS)
+
 .PHONY: evals-doubting
 evals-doubting: ## What the second look costs, against every send-back ever made (no API calls)
 	@go test ./internal/app/doubting/evals/ -tags evals -count=1 -v -timeout 10m $(ARGS)
