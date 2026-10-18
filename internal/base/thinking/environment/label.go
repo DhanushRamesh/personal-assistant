@@ -43,11 +43,17 @@ const (
 	// FeatureNoticing : The pass that judges whether anything is worth a
 	// rule, a retirement or a superseded memory.
 	FeatureNoticing Feature = "noticing"
+	// FeatureCatching : The pass that reads back over what was said and
+	// writes down anything placed in time that is written nowhere.
+	FeatureCatching Feature = "catching"
 	// FeatureRuleRemark : A rule firing, writing what it says.
 	FeatureRuleRemark Feature = "rule_remark"
 	// FeatureTerminal : A terminal on the laptop wanting attention,
 	// deciding whether to tell them and what.
 	FeatureTerminal Feature = "terminal"
+	// FeatureNote : A line written in a space's notes, deciding whether
+	// it is a task or an event to offer.
+	FeatureNote Feature = "note"
 	// FeatureGlance : Saying what the person has in front of them, in
 	// one quick call.
 	FeatureGlance Feature = "glance"
@@ -60,7 +66,7 @@ func Features() []Feature {
 	return []Feature{
 		FeatureChat, FeatureTitle, FeatureCondense, FeatureProfile,
 		FeatureVocabulary, FeatureGreeting, FeatureRuleWriter, FeatureComing,
-		FeatureNoticing, FeatureNoticingWriter, FeatureRuleRemark, FeatureTerminal, FeatureGlance,
+		FeatureNoticing, FeatureNoticingWriter, FeatureRuleRemark, FeatureTerminal, FeatureNote, FeatureGlance,
 		FeatureOther,
 	}
 }

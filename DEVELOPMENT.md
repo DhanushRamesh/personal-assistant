@@ -20499,3 +20499,57 @@ only. Nothing in the periodic passes writes to the diary yet, and
 there is no cap on how many entries one conversation may produce --
 `noticing`'s own rule-writing pass is held to one a day for exactly
 that reason.
+
+**The pass that reads back over what was said** (owner, 18 October
+2026: *"do the profiling passes"*, after the live half). `internal/app/
+catching` runs once a day, after the description is rewritten, and asks
+one question: what did they place at a time, or say they had to do,
+that is written down nowhere? It is given the diary and the lists and
+may write to them -- the only pass here that writes anywhere the person
+will see.
+
+**Why a second look at all,** when the live rule now writes as the
+words arrive: the turn is not where most of them are lost. A date said
+while the assistant was answering something else, a date said in the
+same sentence as a question, a date said before the rule existed -- the
+turn has one chance at each and no second one.
+
+**The order is fixed and it is the whole design.** Gather the
+candidates, then read what is already written for the days those things
+fall on, then write only what is missing. The live rule has usually
+written the entry already, so the commonest thing this pass can do
+wrong is write it twice.
+
+**Placement is the bar, not importance.** The owner's words were *"if
+something important happened"*, and importance is the one thing the
+judge is forbidden to weigh: asked to find what is important a model
+finds something every day, and on a quiet day what it finds is small
+talk in the diary. The test is the same one the persona uses -- a thing
+and a time.
+
+Its own words are left out of what it reads. That half is the likeliest
+to contain a date, since it reads entries out and confirms them, and a
+pass shown its own words writes down the diary it just read aloud.
+
+Bounds: 36 hours back (longer than the daily gap, so nothing falls
+between two passes and a thing seen twice is caught by the diary read),
+400 messages, three entries written at most, and `Looking` rounds.
+
+**Measured both ways with `make evals-catching`.** Against 387 real
+messages over three days it answered that nothing was missing, which is
+the right answer for three days spent building a server and is also
+exactly what a lazy judge says every day -- so the same judge was shown
+a planted day whose answer is known: three things to write, four to
+leave. It got 7 of 7, putting the scan in the diary and the charger on
+a list, and rejecting the rain, the tiredness, the question and the
+*might go to Bangalore*.
+
+**The checker was wrong first, as usual.** It read 3 of 7 because the
+model names each thing it is rejecting while explaining why, and the
+match ran over the whole answer. A judge that shows its working is not
+a judge that got it wrong. The dry run now ends in strict `WRITE:`
+lines and only those are matched.
+
+**What this cannot test:** the ordering, and therefore duplicates. The
+dry run has no tools, so nothing checks that it reads the days before
+writing to them. That wants the tools and a test calendar.

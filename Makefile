@@ -157,6 +157,13 @@ evals-wondering: ## Ask the real judge what it would write, keeping nothing (cos
 	@go test ./internal/app/noticing/evals/ -tags evals -count=1 -v -timeout 10m \
 		-run TestWhatHeWouldWriteIfHeCould $(ARGS)
 
+.PHONY: evals-catching
+evals-catching: ## What the pass would write down from what was really said, keeping nothing (costs API calls)
+	@# EVAL_DAYS=30 looks back further than a pass does; EVAL_SHOW=1
+	@# prints what it was given, since "nothing is missing" is only
+	@# readable against the days it read.
+	@go test ./internal/app/catching/evals/ -tags evals -count=1 -v -timeout 10m $(ARGS)
+
 .PHONY: evals-tangled
 evals-tangled: ## Ask whether a badly typed sentence still reaches the right tool (costs API calls)
 	@# Twice per case, as typed and spelt correctly, so the spelling

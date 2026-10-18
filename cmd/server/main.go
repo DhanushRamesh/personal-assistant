@@ -29,9 +29,11 @@ import (
 	"personal-assistant/internal/app/api/authn"
 	"personal-assistant/internal/app/api/presence"
 	"personal-assistant/internal/app/away"
+	"personal-assistant/internal/app/catching"
 	"personal-assistant/internal/app/elsewhere"
 	"personal-assistant/internal/app/glance"
 	"personal-assistant/internal/app/live"
+	"personal-assistant/internal/app/noted"
 	"personal-assistant/internal/app/noticing"
 	"personal-assistant/internal/app/pattern"
 	"personal-assistant/internal/app/profile"
@@ -882,7 +884,8 @@ func run() error {
 			cmp.Or(cfg.PlatformAI.SlowModel, cfg.PlatformAI.Model),
 			environment.PurposeProfile,
 			[]string{"event_kinds", "event_recent", "event_ledger", "event_untouched", "place_visits"},
-			persona.AddressFor(cfg.Assistant.Persona), Looking, logger.Logger),
+			persona.AddressFor(cfg.Assistant.Persona), Looking,
+			environment.FeatureNoticing, "looking for something worth a rule", logger.Logger),
 		jobmysql.ID, cfg.Assistant.Now, cfg.Assistant.Location, logger.Logger)
 
 	// And now, with something to think with, the loop that rewrites
@@ -903,7 +906,9 @@ func run() error {
 	go func() {
 		defer watching.Done()
 		logging.Surviving(remindCtx, logger.Logger, "the daily description", func() {
-			describeDaily(remindCtx, chats, describing, thinkingUp, cfg.Assistant.Now, logger.Logger)
+			describeDaily(remindCtx, chats, describing, thinkingUp,
+				catchingUp(chats, answerer, registry, cfg, logger.Logger),
+				cfg.Assistant.Now, logger.Logger)
 		})
 	}()
 	logger.Info("describing the person", slog.Duration("every", profileEvery))
@@ -1003,6 +1008,21 @@ func run() error {
 		Logger:   logger.Logger,
 	}
 
+	// A line written in a space's notes on the laptop: the fast model
+	// decides whether it is a task or an event, and offers it there
+	// (owner, 18 October 2026).
+	noting := &noted.Offerer{
+		Answerer: answerer,
+		Vendor:   cfg.PlatformAI.Vendor,
+		Model:    cmp.Or(cfg.PlatformAI.FastModel, cfg.PlatformAI.Model),
+		Voice:    func() string { return persona.Voice(manner.Current(), cfg.Assistant.Name) },
+		Publish:  announcing{publishing, cfg.Assistant.Now},
+		Notes:    remarked,
+		Location: cfg.Assistant.Location,
+		Now:      cfg.Assistant.Now,
+		Logger:   logger.Logger,
+	}
+
 	handler := api.New(api.Options{
 		Logger:        logger.Logger,
 		AssistantName: cfg.Assistant.Name,
@@ -1016,6 +1036,7 @@ func run() error {
 		DB:            db,
 		Arrivals:      running,
 		Terminals:     reacting,
+		Noted:         noting,
 		Chats:         chats,
 		Messages:      chats,
 		Reminders:     reminderStore,
@@ -1988,6 +2009,7 @@ func describeDaily(
 	},
 	describing *profile.Builder,
 	noticed func(ctx context.Context, userID string),
+	caught func(ctx context.Context, userID string),
 	now func() time.Time,
 	logger *slog.Logger,
 ) {
@@ -2037,6 +2059,17 @@ func describeDaily(
 				// neither of them did.
 				looking, done := context.WithTimeout(ctx, noticingTimeout)
 				noticed(looking, userID)
+				done()
+			}
+
+			// And what they said that was never written down. Last
+			// of the three because it is the only one that writes
+			// anywhere the person will see, and because it reads the
+			// diary rather than the description: nothing above it
+			// changes what it will find.
+			if caught != nil {
+				looking, done := context.WithTimeout(ctx, noticingTimeout)
+				caught(looking, userID)
 				done()
 			}
 		}
@@ -2281,10 +2314,12 @@ func investigating(
 	names []string,
 	address string,
 	rounds int,
+	feature environment.Feature,
+	doing string,
 	logger *slog.Logger,
 ) func(ctx context.Context, userID, system, ask string) (string, error) {
 	return func(ctx context.Context, userID, system, ask string) (string, error) {
-		ctx = askedBy(ctx, environment.FeatureNoticing, userID, "")
+		ctx = askedBy(ctx, feature, userID, "")
 		specs, err := offering(tools, names, address)
 		if err != nil {
 			return "", err
@@ -2295,7 +2330,7 @@ func investigating(
 			asked   = ask
 			began   = time.Now()
 		)
-		logger.InfoContext(ctx, "looking for something worth a rule",
+		logger.InfoContext(ctx, doing,
 			slog.String("purpose", string(why)),
 			slog.Int("tools_offered", len(specs)),
 			slog.Int("shown_characters", len(ask)))
@@ -3914,6 +3949,61 @@ func noticed(
 				mine = append(mine, *made)
 			}
 		}
+	}
+}
+
+// catchingUp : The pass that writes down what was said and never
+// written, or nothing where there is no model to ask.
+//
+// Given the diary and the lists and allowed to write to them, which is
+// the only pass here that can. Everything else the assistant does
+// unasked either speaks (a rule, a remark) or writes somewhere only it
+// reads (a memory, the description). This puts entries in front of the
+// person, so the reading tools come with it and the order is fixed in
+// the judge: gather, read what is there, then write what is missing.
+//
+// The slow model and no hurry. Owner, on the passes that go and look:
+// *"since there is no time constraint it can take its own time, here
+// accuracy >> latency."*
+func catchingUp(
+	said catching.Said,
+	answerer environment.Environment,
+	registry *tool.Registry,
+	cfg config.Config,
+	logger *slog.Logger,
+) func(context.Context, string) {
+	if answerer == nil || registry == nil {
+		return nil
+	}
+	pass := catching.Pass{
+		Ask: investigating(answerer, registry, cfg.PlatformAI.Vendor,
+			cmp.Or(cfg.PlatformAI.SlowModel, cfg.PlatformAI.Model),
+			environment.PurposeProfile,
+			[]string{
+				"calendar_events", "calendar_add",
+				"task_lists", "task_list", "task_list_add", "task_find",
+				"memory_search",
+			},
+			persona.AddressFor(cfg.Assistant.Persona), Looking,
+			environment.FeatureCatching, "looking for what was never written down", logger),
+		Said:  said,
+		Where: cfg.Assistant.Location,
+		Now:   cfg.Assistant.Now,
+	}
+	return func(ctx context.Context, userID string) {
+		looked, err := pass.Run(ctx, userID)
+		if err != nil {
+			logger.WarnContext(ctx, "cannot look for what was never written down",
+				slog.Any("error", err))
+			return
+		}
+		if looked.Read == 0 {
+			return
+		}
+		logger.InfoContext(ctx, "looked back over what they said",
+			slog.String("user_id", userID),
+			slog.Int("messages", looked.Read),
+			slog.String("wrote", looked.Said))
 	}
 }
 
