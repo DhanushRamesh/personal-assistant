@@ -211,9 +211,22 @@ func (r *Runner) consume(runCtx, ctx context.Context, t *chat.Chat, systemPrompt
 	revealed := r.alreadyDescribed(window.Messages)
 
 	// What the person's own devices offer, taken as the chat begins and
-	// described in full: there are a few, and a device's tool named but
-	// not described could be described by nothing, since tool_describe
-	// knows only the server's.
+	// described in full.
+	//
+	// The reason for describing them all is gone and the line that does
+	// it is not. It used to be that a device's tool named but not
+	// described could be described by nothing, since tool_describe
+	// closed over the server's own registry; Registry.With has given
+	// the copy its own since 15 October 2026, and
+	// TestADevicesToolCanBeDescribed holds it.
+	//
+	// So these twenty-nine could be deferred like any other, and they
+	// are 29 of the 49 a request carries. What stops it is that nothing
+	// yet chooses which to describe: measured 18 October, the model
+	// does not call tool_describe when the tool it wants is only a name
+	// -- it reaches for something else and is wrong -- so deferring
+	// them without a picker would cost the laptop rather than the
+	// bytes. See internal/app/tool/nearest in the history.
 	if r.away != nil {
 		if extra := r.away.For(r.callerFor(ctx, t).UserID); len(extra) > 0 {
 			r.chatTools.Store(t.ID, r.tools.With(extra...))

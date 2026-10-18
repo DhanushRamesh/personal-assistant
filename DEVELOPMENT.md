@@ -20845,3 +20845,31 @@ So all four numbers move the same way at once: **93% against 80% on
 reaching the right tool, 0.71s off every model call, about a third off
 what a request costs, and 98% against 79% on the right tool being
 offered at all.**
+
+**The laptop's tools were never the blocker; a stale comment was** (18
+October 2026, asked to *"fix the laptop tools first"*).
+
+Twice today I told the owner that the laptop's twenty-nine tools have
+to be described in full because `tool_describe` knows only the server's
+own. That was true until 15 October, when `Registry.With` was given a
+line that rebuilds `tool_describe` over the copy -- for exactly this
+reason, and the comment there says so. The comment at the other end, in
+`execute.go`, was left behind, and I read it twice as the state of the
+world.
+
+`TestADevicesToolCanBeDescribed` now holds the capability: a registry
+with a device's tool added answers `tool_describe` for it.
+
+**What actually stops the twenty-nine being deferred** is the line
+beside that comment, `revealed[x.Name] = true`, which marks every one
+of them described-already. Removing it is one line, and it should not
+be removed on its own. Measured the same day: the model does not call
+`tool_describe` when the tool it wants arrives as a name -- across two
+full runs of the tool suite it was never the first call -- it reaches
+for something else and is wrong. Deferring the laptop's tools with
+nothing choosing which to describe would cost the laptop rather than
+the bytes.
+
+So the order is the reverse of what it looked like: the picker is not
+waiting on the laptop's tools, the laptop's tools are waiting on the
+picker.
