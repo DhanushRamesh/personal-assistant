@@ -218,30 +218,35 @@ func (r *Runner) consume(runCtx, ctx context.Context, t *chat.Chat, systemPrompt
 	// 75th of 88 tools and 4th with the line before it.
 	said := lastSaid(window.Messages)
 
-	// What the person's own devices offer, taken as the chat begins and
-	// described in full.
+	// What the person's own devices offer, taken as the chat begins.
 	//
-	// The reason for describing them all is gone and the line that does
-	// it is not. It used to be that a device's tool named but not
-	// described could be described by nothing, since tool_describe
-	// closed over the server's own registry; Registry.With has given
-	// the copy its own since 15 October 2026, and
-	// TestADevicesToolCanBeDescribed holds it.
+	// Described in full until 18 October 2026, when they were 29 of the
+	// 49 tools a request carried. Two reasons, and both are gone. A
+	// device's tool named but not described could once be described by
+	// nothing, since tool_describe closed over the server's own
+	// registry; Registry.With has given the copy its own since 15
+	// October, and TestADevicesToolCanBeDescribed holds it. And nothing
+	// chose which to describe, so dropping them meant dropping them
+	// blind.
 	//
-	// So these twenty-nine could be deferred like any other, and they
-	// are 29 of the 49 a request carries. What stops it is that nothing
-	// yet chooses which to describe: measured 18 October, the model
-	// does not call tool_describe when the tool it wants is only a name
-	// -- it reaches for something else and is wrong -- so deferring
-	// them without a picker would cost the laptop rather than the
-	// bytes. See internal/app/tool/nearest in the history.
+	// Now something does. Ranked against the question they win easily
+	// -- "open spotify" puts open_app first of 88, "how hot is the
+	// laptop" puts laptop_status first, "tell Claude Code to commit"
+	// puts type_into_terminal first -- because nothing else sounds like
+	// them. They do better than the server's own, whose diary reached
+	// only 11th on "what is in my diary tomorrow".
+	//
+	// So they are ranked like anything else, and `devices` is what
+	// brings them all back when nothing is ranking: no embedder, a cold
+	// start, an embedder that has gone away.
+	devices := map[string]bool{}
 	if r.away != nil {
 		if extra := r.away.For(r.callerFor(ctx, t).UserID); len(extra) > 0 {
 			r.chatTools.Store(t.ID, r.tools.With(extra...))
 			defer r.chatTools.Delete(t.ID)
 			names := make([]string, 0, len(extra))
 			for _, x := range extra {
-				revealed[x.Name] = true
+				devices[x.Name] = true
 				names = append(names, x.Name)
 			}
 			r.logger.InfoContext(ctx, "the person's devices offer tools", slog.Any("tools", names))
@@ -285,7 +290,7 @@ func (r *Runner) consume(runCtx, ctx context.Context, t *chat.Chat, systemPrompt
 		// rounds must answer from what it gathered, and saying what it
 		// managed is better than being cut off mid-chain with nothing to
 		// show for the work that already ran.
-		tools := r.offered(ctx, t, revealed, said)
+		tools := r.offered(ctx, t, revealed, devices, said)
 		if worked >= MaxToolHops-1 {
 			if len(tools) > 0 {
 				r.logger.WarnContext(ctx, "the tool chain ran long, so the last round is asked without tools",

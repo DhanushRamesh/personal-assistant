@@ -45,7 +45,7 @@ const MaxRounds = 9
 // the model, so a model cannot call what it has not been told exists. The
 // registry checks again when one is actually called, because this is a
 // prompt and a prompt is not a boundary.
-func (r *Runner) offered(ctx context.Context, t *chat.Chat, revealed map[string]bool, before string) []environment.ToolSpec {
+func (r *Runner) offered(ctx context.Context, t *chat.Chat, revealed, devices map[string]bool, before string) []environment.ToolSpec {
 	tools := r.toolsOf(t)
 	if tools == nil {
 		return nil
@@ -56,9 +56,13 @@ func (r *Runner) offered(ctx context.Context, t *chat.Chat, revealed map[string]
 	// Describing all of them was 72% of a request and the endpoint
 	// caches nothing, so the rest are named in the prompt instead and
 	// described when the model asks.
-	reachable := tools.Offered(t.Channel, revealed)
-	if chosen, ok := r.nearest(ctx, t, tools, revealed, before); ok {
-		reachable = chosen
+	chosen, ranked := r.nearest(ctx, t, tools, revealed, before)
+	reachable := chosen
+	if !ranked {
+		// Nothing ranked, so the device's tools come back in whole:
+		// one that is only a name is one the model will not ask about,
+		// and the laptop would quietly stop working.
+		reachable = tools.Offered(t.Channel, with(revealed, devices))
 	}
 	out := make([]environment.ToolSpec, 0, len(reachable))
 	for _, x := range reachable {
@@ -375,4 +379,16 @@ func (r *Runner) remember(ctx context.Context, t *chat.Chat, m conversation.Mess
 func byChat(t *chat.Chat, m conversation.Message) conversation.Message {
 	m.ChatID = t.ID
 	return m
+}
+
+// with : One set of names and another, without changing either.
+func with(a, b map[string]bool) map[string]bool {
+	out := make(map[string]bool, len(a)+len(b))
+	for k := range a {
+		out[k] = true
+	}
+	for k := range b {
+		out[k] = true
+	}
+	return out
 }

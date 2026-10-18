@@ -180,3 +180,34 @@ func has(in []string, want string) bool {
 	}
 	return false
 }
+
+// TestNothingRankedBringsTheLaptopBack : The dangerous path. A device's
+// tool that is only a name is one the model will not ask about, so when
+// nothing ranks -- no embedder, a cold start, one that has gone away --
+// they must all come back.
+func TestNothingRankedBringsTheLaptopBack(t *testing.T) {
+	for _, tc := range []struct {
+		name string
+		opts runner.Options
+	}{
+		{"no picker", runner.Options{ToolsNearest: 1}},
+		{"a cold one", runner.Options{Picker: &nearest.Picker{Embed: sharedWords{}}, ToolsNearest: 1}},
+	} {
+		registry := manyTools(t)
+		p := &noting{scripted: &scripted{rounds: []environment.Message{
+			environment.Final("Nothing, sir."),
+		}}}
+		opts := tc.opts
+		opts.Tools = registry
+		h := newHarness(t, p, opts)
+		tk := h.submitOn(t, chat.ChannelDirect, "what did I say about the roof")
+		h.await(t, tk.ID, chat.StatusCompleted, chat.StatusFailed)
+
+		p.mu.Lock()
+		offered := append([][]string(nil), p.offered...)
+		p.mu.Unlock()
+		if len(offered) == 0 || len(offered[0]) == 0 {
+			t.Errorf("%s: a turn was left with no tools at all: %v", tc.name, offered)
+		}
+	}
+}
