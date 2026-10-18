@@ -128,6 +128,20 @@ var hot = []string{
 	// starting anything, so by the time it is wanted the model is
 	// already in the domain and can ask.
 	"web_search",
+
+	// The laptop's, offered by the desktop app while it is connected
+	// (owner, 18 October 2026: *"yes, put them back"*). Named and not
+	// described, they were the easiest to work around -- and the turns
+	// about the laptop are about its terminals and spaces, with the
+	// model answering from the screen in front rather than reading the
+	// terminal it was asked about. These six are the ones nearly every
+	// such turn needs; the rest of the app's tools stay deferred.
+	"read_terminal",
+	"type_into_terminal",
+	"list_terminals",
+	"list_spaces",
+	"open_space",
+	"open_app",
 }
 
 // hotSet : hot, for looking up.

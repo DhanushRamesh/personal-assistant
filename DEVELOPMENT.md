@@ -176,6 +176,14 @@ chat was made once answered, so it showed as taking 0.0 s, though the
 glance took about 3 s. It now starts at the moment the question came in
 (`Glanced`'s `askedAt`), and the time shown is the time it took.
 
+**Six of the laptop's tools are described on every turn** (owner, 18
+October 2026: *"yes, put them back"*). These are `read_terminal`,
+`type_into_terminal`, `list_terminals`, `list_spaces`, `open_space` and
+`open_app`, in `tool/deferred.go`'s hot list. The other 23 the desktop
+app offers stay deferred. When they were only named, the model tended to
+answer from the screen in front rather than read the terminal it was
+asked about.
+
 **A line written in a space's notes is offered for tasks or the calendar**
 (owner, 18 October 2026: *"the notes I keep in a space can be added to
 tasks, or if it's like an event, added to the calendar"*; *"both, start
