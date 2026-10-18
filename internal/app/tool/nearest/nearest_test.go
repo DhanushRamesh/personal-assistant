@@ -258,3 +258,31 @@ func TestWhatAToolIsRankedOnIncludesItsArguments(t *testing.T) {
 		t.Errorf("the arguments are not in a fixed order: %q", got)
 	}
 }
+
+// TestASearchIsOfferedWhateverTheRankingSays : The twentieth question,
+// the one the ranking misses. Owner: *"make search tool always inside
+// so even if it misses, the job is still done."*
+func TestASearchIsOfferedWhateverTheRankingSays(t *testing.T) {
+	tools := append(toolsFor(t), tool.Tool{
+		Name: "web_search", Purpose: "Look something up on the web.",
+		Examples: []tool.Example{{Ask: "how much is a litre of petrol"}},
+	})
+	p := &nearest.Picker{Embed: words{}}
+	if _, err := p.Warm(context.Background(), nearest.Server, tools); err != nil {
+		t.Fatal(err)
+	}
+
+	// A question about the diary: nothing about it is near a search.
+	keep, ok := p.Keep(context.Background(), "what is in my diary tomorrow", tools, 1)
+	if !ok {
+		t.Fatal("it could not rank at all")
+	}
+	if !keep["web_search"] {
+		t.Errorf("there was nothing to fall back on: %v", keep)
+	}
+	// Beside the nearest and not instead of it: asking for one still
+	// gets the nearest one.
+	if !keep["calendar_events"] {
+		t.Errorf("the search took the nearest one's place: %v", keep)
+	}
+}

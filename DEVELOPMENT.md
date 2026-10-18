@@ -20947,3 +20947,22 @@ everything sits near 0.5. `web_search` and `reminder_list` still beat
 the diary for a question about the diary. That is the embedding model,
 not the text, and `bge-m3` is downloading to find out whether a bigger
 one separates them.
+
+**A search is offered whatever the ranking says** (owner, 18 October
+2026, told that ten tools carry the right one on 95% of questions
+rather than 97%: *"make search tool always inside so even if it misses,
+the job is still done."*).
+
+The twentieth question is the one this is for. A ranking that misses
+leaves the model with nothing that fits and no way to ask: measured the
+same day, it does not call `tool_describe` when the tool it wants is
+only a name -- it reaches for something else and is wrong. With a
+search in the list it can at least go and look.
+
+`web_search` alone. It is the one that answers a question about
+anything rather than about one thing, so it is the only one whose
+absence leaves nothing to fall back on; adding the others would be
+adding them to every question, which is the fixed list this replaced.
+
+Beside the nearest and not instead of one of them, so asking for ten
+still ranks ten deep.

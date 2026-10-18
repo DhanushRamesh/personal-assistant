@@ -154,6 +154,35 @@ func Asking(say, before string) string {
 // and the question is the part that moved.
 const Before = 300
 
+// Always : The tools offered whatever the ranking says, beside the
+// nearest rather than instead of one of them.
+//
+// Owner, 18 October 2026, on being told the nearest ten carry the right
+// tool on 95% of questions rather than 97%: *"make search tool always
+// inside so even if it misses, the job is still done."*
+//
+// The twentieth question is the one this is for. A ranking that misses
+// leaves the model with nothing that fits and no way to ask -- measured
+// the same day, it does not call tool_describe when the tool it wants
+// is only a name, it reaches for something else and is wrong. With a
+// search in the list it can at least go and look.
+//
+// web_search only. It is the one that answers a question about anything
+// rather than about one thing, so it is the only one whose absence
+// leaves nothing to fall back on. Adding the others would be adding
+// them to every question, which is the fixed list this replaced.
+var Always = []string{"web_search"}
+
+// kept : Whether a tool is offered whatever the ranking says.
+func kept(name string) bool {
+	for _, n := range Always {
+		if n == name {
+			return true
+		}
+	}
+	return false
+}
+
 // Picker : Ranks tools against a question, over vectors it keeps.
 //
 // Safe to use before it knows anything. A tool it has no vector for is
@@ -339,6 +368,13 @@ func (p *Picker) Keep(ctx context.Context, say string, among []tool.Tool, n int)
 	sort.Slice(ranked, func(i, j int) bool { return ranked[i].sim > ranked[j].sim })
 	for i := 0; i < n && i < len(ranked); i++ {
 		keep[ranked[i].name] = true
+	}
+	// Beside the nearest rather than instead of one of them: a search
+	// that took a place would make the ranking nine deep and not ten.
+	for _, t := range among {
+		if kept(t.Name) {
+			keep[t.Name] = true
+		}
 	}
 	return keep, true
 }
