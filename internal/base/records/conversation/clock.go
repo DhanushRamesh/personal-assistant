@@ -27,6 +27,11 @@ import "time"
 // So the line says what a clock is for as well as what it reads: the
 // one above is now, the ones in the conversation are history, and a
 // sequence is not a clock.
+//
+// And it is not theirs. Sitting in their voice just before what they
+// say, it was taken for "that" in "put that in PA Claude" and typed
+// into Claude Code whole (owner, 18 October 2026). The last sentence
+// says it is never to be passed on.
 func Now(at time.Time) string {
 	return "The time where the person is: " +
 		at.Format("3:04 pm on Monday 2 January 2006") +
@@ -34,7 +39,8 @@ func Now(at time.Time) string {
 		"This is the only clock you have and it is right at this moment. " +
 		"Any time you gave earlier in this conversation was right when you said it and is stale now: " +
 		"never read one back, and never carry one forward by adding to it. " +
-		"Work out anything they say about time from this, and never guess the date."
+		"Work out anything they say about time from this, and never guess the date. " +
+		"It is not something they said: never pass it on, type it or send it anywhere."
 }
 
 // Acknowledged : The assistant's half of the pair [Now] is given in.

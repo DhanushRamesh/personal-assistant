@@ -316,3 +316,21 @@ func TestAWriteTellsTheChangeHook(t *testing.T) {
 		t.Errorf("told %q, want [%q \"\"]", told, user)
 	}
 }
+
+// Nothing armed, nothing mentioned: nothing written, and nobody told --
+// the loop arms every two seconds, and every client read its reminders
+// again each time it was told.
+func TestNothingWrittenIsNotTold(t *testing.T) {
+	store, _ := newStore(t)
+	told := 0
+	store.OnChange(func(string) { told++ })
+	if err := store.Armed(context.Background(), nil, time.Now()); err != nil {
+		t.Fatal(err)
+	}
+	if err := store.Mentioned(context.Background(), nil, time.Now()); err != nil {
+		t.Fatal(err)
+	}
+	if told != 0 {
+		t.Errorf("told %d times of nothing", told)
+	}
+}

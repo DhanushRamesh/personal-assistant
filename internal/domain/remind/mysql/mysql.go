@@ -482,6 +482,9 @@ func (s *Store) Missed(ctx context.Context, id string, at time.Time) error {
 
 // Mentioned : See mentioned; the change hook is told when it succeeds.
 func (s *Store) Mentioned(ctx context.Context, ids []string, at time.Time) error {
+	if len(ids) == 0 {
+		return nil
+	}
 	err := s.mentioned(ctx, ids, at)
 	s.tell(err, "")
 	return err
@@ -489,6 +492,13 @@ func (s *Store) Mentioned(ctx context.Context, ids []string, at time.Time) error
 
 // Armed : See armed; the change hook is told when it succeeds.
 func (s *Store) Armed(ctx context.Context, ids []string, at time.Time) error {
+	// Nothing armed is nothing written, and nothing to tell: the loop calls
+	// this every two seconds, and told each time, every client read its
+	// reminders again every two seconds (17 October 2026: 73 "reminders
+	// changed" in two and a half minutes, with no reminder touched).
+	if len(ids) == 0 {
+		return nil
+	}
 	err := s.armed(ctx, ids, at)
 	s.tell(err, "")
 	return err

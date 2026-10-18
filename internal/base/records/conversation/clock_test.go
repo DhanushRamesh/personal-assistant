@@ -70,3 +70,13 @@ func TestTheClockSaysItBeatsTheConversation(t *testing.T) {
 		}
 	}
 }
+
+// Given in their voice, it is said not to be theirs: "put that in PA
+// Claude" once typed the clock line into Claude Code.
+func TestNowIsNotPassedOn(t *testing.T) {
+	got := conversation.Now(time.Now())
+
+	if !strings.Contains(got, "never pass it on") {
+		t.Errorf("Now does not say it is not to be passed on:\n%s", got)
+	}
+}
