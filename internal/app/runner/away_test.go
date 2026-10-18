@@ -79,3 +79,64 @@ func TestALaptopsToolIsOfferedAndRun(t *testing.T) {
 		t.Errorf("open_app ran %d times, want once", opened)
 	}
 }
+
+// TestAHelloIsAskedWithoutTools : What is said in passing cannot need a
+// tool, and the block is the most expensive thing in the request.
+//
+// persona.InPassing already decides this before the first call -- it is
+// what stops the answer being sent back to look -- and until 18 October
+// 2026 the tools went out anyway: 117,923 bytes of definitions that
+// could not be used, costing 1.30s to the first word and about 31,000
+// tokens on every "thank you".
+func TestAHelloIsAskedWithoutTools(t *testing.T) {
+	for _, said := range []string{"thank you", "hello", "ok", "good morning"} {
+		p := &noting{scripted: &scripted{rounds: []environment.Message{
+			environment.Final("Of course, sir."),
+		}}}
+		h := newHarness(t, p, runner.Options{Tools: writer(true)})
+
+		tk := h.submitOn(t, chat.ChannelDirect, said)
+		h.await(t, tk.ID, chat.StatusCompleted, chat.StatusFailed)
+
+		p.mu.Lock()
+		offered := append([][]string(nil), p.offered...)
+		prompts := append([]string(nil), p.prompts...)
+		p.mu.Unlock()
+
+		if len(offered) == 0 {
+			t.Fatalf("%q was never asked", said)
+		}
+		for i, names := range offered {
+			if len(names) > 0 {
+				t.Errorf("%q was offered %d tools on round %d: %v", said, len(names), i+1, names)
+			}
+		}
+		// And the catalogue with them: naming tools it cannot call is
+		// the same cost by another route.
+		for _, prompt := range prompts {
+			if strings.Contains(prompt, "you have not been given their arguments") {
+				t.Errorf("%q was still told about the tools it was not offered", said)
+			}
+		}
+	}
+}
+
+// TestAQuestionIsStillOfferedTools : The other half. Only what is said
+// in passing loses them, and a question that might need one keeps them.
+func TestAQuestionIsStillOfferedTools(t *testing.T) {
+	p := &noting{scripted: &scripted{rounds: []environment.Message{
+		environment.Final("Nothing tomorrow, sir."),
+	}}}
+	h := newHarness(t, p, runner.Options{Tools: writer(true)})
+
+	tk := h.submitOn(t, chat.ChannelDirect, "thanks, and what is in my diary tomorrow")
+	h.await(t, tk.ID, chat.StatusCompleted, chat.StatusFailed)
+
+	p.mu.Lock()
+	offered := append([][]string(nil), p.offered...)
+	p.mu.Unlock()
+
+	if len(offered) == 0 || len(offered[0]) == 0 {
+		t.Errorf("a question beginning with thanks was asked with no tools: %v", offered)
+	}
+}

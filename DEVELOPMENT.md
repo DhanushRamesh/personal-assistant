@@ -20845,3 +20845,28 @@ So all four numbers move the same way at once: **93% against 80% on
 reaching the right tool, 0.71s off every model call, about a third off
 what a request costs, and 98% against 79% on the right tool being
 offered at all.**
+
+**A hello is asked without tools** (owner, 18 October 2026, on the plan
+that came out of the day's measurements: *"yes start A"*).
+
+`persona.InPassing` has decided since 17 October that thanks, a hold,
+an acknowledgement or a greeting is answered in one round and never
+sent back to look. The tool block went out anyway -- **117,923 bytes of
+definitions that cannot be used**, on every "thank you".
+
+Measured today, the block costs **1.30s to the first word** against
+sending none, and a hello carries about **49,700 input tokens**. With
+the tools dropped it is **18,100 tokens and about 2.6s**, which is the
+first thing all day to put a simple turn near the three seconds the
+owner has been asking for.
+
+The catalogue goes with them, for nothing: `asking` is only built when
+there are tools, so naming tools it cannot call stops too.
+
+**Against the risk**, which is real -- this is the only change that can
+leave the model with no tool when it needed one. `InPassing` matched
+**one of the 106 questions** in the tool suite, and that one wanted no
+tool. It is also narrow by construction: "thank you", "hello", "ok" and
+"good morning" match; "that is great, thanks" does not, and neither
+does "thanks, and what is in my diary tomorrow", which keeps its tools
+and is tested.
