@@ -157,6 +157,10 @@ evals-wondering: ## Ask the real judge what it would write, keeping nothing (cos
 	@go test ./internal/app/noticing/evals/ -tags evals -count=1 -v -timeout 10m \
 		-run TestWhatHeWouldWriteIfHeCould $(ARGS)
 
+.PHONY: evals-doubting
+evals-doubting: ## What the second look costs, against every send-back ever made (no API calls)
+	@go test ./internal/app/doubting/evals/ -tags evals -count=1 -v -timeout 10m $(ARGS)
+
 .PHONY: evals-catching
 evals-catching: ## What the pass would write down from what was really said, keeping nothing (costs API calls)
 	@# EVAL_DAYS=30 looks back further than a pass does; EVAL_SHOW=1

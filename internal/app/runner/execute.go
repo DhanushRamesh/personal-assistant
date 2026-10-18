@@ -433,6 +433,12 @@ func (r *Runner) consume(runCtx, ctx context.Context, t *chat.Chat, systemPrompt
 					slog.Bool("already_running", waiting != nil),
 					slog.Bool("spoken", published),
 					slog.String("thrown_away", first(final.Text, 120)))
+				// Kept whole beside the request that wrote it, which
+				// the log's 120 characters never were. Whether a
+				// second look is owed is a judgement about an answer,
+				// and 642 of them are already gone: see
+				// internal/app/doubting.
+				t.Drafted(call, final.Text)
 				pressed = true
 				// Begun while this answer was still being written, if
 				// it was. This is the only place it is right to use.

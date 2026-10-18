@@ -20638,3 +20638,58 @@ logged `stored=1` on every batch. The rows were there. `occurred_at` and
 against `NOW()` hides the last five and a half hours.
 `UTC_TIMESTAMP()` is the comparison. The times quoted above are UTC:
 the morning ride was 09:34 to 10:04 local.
+
+**The second look is already nearly free, and the plan built to speed
+it up died measuring it** (owner, 18 October 2026, after two essays on
+agent architecture: *"we have to structurize our jarvis agent like
+this"*, then *"go ahead with step 1"*).
+
+Step 1 was to build the evidence before building anything on it:
+`internal/app/doubting`, which reads every send-back this server has
+ever made out of the record each chat already keeps of its own
+requests, and scores a judge against what the real second look found.
+No model, no gateway, `make evals-doubting`.
+
+The case for the work looked strong. A round through the gateway is
+4.5 seconds; 642 send-backs since 26 September, of which **542 changed
+nothing**; eighty-four per cent of the cost buying nothing, and about
+forty minutes of waiting. A small local model judging whether the look
+was owed would be 0.2s against 4.5.
+
+**All of that was wrong, and the first thing the eval printed is why.**
+The runner starts the look-first round *speculatively*, while the first
+answer is still being written -- `already_running=true` on every
+send-back in the log. **628 of the 642 reused a request that was
+already in flight.** What a needless send-back actually adds is
+whatever is left of that round when the first answer arrives: a median
+of **0.11s**, a p90 of 0.92s, **3.6 minutes in total across three
+weeks**. A judge saving a tenth of a second, at the risk of the 100
+real catches, is not worth building.
+
+**Where the time actually goes**, from the same day's turns:
+
+| tools run | turns | median turn |
+| --- | --- | --- |
+| 0 | 14 | **3.9 s** |
+| 1 | 15 | 8.8 s |
+| 2 | 3 | 12.3 s |
+| 3 | 1 | 14.4 s |
+
+A tool costs about five seconds, because the model cannot speak until
+it has seen what the tool returned, and that round is not speculative:
+nothing knows the result to guess at. The answer-mode / action-mode
+split, the router, the local judge -- none of them touch this. The only
+thing that would is knowing a tool's answer before the model asks for
+it, which is what prefetching is, and which is today [[prefetch-only
+-memory]].
+
+`doubting.Round` is kept at the measured 0.11s rather than a round's
+price, so that nothing built on this package can quote a saving that
+does not exist. The eval stays: it cost an afternoon and it stopped a
+week.
+
+Also added, since it was the one thing the set was missing: a chat's
+call record now keeps the answer that was thrown away (`Call.Draft`).
+All 642 historical cases have the question and no answer, so a judge
+that wants to read what it is doubting could not have been measured at
+all.

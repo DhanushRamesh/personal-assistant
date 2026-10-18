@@ -37,6 +37,16 @@ type Call struct {
 	// Early : Whether it was begun before the request in front of it had
 	// finished, in case that one's answer was sent back.
 	Early bool `json:"early,omitempty"`
+	// Draft : The answer this request produced, where that answer was
+	// then thrown away and sent back to look at the tools.
+	//
+	// Kept because nothing kept it. Whether a second look is owed is a
+	// judgement about an answer, and for every send-back before 18
+	// October 2026 the answer being judged is gone -- 642 of them, with
+	// only the question left. See internal/app/doubting, which is
+	// measurable on the question alone for exactly that reason and
+	// would rather not be.
+	Draft string `json:"draft,omitempty"`
 }
 
 // Asking : Records that a request to the model has gone out, returning
@@ -54,6 +64,19 @@ func (t *Chat) Heard(i int, at time.Time) {
 	}
 	when := at.UTC()
 	t.Calls[i].HeardAt = &when
+}
+
+// Drafted : Keeps the answer request i produced, where that answer is
+// about to be thrown away and sent back to look.
+//
+// Written whatever the request ended as, because the ending is recorded
+// at the moment the answer arrives and the decision to send it back
+// comes after. An i out of range is ignored.
+func (t *Chat) Drafted(i int, answer string) {
+	if i < 0 || i >= len(t.Calls) {
+		return
+	}
+	t.Calls[i].Draft = answer
 }
 
 // Ended : Records how request i ended, once. An i out of range is ignored.
