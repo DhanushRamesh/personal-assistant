@@ -20811,3 +20811,37 @@ point where the embedder stops reading.
 The two it still cannot find are both about conversations -- *"switch
 to the one about cricket"*, *"I've finished with this one"* -- which
 name no subject a tool description could match.
+
+**Choosing twenty tools by meaning beats the hand-written list by
+fourteen cases** (18 October 2026, the measurement the retrieval work
+was for).
+
+The tool suite now runs three ways -- `EVAL_TOOLS=all|hot|nearest`,
+with `EVAL_NEAREST` for how many -- so what it measures is what a
+request actually carries. Before this it described every tool in full,
+which is not what the server sends and never was.
+
+| what is described in full | right first try |
+| --- | --- |
+| `hot`, the hand-written 25, what the server sends today | **85 of 106** |
+| the 20 nearest the question, by meaning | **99 of 106** |
+
+Eighty per cent against ninety-three, on the same 106 questions, with
+the same model.
+
+**And neither run asked what a tool is, once.** `tool_describe` was
+never the first call in either. When the right tool is a name rather
+than a description, the model does not ask -- it reaches for a
+different tool and gets it wrong. Deferral has been costing accuracy
+and nothing was recovering it, which is the opposite of what the
+mechanism was built to do.
+
+On the memory questions alone the gap is starkest: `hot` 3 of 8,
+nearest-20 8 of 8. `memory_search` is not in `hot`, so a question about
+what he once said arrived with no way to look it up and no sign that
+anything was missing.
+
+So all four numbers move the same way at once: **93% against 80% on
+reaching the right tool, 0.71s off every model call, about a third off
+what a request costs, and 98% against 79% on the right tool being
+offered at all.**

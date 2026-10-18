@@ -199,7 +199,7 @@ func TestTheModelWritesARuleProperly(t *testing.T) {
 		if channel == "" {
 			channel = chat.ChannelVoice
 		}
-		called, args, said := ask(t, env, registry, channel, c.Say, c.After)
+		called, args, said := ask(t, env, registry, channel, c.Say, c.After, nil)
 
 		var blurted []string
 		for _, never := range c.Never {

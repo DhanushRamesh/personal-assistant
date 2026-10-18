@@ -209,10 +209,10 @@ func TestASentenceSurvivesItsSpelling(t *testing.T) {
 			time.Sleep(Pace)
 		}
 		asked++
-		tangledCalled, tangledArgs, _ := ask(t, env, registry, channel, c.Said, "")
+		tangledCalled, tangledArgs, _ := ask(t, env, registry, channel, c.Said, "", nil)
 
 		time.Sleep(Pace)
-		tidyCalled, tidyArgs, _ := ask(t, env, registry, channel, c.Tidy, "")
+		tidyCalled, tidyArgs, _ := ask(t, env, registry, channel, c.Tidy, "", nil)
 
 		tangledOK := right(c, tangledCalled, tangledArgs)
 		tidyOK := right(c, tidyCalled, tidyArgs)

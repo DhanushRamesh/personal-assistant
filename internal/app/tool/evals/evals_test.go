@@ -489,7 +489,18 @@ func TestTheModelReachesForTheRightTool(t *testing.T) {
 	// them. Empty runs everything, which is what make evals does.
 	only := strings.ToLower(os.Getenv("EVAL_ONLY"))
 
-	var right, wrong int
+	// Which tools each question is shown in full, and how they are
+	// chosen. Built once: the server would embed its tools at startup
+	// and only the question per turn.
+	var pick *chooser
+	if chosen() == "nearest" {
+		pick = newChooser(registry.For(chat.ChannelVoice))
+		t.Logf("describing the %d tools nearest each question, by meaning", nearestN())
+	} else {
+		t.Logf("describing %s", chosen())
+	}
+
+	var right, wrong, asking int
 	var asked int
 	for _, c := range cases {
 		if only != "" && !strings.Contains(strings.ToLower(c.Say), only) {
@@ -511,7 +522,7 @@ func TestTheModelReachesForTheRightTool(t *testing.T) {
 			channel = chat.ChannelVoice
 		}
 
-		called, args, said := ask(t, env, registry, channel, c.Say, c.After)
+		called, args, said := ask(t, env, registry, channel, c.Say, c.After, pick)
 
 		var blurted []string
 		for _, never := range c.Never {
@@ -532,6 +543,14 @@ func TestTheModelReachesForTheRightTool(t *testing.T) {
 		case len(c.Tool) > 0 && called == "":
 			wrong++
 			t.Errorf("%-45q called nothing, want one of %v", c.Say, c.Tool)
+		// Reaching the right tool, but a round later. The tool it wants
+		// was a name rather than a description, so it had to ask what
+		// it is before it could call it -- which is not a wrong choice
+		// and is not free either: a turn that asked ran 14.4s against
+		// 7.0s for one that did not.
+		case called == tool.Describing(nil).Name && len(c.Tool) > 0:
+			asking++
+			t.Logf("%-45q asked what a tool is first, wanting one of %v", c.Say, c.Tool)
 		case !among(called, c.Tool):
 			wrong++
 			t.Errorf("%-45q called %s, want one of %v", c.Say, called, c.Tool)
@@ -556,19 +575,31 @@ func TestTheModelReachesForTheRightTool(t *testing.T) {
 		}
 	}
 
-	t.Logf("%d of %d right", right, right+wrong)
+	t.Logf("%d of %d right, %d reached a round later", right, right+wrong+asking, asking)
 }
 
 // ask : What the model does with one thing somebody said.
 //
 // One call, not the whole loop: what is being measured is the choice, and the
 // choice is made before anything runs.
-func ask(t *testing.T, env *platformai.Environment, registry *tool.Registry, channel chat.Channel, say, after string) (string, string, string) {
+func ask(t *testing.T, env *platformai.Environment, registry *tool.Registry, channel chat.Channel, say, after string, pick *chooser) (string, string, string) {
 	t.Helper()
 
 	reachable := registry.For(channel)
+	// Which of them this run describes in full. The rest go as names
+	// in the catalogue, which is what the server does and what this
+	// suite did not: see choosing_test.go and EVAL_TOOLS.
+	full, err := describing(pick, reachable, say)
+	if err != nil {
+		t.Fatalf("choosing tools for %q: %v", say, err)
+	}
 	specs := make([]environment.ToolSpec, 0, len(reachable))
+	var named []string
 	for _, x := range reachable {
+		if !full[x.Name] {
+			named = append(named, x.Name)
+			continue
+		}
 		schema, err := json.Marshal(x.Params)
 		if err != nil {
 			t.Fatalf("%s has an unusable schema: %v", x.Name, err)
