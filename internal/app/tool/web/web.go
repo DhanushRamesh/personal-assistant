@@ -91,8 +91,13 @@ var keepLooking = "One search is a first attempt, not an answer. Five rounds are
 	"different words -- name the series, the season, the year, the place, the language, " +
 	"whichever of those the results got wrong. If a result looks like it holds the answer " +
 	"but the summary stops short, read the page. " +
-	"Give up only when a differently worded search has failed too, and then say what you " +
-	"did find rather than what you did not. " +
+	"If the words were right and the answer simply was not in the summaries, search again " +
+	"with deep set, which reads the pages themselves. " +
+	"Never offer to search more deeply and wait to be told. Owner, 18 October 2026, shown " +
+	"\"I can search more deeply if you would like\": that is a turn spent asking permission " +
+	"for something nobody would refuse. Do it, then answer. " +
+	"Give up only when a differently worded search and a deep one have both failed, and " +
+	"then say what you did find rather than what you did not. " +
 	"Never describe the searching. Not the results, not the sources, not what came back, " +
 	"not that the first one was incomplete: they asked about the world and a sentence about " +
 	"your own machinery answers nothing and tells them to go and look themselves. " +
@@ -178,14 +183,19 @@ func lookUp(searcher search.Searcher, reader search.Reader) tool.Tool {
 					Description: "Read the top pages as well as searching, and bring back " +
 						"what each of them actually says, so they can be compared against " +
 						"one another rather than taken from one summary. " +
-						"For when they ask you to cross-check, to look into something " +
-						"properly, to be sure, or to find out what people think -- and for " +
-						"anything where the sources are likely to disagree: a price, a " +
-						"review, a claim about what something does, a date that has moved. " +
+						"Set it yourself the moment a plain search has not answered -- a " +
+						"summary that stops short, results about the wrong thing, a detail " +
+						"the snippets do not carry. That is what it is for, and it is your " +
+						"decision, not theirs: never offer to look more deeply and wait to " +
+						"be told, just do it and answer. " +
+						"Set it too when they ask you to cross-check, to look into " +
+						"something properly or to be sure, and for anything where sources " +
+						"are likely to disagree: a price, a review, a claim about what " +
+						"something does, a date that has moved. " +
 						"Say where they disagree when they do; that is the whole point of " +
 						"having read several. " +
 						"It costs a few seconds and reads three pages, so not for a fact " +
-						"one page would settle.",
+						"the first search already gave you.",
 				},
 			},
 		},

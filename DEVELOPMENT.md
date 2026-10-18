@@ -21154,3 +21154,31 @@ Unmeasured, and the eval says so: both test questions reach
 does not reproduce what a real turn does. The rule is reasoned, not
 proven -- the third time today that a carried-subject or look-first
 rule has been broken while present and correct in the prompt.
+
+**A deeper search is its own decision** (owner, 18 October 2026, shown
+*"I can search more deeply if you would like, sir"*: *"it's asking for
+a permission to do deep research — don't need to ask that, it can do it
+on its own."*).
+
+The fault was mine and it was a contradiction, not a rule being
+ignored. `replying` has forbidden ending on an offer of further help
+since it was written. But the `deep` parameter, added two hours
+earlier, described itself as *"for when they ask you to cross-check,
+to look into something properly, to be sure"* -- which is an
+instruction to wait and be asked.
+
+So the description said offer and the persona said never offer, and the
+description won, because it is the one sitting beside the tool at the
+moment of choosing.
+
+Now: set it yourself the moment a plain search has not answered -- a
+summary that stops short, results about the wrong thing, a detail the
+snippets do not carry -- and never offer and wait. `keepLooking` says
+the same from the other end: searching deeper is part of not giving up,
+beside searching again with different words, and giving up now takes
+both having failed.
+
+The lesson is not that the model broke a rule. Two instructions
+disagreed and the nearer one was obeyed, which is what should happen.
+Every rule written beside a tool is read against the persona, and a new
+parameter is a new chance to contradict it.
