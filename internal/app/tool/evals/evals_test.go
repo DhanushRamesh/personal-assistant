@@ -194,6 +194,24 @@ var cases = []eval{
 	{Say: "add a reminder in the diary to renew the insurance on the first",
 		Tool:  []string{"calendar_add", "reminder_set"},
 		Never: []string{"where", "Where", "which address"}},
+	// Mentioned, not asked for. Owner, 18 October 2026: *"if something
+	// important happened or is going to happen, note in calendar or
+	// task -- don't ask me."* Until then the rule was to offer and
+	// wait for a yes, so a thing said in passing stayed said in
+	// passing.
+	//
+	// Only the first call is seen here, and the first right move is to
+	// read the day before writing to it, so calendar_add is allowed
+	// rather than required. What this case measures is that a passing
+	// mention reaches the diary at all instead of being answered with
+	// a sentence.
+	{Say: "i have to take my mother to the hospital on the 23rd morning",
+		Tool: []string{"calendar_add", "calendar_events"}},
+	// With no hour of its own it is a list and not a diary, because
+	// the task API drops the time. Reading the lists first is right
+	// here for the same reason.
+	{Say: "i need to buy a new charger for the laptop",
+		Tool: []string{"task_list_add", "task_add", "task_lists", "task_list"}},
 	// A kind of thing, not a word. Asked whether he knew anyone from
 	// America it searched his devices and mail for America, found
 	// nothing and said so -- while a memory held somebody in Houston,

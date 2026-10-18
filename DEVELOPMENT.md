@@ -20455,3 +20455,47 @@ written by `tool.Unchanged` and appended by the server to any answer
 that claims a write no tool performed. It is a guard, not a manner,
 and no wording in the persona will remove it. See
 [[read-before-write-in-every-domain]].
+
+**Written, not offered** (owner, 18 October 2026: *"when profiling or
+when you see something in conversation .. if something important
+happened or is going to happen, note in calendar or task -- don't ask
+me"*). The rule of 3 October was to offer anything placed in the
+future and wait for a yes. The asking is gone. What takes its place is
+saying: it is written, then named in one clause at the end of the
+reply, so a wrong entry is visible in the same breath and costs one
+word to remove. That is the bargain `keeping` has always had, which
+writes memories unasked and has never needed a question.
+
+**Two homes, by whether the thing has an hour.** The diary holds
+anything placed at a time. The list holds something to do with no time
+of its own -- to buy, to chase, to look at -- because the task API
+drops the hour ([[tasks-cannot-hold-a-time]]). Something that merely
+happened and is worth keeping is neither: that is a memory, and
+`keeping` already writes it without asking, so nothing new was needed
+for the half of the request about what has already happened.
+
+The name rule survives in a changed form. Looking the spelling up
+first is unchanged, because that costs nothing and nobody is asked.
+What changed is the fallback: it used to ask how a name is spelt, and
+now it writes its best guess and says which spelling it used. An entry
+they never heard about is the one that stays wrong.
+
+Three other rules said *offer* and had to move with it, or the prompt
+would have contradicted itself: `replying`'s third exception for
+ending on a question is now no exception at all, and `timekeeping`'s
+two references.
+
+**Not measured.** The tool suite sees one round and the first call
+only, and the right first move is to read the day before writing to
+it, so both new cases pass on the old wording as well as the new --
+they guard that a passing mention reaches the diary at all, and
+nothing more. Measuring *write rather than ask* wants a harness that
+runs a second round with a tool result in it. The shape eval has no
+tools, so it answers such a prompt by narrating an intention, which
+tests nothing here.
+
+**Still owed:** the profiling half. This is the conversation half
+only. Nothing in the periodic passes writes to the diary yet, and
+there is no cap on how many entries one conversation may produce --
+`noticing`'s own rule-writing pass is held to one a day for exactly
+that reason.

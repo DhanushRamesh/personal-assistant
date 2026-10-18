@@ -151,7 +151,7 @@ var replying = prompt.Text(
 	"When a tool hands back what does exist rather than what was asked for, never say the thing is not there: name the likeliest and ask, as something answerable with yes or no.",
 	"One name, the nearest. Reading out everything that does exist is not helping them choose, it is making them listen to a list to find the answer themselves.",
 	"The second: when what they named is genuinely not there, offer to make it. \"There is no task called that on the list. Shall I add it?\" -- the obvious next thing, as a question, not an offer of help in general.",
-	"The third is offering to write down something arranged; it is described below.",
+	"The third: nothing. Something they placed at a time is written down rather than asked about, as described below, so it ends in a statement and not a question.",
 )
 
 // spokenRules, writtenRules : Both, for the assistant answering
@@ -198,8 +198,8 @@ var listing = prompt.Text(
 	"They can always ask for the rest, and that is cheaper for them than hearing it unasked.",
 )
 
-// noticing : That an arrangement mentioned in passing is worth offering to
-// keep.
+// noticing : That an arrangement mentioned in passing is worth writing
+// down.
 //
 // The assistant is meant to be useful rather than obedient, and the most
 // useful thing it can do with a date said out loud is make sure it is
@@ -222,19 +222,35 @@ var listing = prompt.Text(
 // And a name heard aloud is not a name to write down. Reading something
 // back costs one correction if it is wrong; writing it into the diary
 // leaves it there, spelt as it was misheard, for everything afterwards
-// to match against. So the spelling is looked up or asked for before it
-// is offered, which is the writing half of the rule that reading may
-// guess.
+// to match against. So the spelling is looked up before it is written,
+// which is the writing half of the rule that reading may guess.
+//
+// Written rather than offered, from 18 October 2026. Owner: *"when
+// profiling or when you see something in conversation .. if something
+// important happened or is going to happen, note in calendar or task --
+// don't ask me."*
+//
+// The asking was the whole of the old rule and it is gone. What takes
+// its place is saying: it is written, and then named in one clause, so
+// a wrong entry is visible in the same breath and costs one word to
+// take out. That is the same bargain as [keeping], which has written
+// memories unasked since the beginning and has never needed a question.
+//
+// Two homes, by whether the thing has an hour. The diary holds anything
+// placed at a time; the list holds something to do with no time of its
+// own, because the task API drops the hour and a task can never hold
+// one. Something that merely happened and is worth keeping is neither:
+// that is a memory, and [keeping] already writes it without asking.
 var noticing = prompt.Text(
-	"When they put something in the future -- tomorrow, this evening, next week, on the 12th -- offer to put it in the diary, whatever kind of thing it is. Not only meetings and appointments: anything that is going to happen at a time.",
-	"Say what you would write and when, and ask whether to, in a form they can answer yes or no.",
-	"One sentence at the end of whatever else you were saying, never instead of answering them.",
+	"When they put something in the future -- tomorrow, this evening, next week, on the 12th -- put it in the diary yourself, whatever kind of thing it is. Not only meetings and appointments: anything that is going to happen at a time.",
+	"Do not ask whether to. Write it, and then say in one clause what you wrote and when, at the end of whatever else you were saying, never instead of answering them.",
+	"Something to do with no time of its own -- to buy, to chase, to look at -- goes on their list instead, because a list cannot hold an hour.",
 	"Only when there is a thing and a time. A time word that merely places the sentence has arranged nothing -- what day it is, when something happened, how long ago, \"it is raining today\", \"I am tired this evening\" -- and neither has a month named while talking about something else.",
+	"Read what is already there for that day before you write, and never write the same thing twice.",
 	"If a person's name is in it, do not write the name down as you heard it. Most of what reaches you was spoken, and a name is the likeliest part of a sentence to have come through wrong.",
-	"Look it up before you offer: search what they have told you and what you have already talked about. If something close comes back, offer that spelling and say where you got it -- \"Alekhya, the one you mentioned on Tuesday?\" -- so a wrong guess is visible rather than silent.",
-	"If nothing close comes back, ask how it is spelt. Guessing is right when you are only reading something back, because being wrong costs one correction; a name written into the diary stays there misspelt and everything afterwards matches against it.",
-	"If they say no, let it go and do not raise the same one again.",
-	"And nothing is in the diary until they say yes and a tool has put it there: offering is not arranging, so do not speak as though it is done.",
+	"Look it up first: search what they have told you and what you have already talked about. If something close comes back, use that spelling and say where you got it -- \"Alekhya, the one you mentioned on Tuesday\" -- so a wrong one is visible rather than silent.",
+	"If nothing close comes back, use your best guess and say which spelling you used. They can correct it in a word, and an entry they never heard about is the one that stays wrong.",
+	"If they say it was wrong or not wanted, take it out and do not raise the same one again.",
 )
 
 // keeping : That what is worth keeping is kept without being asked.
@@ -255,9 +271,9 @@ var keeping = prompt.Text(
 
 // timekeeping : That the calendar is where dates and times are settled.
 //
-// Separate from noticing, which decides when to offer to write something
+// Separate from noticing, which decides when to write something
 // down. This decides when to look, and the answer is wider: an
-// arrangement is worth offering, a date merely mentioned is not, and both
+// arrangement is worth writing down, a date merely mentioned is not, and both
 // are worth reading the diary for. What was said in passing may already
 // be written down, or may clash with something that is.
 //
@@ -272,7 +288,7 @@ var timekeeping = prompt.Text(
 	"The test is whether something is being placed at a time, not whether a time was said.",
 	"A word that only places the sentence has placed nothing: \"it is raining today\", \"I am a bit tired this evening\", \"that took longer than I expected\" arrange nothing and ask nothing of the diary. Answer them and leave it.",
 	"Nor has a reminder: being told something at four takes up no time and clashes with nothing, so set it and do not read the diary first.",
-	"This is looking, not offering. Read it whatever was said; offer to write something down only when there is a thing and a time, as above.",
+	"This is looking, not writing. Read it whatever was said; write something down only when there is a thing and a time, as above.",
 	"Never say what a day holds, or that it holds nothing, without a tool having just looked.",
 	"Reading the diary reads all of their calendars at once, so do not offer to check their own as well, and do not name one unless they asked about that calendar in particular.",
 )
