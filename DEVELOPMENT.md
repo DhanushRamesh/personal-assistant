@@ -20769,3 +20769,45 @@ about **two seconds off a median turn of 7.1 s**. It also takes about a
 third off what every request costs, and raises the odds of the right
 tool being in front of the model from 79% to 96%. Those were already
 measured; the seconds were the part in doubt, and are not any more.
+
+**The description did not need fixing; the text it is ranked by did**
+(18 October 2026, continuing the tool-retrieval measurement).
+
+The plan was to rewrite `web_search`'s description, because it sat at
+#78 of 88 for *"who is the chief minister of Tamil Nadu"* and the
+description says, in those words, *who holds an office*. It already
+said the right thing. It also already carried worked examples --
+*"what time does Phoenix Mall close"*, *"is it going to rain
+tomorrow"* -- which are two of the questions it was failing.
+
+**It is 3,999 characters, and bge-base reads about 512 tokens.** Its
+examples are past the cut and never reach the embedder at all. Seven of
+the eighty-eight tools are longer than the embedder reads:
+`web_search`, `calendar_events`, `event_recent`, `coming_settled`,
+`reminder_set`, `mail_search`, `memory_remember`.
+
+So the fix is to rank on text written to fit, rather than on the whole
+of what the model reads. Four ways, over the same 91 cases:
+
+| nearest N | purpose + usewhen + avoid | purpose only | purpose + usewhen | **purpose + the questions it is for** |
+| --- | --- | --- | --- | --- |
+| 5 | 82% | 68% | 76% | **82%** |
+| 10 | 91% | 82% | 87% | **92%** |
+| 15 | 93% | 85% | 90% | **96%** |
+| 20 | 96% | 87% | 91% | **98%** |
+| `hot`, today | | | | **79%** |
+
+A tool's `Examples` are questions, and a query is a question, so the
+shortest document is also the best one. **Fifteen chosen this way beat
+the whole description at twenty, and nothing the model reads changes**
+-- which is the part that matters, since a description rewrite would
+have had to be measured against tool choice as well.
+
+A guess that was wrong on the way: that the rulebook was burying the
+subject, and ranking on `Purpose` alone would do better. It is the
+worst of the four. More of a tool's own words helps, right up to the
+point where the embedder stops reading.
+
+The two it still cannot find are both about conversations -- *"switch
+to the one about cricket"*, *"I've finished with this one"* -- which
+name no subject a tool description could match.
