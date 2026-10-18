@@ -20390,3 +20390,30 @@ Code in", "checking your calendar for" -- so trimming is not the
 enforcement. Refusing to **speak** one that is over the cap is: the
 screen can carry a long line for nothing, and silence costs nothing
 either. That goes in with the announcing, which is still off.
+
+**A bare instruction keeps the subject too** (owner, 18 October 2026:
+*"it should assume that i talk about claude code .. why it went to
+rule list"*). Having said *"Claude Code in PAC has finished, sir ...
+shall I ask it to commit and push both?"*, it heard *"wait jarvis. ask
+you to do, like, when connecting back to network, it should announce,
+like, i am here"* and called `rule_add` with a rule named "offline
+wake announcement", which the rules domain then refused -- so the turn
+spent 17.5 seconds to arrive at *"a rule like that does not exist in
+the list, sir."*
+
+`carried` was written five days earlier for exactly this and covered
+only a **question**. An instruction is the commoner half: most of what
+follows an offer is an amendment to the offer. It now says so, with a
+line for the shape -- ask it to do this too, tell them that instead --
+and a line for the misheard word, since *ask it* and *ask you* are one
+sound apart and the subject both of you were already on is the better
+evidence of the two.
+
+**Not measured, and the eval says so in its own comment.**
+`TestABareFollowUpKeepsTheSubject` replays the exchange with the
+laptop's two terminal tools declared word for word, and passes on the
+old wording as well as the new -- so it guards the shape and proves
+nothing about the fix. The real turn carried 49 tools, 63 KB of
+context and a conversation several turns deep, and one of those is
+what tipped it. A reproduction wants that conversation replayed out of
+the store. Tool choice elsewhere is unchanged: roof 8 of 8.

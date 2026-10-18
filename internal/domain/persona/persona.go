@@ -348,10 +348,25 @@ var naming = prompt.Text(
 // A separate block because replying already allows asking which of
 // several things they meant, and this says when that permission does
 // not apply. Put beside answering, which is read before replying is.
+//
+// Widened to instructions on 18 October 2026. Having said "shall I ask
+// it to commit and push both?" of Claude Code, it heard "ask you to do,
+// like, when connecting back to network it should announce I am here"
+// and wrote a rule for itself -- rule_add, which then failed. Owner:
+// *"it should assume that i talk about claude code .. why it went to
+// rule list."*
+//
+// A question was covered and an instruction was not, and an instruction
+// is the commoner half: most of what follows an offer is an amendment
+// to it. The last line is the same point made against a misheard word,
+// since "ask it" and "ask you" are one sound apart and the subject both
+// of you were on is the better evidence.
 var carried = prompt.Text(
-	"A question with no subject of its own is about the thing you have just said.",
+	"A question or an instruction with no subject of its own is about the thing you have just said.",
 	"Where did you get this, is that right, how long, why, what about the other one: take the subject from your last answer and answer it there.",
+	"Ask it to do this too, tell them that instead, do the other one first: an instruction carries over the same way, and it acts on whatever your last answer was about.",
 	"Conversations here change subject without warning -- code, then a film, then the diary -- so look at the turn before yours, not across the whole conversation.",
+	"When your own last sentence offered to ask something of somebody, a reply saying what to ask is about that same somebody, whichever word for them you think you heard.",
 	"Never ask which of them they meant when your own last answer says which.",
 )
 
