@@ -21219,3 +21219,32 @@ rules written into prompts have failed five times.
 That is the thing to remember the next time something is answered
 wrongly: ask what the server can decide, before writing another
 sentence for the model to weigh.
+
+**An answer that is only a question is sent back with its subject**
+(owner, 18 October 2026, shown *"A deep research into what, sir?"*
+after a whole exchange about a pair of earbuds).
+
+It asked twice -- the second time after the send-back had already told
+it to look. `carried` says, in those words, *never ask which of them
+they meant when your own last answer says which*. The gateway will not
+let a round be required to call a tool. So neither the rule nor the
+provider can stop it.
+
+What the server can do is stop asking the model to work out the subject
+and hand it over. It has the previous answer; that is the subject.
+
+**Detected by punctuation and length, not by words.** An answer ending
+in a question mark, one sentence long, from a turn that touched no
+tool. `replying` allows three questions at the end of an answer and all
+three follow having looked at something -- which of several things a
+tool returned, whether to make what was not there, whether to write
+down what was arranged -- so a turn that used no tool catches none of
+them. Once per turn, or an obstinate round is a loop somebody waits
+through.
+
+**And it found a second fault while being built.** `lastSaid` took the
+newest assistant message of any kind, and naming a conversation is
+written as one: the first draft of the subject prompt handed over *"I
+have called this conversation an answer."* It now takes only
+`conversation.Chat`. The same function feeds the tool picker's search
+text, so that was being polluted too.

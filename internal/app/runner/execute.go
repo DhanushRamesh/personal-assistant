@@ -186,6 +186,9 @@ func (r *Runner) consume(runCtx, ctx context.Context, t *chat.Chat, systemPrompt
 	// prefetched on every turn, so something has always run. This is
 	// about what the model chose.
 	var reached, pressed bool
+	// askedBack : Whether an answer that was only a question has
+	// already been sent back with its subject. Once a turn.
+	var askedBack bool
 	// Said in passing -- thanks, a hold, a hello -- is not sent back to
 	// look, nor run a round beside it for that: see persona.InPassing.
 	if persona.InPassing(t.Prompt, r.assistantName) {
@@ -495,6 +498,36 @@ func (r *Runner) consume(runCtx, ctx context.Context, t *chat.Chat, systemPrompt
 					shortened = true
 				}
 				continue
+			}
+
+			// An answer that is nothing but a question back, from a
+			// turn that touched no tool.
+			//
+			// Owner, 18 October 2026, after asking about a pair of
+			// earbuds and then saying "do a deep research": *"A deep
+			// research into what, sir?"* -- twice, the second time
+			// after the send-back had already told it to look. The
+			// persona says in so many words never to ask which of
+			// them they meant when your own last answer says which,
+			// and the gateway will not let a round be required to
+			// call a tool, so neither the rule nor the provider can
+			// stop it.
+			//
+			// What the server can do is stop asking the model to
+			// work out the subject and hand it over. It has the
+			// previous answer; that is the subject. Once per turn,
+			// and only when nothing was looked at, so an honest
+			// question after reading something still goes out.
+			if !reached && !askedBack && onlyAsking(final.Text) {
+				if said := lastSaid(window.Messages); said != "" {
+					r.logger.InfoContext(ctx, "an answer that was only a question was sent back with its subject",
+						slog.String("thrown_away", first(final.Text, 90)))
+					askedBack = true
+					t.Drafted(call, final.Text)
+					turns = append(turns, asUserTurn(prompt)...)
+					prompt = subjectIs(said)
+					continue
+				}
 			}
 			// Asked to change something, changed nothing, and now
 			// answering. Sent back once, with the refusal and
@@ -1465,7 +1498,12 @@ func laptopConnected(tools []string) string {
 func lastSaid(messages []conversation.Message) string {
 	for i := len(messages) - 1; i >= 0; i-- {
 		m := messages[i]
-		if m.Role == conversation.Assistant && strings.TrimSpace(m.Content) != "" {
+		// An answer to them, not its own housekeeping. Naming a
+		// conversation is written as an assistant message too, and
+		// "I have called this conversation X" is not the subject of
+		// anything they said next.
+		if m.Role == conversation.Assistant && m.Kind == conversation.Chat &&
+			strings.TrimSpace(m.Content) != "" {
 			return m.Content
 		}
 	}
@@ -1508,4 +1546,40 @@ func lately(messages []conversation.Message, n int) []conversation.Message {
 		}
 	}
 	return messages
+}
+
+// onlyAsking : Whether an answer is nothing but a question put back to
+// the person.
+//
+// Punctuation and length, not words: a question mark is a question in
+// every language this is spoken in, and what makes it a refusal to
+// answer rather than an aside is that there is nothing else in it.
+//
+// [persona.replying] allows three questions at the end of an answer,
+// and all three follow having looked at something -- which of several
+// things a tool returned, whether to make what was not there, whether
+// to write down what was arranged. This fires only on a turn that
+// touched no tool, so none of the three is caught by it.
+func onlyAsking(answer string) bool {
+	answer = strings.TrimSpace(answer)
+	if !strings.HasSuffix(answer, "?") {
+		return false
+	}
+	// One question and nothing else. An answer that said something
+	// and then asked has answered.
+	return persona.Sentences(answer) <= 1
+}
+
+// subjectIs : What the model is told when it asked which thing was
+// meant and its own last answer says which.
+//
+// The subject is given rather than pointed at. Told to look at the
+// turn before, it has looked and asked anyway; handed the words, there
+// is nothing left to work out.
+func subjectIs(said string) string {
+	return "Before that answer goes out: it is a question back to them and nothing else, " +
+		"on a turn where you looked at nothing. They were not asked to choose; they asked you. " +
+		"The subject is what you yourself said last, which was: " + first(said, 400) + " " +
+		"Take the subject from that and answer, using whatever tool fits. " +
+		"Do not ask them which thing they meant -- your own last answer says which."
 }
