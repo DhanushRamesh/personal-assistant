@@ -20582,3 +20582,43 @@ lines and only those are matched.
 **What this cannot test:** the ordering, and therefore duplicates. The
 dry run has no tools, so nothing checks that it reads the days before
 writing to them. That wants the tools and a test calendar.
+
+**The speed-aware sampling was off by a unit** (owner, 18 October 2026,
+with a map of straight lines cutting across streets: *"after you did the
+location changes in tasker the locations are not accurate"*).
+
+They were accurate. Over 30 hours of fixes every implied speed was
+plausible, the fastest 20 km/h, no reading repeated and no jump was
+impossible. What the map drew was straight lines between points **300
+to 900 metres apart**, which cut through blocks on a street grid. The
+path was undersampled, not wrong.
+
+**It was undersampled because the loop never ran.** 98 of 105 fixes
+landed exactly on the 2-minute profile beat, and the phone's own run
+log says why: `Send Location.Goto` logged `IfFail` on every firing,
+with the `Wait` before it returning in the same second. `%again` was
+always 0.
+
+The cause was in the JavaScriptlet: `if(speed>=5&&left>20000)`.
+`%gl_speed` from Get Location v2 is **metres per second**, so 5 is
+**18 km/h** -- a threshold meant for the highway that switched the
+feature off everywhere else, since his trips run 8 to 15 km/h. Proof
+that the machinery itself worked: exactly one stretch of the day
+exceeded 5 m/s (419 m in 76 s) and that is precisely where the single
+off-beat fix sits.
+
+Now `speed>=1.5` (5.4 km/h) and `120/speed` rather than `300/speed`,
+edited in place over adb and verified by reading the field back. At 10
+km/h that is a fix every 43 s instead of 120, about 100 m apart; at 60
+km/h it hits the 20 s floor. The 110-second window cap holds each run
+inside its own slot, so it is at most two or three extra fixes per
+firing. Scale: roughly 105 fixes a day becomes about 160, 38k rows a
+year to 58k, on the same batch.
+
+**A reading mistake worth recording.** Halfway through this the whole
+phone feed looked dead -- nothing stored for six hours while the server
+logged `stored=1` on every batch. The rows were there. `occurred_at` and
+`received_at` are UTC and MySQL's `NOW()` is IST, so a window written
+against `NOW()` hides the last five and a half hours.
+`UTC_TIMESTAMP()` is the comparison. The times quoted above are UTC:
+the morning ride was 09:34 to 10:04 local.
