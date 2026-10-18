@@ -111,8 +111,10 @@ func lookUp(searcher search.Searcher, reader search.Reader) tool.Tool {
 		Name:   "web_search",
 		Domain: "web",
 		Lists:  true,
-		Purpose: "Look something up on the web: anything that is not about them, not in their " +
-			"diary, reminders, messages, tasks or what their own devices reported.",
+		Purpose: "Look something up on the web: anything in the world rather than in their own " +
+			"life. What a thing is and what it costs, a product and its specifications, a " +
+			"place, a person, a result, the news. Not their diary, reminders, messages, " +
+			"tasks or what their own devices reported.",
 		UseWhen: "A question whose answer lives in the world rather than in their life. " +
 			"What something is, who somebody is, how something works, what happened, what is " +
 			"on, what a place is like, what a thing costs, what the news says. " +
@@ -208,6 +210,19 @@ func lookUp(searcher search.Searcher, reader search.Reader) tool.Tool {
 				Args: `{"query":"Chennai weather forecast tomorrow","days":1,"limit":3}`},
 			{Ask: "what is trending on Tamil social media today",
 				Args: `{"query":"Tamil trending today","days":1,"news":true}`},
+			// A thing you could buy. Nothing here covered it, and a
+			// product's own words belong to the laptop's tools:
+			// asked about the microphone on a pair of earbuds on 18
+			// October 2026, choose_device ranked first of
+			// eighty-eight and this ranked 26th, because
+			// choose_device's description says "microphone" and
+			// "earbuds" and this said football, rain and a mall.
+			{Ask: "what are the specifications of the Realme Buds T310",
+				Args: `{"query":"Realme Buds T310 specifications","limit":5}`},
+			{Ask: "does it have noise cancellation and how long does the battery last",
+				Args: `{"query":"Realme Buds T310 noise cancellation battery life","deep":true}`},
+			{Ask: "which phone should I buy under thirty thousand",
+				Args: `{"query":"best phone under 30000 India","days":90,"limit":5}`},
 			{Ask: "cross-check that for me",
 				Args: `{"query":"Jailer 2 reviews critics","deep":true,"saying":"reading a few reviews"}`},
 			{Ask: "look into whether that medicine clashes with anything",

@@ -21248,3 +21248,40 @@ written as one: the first draft of the subject prompt handed over *"I
 have called this conversation an answer."* It now takes only
 `conversation.Chat`. The same function feeds the tool picker's search
 text, so that was being polluted too.
+
+**web_search had nothing in it about a thing you could buy** (18
+October 2026, the last of the four faults in the earbuds exchange).
+
+Asked *"what about the microphone settings?"* after an answer about a
+pair of earbuds, it read the laptop's own settings. The reason was
+vocabulary, laid out plainly once the three ranking texts are side by
+side:
+
+    choose_device   "Choose the microphone or speaker … earbuds when they are connected"
+    get_settings    "This app's settings … the wake word …"
+    web_search      "who won the match last night. what time does Phoenix Mall close.
+                     is it going to rain tomorrow. what is trending on Tamil social media"
+
+`choose_device` owned both of his words. `web_search` owned neither,
+because every example it carried was a result, a mall, the weather or a
+trend. **Nothing in it was about a product.**
+
+Three examples added -- a product's specifications, its battery and
+noise cancellation, which phone to buy -- and the purpose widened from
+"anything that is not about them" to name what it covers: what a thing
+is and what it costs, a product and its specifications, a place, a
+person, a result, the news.
+
+| question | before | after |
+| --- | --- | --- |
+| "microphone settings", with the earbuds answer before it | #26 | **#1** |
+| "I was asking about realme earbuds" | #16 | **#1** |
+| "microphone settings" alone, with no context | #47 | #11 |
+
+And no over-reach: over the suite the right tool is in the nearest ten
+on **94%** against 92% before, and in the nearest twenty on 98%.
+
+The lesson is the one that keeps paying. A tool is found by the words
+in its own description, and the words it lacks are the questions it
+will never be offered for. Every example is a shape it can be found
+by; a tool with four examples can be found four ways.
