@@ -242,3 +242,99 @@ func TestOnlyAFewPagesAreRead(t *testing.T) {
 		t.Errorf("read %d pages, want at most %d", len(s.read), webtool.Pages)
 	}
 }
+
+// readsPages : A service that searches and reads, recording what it was
+// asked to read.
+type readsPages struct {
+	found []search.Result
+	pages []search.Page
+	err   error
+	asked []string
+}
+
+func (r *readsPages) Where() string { return "test" }
+
+func (r *readsPages) Search(context.Context, search.Ask) ([]search.Result, error) {
+	return r.found, nil
+}
+
+func (r *readsPages) Read(_ context.Context, urls []string) ([]search.Page, error) {
+	r.asked = append(r.asked, urls...)
+	return r.pages, r.err
+}
+
+func searchTool(t *testing.T, service search.Service) tool.Tool {
+	t.Helper()
+	for _, x := range webtool.Tools(service) {
+		if x.Name == "web_search" {
+			return x
+		}
+	}
+	t.Fatal("no web_search")
+	return tool.Tool{}
+}
+
+// TestADeepSearchReadsThePagesToo : Owner, 18 October 2026: *"I want
+// deep research in the chat call only, because I'll ask to cross-check
+// and research there."* One tool call and not a conversation: a turn is
+// cut at thirty seconds and a round of the model is four and a half.
+func TestADeepSearchReadsThePagesToo(t *testing.T) {
+	s := &readsPages{
+		found: []search.Result{
+			{Title: "One", URL: "https://a.test", Snippet: "a"},
+			{Title: "Two", URL: "https://b.test", Snippet: "b"},
+			{Title: "Three", URL: "https://c.test", Snippet: "c"},
+			{Title: "Four", URL: "https://d.test", Snippet: "d"},
+		},
+		pages: []search.Page{{URL: "https://a.test", Text: "the first page says forty thousand"}},
+	}
+	got := searchTool(t, s).Run(context.Background(), tool.Invocation{
+		Args: []byte(`{"query":"the roof","deep":true}`),
+	})
+	if got.Outcome != "ok" {
+		t.Fatalf("outcome = %q: %s", got.Outcome, got.Content)
+	}
+	if len(s.asked) != 3 {
+		t.Errorf("read %d pages, want the top %d", len(s.asked), 3)
+	}
+	if !strings.Contains(got.Content, "forty thousand") {
+		t.Errorf("what the page said never reached the model:\n%s", got.Content)
+	}
+	if !strings.Contains(strings.ToLower(got.Content), "where they disagree") {
+		t.Errorf("nothing told it to compare them:\n%s", got.Content)
+	}
+}
+
+// TestAShallowSearchReadsNothing : The ordinary search is unchanged,
+// and reading is the dear act -- seconds each, and a credit each on the
+// service that counts them.
+func TestAShallowSearchReadsNothing(t *testing.T) {
+	s := &readsPages{found: []search.Result{{Title: "One", URL: "https://a.test"}}}
+	got := searchTool(t, s).Run(context.Background(), tool.Invocation{
+		Args: []byte(`{"query":"the roof"}`),
+	})
+	if got.Outcome != "ok" {
+		t.Fatalf("outcome = %q", got.Outcome)
+	}
+	if len(s.asked) != 0 {
+		t.Errorf("an ordinary search read %d pages", len(s.asked))
+	}
+}
+
+// TestAReadThatFailedStillAnswers : The search stands. A read that
+// failed is a thinner answer, not a failed one.
+func TestAReadThatFailedStillAnswers(t *testing.T) {
+	s := &readsPages{
+		found: []search.Result{{Title: "One", URL: "https://a.test", Snippet: "the snippet"}},
+		err:   errors.New("the pages could not be had"),
+	}
+	got := searchTool(t, s).Run(context.Background(), tool.Invocation{
+		Args: []byte(`{"query":"the roof","deep":true}`),
+	})
+	if got.Outcome != "ok" {
+		t.Fatalf("a failed read failed the whole search: %q %s", got.Outcome, got.Content)
+	}
+	if !strings.Contains(got.Content, "the snippet") {
+		t.Errorf("the results were lost with the pages:\n%s", got.Content)
+	}
+}

@@ -57,9 +57,9 @@ const (
 // Tools : What the assistant can look up, and read.
 func Tools(service search.Service) []tool.Tool {
 	if service == nil {
-		return []tool.Tool{lookUp(nil), readPage(nil)}
+		return []tool.Tool{lookUp(nil, nil), readPage(nil)}
 	}
-	return []tool.Tool{lookUp(service), readPage(service)}
+	return []tool.Tool{lookUp(service, service), readPage(service)}
 }
 
 // keepLooking : What to do with a search that did not answer, and
@@ -101,7 +101,7 @@ var keepLooking = "One search is a first attempt, not an answer. Five rounds are
 	"and let them judge it."
 
 // lookUp : Search the web.
-func lookUp(searcher search.Searcher) tool.Tool {
+func lookUp(searcher search.Searcher, reader search.Reader) tool.Tool {
 	return tool.Tool{
 		Name:   "web_search",
 		Domain: "web",
@@ -173,6 +173,20 @@ func lookUp(searcher search.Searcher) tool.Tool {
 						"that happened rather than something that is: a result, a decision, " +
 						"an announcement, an accident. Not for opening hours or prices.",
 				},
+				"deep": {
+					Type: "boolean",
+					Description: "Read the top pages as well as searching, and bring back " +
+						"what each of them actually says, so they can be compared against " +
+						"one another rather than taken from one summary. " +
+						"For when they ask you to cross-check, to look into something " +
+						"properly, to be sure, or to find out what people think -- and for " +
+						"anything where the sources are likely to disagree: a price, a " +
+						"review, a claim about what something does, a date that has moved. " +
+						"Say where they disagree when they do; that is the whole point of " +
+						"having read several. " +
+						"It costs a few seconds and reads three pages, so not for a fact " +
+						"one page would settle.",
+				},
 			},
 		},
 		Examples: []tool.Example{
@@ -184,6 +198,10 @@ func lookUp(searcher search.Searcher) tool.Tool {
 				Args: `{"query":"Chennai weather forecast tomorrow","days":1,"limit":3}`},
 			{Ask: "what is trending on Tamil social media today",
 				Args: `{"query":"Tamil trending today","days":1,"news":true}`},
+			{Ask: "cross-check that for me",
+				Args: `{"query":"Jailer 2 reviews critics","deep":true,"saying":"reading a few reviews"}`},
+			{Ask: "look into whether that medicine clashes with anything",
+				Args: `{"query":"metformin drug interactions","deep":true,"limit":5}`},
 		},
 		Run: func(ctx context.Context, in tool.Invocation) tool.Result {
 			var args struct {
@@ -191,6 +209,7 @@ func lookUp(searcher search.Searcher) tool.Tool {
 				Limit int    `json:"limit"`
 				Days  int    `json:"days"`
 				News  bool   `json:"news"`
+				Deep  bool   `json:"deep"`
 			}
 			_ = json.Unmarshal(in.Args, &args)
 
@@ -244,9 +263,51 @@ func lookUp(searcher search.Searcher) tool.Tool {
 					found = wider
 				}
 			}
-			return tool.OK(search.Describe(query, found))
+			if !args.Deep || reader == nil || len(found) == 0 {
+				return tool.OK(search.Describe(query, found))
+			}
+			return tool.OK(compared(ctx, reader, query, found))
 		},
 	}
+}
+
+// compared : The results, and what the first few pages actually say.
+//
+// Owner, 18 October 2026, asked whether deep research should be its own
+// tool or a background job: *"I want deep research in the chat call
+// only, because I'll ask to cross-check and research there."*
+//
+// So it is one tool call and not a conversation: search, then read the
+// top pages in a single batch, and hand the model all of it at once.
+// A turn is cut at thirty seconds and a round of the model is four and
+// a half of them, so the thing that cannot be afforded is rounds. The
+// reading is one more HTTP call on a service that takes every URL
+// together.
+//
+// What it buys is the only kind of cross-checking that is worth the
+// name: three sources' own words side by side, rather than one
+// summary and a model's memory of the rest.
+func compared(ctx context.Context, reader search.Reader, query string, found []search.Result) string {
+	wanted := make([]string, 0, Pages)
+	for _, r := range found {
+		if strings.TrimSpace(r.URL) == "" {
+			continue
+		}
+		wanted = append(wanted, r.URL)
+		if len(wanted) >= Pages {
+			break
+		}
+	}
+
+	pages, err := reader.Read(ctx, wanted)
+	if err != nil || len(pages) == 0 {
+		// The search still stands. A read that failed is a thinner
+		// answer, not a failed one, and saying so beats refusing.
+		return search.Describe(query, found)
+	}
+	return search.Describe(query, found) + "\n\n" +
+		"What each of these pages says, in its own words. Compare them, and say where they disagree:\n\n" +
+		search.Said(pages, Longest, query)
 }
 
 // readPage : Read what is actually on a page.

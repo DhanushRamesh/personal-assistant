@@ -21046,3 +21046,35 @@ ever revisited.
 Five questions and one run, so the snippet problems are the finding and
 the milliseconds are an impression. The gap is wide enough to act on
 either way.
+
+**Deep search is a parameter, not a job** (owner, 18 October 2026, on
+what deep research should be here: *"I want deep research in the chat
+call only, coz I'll ask to cross-check and research there .. so just
+add a parameter deep research in web_search."*).
+
+`web_search` takes `deep`. With it, the tool searches, then reads the
+top three pages in one batch, and hands the model the results and the
+pages' own words together, under a line telling it to compare them and
+say where they disagree.
+
+**One tool call and not a conversation**, which is what makes it fit a
+turn at all. The turn is cut at thirty seconds and a round of the model
+costs four and a half, so rounds are the thing that cannot be afforded;
+reading is one more HTTP call on a service that takes every URL at
+once. An agent that searched, thought, searched again would be minutes
+and belongs in a background pass -- which is what was offered and what
+he turned down.
+
+What it buys is the only cross-checking worth the name: three sources'
+own words side by side, rather than one summary and the model's memory
+of the rest.
+
+A read that fails does not fail the search. The results still stand and
+a thinner answer beats a refusal.
+
+Rejected on the way: Tavily's `/research` endpoint, which is the same
+idea bought rather than built. It is queued and takes minutes, so it
+cannot live in a turn; it costs 4 to 110 credits a time against a
+thousand a month; and it cannot see his diary, his memories or his
+devices, which is the one thing a research agent here can do that no
+vendor's can.
