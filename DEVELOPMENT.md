@@ -20742,3 +20742,30 @@ The registry the evals build now carries every domain the server has,
 including coming, web, maps and calling. Without them the first run
 scored a 82% ceiling and reported sixteen misses that were tools never
 offered to the ranking at all.
+
+**The tool block does cost time, and I had said it did not** (18
+October 2026). The claim that the first word arrives at 2.94s whatever
+the prompt carries rested on two calls out of seventy, in a sample
+where sixty-eight sat at the same size. `make evals-toolcost` asks the
+same one-word question nine times at each size, alternating rather
+than in blocks, because the gateway is slower at some minutes than
+others:
+
+| tools sent | tool bytes | first word |
+| --- | --- | --- |
+| 0 | 2 | 2.356 s |
+| 20 | 48,825 | 2.944 s |
+| 50 | 124,501 | 3.657 s |
+
+Roughly in proportion to size, and **about 0.71 s between fifty tools
+and twenty**. Five spins was not enough to order them -- twenty came
+back slower than fifty, which is the shape of noise -- so the sample is
+raised with `EVAL_SPINS`.
+
+**What that makes the tool-retrieval work worth.** Every call in a turn
+carries the block, and a turn averaged 2.77 calls on 18 October, so
+describing twenty by meaning rather than fifty by a fixed list is worth
+about **two seconds off a median turn of 7.1 s**. It also takes about a
+third off what every request costs, and raises the odds of the right
+tool being in front of the model from 79% to 96%. Those were already
+measured; the seconds were the part in doubt, and are not any more.
