@@ -28,7 +28,6 @@ import (
 	// Aliased: aside.go already has a speech of its own, which is the one
 	// being spoken rather than the one that was heard.
 	"personal-assistant/internal/app/tool"
-	"personal-assistant/internal/app/tool/nearest"
 	utterance "personal-assistant/internal/base/world/speech"
 )
 
@@ -109,14 +108,6 @@ type Options struct {
 	// AssistantName : What the assistant calls itself when it introduces
 	// itself. Empty leaves it nameless.
 	AssistantName string
-	// Picker : Chooses which tools a question is shown in full, by what
-	// it means. Nil leaves the hand-written list of twenty-five, which
-	// is what the server sent until 18 October 2026.
-	Picker *nearest.Picker
-	// ToolsNearest : How many tools a question is shown. Zero leaves
-	// the hand-written list. Twenty reached the right tool first try on
-	// 99 of the tool suite's 106 questions, against 85 for the list.
-	ToolsNearest int
 	// Persona : The manner it answers in, read afresh on every prompt so a
 	// change takes effect without a restart. Nil leaves it answering
 	// plainly.
@@ -179,18 +170,11 @@ type Runner struct {
 	historyLimits   conversation.Limits
 	condenseTimeout time.Duration
 	assistantName   string
-	// picker : Chooses which tools to describe for a question. Nil
-	// leaves the hand-written list, which is what the server sent
-	// until 18 October 2026.
-	picker *nearest.Picker
-	// toolsNearest : How many tools a question is shown in full. Zero
-	// leaves the hand-written list.
-	toolsNearest int
-	persona      *persona.Setting
-	announcer    announce.Announcer
-	cut          *utterance.Cut
-	tools        *tool.Registry
-	away         Away
+	persona         *persona.Setting
+	announcer       announce.Announcer
+	cut             *utterance.Cut
+	tools           *tool.Registry
+	away            Away
 	// chatTools : Each running chat's tools -- Tools with what the
 	// person's devices offer -- by chat id, for as long as it runs.
 	chatTools sync.Map
@@ -271,8 +255,6 @@ func New(opts Options) (*Runner, error) {
 		historyLimits:   opts.HistoryLimits,
 		condenseTimeout: opts.CondenseTimeout,
 		assistantName:   opts.AssistantName,
-		picker:          opts.Picker,
-		toolsNearest:    opts.ToolsNearest,
 		persona:         opts.Persona,
 		cut:             opts.Cut,
 		announcer:       opts.Announcer,

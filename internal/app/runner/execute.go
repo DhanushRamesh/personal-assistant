@@ -188,8 +188,7 @@ func (r *Runner) consume(runCtx, ctx context.Context, t *chat.Chat, systemPrompt
 	var reached, pressed bool
 	// Said in passing -- thanks, a hold, a hello -- is not sent back to
 	// look, nor run a round beside it for that: see persona.InPassing.
-	inPassing := persona.InPassing(t.Prompt, r.assistantName)
-	if inPassing {
+	if persona.InPassing(t.Prompt, r.assistantName) {
 		pressed = true
 		r.logger.InfoContext(ctx, "said in passing: not sent back to look")
 	}
@@ -265,24 +264,7 @@ func (r *Runner) consume(runCtx, ctx context.Context, t *chat.Chat, systemPrompt
 		// rounds must answer from what it gathered, and saying what it
 		// managed is better than being cut off mid-chain with nothing to
 		// show for the work that already ran.
-		tools := r.offered(ctx, t, revealed)
-		// And nothing at all for a hello. persona.InPassing has already
-		// decided this is thanks, a hold, an acknowledgement or a
-		// greeting -- it is what stops the answer being sent back to
-		// look -- and the tool block went out anyway: 117,923 bytes of
-		// definitions that cannot be used.
-		//
-		// Measured on 18 October 2026. The block costs 0.71s to the
-		// first word between fifty tools and twenty and 1.30s against
-		// none, so a hello falls from about 49,700 tokens and 3.9s to
-		// 18,100 and 2.6s. Against the risk of leaving the model
-		// without a tool it needed: InPassing matched one of the 106
-		// questions in the tool suite, and that one wanted no tool.
-		if inPassing && len(tools) > 0 {
-			r.logger.InfoContext(ctx, "said in passing: asked without tools",
-				slog.Int("not_offered", len(tools)))
-			tools = nil
-		}
+		tools := r.offered(t, revealed)
 		if worked >= MaxToolHops-1 {
 			if len(tools) > 0 {
 				r.logger.WarnContext(ctx, "the tool chain ran long, so the last round is asked without tools",
