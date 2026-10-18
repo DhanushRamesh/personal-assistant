@@ -93,3 +93,49 @@ func TestAnUndescribedToolIsStillHeldBack(t *testing.T) {
 		t.Errorf("a tool the model had never been given the arguments for ran %d times", runs)
 	}
 }
+
+// TestADescribedToolExpires : The other side of it, and the fault that
+// put it there.
+//
+// Owner, 18 October 2026, having asked about his battery, then about a
+// film, then about two people, and then said "look again": it read his
+// battery. The battery tool had been described three questions earlier
+// and was still on the table, so a bare follow-up found something to
+// look at again that nobody had mentioned since.
+//
+// Three of his turns, counting the one being answered. A chain keeps
+// its tools; another subject's do not.
+func TestADescribedToolExpires(t *testing.T) {
+	var runs int
+	tools := deferring(t, func() tool.Result { runs++; return tool.OK("Moved it.") })
+
+	// Described on the first turn, then three turns of something else,
+	// then called again. By then it should be a name once more, so the
+	// call is refused rather than run on guessed arguments.
+	h := newHarness(t, &scripted{rounds: []environment.Message{
+		calling("calendar_free"),
+		environment.Final("Moved it."),
+		environment.Final("Nothing, sir."),
+		environment.Final("Nothing, sir."),
+		environment.Final("Nothing, sir."),
+		calling("calendar_free"),
+		environment.Final("Moved it again."),
+	}}, runner.Options{Tools: tools})
+
+	first := h.submit(t, "move the movie to ten past six")
+	h.await(t, first.ID, chat.StatusCompleted, chat.StatusFailed)
+	if runs != 0 {
+		t.Fatalf("a tool ran from guessed arguments %d times", runs)
+	}
+
+	for _, say := range []string{"how was the film", "is it going to rain", "who called me"} {
+		tk := h.submit(t, say)
+		h.await(t, tk.ID, chat.StatusCompleted, chat.StatusFailed)
+	}
+
+	last := h.submit(t, "look again")
+	h.await(t, last.ID, chat.StatusCompleted, chat.StatusFailed)
+	if runs != 0 {
+		t.Errorf("a tool described four turns ago was still on the table: it ran %d times", runs)
+	}
+}

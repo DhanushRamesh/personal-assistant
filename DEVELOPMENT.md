@@ -21112,3 +21112,45 @@ two figures and a subtraction, a model does the subtraction in its head
 and gets it wrong. `events.Span` renders a duration the way somebody
 says it -- "45 minutes", "2 hours", "15.2 hours" -- so the division
 never reaches the model at all.
+
+**A described tool expires** (owner, 18 October 2026: *"do that, expire
+a described tool after a few turns."*).
+
+He asked about his battery, then about a film, then about two people,
+then said **"look again"**. It read his battery.
+
+The battery tool had been described three questions earlier, and
+`alreadyDescribed` walked the whole window: anything ever called or
+described in it stayed described. So a bare follow-up went looking for
+something to look at again and found a tool nobody had mentioned since.
+
+The ranking was not at fault and the picker was not at fault. With the
+previous answer attached, `web_search` ranked **2nd of 88** and
+`event_recent` **13th** -- outside the ten it would have been given. It
+was offered anyway, as a leftover.
+
+Now only the last **three** of his turns count, by chat rather than by
+message: one thing he says is one chat however many rounds it takes,
+and a turn that called four tools must not push the turn before it out
+of sight. A chain -- ask, refine, correct -- keeps its tools. Another
+subject's do not.
+
+Messages written before chats were recorded have no chat of their own
+and are kept, since an old message cannot be placed and dropping what
+cannot be placed would quietly shrink the window on the oldest
+conversations.
+
+**Also that evening, and not fixed by this.** Asked whether two people
+were going to marry, it answered that nothing had been announced --
+twice, with `web_search` ranked first of eighty-eight and offered both
+times, and after the send-back told it to look. `lookFirst` now bans
+the sentences rather than stating the rule: that nothing has been
+announced, that there is no public word, that it has not happened, has
+not been released, is not known. That is the form that worked for the
+word "tool" in `persona.machinery`.
+
+Unmeasured, and the eval says so: both test questions reach
+`web_search` in the harness with and without the change, so the harness
+does not reproduce what a real turn does. The rule is reasoned, not
+proven -- the third time today that a carried-subject or look-first
+rule has been broken while present and correct in the prompt.

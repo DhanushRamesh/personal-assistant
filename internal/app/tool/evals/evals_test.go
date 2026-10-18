@@ -286,6 +286,18 @@ var cases = []eval{
 	// been released, sir -- Jailer came out in 2023 and there is no
 	// sequel announced." Which was true when it was trained and is the
 	// exact shape the web rule is for.
+	// Owner, 18 October 2026, shown an answer about two people he
+	// asked about: *"it got from memories but these kinds of thing
+	// has to be web searched!!"* It answered that no engagement had
+	// been announced and there was no public word of it -- twice,
+	// with web_search ranked first of eighty-eight and offered both
+	// times. The description said not to; it is now a list of
+	// sentences in lookFirst rather than a rule.
+	{Say: "is anirudh and kavya maran gonna marry",
+		Tool:  []string{"web_search"},
+		Never: []string{"not announced", "no public word", "no record"}},
+	{Say: "has the new iPhone been released in India yet",
+		Tool: []string{"web_search"}},
 	{Say: "how was the movie Jailer 2", Tool: []string{"web_search"}},
 	{Say: "what time does Phoenix Marketcity close today", Tool: []string{"web_search"}},
 	{Say: "is it going to rain in Chennai tomorrow", Tool: []string{"web_search"}},

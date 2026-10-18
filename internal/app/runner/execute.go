@@ -715,7 +715,25 @@ const lookFirst = "Before that answer goes out: you did not use any tool this tu
 	"If you were about to say you cannot do something, or that something does not exist, " +
 	"that is a claim to check against both lists rather than against what you remember -- " +
 	"the tools change, and what you could not do last week you may be able to do now. " +
-	"If a tool fits, use it. If none does, say the same thing again and it will be sent as it is."
+	// The sentences, not the principle. The principle was already in
+	// web_search's own description, measured working on 18 October and
+	// broken the same evening: asked whether two people were going to
+	// marry, it answered that no engagement had been announced and
+	// there was no public word of it -- twice, with web_search ranked
+	// first of eighty-eight and offered both times.
+	//
+	// A rule the model must weigh gets broken. A list of sentences it
+	// may not send does not, which is what the ban on the word "tool"
+	// proved in [persona.machinery].
+	"There are sentences you may not send without having searched first. " +
+	"That nothing has been announced. That there is no public word of it, or no record of it. " +
+	"That it has not happened, has not been released, has not been confirmed, or is not known. " +
+	"That nobody has said. That it does not exist yet. That you have no information about it. " +
+	"Every one of those is a claim about the world as it was when you were trained, and you " +
+	"cannot tell how long ago that was or what has happened since. If your answer contains one " +
+	"of them, search before you send it, whatever else you do with this turn. " +
+	"If a tool fits, use it. If none does, and none of those sentences is in your answer, " +
+	"say the same thing again and it will be sent as it is."
 
 // sayItPlainly : What the model is told when it named its machinery.
 //
@@ -1030,11 +1048,22 @@ func (r *Runner) history(ctx context.Context, t *chat.Chat, systemPrompt string)
 // bounds it for free. A tool last mentioned far enough back to have
 // been condensed away is not what this conversation is doing any more,
 // and the request stops carrying its description.
+//
+// The window was not a tight enough bound. Owner, 18 October 2026,
+// having asked about his battery, then about a film, then about two
+// people, and then said "look again": it read his battery. The battery
+// tool had been described three questions earlier and was still being
+// offered, so "look again" found something to look at again that
+// nobody had mentioned since.
+//
+// So it expires. Only the last [Lately] things he said count, and a
+// tool nothing has touched since then goes back to being a name.
 func (r *Runner) alreadyDescribed(messages []conversation.Message) map[string]bool {
 	revealed := map[string]bool{}
 	if r.tools == nil {
 		return revealed
 	}
+	messages = lately(messages, Lately)
 
 	add := func(name string) {
 		// Through the registry, so a name the model invented does not
@@ -1441,4 +1470,42 @@ func lastSaid(messages []conversation.Message) string {
 		}
 	}
 	return ""
+}
+
+// Lately : How many of the person's turns a described tool survives.
+//
+// Three, counting the one being answered. Enough that a chain -- ask,
+// refine, correct -- keeps its tools, and not so many that something
+// from another subject is still on the table when a bare follow-up
+// goes looking for one.
+const Lately = 3
+
+// lately : The tail of a window, to the last n things the person said.
+//
+// Counted by chat and not by message, because one thing he says is one
+// chat however many rounds it takes, and a turn that called four tools
+// should not push the turn before it out of sight.
+//
+// Messages with no chat of their own are the ones written before that
+// was recorded. They are kept: an old message cannot be placed, and
+// dropping what cannot be placed would quietly shrink the window on
+// the oldest conversations.
+func lately(messages []conversation.Message, n int) []conversation.Message {
+	if n <= 0 {
+		return messages
+	}
+	seen := map[string]bool{}
+	for i := len(messages) - 1; i >= 0; i-- {
+		id := messages[i].ChatID
+		if id == "" {
+			continue
+		}
+		if !seen[id] {
+			if len(seen) == n {
+				return messages[i+1:]
+			}
+			seen[id] = true
+		}
+	}
+	return messages
 }
