@@ -82,7 +82,20 @@ func real(t *testing.T, cfg config.Config, limit int) []environment.Turn {
 		}
 		history = append(history, environment.Turn{Role: role, Text: r.Content})
 	}
-	t.Logf("read %d real messages", len(history))
+
+	// Cut back to a finished exchange.
+	//
+	// LIMIT lands wherever it lands, and on 19 October 2026 it landed
+	// on "what is the date, what is the date, what is the date," with
+	// no answer under it. Anything appended after that follows a
+	// question of his that was never answered, so a bare follow-up
+	// answers the dangling question instead of the turn before it --
+	// which looked exactly like a long conversation losing its
+	// subject, and was a fixture ending in the wrong place.
+	for len(history) > 0 && history[len(history)-1].Role != environment.RoleAssistant {
+		history = history[:len(history)-1]
+	}
+	t.Logf("read %d real messages, cut to %d at a finished exchange", len(rows), len(history))
 	return history
 }
 

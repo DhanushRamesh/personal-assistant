@@ -166,6 +166,11 @@ evals-clock: ## Whether the clock beats a history of stale times, and what a fol
 	@go test ./internal/base/records/conversation/evals/ -tags evals -count=1 -v -timeout 10m \
 		-run 'TestTheClockBeatsTheConversation|TestAFollowUpLandsOnTheAnswerAndNotTheClock' $(ARGS)
 
+.PHONY: evals-drift
+evals-drift: ## Whether "say that again" reaches the turn before it, with a real conversation behind it (costs API calls)
+	@go test ./internal/base/records/conversation/evals/ -tags evals -count=1 -v -timeout 10m \
+		-run TestAFollowUpReachesTheTurnBeforeIt $(ARGS)
+
 .PHONY: evals-rhythm
 evals-rhythm: ## Print the counted half of the description from the real database (no API calls)
 	@go test ./internal/app/profile/evals/ -tags evals -count=1 -v -timeout 2m \
