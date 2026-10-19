@@ -228,6 +228,12 @@ message, and the server is also told that it is for that message"*).
 - The migration is numbered 59 because 57 and 58 were run on 17 October by
   work since taken back, and goose counts them as applied.
 
+**What it is doing is said in the persona's voice** (owner, 19 October
+2026: *"add the word sir, like 'Looking into it, sir'"*). The line a round
+says while its tools run (the `saying` argument) gets the persona's
+address added (`runner.narration`, `persona.Addressed`) unless the model
+already put it in. The desktop app says it only for a request asked aloud.
+
 **Its own Claude Code's answer is told as the answer** (owner, 19 October
 2026: *"[the assistant]'s Claude Code should not be announced, it's an
 exception"*). News with `own: true` (`event.Terminal.Own`) is not asked

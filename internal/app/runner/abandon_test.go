@@ -9,6 +9,8 @@ import (
 	"time"
 
 	"personal-assistant/internal/base/records/chat"
+	"personal-assistant/internal/base/thinking/environment"
+	"personal-assistant/internal/domain/persona"
 )
 
 func quiet() *slog.Logger { return slog.New(slog.NewJSONHandler(io.Discard, nil)) }
@@ -117,5 +119,34 @@ func TestAQuickTurnSaysNothingBesideItself(t *testing.T) {
 
 	if got := player.spoken(); len(got) != 0 {
 		t.Fatalf("narrated a turn that was already answered: %q", got)
+	}
+}
+
+// What a round says it is doing is in the persona's voice: "listing the
+// folders" was said bare, where every other line called him sir.
+func TestWhatItIsDoingIsAddressed(t *testing.T) {
+	var addressing persona.Persona
+	for _, p := range persona.All() {
+		if p.Address != "" {
+			addressing = p
+			break
+		}
+	}
+	if addressing.ID == "" {
+		t.Skip("no persona addresses anybody")
+	}
+	r := &Runner{logger: quiet(), persona: persona.NewSetting(addressing.ID)}
+	call := func(saying string) []environment.ToolCall {
+		return []environment.ToolCall{{Name: "read_terminal", Arguments: `{"terminal": "Server", "saying": "` + saying + `"}`}}
+	}
+	address := addressing.Address
+	if got, want := r.narration(call("listing the folders")), "listing the folders, "+address; got != want {
+		t.Errorf("said %q, want %q", got, want)
+	}
+	if got, want := r.narration(call("reading your diary, "+address)), "reading your diary, "+address; got != want {
+		t.Errorf("said %q, want it once: %q", got, want)
+	}
+	if got := r.narration([]environment.ToolCall{{Name: "read_terminal", Arguments: `{}`}}); got != "" {
+		t.Errorf("said %q for a round that said nothing", got)
 	}
 }

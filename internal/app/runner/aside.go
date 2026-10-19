@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"log/slog"
+	"personal-assistant/internal/domain/persona"
 	"strings"
 	"sync"
 	"sync/atomic"
@@ -256,6 +257,16 @@ const asideNoticed = 250 * time.Millisecond
 // One sentence covers the round: a model asking for three tools at once
 // is doing one thing, and describing each call separately would say three
 // things about it.
+// narration : What a round says it is about to do, addressed as the
+// persona addresses them; empty when it said nothing.
+func (r *Runner) narration(calls []environment.ToolCall) string {
+	said := takeSaying(calls)
+	if said == "" {
+		return ""
+	}
+	return persona.Addressed(said, persona.AddressFor(r.personaID()), said)
+}
+
 func takeSaying(calls []environment.ToolCall) string {
 	for i := range calls {
 		if one, _ := tool.TakeSaying(json.RawMessage(calls[i].Arguments)); strings.TrimSpace(one) != "" {

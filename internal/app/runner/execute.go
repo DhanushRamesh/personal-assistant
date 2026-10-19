@@ -746,7 +746,12 @@ func (r *Runner) consume(runCtx, ctx context.Context, t *chat.Chat, systemPrompt
 		for _, c := range final.ToolCalls {
 			raw = append(raw, c.Name+" "+c.Arguments)
 		}
-		said := takeSaying(final.ToolCalls)
+		// In the persona's voice, as a sentence the server writes is:
+		// "listing the folders" was said bare, where every other line
+		// called him sir (owner, 19 October 2026: *"add the word sir,
+		// like 'Looking into it, sir'"*). Once, and not when the model
+		// already said it.
+		said := r.narration(final.ToolCalls)
 		r.logger.InfoContext(ctx, "saying on the call",
 			slog.String("said", said),
 			slog.String("channel", string(t.Channel)),
