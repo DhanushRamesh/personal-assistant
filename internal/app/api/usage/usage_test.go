@@ -233,3 +233,70 @@ func TestATerminalsReactionHasItsFeature(t *testing.T) {
 		t.Errorf("labelled %q", usageapi.Label(environment.FeatureTerminal))
 	}
 }
+
+// The page's charts: today by the hour, the window's endings, the chat
+// answer time's spread and each feature's mean time, and yesterday to
+// compare against -- all of the person's own calls only.
+func TestTheInsightsAreTheWindowsByTheHour(t *testing.T) {
+	e, _ := setUp(t)
+	rec := e.Get(t, "/v1/usage")
+	if rec.Code != http.StatusOK {
+		t.Fatalf("status %d: %s", rec.Code, rec.Body.String())
+	}
+	var got struct {
+		Insights usageapi.Insights `json:"insights"`
+	}
+	if err := json.Unmarshal(rec.Body.Bytes(), &got); err != nil {
+		t.Fatal(err)
+	}
+	in := got.Insights
+	if in.Bucket != "hour" || len(in.Buckets) != 24 {
+		t.Fatalf("bucketed by %q into %d", in.Bucket, len(in.Buckets))
+	}
+	// 15:00 now: the chats at 14:00 and 14:10, the rule remark at 13:00.
+	if b := in.Buckets[14]; b.ChatInput != 2200 || b.BackgroundInput != 0 || b.Calls != 2 {
+		t.Errorf("14:00 was %+v", b)
+	}
+	if b := in.Buckets[13]; b.BackgroundInput != 3000 || b.Calls != 1 {
+		t.Errorf("13:00 was %+v", b)
+	}
+	if in.Ends["answered"] != 1 || in.Ends["tools"] != 1 || in.Ends["failed"] != 1 {
+		t.Errorf("ends %v", in.Ends)
+	}
+	if in.ChatTime.Calls != 2 || in.ChatTime.P50MS != 2300 || in.ChatTime.MaxMS != 2300 {
+		t.Errorf("chat time %+v", in.ChatTime)
+	}
+	if in.Took["chat"] != 2300 {
+		t.Errorf("took %v", in.Took)
+	}
+	if in.Before.Calls != 0 {
+		t.Errorf("yesterday had %d calls; none were kept then", in.Before.Calls)
+	}
+}
+
+// Seven days are bucketed by the day, in the person's zone, the empty
+// days too.
+func TestAWeekIsBucketedByTheDay(t *testing.T) {
+	e, _ := setUp(t)
+	rec := e.Get(t, "/v1/usage?days=7")
+	var got struct {
+		Insights usageapi.Insights `json:"insights"`
+	}
+	if err := json.Unmarshal(rec.Body.Bytes(), &got); err != nil {
+		t.Fatal(err)
+	}
+	in := got.Insights
+	if in.Bucket != "day" || len(in.Buckets) != 8 {
+		t.Fatalf("bucketed by %q into %d", in.Bucket, len(in.Buckets))
+	}
+	calls := 0
+	for _, b := range in.Buckets {
+		calls += b.Calls
+	}
+	if calls != 4 {
+		t.Errorf("%d calls in the week's buckets, want 4", calls)
+	}
+	if last := in.Buckets[len(in.Buckets)-1]; last.Calls != 3 {
+		t.Errorf("today's bucket has %d calls, want 3", last.Calls)
+	}
+}

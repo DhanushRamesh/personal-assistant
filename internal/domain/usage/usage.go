@@ -192,6 +192,9 @@ type Store interface {
 	ByModel(ctx context.Context, userID string, since time.Time) ([]ByModel, error)
 	// List : Their calls, newest first.
 	List(ctx context.Context, q Query) ([]Call, error)
+	// Every : All their calls since a moment, oldest first, with no
+	// limit -- what the usage page's charts are worked out from.
+	Every(ctx context.Context, userID string, since time.Time) ([]Call, error)
 	// Forget : Drops every call older than a moment, saying how many.
 	Forget(ctx context.Context, before time.Time) (int64, error)
 }

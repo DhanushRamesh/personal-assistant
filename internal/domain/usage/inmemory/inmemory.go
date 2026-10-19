@@ -136,6 +136,18 @@ func (s *Store) List(_ context.Context, q usage.Query) ([]usage.Call, error) {
 	return out, nil
 }
 
+// Every : See usage.Store.
+func (s *Store) Every(_ context.Context, userID string, since time.Time) ([]usage.Call, error) {
+	out := s.theirs(userID, since)
+	sort.SliceStable(out, func(i, j int) bool {
+		if !out[i].At.Equal(out[j].At) {
+			return out[i].At.Before(out[j].At)
+		}
+		return out[i].ID < out[j].ID
+	})
+	return out, nil
+}
+
 // Forget : See usage.Store.
 func (s *Store) Forget(_ context.Context, before time.Time) (int64, error) {
 	s.mu.Lock()

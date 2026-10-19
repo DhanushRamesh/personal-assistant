@@ -32,6 +32,7 @@ func Run(t *testing.T, open New) {
 		{"calls are grouped by model", groupedByModel},
 		{"a listing is newest first and filtered by kind", listedByKind},
 		{"a listing is limited", listingIsLimited},
+		{"every call is read, oldest first, past any limit", everyCallIsRead},
 		{"old calls are forgotten and newer ones kept", oldOnesAreForgotten},
 	} {
 		t.Run(c.name, func(t *testing.T) { c.run(t, open) })
@@ -252,5 +253,21 @@ func oldOnesAreForgotten(t *testing.T, open New) {
 	}
 	if len(got) != 1 || got[0].ID != kept.ID {
 		t.Errorf("left %+v, want only the newer one", got)
+	}
+}
+
+func everyCallIsRead(t *testing.T, open New) {
+	s, user, other := open(t)
+	n := usage.MaxLimit + 3
+	for i := 0; i < n; i++ {
+		add(t, s, call(user, environment.FeatureChat, i, 1, 1, environment.EndedAnswered))
+	}
+	add(t, s, call(other, environment.FeatureChat, 1, 1, 1, environment.EndedAnswered))
+	got, err := s.Every(context.Background(), user, at.Add(time.Minute))
+	if err != nil {
+		t.Fatalf("Every: %v", err)
+	}
+	if len(got) != n-1 || !got[0].At.Equal(at.Add(time.Minute)) || !got[len(got)-1].At.Equal(at.Add(time.Duration(n-1)*time.Minute)) {
+		t.Errorf("read %d calls, from %v; want %d, oldest first from a minute in", len(got), got[0].At, n-1)
 	}
 }

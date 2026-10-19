@@ -159,6 +159,7 @@ type Response struct {
 	ByModel   []Model   `json:"by_model"`
 	Calls     []Call    `json:"calls"`
 	Kinds     Kinds     `json:"kinds"`
+	Insights  Insights  `json:"insights"`
 }
 
 // windows : The days a window may be asked for.
@@ -232,6 +233,23 @@ func (h *Handler) Usage(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 	out.Kinds = Kinds{All: window.Calls, Chat: window.Chat, Background: window.Background, Failed: window.Failed}
+
+	every, err := h.o.Store.Every(ctx, userID, since)
+	if err != nil {
+		h.Fail(ctx, w, "reading model calls", err)
+		return
+	}
+	out.Insights = insightsOf(every, since, days, h.o.Location)
+	// The window as long, just before: yesterday for today. Totals count
+	// from a moment to now, so it is the longer count less this one.
+	before := since.AddDate(0, 0, -days)
+	if days != 1 {
+		before = since.Add(-time.Duration(days) * 24 * time.Hour)
+	}
+	if t, err := h.o.Store.Totals(ctx, userID, before); err == nil {
+		out.Insights.Before = Totals{Calls: t.Calls - window.Calls, Input: t.Input - window.Input, Output: t.Output - window.Output,
+			ChatCalls: t.Chat - window.Chat, BackgroundCalls: t.Background - window.Background}
+	}
 
 	features, err := h.o.Store.ByFeature(ctx, userID, since)
 	if err != nil {

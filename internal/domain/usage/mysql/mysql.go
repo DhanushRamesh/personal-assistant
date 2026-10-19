@@ -176,6 +176,19 @@ func (s *Store) List(ctx context.Context, q usage.Query) ([]usage.Call, error) {
 	return out, nil
 }
 
+// Every : See usage.Store.
+func (s *Store) Every(ctx context.Context, userID string, since time.Time) ([]usage.Call, error) {
+	var rows []row
+	if err := s.theirs(ctx, userID, since).Order("at, id").Find(&rows).Error; err != nil {
+		return nil, fmt.Errorf("reading model calls: %w", err)
+	}
+	out := make([]usage.Call, 0, len(rows))
+	for _, r := range rows {
+		out = append(out, r.toCall())
+	}
+	return out, nil
+}
+
 // Forget : See usage.Store.
 func (s *Store) Forget(ctx context.Context, before time.Time) (int64, error) {
 	out := s.db.WithContext(ctx).Where("at < ?", before.UTC()).Delete(&row{})

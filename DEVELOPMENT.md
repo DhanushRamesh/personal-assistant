@@ -176,6 +176,19 @@ chat was made once answered, so it showed as taking 0.0 s, though the
 glance took about 3 s. It now starts at the moment the question came in
 (`Glanced`'s `askedAt`), and the time shown is the time it took.
 
+**`/v1/usage` carries the dashboard's insights** (owner, 18 October 2026:
+*"in usage I need graphs .. like a dashboard"*). For the window asked for,
+it returns:
+- buckets by the hour today and by the day for 7 and 30 days, with chat
+  and background tokens in and the calls,
+- how calls ended,
+- the chat answer time's middle, nine in ten and slowest,
+- each feature's mean time a call,
+- the window as long just before.
+
+They are worked out in Go (`insightsOf`) from every call of the window,
+which `usage.Store.Every` reads with no limit, oldest first.
+
 **A terminal whose name another shares is named with its space** (owner,
 18 October 2026: *"what if the same name is for both terminals? .. yes,
 add the space"*). The desktop app marks a terminal's news `shared` when
