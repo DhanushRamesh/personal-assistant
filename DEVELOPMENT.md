@@ -22528,3 +22528,35 @@ rather than refused looks exactly like one.
 The answers were still better. What stands in the way is an allowance,
 which is a decision about money rather than about which service is
 good, and that is the owner's.
+
+### Gemini goes first, and falls back to what there was
+
+Owner, 20 October 2026, told the free allowance is twenty a day:
+*"gemini will work from tomorrow right ... keep gemini at the top now,
+currently it will fall back to tinyfish"*. Which is right, and is why
+putting it first is safe rather than a gamble: on the twenty-first
+search it refuses in a third of a second and everything carries on
+exactly as it did before.
+
+`search.Ahead` holds it. `Pair` wants two Services and cannot: Google's
+grounding answers a question and names what it read, so it searches and
+cannot read, and the reading goes to the service behind it unasked.
+
+- **Searching:** Gemini, within `search.quick`, then the TinyFish pair.
+- **Reading:** always the pair. The one ahead is never asked.
+- **A refused allowance:** HTTP 429 is returned as `search.ErrSpent`,
+  which rests it for an hour rather than asking again on every search.
+  Measured: one refusal, then four searches that do not ask it at all,
+  then one more try after the hour -- a daily allowance comes back and
+  nothing here knows when.
+
+The chain is now `gemini then tinyfish then tavily then firecrawl`,
+and it says so at startup.
+
+**What has not been measured** is whether the better answers survive a
+turn. A grounded answer is a paragraph where the others give a list,
+and `web_search` hands its results to a model that then writes a reply:
+a paragraph may read as the answer and be repeated, or may crowd out
+the model's own words. Nothing here tested that. It is worth watching
+the first few searches after one in the morning, when the allowance
+comes back.

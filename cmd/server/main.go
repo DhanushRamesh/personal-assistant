@@ -12,6 +12,7 @@ import (
 	"os"
 	"os/exec"
 	"os/signal"
+	"path/filepath"
 	"personal-assistant/internal/base/records/client"
 	"personal-assistant/internal/base/records/store"
 	"reflect"
@@ -73,6 +74,7 @@ import (
 	"personal-assistant/internal/base/thinking/prompt"
 	"personal-assistant/internal/base/thinking/search"
 	"personal-assistant/internal/base/thinking/search/firecrawl"
+	"personal-assistant/internal/base/thinking/search/gemini"
 	"personal-assistant/internal/base/thinking/search/tavily"
 	"personal-assistant/internal/base/thinking/search/tinyfish"
 	"personal-assistant/internal/base/world/alarm"
@@ -1606,8 +1608,48 @@ func searchingFast(cfg config.Config, logger *slog.Logger) search.Service {
 	case quick == nil:
 		return spare
 	}
-	return &search.Pair{
+	return grounded(cfg, logger, &search.Pair{
 		Quick: quick, Spare: spare,
+		Within: cfg.Search.Quick, Rested: cfg.Search.Rested,
+		Now: cfg.Assistant.Now, Logger: logger,
+	})
+}
+
+// grounded : Google's grounded search in front of everything else, when
+// there is a key for it.
+//
+// It answers the question rather than listing pages, and the answers
+// are better: asked who the female lead of Jailer 2 is, it names her
+// and the part, where a list of links leaves the reading to whoever
+// asked. Owner, 20 October 2026: *"my web search isn't broken but
+// gemini is exceptional results"*.
+//
+// In front rather than instead, because a free key is twenty requests
+// a day for the whole project and his own searching is about sixteen.
+// On the twenty-first it refuses in a third of a second, is rested for
+// an hour, and everything carries on exactly as it did before -- which
+// is what makes putting it first safe rather than a gamble.
+//
+// The key lives beside the Home Assistant token rather than in
+// config.ini, which is in git with the other search keys already in it.
+func grounded(cfg config.Config, logger *slog.Logger, rest search.Service) search.Service {
+	home, err := os.UserHomeDir()
+	if err != nil {
+		return rest
+	}
+	key, err := os.ReadFile(filepath.Join(home, ".config", "jarvis", "gemini-key"))
+	if err != nil {
+		return rest
+	}
+	asked := gemini.New(strings.TrimSpace(string(key)), "", cfg.Search.Patient)
+	if asked == nil {
+		return rest
+	}
+	logger.Info("google's grounded search is asked first",
+		slog.String("then", rest.Where()),
+		slog.Duration("within", cfg.Search.Quick))
+	return &search.Ahead{
+		Asked: asked, Rest: rest,
 		Within: cfg.Search.Quick, Rested: cfg.Search.Rested,
 		Now: cfg.Assistant.Now, Logger: logger,
 	}

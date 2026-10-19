@@ -378,3 +378,123 @@ func Said(pages []Page, most int, wanted ...string) string {
 	}
 	return strings.TrimRight(b.String(), "\n")
 }
+
+// Ahead : A searcher asked before the service behind it, for searching
+// and for nothing else.
+//
+// [Pair] wants two Services and cannot hold this one. Google's grounded
+// search answers a question and names what it read; it does not fetch a
+// page on demand, so it can search and cannot read, and the reading
+// goes to the service behind it unasked.
+//
+// Owner, 20 October 2026: *"keep gemini at the top now, currently it
+// will fall back to tinyfish"*. Which is the whole design: the better
+// answer when it can, and what there was before when it cannot. A free
+// key is twenty requests a day, so it cannot be relied on and need not
+// be -- nothing is lost on the twenty-first.
+type Ahead struct {
+	// Asked : Tried first, for searching. Nil leaves only Rest.
+	Asked Searcher
+	// Rest : Everything else, and what answers when Asked cannot.
+	// Required.
+	Rest Service
+	// Within : How long Asked gets before Rest is asked instead. Zero
+	// gives it everything, which is wrong in a turn that has thirty
+	// seconds for all of its work.
+	Within time.Duration
+	// Rested : How long a spent searcher is left alone. Zero selects
+	// DefaultRested.
+	Rested time.Duration
+	// Now : The clock, replaceable in tests.
+	Now func() time.Time
+	// Logger : Where a fallback is recorded. Nil is silent.
+	Logger *slog.Logger
+
+	mu    sync.Mutex
+	spent time.Time
+}
+
+// Where : Which service this is.
+func (a *Ahead) Where() string {
+	if a == nil || a.Rest == nil {
+		return "nothing"
+	}
+	if a.Asked == nil {
+		return a.Rest.Where()
+	}
+	return a.Asked.Where() + " then " + a.Rest.Where()
+}
+
+// Read : Always the service behind, which is the only one that reads.
+func (a *Ahead) Read(ctx context.Context, urls []string) ([]Page, error) {
+	if a == nil || a.Rest == nil {
+		return nil, errors.New("search: nothing is configured to read the web")
+	}
+	return a.Rest.Read(ctx, urls)
+}
+
+// Search : The one ahead if it can, the service behind if it cannot.
+func (a *Ahead) Search(ctx context.Context, ask Ask) ([]Result, error) {
+	if a == nil || a.Rest == nil {
+		return nil, errors.New("search: nothing is configured to reach the web")
+	}
+	if a.Asked == nil || a.resting() {
+		return a.Rest.Search(ctx, ask)
+	}
+
+	first := ctx
+	if a.Within > 0 {
+		var stop context.CancelFunc
+		first, stop = context.WithTimeout(ctx, a.Within)
+		defer stop()
+	}
+
+	got, err := a.Asked.Search(first, ask)
+	if err == nil && len(got) > 0 {
+		return got, nil
+	}
+	// The turn itself ending is not the first one failing.
+	if ctx.Err() != nil {
+		return nil, err
+	}
+	if errors.Is(err, ErrSpent) {
+		a.rest()
+	}
+	if a.Logger != nil {
+		a.Logger.InfoContext(ctx, "falling back from the search asked first",
+			slog.String("asked", a.Asked.Where()),
+			slog.String("rest", a.Rest.Where()),
+			slog.Bool("spent", errors.Is(err, ErrSpent)),
+			slog.Any("error", err))
+	}
+	return a.Rest.Search(ctx, ask)
+}
+
+// resting : Whether the one ahead is being left alone.
+func (a *Ahead) resting() bool {
+	a.mu.Lock()
+	defer a.mu.Unlock()
+	if a.spent.IsZero() {
+		return false
+	}
+	rested := a.Rested
+	if rested <= 0 {
+		rested = DefaultRested
+	}
+	return a.clock().Sub(a.spent) < rested
+}
+
+// rest : Stops asking the one ahead for a while.
+func (a *Ahead) rest() {
+	a.mu.Lock()
+	defer a.mu.Unlock()
+	a.spent = a.clock()
+}
+
+// clock : The time, by whatever clock was given.
+func (a *Ahead) clock() time.Time {
+	if a.Now != nil {
+		return a.Now()
+	}
+	return time.Now()
+}

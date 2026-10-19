@@ -149,6 +149,13 @@ func (c *Client) Search(ctx context.Context, ask search.Ask) ([]search.Result, e
 	if err := json.NewDecoder(resp.Body).Decode(&got); err != nil {
 		return nil, fmt.Errorf("gemini: reading the reply (HTTP %d): %w", resp.StatusCode, err)
 	}
+	// A refused allowance, which is the ordinary state of a free key:
+	// twenty requests a day for the whole project, and a day's worth
+	// is spent by lunchtime. Said as ErrSpent so the caller rests it
+	// rather than asking again every time somebody searches.
+	if resp.StatusCode == http.StatusTooManyRequests {
+		return nil, fmt.Errorf("gemini: %w (HTTP 429)", search.ErrSpent)
+	}
 	if got.Error != nil {
 		return nil, fmt.Errorf("gemini: %s (HTTP %d)", got.Error.Message, got.Error.Code)
 	}
