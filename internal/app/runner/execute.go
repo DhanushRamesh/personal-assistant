@@ -705,6 +705,14 @@ func (r *Runner) consume(runCtx, ctx context.Context, t *chat.Chat, systemPrompt
 			// first thing said, the answer underneath it is sound,
 			// and a round trip to remove a sentence is a round trip
 			// nobody is waiting through.
+			// An opening that agreed with a note the server sent it.
+			// The note is between the server and the model; he asked
+			// a question. See persona.Preambled.
+			if shorter, took := persona.Preambled(answer); took {
+				r.logger.InfoContext(ctx, "the answer began by agreeing with a note",
+					slog.String("removed", first(answer[:len(answer)-len(shorter)], 90)))
+				answer = shorter
+			}
 			if shorter, took := persona.Triaged(answer); took {
 				r.logger.InfoContext(ctx, "the answer began by classifying the question",
 					slog.String("removed", first(answer[:len(answer)-len(shorter)], 90)))

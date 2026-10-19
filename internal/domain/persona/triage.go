@@ -340,3 +340,47 @@ func Buried(answer string) bool {
 	}
 	return true
 }
+
+// preamble : An opening that acknowledges a note the server sent it,
+// rather than answering.
+//
+// Sent back to shape an answer, it replied "You're right. Here it is
+// shaped:" and then the answer. The reshaping is between the server
+// and the model; he asked when his birthday was. The same fault as
+// "Understood, sir. I will read both lists of tools", which was the
+// look-first note read back to him as a promise.
+//
+// Narrow, and only where an answer follows: "You are right, sir" on
+// its own is an answer, and so is "Noted, sir". What is taken off is a
+// preamble with the real answer behind it.
+var preamble = regexp.MustCompile(`(?is)^\s*(?:` +
+	`you(?:'re| are)\s+right|quite\s+right|understood|apologies|my\s+apologies|` +
+	`here\s+(?:it\s+is|you\s+are)|here(?:'s| is)\s+(?:it|that)` +
+	// Stops at the first thing that ends a clause, never past it: a
+	// greedy run swallowed "Here it is, shorter: **14 November 2003**"
+	// whole and left nothing, which reads from outside as no match.
+	`)\b[^.!?:\n` + "\u2014" + `]*(?:[.!?:]|` + "\u2014" + `|--)\s*`)
+
+// Preambled : The answer with an opening that agreed with a note taken
+// off, and whether anything was taken.
+//
+// Taken off rather than sent back, as [Triaged] is: the answer behind
+// it is sound and a round trip to remove a clause is a round trip
+// nobody is waiting through.
+func Preambled(answer string) (string, bool) {
+	trimmed := strings.TrimSpace(answer)
+	if trimmed == "" || !preamble.MatchString(trimmed) {
+		return answer, false
+	}
+	// Twice over where there are two: it answered "You're right. Here
+	// it is shaped:" and one pass left the second half standing.
+	rest := trimmed
+	for i := 0; i < 3 && preamble.MatchString(rest); i++ {
+		rest = strings.TrimSpace(preamble.ReplaceAllString(rest, ""))
+	}
+	if rest == "" || rest == trimmed {
+		// The whole answer was the agreement, so it is the answer.
+		return answer, false
+	}
+	return rest, true
+}

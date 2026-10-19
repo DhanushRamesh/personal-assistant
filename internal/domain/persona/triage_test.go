@@ -312,3 +312,36 @@ func TestADateLeadsOrItIsSentBack(t *testing.T) {
 		}
 	}
 }
+
+// TestAnOpeningThatAgreesComesOff : Sent back to shape an answer, it
+// replied "You're right. Here it is shaped:" and then the answer.
+//
+// The reshaping is between the server and the model. He asked when his
+// birthday was.
+func TestAnOpeningThatAgreesComesOff(t *testing.T) {
+	for _, c := range []struct{ said, want string }{
+		{"You're right. Here it is shaped:\n\n## Thursday 22 October\n\nYour birthday.",
+			"## Thursday 22 October\n\nYour birthday."},
+		{"Understood, sir. The dentist is at nine on Tuesday.", "The dentist is at nine on Tuesday."},
+		{"Quite right — it is twenty past four, sir.", "it is twenty past four, sir."},
+		{"Here it is, shorter: **14 November 2003**.", "**14 November 2003**."},
+	} {
+		got, took := Preambled(c.said)
+		if !took || got != c.want {
+			t.Errorf("Preambled(%q) = %q, %v; want %q", c.said, got, took, c.want)
+		}
+	}
+
+	// An agreement that is the whole answer is the answer.
+	for _, said := range []string{
+		"You are right, sir.",
+		"Understood, sir.",
+		"Noted, sir.",
+		"It is twenty past four, sir.",
+		"Here is your diary for tomorrow, sir: the dentist at nine.",
+	} {
+		if got, took := Preambled(said); took {
+			t.Errorf("Preambled(%q) took something, leaving %q", said, got)
+		}
+	}
+}
