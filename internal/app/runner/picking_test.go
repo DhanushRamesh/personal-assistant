@@ -211,3 +211,44 @@ func TestNothingRankedBringsTheLaptopBack(t *testing.T) {
 		}
 	}
 }
+
+// TestAToolThePickerChoseCanBeCalled : The regression that broke every
+// non-hot tool the moment the picker was switched on.
+//
+// Owner, 19 October 2026, asked to open Places: *"I asked to open
+// Places but the tool was not run because I had not been given its
+// arguments."* go_to had ranked third of eighty-eight, was described,
+// was called -- and was refused, because the check asked whether it
+// was in the hand-written hot list rather than whether this request
+// had described it.
+func TestAToolThePickerChoseCanBeCalled(t *testing.T) {
+	registry := manyTools(t)
+	pick := &nearest.Picker{Embed: sharedWords{}}
+	if _, err := pick.Warm(context.Background(), nearest.Server, registry.All()); err != nil {
+		t.Fatal(err)
+	}
+
+	p := &noting{scripted: &scripted{rounds: []environment.Message{
+		calling("memory_search"),
+		environment.Final("You said forty thousand, sir."),
+	}}}
+	h := newHarness(t, p, runner.Options{
+		Tools: registry, Picker: pick, ToolsNearest: 1,
+	})
+
+	tk := h.submitOn(t, chat.ChannelDirect, "what did I say about the roof")
+	done := h.await(t, tk.ID, chat.StatusCompleted, chat.StatusFailed)
+
+	p.mu.Lock()
+	offered := append([][]string(nil), p.offered...)
+	p.mu.Unlock()
+	if len(offered) == 0 || !has(offered[0], "memory_search") {
+		t.Fatalf("the tool was never offered: %v", offered)
+	}
+	if strings.Contains(done.Response, "arguments") {
+		t.Errorf("a tool that was described was refused for want of its arguments: %q", done.Response)
+	}
+	if !strings.Contains(done.Response, "forty thousand") {
+		t.Errorf("the tool did not run: %q", done.Response)
+	}
+}

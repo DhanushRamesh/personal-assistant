@@ -293,7 +293,7 @@ func (r *Runner) consume(runCtx, ctx context.Context, t *chat.Chat, systemPrompt
 		// rounds must answer from what it gathered, and saying what it
 		// managed is better than being cut off mid-chain with nothing to
 		// show for the work that already ran.
-		tools := r.offered(ctx, t, revealed, devices, said)
+		tools, described := r.offered(ctx, t, revealed, devices, said)
 		if worked >= MaxToolHops-1 {
 			if len(tools) > 0 {
 				r.logger.WarnContext(ctx, "the tool chain ran long, so the last round is asked without tools",
@@ -676,7 +676,7 @@ func (r *Runner) consume(runCtx, ctx context.Context, t *chat.Chat, systemPrompt
 		// calls were all refused adds nothing and is not charged.
 		before := len(ran)
 
-		ranTurns, ranOwed, reveal, read := r.runTools(ctx, t, final.ToolCalls, &ran, revealed, &wrote)
+		ranTurns, ranOwed, reveal, read := r.runTools(ctx, t, final.ToolCalls, &ran, described, &wrote)
 		if did(ran[before:]) {
 			worked++
 		}

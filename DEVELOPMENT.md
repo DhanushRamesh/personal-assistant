@@ -21311,3 +21311,40 @@ with no tool call, which cannot happen: to know the list is not there
 it must have looked. Written faithfully, with a tool and a real
 sentence in front of the question, it passes either way and stops
 arguing for a narrow rule.
+
+**Every tool the picker chose was being refused** (19 October 2026,
+and mine, from the evening before).
+
+Asked to open Places, it answered: *"I asked to open Places but the
+tool was not run because I had not been given its arguments. I cannot
+open Places without them."* Three things wrong in one answer, and one
+cause.
+
+`go_to` ranked **third of eighty-eight** for that question and was
+described. The model called it. The server refused it.
+
+`Registry.Withheld` asked whether a tool was **hot or revealed**. While
+those two decided what went out, that was the same question as "was it
+described". Since the picker was switched on it is a different
+question, and the two answers came apart: a tool the picker chose and
+sent is not hot and nothing revealed it, so **every non-hot tool the
+picker offered was refused the moment it was called.**
+
+`place_visits` is in the hot list, so the second half of his question
+worked and hid the first.
+
+`Registry.Undescribed` asks what this request actually described, and
+the runner now computes that set in `offered` -- the only place that
+knows, since a picker chooses it per question and asking the registry
+again answers for a different request. `Withheld` remains, as
+`Undescribed` over hot plus revealed, which is what it always meant.
+
+The two other faults in that answer follow from this one and need no
+fix of their own: the machinery leak was it reading out the refusal,
+and `tool.Unchanged` was right that a change had been asked for and
+had not happened.
+
+The lesson for the picker: switching on a new way of choosing what
+goes out means auditing everything that asks *what went out*. I
+changed the first and not the second, and it was silently wrong from
+that evening until this morning.

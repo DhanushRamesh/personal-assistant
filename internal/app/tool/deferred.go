@@ -299,6 +299,25 @@ func HotCount() int { return len(hot) }
 // that is the boundary; this is about answering correctly instead of
 // failing on a guess.
 func (r *Registry) Withheld(c chat.Channel, revealed map[string]bool, name string) bool {
+	return r.Undescribed(c, with(revealed, hotSet), name)
+}
+
+// Undescribed : Whether a tool exists and is reachable but was not
+// among the ones this request described.
+//
+// Taken from what was actually sent rather than worked out again, and
+// that is the whole point of it. Withheld asked whether a tool was hot
+// or revealed, which was the same question while those two decided
+// what went out. Since 18 October 2026 a picker decides, and the two
+// answers came apart: go_to ranked third of eighty-eight for "go to
+// places", was described, was called -- and was refused, because it is
+// not in the hand-written hot list and nothing had revealed it. The
+// owner was told his assistant had not been given the arguments for a
+// tool it had been given the arguments for.
+//
+// Every non-hot tool the picker chose was refused the same way, from
+// the evening it was switched on.
+func (r *Registry) Undescribed(c chat.Channel, described map[string]bool, name string) bool {
 	if !r.defers(c) {
 		return false
 	}
@@ -306,5 +325,17 @@ func (r *Registry) Withheld(c chat.Channel, revealed map[string]bool, name strin
 	if !ok || !t.Reaches(c) {
 		return false
 	}
-	return !Hot(name) && !revealed[name] && name != DescribeName
+	return !described[name] && name != DescribeName
+}
+
+// with : Two sets of names as one, without changing either.
+func with(a, b map[string]bool) map[string]bool {
+	out := make(map[string]bool, len(a)+len(b))
+	for k := range a {
+		out[k] = true
+	}
+	for k := range b {
+		out[k] = true
+	}
+	return out
 }

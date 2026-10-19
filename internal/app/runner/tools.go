@@ -45,10 +45,10 @@ const MaxRounds = 9
 // the model, so a model cannot call what it has not been told exists. The
 // registry checks again when one is actually called, because this is a
 // prompt and a prompt is not a boundary.
-func (r *Runner) offered(ctx context.Context, t *chat.Chat, revealed, devices map[string]bool, before string) []environment.ToolSpec {
+func (r *Runner) offered(ctx context.Context, t *chat.Chat, revealed, devices map[string]bool, before string) ([]environment.ToolSpec, map[string]bool) {
 	tools := r.toolsOf(t)
 	if tools == nil {
-		return nil
+		return nil, nil
 	}
 
 	address := persona.AddressFor(r.personaID())
@@ -64,8 +64,14 @@ func (r *Runner) offered(ctx context.Context, t *chat.Chat, revealed, devices ma
 		// and the laptop would quietly stop working.
 		reachable = tools.Offered(t.Channel, with(revealed, devices))
 	}
+	// What this request actually describes, which is what a call is
+	// checked against. Worked out here because here is the only place
+	// that knows: a picker chooses it per question, and asking the
+	// registry again gives the answer for a different request.
+	described := make(map[string]bool, len(reachable))
 	out := make([]environment.ToolSpec, 0, len(reachable))
 	for _, x := range reachable {
+		described[x.Name] = true
 		schema, err := tool.Narrated(x.Params, address).MarshalJSON()
 		if err != nil {
 			// Unreachable: the schema is a typed structure of strings. A tool
@@ -82,7 +88,7 @@ func (r *Runner) offered(ctx context.Context, t *chat.Chat, revealed, devices ma
 			Parameters:  schema,
 		})
 	}
-	return out
+	return out, described
 }
 
 // nearest : The tools to describe for this question, chosen by what it
@@ -217,7 +223,7 @@ func (r *Runner) runTools(
 	t *chat.Chat,
 	calls []environment.ToolCall,
 	seen *[]string,
-	revealed map[string]bool,
+	described map[string]bool,
 	wrote *writing,
 ) (turns []environment.Turn, owed []tool.Owed, reveal, read []string) {
 	asked := make([]conversation.ToolCall, 0, len(calls))
@@ -253,7 +259,7 @@ func (r *Runner) runTools(
 		// described from the next round on, which costs the round the
 		// model should have spent asking. Not running it also matters
 		// for a write: a guess that happens to validate would act.
-		if tools.Withheld(t.Channel, revealed, c.Name) {
+		if tools.Undescribed(t.Channel, described, c.Name) {
 			result := withheld(tools, c.Name)
 			r.logger.InfoContext(ctx, "a tool was called before it was described",
 				slog.String("tool", c.Name))
