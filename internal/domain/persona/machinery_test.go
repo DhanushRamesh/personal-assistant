@@ -74,3 +74,31 @@ func TestHandingTheQuestionBackIsCaught(t *testing.T) {
 		}
 	}
 }
+
+// Sending somebody to a person is the one honest hand-back. What a
+// doctor or a lawyer knows about this person is not written down, so
+// searching instead would be worse than useless.
+//
+// A bank is not on that list and is not meant to be: its process is
+// published, which is the whole of the credit card fault.
+func TestSendingSomebodyToAPersonIsNotAHandBack(t *testing.T) {
+	for _, said := range []string{
+		"You would need to check with your doctor about that, sir.",
+		"I cannot tell you whether that is safe; you would need to check with a pharmacist.",
+		"That is something you would need to check with your accountant, sir.",
+	} {
+		if persona.Unsearched(said) {
+			t.Errorf("sending him to a person was taken as a hand-back: %q", said)
+		}
+	}
+
+	// And the fault itself still is one.
+	for _, said := range []string{
+		"That is something you would need to check through the HDFC Bank app or website.",
+		"You would need to check with the airline, sir.",
+	} {
+		if !persona.Unsearched(said) {
+			t.Errorf("a published process was taken as honest: %q", said)
+		}
+	}
+}

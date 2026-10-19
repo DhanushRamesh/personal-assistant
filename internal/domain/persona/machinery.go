@@ -76,5 +76,20 @@ var unsearched = regexp.MustCompile(`(?i)\b(` +
 // back the same. A sentence the server will not send does not have to
 // win an argument.
 func Unsearched(answer string) bool {
-	return unsearched.MatchString(strings.TrimSpace(answer))
+	answer = strings.TrimSpace(answer)
+	return unsearched.MatchString(answer) && !referred.MatchString(answer)
 }
+
+// referred : Sending somebody to a person, which is not a search.
+//
+// The one honest hand-back. What a doctor, a lawyer or an accountant
+// knows about this person is not written down anywhere, so "you would
+// need to check with your doctor" is the right answer and searching
+// instead would be worse than useless.
+//
+// A bank, an airline or a shop is not on this list and is not meant to
+// be: their process is published, which is the whole of the credit
+// card fault.
+var referred = regexp.MustCompile(`(?i)\b(doctor|physician|GP|surgeon|dentist|` +
+	`lawyer|solicitor|advocate|accountant|auditor|therapist|counsellor|counselor|` +
+	`pharmacist|landlord|employer|insurer)\b`)
