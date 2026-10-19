@@ -131,7 +131,7 @@ func TestEveryGuardIsReachableFromARealTurn(t *testing.T) {
 				"They add something the current one does not have. " +
 				"The four-way distinction is one of them.",
 			channel: chat.ChannelDirect,
-			shows:   "it has a paragraph of four or more sentences in it",
+			shows:   "does not read paragraphs; he reads points",
 		},
 		{
 			guard:   "an answer that names its own machinery, spoken",
