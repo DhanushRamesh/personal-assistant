@@ -1,6 +1,9 @@
 package persona
 
-import "testing"
+import (
+	"strings"
+	"testing"
+)
 
 // TestTheClassificationComesOff : both of the real ones, and the rest
 // of each answer kept whole.
@@ -237,5 +240,35 @@ func TestAnAnswerWithNoShapeIsCaught(t *testing.T) {
 		if AWall(one, Written) {
 			t.Errorf("a short answer was caught: %q", one)
 		}
+	}
+}
+
+// TestALongAnswerNeedsMoreThanBold : One bolded word cleared the shape
+// check and the answer still ran three paragraphs.
+//
+// Asked what falsifiability means, it replied in about a hundred and
+// fifty words with "Falsifiability" bold at the front and nothing else
+// to look at. No paragraph reached four sentences, so every check
+// passed, and it was still three paragraphs of prose.
+func TestALongAnswerNeedsMoreThanBold(t *testing.T) {
+	long := "**Falsifiability** is the principle that a statement is scientifically meaningful " +
+		"only if it can be proven false. A falsifiable claim makes a prediction specific enough " +
+		"that reality could contradict it. It will rain tomorrow is falsifiable; if tomorrow " +
+		"comes dry the claim is false. It might rain or it might not is not falsifiable because " +
+		"no outcome can prove it wrong. Karl Popper developed this as a cornerstone of method: " +
+		"a theory that cannot be falsified is not science. A claim that survives repeated " +
+		"attempts becomes more credible, not because it is proven but because it withstood them."
+
+	if !AWall(long, Written) {
+		t.Error("a long answer with only a bold phrase was not caught")
+	}
+	// The same length with something to jump through is fine.
+	if AWall(strings.Replace(long, "A falsifiable claim makes",
+		"\n\n- A falsifiable claim makes", 1), Written) {
+		t.Error("a long answer with a list was caught")
+	}
+	// And a short bolded answer is still fine, which is the common case.
+	if AWall("**18 December 2026** in the US, a day after India and two after the UK, sir.", Written) {
+		t.Error("a short bolded answer was caught")
 	}
 }

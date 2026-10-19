@@ -247,19 +247,49 @@ func AWall(answer string, how Reading) bool {
 // meaningful sense. 44 of them are this long or longer.
 const Shapeless = 30
 
+// Dense : How many words a written answer may run to before a bolded
+// phrase stops being shape enough.
+//
+// Eighty. Asked what falsifiability means, it answered in about a
+// hundred and fifty words: three paragraphs of three sentences each,
+// with the one word "Falsifiability" in bold at the front. Every check
+// passed -- no paragraph reached four sentences, and the bold cleared
+// [Shapeless] -- and it was still three paragraphs of prose, which is
+// the thing he said he will not read.
+//
+// So the shape has to grow with the answer. Past this, a bold run is
+// not enough on its own: it takes a list, a table or a heading, which
+// is what makes a long answer skimmable rather than merely punctuated.
+//
+// Only nine of his 137 typed answers are this long, so it asks for
+// more work on the few that need it and changes nothing for the rest.
+const Dense = 80
+
 // shaped : Anything that gives an answer a shape -- a heading, a list,
 // a table, a quote, code, or bold on the words that carry it.
 var shaped = regexp.MustCompile("(?m)^\\s*(?:[-*+]\\s|\\d+[.)]\\s|#{1,6}\\s|>\\s|\\||```)|\\*\\*\\S")
 
-// Unshaped : Whether a written answer of any length ran as plain prose.
+// skimmable : Shape a reader can jump through -- a heading, a list, a
+// table. Bold alone is not on this list, which is the point of it.
+var skimmable = regexp.MustCompile("(?m)^\\s*(?:[-*+]\\s|\\d+[.)]\\s|#{1,6}\\s|\\||```)")
+
+// Unshaped : Whether a written answer ran as prose for its length.
 //
-// A low bar on purpose: one bolded phrase clears it. What it stops is
-// an answer with several facts in it arriving as a paragraph, which is
-// the thing he says he will not read.
+// Two bars, because one was gamed. Past [Shapeless] it needs any shape
+// at all, and one bolded phrase clears that. Past [Dense] it needs
+// shape a reader can jump through, and a bolded phrase no longer
+// counts.
 func Unshaped(answer string) bool {
 	answer = strings.TrimSpace(answer)
-	if answer == "" || shaped.MatchString(answer) {
+	if answer == "" {
 		return false
 	}
-	return len(strings.Fields(answer)) >= Shapeless
+	words := len(strings.Fields(answer))
+	switch {
+	case words >= Dense:
+		return !skimmable.MatchString(answer)
+	case words >= Shapeless:
+		return !shaped.MatchString(answer)
+	}
+	return false
 }

@@ -914,13 +914,18 @@ const lookItUp = "Before that answer goes out: it tells him to go and find this 
 // thing to do, and the difference is the whole reason this exists in
 // code at all.
 const sayItInPoints = "Before that answer goes out: it is being read on a screen, not heard, " +
-	"and it has no shape -- it is a paragraph of four or more sentences, or it runs past " +
-	"thirty words with nothing to look at. He does not read paragraphs; he reads points. " +
+	"and it has no shape for its length -- a paragraph of four or more sentences, or past " +
+	"thirty words with nothing to look at, or past eighty with nothing but a bold phrase. " +
+	"He does not read paragraphs; he reads points. " +
 	"Say the same thing again with every fact still in it, shaped: " +
 	"the answer itself as a short bold lead, or a heading where it is a date or a name he came for; " +
 	"a bulleted or numbered list wherever you are naming more than two things; " +
 	"a table wherever the same few facts are given about several things -- three release dates " +
 	"in three countries is a table, not a sentence; and no paragraph longer than three sentences. " +
+	"Past eighty words a bold phrase is not enough on its own: it needs a list, a table or a " +
+	"heading, something he can jump through rather than read in order -- and it almost certainly " +
+	"needs to be shorter. Cut what rounds the subject out and keep what he asked for. " +
+	"He will ask for more if he wants it, and he reads what is short. " +
 	"Lose nothing and add nothing. This is the shape changing, not the answer."
 
 const sayItPlainly = "Before that answer goes out: it names your own machinery, which they " +
