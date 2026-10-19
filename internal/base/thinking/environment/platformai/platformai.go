@@ -124,6 +124,9 @@ type Config struct {
 	RedirectURI string
 	// Scope : The OAuth scope requested. Defaults to DefaultScope.
 	Scope string
+	// PromptCacheTTL : What to ask the gateway to keep a cached prompt
+	// for, or empty for no caching. See config.PlatformAI.
+	PromptCacheTTL string
 	// PortalID : Identifies the calling portal. Required.
 	PortalID string
 

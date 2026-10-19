@@ -469,6 +469,18 @@ type PlatformAI struct {
 
 	Vendor string
 	Model  string
+	// PromptCacheTTL : How long the gateway should keep a cached
+	// prompt, or empty to ask for no caching at all.
+	//
+	// Empty by default, and it must stay empty until the gateway moves
+	// its cache breakpoint. Measured 20 October 2026: the mark sits
+	// after the question, so a prefix is never shared between turns --
+	// every turn would write a fresh copy at twice the price and read
+	// nothing. The switch is here so that the day it moves, this is a
+	// line of configuration rather than a build.
+	//
+	// The gateway takes "5m" and "1h" and refuses everything else.
+	PromptCacheTTL string
 	// FastModel : A smaller, quicker model for the work that happens
 	// while somebody is waiting in a doorway rather than reading.
 	//
@@ -739,6 +751,7 @@ func Load(path string, lookup Lookup) (Config, error) {
 			Vendor:             l.str("platformai", "vendor", ""),
 			Model:              l.str("platformai", "model", ""),
 			FastModel:          l.str("platformai", "fast_model", ""),
+			PromptCacheTTL:     l.str("platformai", "prompt_cache_ttl", ""),
 			SlowModel:          l.str("platformai", "slow_model", ""),
 			Thinking:           l.str("platformai", "reasoning_effort", ""),
 			Timeout:            l.duration("platformai", "timeout", 120*time.Second),

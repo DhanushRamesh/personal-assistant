@@ -2,6 +2,7 @@ package platformai
 
 import (
 	"encoding/json"
+	"strings"
 	"testing"
 )
 
@@ -70,5 +71,46 @@ func TestACachedCallIsCountedBothWays(t *testing.T) {
 	}
 	if read.CacheRead != 4520 || read.CacheWrite() != 0 {
 		t.Errorf("a read read as %d read, %d written", read.CacheRead, read.CacheWrite())
+	}
+}
+
+// TestCachingIsAskedForOnlyWhenSetAndIsOffByDefault : The switch that
+// must stay off.
+//
+// The gateway takes prompt_caching and the only thing it accepts is a
+// ttl of "5m" or "1h". It is not asked for, because its cache mark
+// sits after the question: no two turns share a prefix, so every turn
+// would write a fresh copy at twice the price and read nothing.
+//
+// Omitted rather than sent empty. The gateway refuses a key it does
+// not expect and names the one it refused.
+func TestCachingIsAskedForOnlyWhenSetAndIsOffByDefault(t *testing.T) {
+	if got := caching(""); got != nil {
+		t.Errorf("caching is asked for with nothing configured: %+v", got)
+	}
+	if got := caching("   "); got != nil {
+		t.Errorf("a blank setting asked for caching: %+v", got)
+	}
+	got := caching("1h")
+	if got == nil || got.TTL != "1h" {
+		t.Fatalf("caching(%q) = %+v", "1h", got)
+	}
+
+	// Off, the key is absent from the body rather than present and
+	// empty, which is what the gateway would refuse.
+	body, err := json.Marshal(chatRequest{Model: "m", Caching: caching("")})
+	if err != nil {
+		t.Fatalf("Marshal: %v", err)
+	}
+	if strings.Contains(string(body), "prompt_caching") {
+		t.Errorf("the key was sent with caching off: %s", body)
+	}
+
+	body, err = json.Marshal(chatRequest{Model: "m", Caching: caching("1h")})
+	if err != nil {
+		t.Fatalf("Marshal: %v", err)
+	}
+	if !strings.Contains(string(body), `"prompt_caching":{"ttl":"1h"}`) {
+		t.Errorf("caching was not asked for as the gateway takes it: %s", body)
 	}
 }

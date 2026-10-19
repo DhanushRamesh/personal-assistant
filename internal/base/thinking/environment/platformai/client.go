@@ -90,6 +90,12 @@ type chatRequest struct {
 	// Stream : Ask for the reply as server-sent events rather than one
 	// body when it is finished. See Streaming.
 	Stream bool `json:"stream,omitempty"`
+	// Caching : What the gateway should keep a cached prompt for, left
+	// out entirely when nothing is asked for.
+	//
+	// Omitted and not false: the gateway refuses a key it does not
+	// expect, and names the one it refused.
+	Caching *wireCaching `json:"prompt_caching,omitempty"`
 	// Thinking : How much the model may reason before it answers, as
 	// the gateway's reasoning_effort. Empty leaves it to the vendor.
 	//
@@ -125,6 +131,24 @@ type chatResponse struct {
 		} `json:"messages"`
 		Usage wireCost `json:"usage"`
 	} `json:"data"`
+}
+
+// caching : What to ask for, or nothing at all.
+func caching(ttl string) *wireCaching {
+	if strings.TrimSpace(ttl) == "" {
+		return nil
+	}
+	return &wireCaching{TTL: strings.TrimSpace(ttl)}
+}
+
+// wireCaching : How long the gateway should keep a cached prompt.
+//
+// The only thing it takes. There is no way to say where the cache
+// begins, which is the whole reason this is off: the gateway puts its
+// mark after the question, so no two turns share a prefix. See
+// config.PlatformAI.PromptCacheTTL.
+type wireCaching struct {
+	TTL string `json:"ttl"`
 }
 
 // wireCost : What the endpoint says the call cost, in tokens and in
@@ -523,6 +547,7 @@ func (p *Environment) attemptOnce(ctx context.Context, ask environment.Request, 
 		Messages: messages,
 		Tools:    tools,
 		Stream:   Streaming,
+		Caching:  caching(p.cfg.PromptCacheTTL),
 		Thinking: thinking(p.cfg.Thinking, ask.Purpose),
 		Choice:   json.RawMessage(ask.MustUseTool),
 	})

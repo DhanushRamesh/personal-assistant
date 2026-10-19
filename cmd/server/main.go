@@ -1135,16 +1135,17 @@ func buildProvider(cfg config.Config, keeping environment.Recorder, logger *slog
 	switch cfg.Provider.Name {
 	case config.ProviderPlatformAI:
 		return platformai.New(platformai.Config{
-			ClientID:     cfg.PlatformAI.ClientID,
-			ClientSecret: cfg.PlatformAI.ClientSecret,
-			RefreshToken: cfg.PlatformAI.RefreshToken,
-			PortalID:     cfg.PlatformAI.PortalID,
-			TokenURL:     cfg.PlatformAI.TokenURL,
-			ChatURL:      cfg.PlatformAI.ChatURL,
-			Scope:        cfg.PlatformAI.Scope,
-			RedirectURI:  cfg.PlatformAI.RedirectURI,
-			Vendor:       cfg.PlatformAI.Vendor,
-			Model:        cfg.PlatformAI.Model,
+			ClientID:       cfg.PlatformAI.ClientID,
+			ClientSecret:   cfg.PlatformAI.ClientSecret,
+			RefreshToken:   cfg.PlatformAI.RefreshToken,
+			PortalID:       cfg.PlatformAI.PortalID,
+			TokenURL:       cfg.PlatformAI.TokenURL,
+			ChatURL:        cfg.PlatformAI.ChatURL,
+			Scope:          cfg.PlatformAI.Scope,
+			PromptCacheTTL: cfg.PlatformAI.PromptCacheTTL,
+			RedirectURI:    cfg.PlatformAI.RedirectURI,
+			Vendor:         cfg.PlatformAI.Vendor,
+			Model:          cfg.PlatformAI.Model,
 			// The fallback for a caller that gives no prompt of its
 			// own, which the runner never is -- it builds one per
 			// chat and knows whether the reply will be heard.

@@ -22319,3 +22319,19 @@ instead.
 
 Sending it back makes it look. Why it reached for the toolbox rather
 than the tool it had just used twice is not answered here.
+
+### Caching is now one line away, and still off
+
+`platformai.prompt_cache_ttl` is empty and must stay empty until the
+gateway moves its mark. Set it to `1h` or `5m` and the request carries
+`prompt_caching`; leave it alone and the key is absent altogether,
+since the gateway refuses a key it does not expect.
+
+Built now rather than later because the day the breakpoint moves this
+should be a line of configuration and not a release. A test holds both
+halves: nothing sent when it is empty, and `{"ttl":"1h"}` when it is
+not.
+
+The ask itself is written up in `docs/prompt-caching-request.md`, with
+the two tables that make the case -- what caching does, and why it
+cannot be used as the mark is placed now.
