@@ -1565,10 +1565,24 @@ func onlyAsking(answer string) bool {
 	if !strings.HasSuffix(answer, "?") {
 		return false
 	}
-	// One question and nothing else. An answer that said something
-	// and then asked has answered.
-	return persona.Sentences(answer) <= 1
+	// Short enough to be nothing but the question. Counted in
+	// characters and not in sentences, which is what the first
+	// version got wrong: it asked for one sentence, and what actually
+	// comes back is two -- "I need to know what you want me to search
+	// for, sir. Search for anything about what?" -- so the guard let
+	// both of them through on 19 October 2026.
+	//
+	// An answer that said something real and then asked is longer
+	// than this and goes out untouched.
+	return len(answer) <= Asked
 }
+
+// Asked : How long an answer may be and still be nothing but a
+// question put back to them.
+//
+// Two hundred characters. The two that got through were 69 and 83;
+// an answer carrying a fact and then a question runs well past it.
+const Asked = 200
 
 // subjectIs : What the model is told when it asked which thing was
 // meant and its own last answer says which.

@@ -114,11 +114,11 @@ func TestAnAnswerThatIsOnlyAQuestionIsSentBackWithItsSubject(t *testing.T) {
 // answered has answered. persona.replying allows three questions at
 // the end of one, and all three follow having looked at something.
 func TestAnAnswerThatSaysSomethingAndThenAsksIsLeftAlone(t *testing.T) {
-	p := &asksBack{
-		first: "There is no list called that, sir. Shall I make one?",
-		again: "There is no list called that, sir. Shall I make one?",
-		given: "There is no list called that, sir. Shall I make one?",
-	}
+	// Long enough to be carrying something, which is what tells an
+	// answer that then asks from a refusal to answer at all.
+	said := "There is no list called that, sir -- the ones you keep are the " +
+		"shopping, the roof and the things to read. Shall I make one?"
+	p := &asksBack{first: said, again: said, given: said}
 	h := newHarness(t, p, runner.Options{Tools: writer(true)})
 
 	tk := h.submit(t, "what is on John's list")
@@ -157,5 +157,31 @@ func TestAQuestionIsSentBackOnlyOnce(t *testing.T) {
 	}
 	if sent > 1 {
 		t.Errorf("sent back %d times, want at most once", sent)
+	}
+}
+
+// TestATwoSentenceQuestionIsCaughtToo : What the first version missed.
+//
+// Owner, 19 October 2026, twice in one exchange: *"I need to know what
+// you want me to search for, sir. Search for anything about what?"*
+// The guard asked for one sentence; these are two, so both went out.
+func TestATwoSentenceQuestionIsCaughtToo(t *testing.T) {
+	p := &asksBack{
+		first: "The Server terminal is running Claude Code, sir.",
+		again: "I need to know what you want me to search for, sir. Search for anything about what?",
+		given: "It is building the accessibility route for Chrome, sir.",
+	}
+	h := newHarness(t, p, runner.Options{Tools: writer(true)})
+
+	first := h.submit(t, "what does my terminal say")
+	h.await(t, first.ID, chat.StatusCompleted, chat.StatusFailed)
+	second := h.submit(t, "do a deep research")
+	done := h.await(t, second.ID, chat.StatusCompleted, chat.StatusFailed)
+
+	if strings.Contains(done.Response, "about what") {
+		t.Errorf("a two-sentence question still reached them: %q", done.Response)
+	}
+	if !strings.Contains(done.Response, "accessibility route") {
+		t.Errorf("the subject was never taken up: %q", done.Response)
 	}
 }

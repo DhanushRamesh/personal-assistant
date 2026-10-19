@@ -21285,3 +21285,29 @@ The lesson is the one that keeps paying. A tool is found by the words
 in its own description, and the words it lacks are the questions it
 will never be offered for. Every example is a shape it can be found
 by; a tool with four examples can be found four ways.
+
+**The question guard asked for one sentence and they come in two** (19
+October 2026, the same fault twice in one exchange: *"why is it not
+getting the context???"*).
+
+```
+I need to know what you are asking about, sir. Your decision on what?
+I need to know what you want me to search for, sir. Search for anything about what?
+```
+
+Both reached him. The send-back fired on both, and `onlyAsking`
+required `Sentences(answer) <= 1` -- so a question split across two
+sentences walked past a guard written the night before for exactly
+this.
+
+Counted in characters now, not sentences. The two that escaped were 69
+and 83; `Asked` is 200, and an answer carrying something real and then
+asking runs well past it.
+
+The test that was supposed to hold the other side -- an answer that
+says something and then asks -- was also wrong, and in a way that hid
+this. It used *"There is no list called that, sir. Shall I make one?"*
+with no tool call, which cannot happen: to know the list is not there
+it must have looked. Written faithfully, with a tool and a real
+sentence in front of the question, it passes either way and stops
+arguing for a narrow rule.
