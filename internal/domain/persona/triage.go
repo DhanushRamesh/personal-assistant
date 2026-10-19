@@ -156,3 +156,33 @@ func InPassing(said, before, name string) bool {
 	}
 	return !(agreeing.MatchString(s) && asking.MatchString(before))
 }
+
+// consenting : A bare yes, and nothing else -- the words a person
+// answers an offer with when the offer says what is to be done.
+var consenting = regexp.MustCompile(`^(?:(?:yes|yeah|yep|yup|ya|sure|ok|okay|alright|all right|fine|absolutely|of course|please)` +
+	`(?: (?:yes|sir|please|do it|do that|go ahead|go on|proceed|carry on|tell it|do so))*` +
+	`|go ahead|do it|do that|go on|proceed|carry on|go for it|please do|sounds good|tell it)(?: sir| please)*$`)
+
+// Agrees : Whether what was said is a bare yes, the assistant's name
+// and a "hey" around it aside.
+//
+// Owner, 19 October 2026, typing "yes" under "The Server terminal is
+// done, sir... Shall I tell it to move on to step 4?": nothing told the
+// model what the yes was for, it worked out the wrong terminal from the
+// conversation and did nothing. A yes on its own carries no subject; the
+// question it answers is the subject, and the runner hands it over.
+func Agrees(said, name string) bool {
+	s := strings.ToLower(said)
+	s = regexp.MustCompile(`[^a-z' ]+`).ReplaceAllString(s, " ")
+	s = strings.Join(strings.Fields(s), " ")
+	s = strings.TrimPrefix(s, "hey ")
+	if n := strings.ToLower(strings.TrimSpace(name)); n != "" {
+		s = strings.TrimSpace(strings.TrimSuffix(strings.TrimPrefix(s, n+" "), " "+n))
+	}
+	return s != "" && consenting.MatchString(s)
+}
+
+// Asks : Whether the assistant's words end by putting a question to them.
+func Asks(said string) bool {
+	return asking.MatchString(strings.TrimRight(said, ` "'”’)]`))
+}

@@ -64,6 +64,9 @@ type inbound struct {
 	// Where : For a prompt, what the person has in front of them in the
 	// client right now, as plain text; absent says nothing. Cut to 8 KB.
 	Where string `json:"where,omitempty"`
+	// ReplyTo : For a prompt, the words of the assistant's message the
+	// person chose to reply to; absent when none was.
+	ReplyTo string `json:"reply_to,omitempty"`
 	// Message : For an mcp message, one MCP message, as JSON-RPC.
 	Message json.RawMessage `json:"message,omitempty"`
 	// Failure : For said, why the announcement was not said; absent when it was.
@@ -269,6 +272,7 @@ func (h *Handler) handle(ctx context.Context, c *websocket.Conn, caller *authn.C
 			ConversationID:       m.ConversationID,
 			Prompt:               m.Text,
 			Where:                m.Where,
+			ReplyTo:              m.ReplyTo,
 		})
 		if err != nil {
 			_ = send(ctx, c, outbound{Type: "refused", Request: m.Request, Message: refusal(err)})

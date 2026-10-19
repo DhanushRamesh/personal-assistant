@@ -269,12 +269,21 @@ func (r *Reactor) terminalTools(userID string) []tool.Tool {
 	}
 	var out []tool.Tool
 	for _, t := range r.Tools(userID) {
-		if strings.Contains(t.Name, "terminal") && !strings.HasPrefix(t.Name, "type_") && t.Run != nil {
+		// The space's own Claude Code too: it only looks, so asking it changes nothing of theirs (owner, 19 October 2026).
+		if (strings.Contains(t.Name, "terminal") && !strings.HasPrefix(t.Name, "type_") || t.Name == OwnClaude) && t.Run != nil {
 			out = append(out, t)
 		}
 	}
 	return out
 }
+
+// OwnClaude : The tool that gives a question to the space's own Claude Code
+// of the assistant's, which only looks -- in the space's folder, in plan
+// mode. Offered here so that what would be offered as "shall I look
+// closer?" is found out instead, and its answer told when it comes (owner,
+// 19 October 2026: "for this it can ask that hidden Claude Code and get the
+// result and say it to me").
+const OwnClaude = "ask_own_claude"
 
 // converse : Asks, runs the tools it asks for, and asks again; Rounds
 // times at most, then once more with no tools so it has to answer.
@@ -383,6 +392,9 @@ func Asking(t event.Terminal, at, now time.Time, where *time.Location, usually s
 	if where == nil {
 		where = time.UTC
 	}
+	if t.Own {
+		return answered(t)
+	}
 
 	facts := []string{"What happened: " + happened(t)}
 	add := func(label, value string) {
@@ -425,9 +437,9 @@ func Asking(t event.Terminal, at, now time.Time, where *time.Location, usually s
 		record = prompt.Block(
 			prompt.Text(
 				"It is Claude Code, done with its turn and waiting for them, and this is its own record of the conversation, newest last, secrets hidden: what they asked of it, what it did and what it said.",
-				"Say in a sentence or two what it did, by what it comes to -- what changed, whether it worked -- then the best next step, judged from the whole record, and end with one short question offering to tell Claude Code to do it.",
-				"If it asked them something -- a question at the end of what it said, or a choice on its screen -- say plainly what it asks and which answer you would choose, with the reason in a few words, and offer to give Claude Code that answer.",
-				"If the record does not settle it, say what it hinges on, and offer nothing. They answer aloud; a yes is typed into Claude Code for them.",
+				"Read it to judge, not to retell: what it did and what it asks only go into your status and your take, in your own few words.",
+				"If it asked them something -- a question at the end of what it said, or a choice on its screen -- your take is the answer you would choose and why, which may not be the one it leans to; and your question offers to give Claude Code that answer.",
+				"If the record does not settle it, your take says what it hinges on, and there is no question. They answer aloud; a yes is typed into Claude Code for them.",
 			),
 			cut(t.Conversation, MaxConversation),
 		)
@@ -451,6 +463,13 @@ func Asking(t event.Terminal, at, now time.Time, where *time.Location, usually s
 			"Read more of this terminal, or see what else is open, when what is in front of you does not settle it; you have a few looks at most.",
 			"You cannot type into a terminal from here. Where a program is asking -- Claude Code's choices, a yes or no, a password -- that answer is theirs; tell them it is waiting.",
 		)
+		for _, name := range tools {
+			if name == OwnClaude {
+				looking = prompt.Block(looking, prompt.Text(
+					"Where you would offer to look closer -- the flag a command takes, why it failed, what the code says -- do not offer it: ask your own Claude Code with "+OwnClaude+", which only looks, and say in your take that you have asked it; its answer is told when it comes.",
+				))
+			}
+		}
 	}
 
 	// What they answer goes to the terminal named, so it is named as it
@@ -512,7 +531,11 @@ func Asking(t event.Terminal, at, now time.Time, where *time.Location, usually s
 		naming,
 		noticing.Interrupting,
 		prompt.Text(
-			"Say it as one short spoken sentence in your own manner: what happened and where, by the terminal's or the space's name, then the one thing worth knowing; then the question, if you are offering a step.",
+			// Owner, 19 October 2026: "the whole point of notifying the terminal's end is to keep my notice and understand the gist
+			// of it, but it's too long .. it should be minimal .. where, what is the status, what is your take -- it should not blindly
+			// say what Claude Code says, it should assess and say the decision -- and ask the follow-up question .. only 4 parts".
+			"Say it in four short parts and nothing else, about thirty words in all: where -- the terminal by its name; its status, in a few words; your take -- your own judgement of what should happen next and why, never a retelling of what it said; then one short question offering that, if a step follows.",
+			"For example: Server is done -- four of five paths fixed, one still open. I'd leave that one; measuring it costs more than it saves. Shall I tell it to move on?",
 			"Never read out a path, a command line, a hidden value or an error word for word; say what it means. A short command you offer to run is the one exception.",
 			"Say only what is in front of you or what you looked up, and nothing you have worked out around it.",
 		),
@@ -520,11 +543,39 @@ func Asking(t event.Terminal, at, now time.Time, where *time.Location, usually s
 	)
 }
 
+// answered : What the model is asked when the space's own Claude Code
+// has answered what it was asked for them.
+//
+// Owner, 19 October 2026, hearing "Your 'X - by X' terminal is done, sir
+// -- five folders found, clean. Looks complete to me": *"[the
+// assistant]'s Claude Code should not be announced, it's an exception"*.
+// It is not a terminal of theirs finishing; it is the answer to their
+// question, and is told as that: no where, no take, no offer.
+func answered(t event.Terminal) string {
+	record := t.Conversation
+	if record == "" {
+		record = tailOf(t.Tail)
+	}
+	return prompt.Block(
+		prompt.Text(
+			"Earlier they asked you something you could not answer from where you were, so you gave the question to your own Claude Code, which only looks and changes nothing.",
+			"It has answered. This is its record, newest last: what you asked it, and what it found.",
+		),
+		cut(record, MaxConversation),
+		prompt.Text(
+			"Tell them its answer now, as your own, in a few plain words: what they asked for, and only that.",
+			"Never say a terminal is done, never name it or your Claude Code, and add no take of your own and no question, unless the answer leaves them a choice to make.",
+			"Say only what its record says. If it did not get to an answer, say so in a sentence.",
+			"Answer with what they will hear and nothing else.",
+		),
+	)
+}
+
 // Always : Whether this news is said every time, whatever the model makes
 // of it: a command that finished -- the app sends only those of 10 s or
 // more -- and Claude Code done with its turn, sent with its record.
 func Always(t event.Terminal) bool {
-	return t.Kind == event.TerminalFinished || (t.Kind == event.TerminalAsks && t.Conversation != "")
+	return t.Own || t.Kind == event.TerminalFinished || (t.Kind == event.TerminalAsks && t.Conversation != "")
 }
 
 // plainly : What is said when the model said nothing of news that is

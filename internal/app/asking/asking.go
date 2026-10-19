@@ -64,6 +64,9 @@ type Request struct {
 	// trimmed and cut to chat.MaxWhereBytes here, so every way in is held
 	// to the same.
 	Where string
+	// ReplyTo : The words of the assistant's message the person chose to
+	// reply to; empty when none was chosen. Cut to chat.MaxReplyToBytes.
+	ReplyTo string
 }
 
 // Started : A chat that has been accepted and is running.
@@ -124,6 +127,7 @@ func (s *Service) Ask(ctx context.Context, r Request) (*Started, error) {
 	}
 	t.Model = r.Model
 	t.Where = chat.CutWhere(r.Where)
+	t.ReplyTo = chat.CutReplyTo(r.ReplyTo)
 	// Which client asked: a tool that acts on the client itself, such as
 	// switching the conversation it talks in, has no other way to know.
 	t.ClientID = r.ClientID

@@ -436,6 +436,64 @@ func TestAYesToAnOfferIsSentBack(t *testing.T) {
 	}
 }
 
+// TestAYesIsToldWhatItAnswers : A bare yes carries no subject, so the
+// question it answers goes in front of it, and the send-back to look
+// says it again after its own instruction -- which it does not answer.
+//
+// Owner, 19 October 2026: "yes" typed under "Shall I tell it to move on
+// to step 4?" was taken for another terminal, then answered "Understood,
+// sir. I will check the tools before claiming..."; the step was never told.
+func TestAYesIsToldWhatItAnswers(t *testing.T) {
+	recorder := &recordingProvider{}
+	h := newHarness(t, recorder, runner.Options{Tools: offering()})
+	const offer = "The Server terminal is done, sir. Shall I tell it to move on to step 4?"
+	if _, err := h.repo.Append(context.Background(), conversation.Message{
+		ID:             conversation.NewMessageID(),
+		ConversationID: h.conversation(t),
+		Kind:           conversation.Immediate,
+		Role:           conversation.Assistant,
+		Content:        offer,
+		At:             time.Now().UTC(),
+	}); err != nil {
+		t.Fatalf("Append: %v", err)
+	}
+
+	tk := h.submit(t, "yes")
+	h.await(t, tk.ID, chat.StatusCompleted, chat.StatusFailed)
+
+	if len(recorder.prompts) != 2 {
+		t.Fatalf("asked %d times, want twice: %v", len(recorder.prompts), recorder.prompts)
+	}
+	if got := recorder.prompts[0]; !strings.Contains(got, "saying yes to this") || !strings.Contains(got, offer) || !strings.HasSuffix(got, "yes") {
+		t.Errorf("the yes went without its question: %q", got)
+	}
+	if got := recorder.prompts[1]; !strings.Contains(got, "not from them: do not answer it") || !strings.Contains(got, offer) {
+		t.Errorf("the send-back does not say what they asked: %q", got)
+	}
+}
+
+// TestAReplyChosenIsToldWhatItAnswers : A message chosen in the app is
+// what the prompt answers, whatever came last, and whatever was said.
+func TestAReplyChosenIsToldWhatItAnswers(t *testing.T) {
+	recorder := &recordingProvider{}
+	h := newHarness(t, recorder, runner.Options{})
+	tk, err := chat.New(h.conversation(t), chat.ChannelDirect, "what did it find?")
+	if err != nil {
+		t.Fatalf("chat.New: %v", err)
+	}
+	tk.ReplyTo = "Claude Code in Laptop client has finished, sir."
+	if err := h.repo.Create(context.Background(), tk); err != nil {
+		t.Fatalf("Create: %v", err)
+	}
+	if err := h.runner.Submit(tk); err != nil {
+		t.Fatalf("Submit: %v", err)
+	}
+	h.await(t, tk.ID, chat.StatusCompleted, chat.StatusFailed)
+	if got := recorder.prompts[0]; !strings.Contains(got, "replying to this message of yours") || !strings.Contains(got, tk.ReplyTo) {
+		t.Errorf("the reply went without its message: %q", got)
+	}
+}
+
 // TestWhatIsSaidInPassingIsNotSentBack : Thanks or a hello has nothing to
 // look up, so its answer goes out as it is, in one round.
 func TestWhatIsSaidInPassingIsNotSentBack(t *testing.T) {

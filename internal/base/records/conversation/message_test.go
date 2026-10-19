@@ -392,3 +392,24 @@ func TestARemarkCanBeReadBackAndNeverMade(t *testing.T) {
 		t.Errorf("a remark already in the transcript will not load: %v", err)
 	}
 }
+
+// A terminal's news is marked as what it was, not as a reminder: marked
+// as one, the model began its own answers "[Reminder announced aloud at
+// 7:45 pm.]" and made up the news to follow.
+func TestForModelMarksNewsAsNewsNotAReminder(t *testing.T) {
+	messages := []conversation.Message{
+		{Kind: conversation.Immediate, Role: conversation.Assistant, Content: "Server is done, sir.", Detail: "7:30 pm"},
+		{Kind: conversation.Chat, Role: conversation.User, Content: "thanks"},
+		{Kind: conversation.ReminderAnnouncement, Role: conversation.Assistant, Content: "Your tablets, sir.", Detail: "7:31 pm"},
+	}
+	got := conversation.ForModel(messages)
+	if len(got) != 3 {
+		t.Fatalf("model saw %d messages", len(got))
+	}
+	if c := got[0].Content; strings.Contains(c, "Reminder") || !strings.HasPrefix(c, "[Said unasked at 7:30 pm, news from their devices") {
+		t.Errorf("terminal news is marked %q", c)
+	}
+	if c := got[2].Content; !strings.HasPrefix(c, "[Reminder announced aloud at 7:31 pm.]") {
+		t.Errorf("a reminder is marked %q", c)
+	}
+}

@@ -615,6 +615,15 @@ func announcedAs(kind Kind, when string) string {
 		return "Announced aloud" + at + ", as they came into the room."
 	case Renaming:
 		return "You named this conversation" + at + ", from what had been said in it so far."
+	// Not a reminder: every terminal's news and every rule's was marked
+	// as one, and the model, reading a column of "[Reminder announced
+	// aloud at 7:30 pm.] Claude Code in Server has finished...", began
+	// its own answers the same way and made up the news to go with it
+	// (owner, 19 October 2026). Said as what it was, and as a record.
+	case Immediate, Reaching:
+		return "Said unasked" + at + ", news from their devices -- a record of what you said then, never a way to begin an answer"
+	case Coming:
+		return "Said unasked" + at + ", ahead of something in their diary"
 	}
 	return "Reminder announced aloud" + at + "."
 }

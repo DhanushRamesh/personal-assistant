@@ -365,8 +365,8 @@ func TestClaudeCodesRecordIsWeighedWhenItAsks(t *testing.T) {
 	got := terminal.Asking(event.Terminal{Kind: event.TerminalAsks, ID: "t", Name: "PAC", Command: "claude",
 		Conversation: "They last asked Claude Code:\nfix the crossings\n\nWhat it said since:\nDelete the false ones, or keep them?"},
 		at, at, time.UTC, "", nil)
-	for _, want := range []string{"its own record of the conversation", "Delete the false ones, or keep them?", "which answer you would choose",
-		"done with its turn", "offering to tell Claude Code to do it", "a yes is typed into Claude Code"} {
+	for _, want := range []string{"its own record of the conversation", "Delete the false ones, or keep them?", "the answer you would choose",
+		"done with its turn", "to judge, not to retell", "offers to give Claude Code that answer", "a yes is typed into Claude Code"} {
 		if !strings.Contains(got, want) {
 			t.Errorf("the prompt does not say %q:\n%s", want, got)
 		}
@@ -393,5 +393,55 @@ func TestASharedNameIsSaidWithItsSpace(t *testing.T) {
 	alone := event.Terminal{Kind: event.TerminalAsks, ID: "t2", Name: "PAC", Space: "Jarvis"}
 	if got := terminal.Called(alone); got != "PAC" {
 		t.Errorf("called %q", got)
+	}
+}
+
+// What is said of a terminal is four short parts -- where, its status,
+// the assistant's own take, and the question -- not a retelling.
+func TestATerminalsNewsIsSaidInFourShortParts(t *testing.T) {
+	at := time.Date(2026, 10, 19, 11, 0, 0, 0, time.UTC)
+	got := terminal.Asking(event.Terminal{Kind: event.TerminalFinished, ID: "t", Name: "Server", Command: "go test ./...", Seconds: 40},
+		at, at, time.UTC, "", nil)
+	for _, want := range []string{"four short parts and nothing else", "about thirty words", "where -- the terminal by its name",
+		"its status, in a few words", "your take -- your own judgement", "never a retelling", "one short question"} {
+		if !strings.Contains(got, want) {
+			t.Errorf("the prompt does not say %q", want)
+		}
+	}
+}
+
+// With the space's own Claude Code offered, looking closer is asked of it
+// rather than offered to them.
+func TestLookingCloserIsAskedOfItsOwnClaude(t *testing.T) {
+	at := time.Date(2026, 10, 19, 11, 0, 0, 0, time.UTC)
+	got := terminal.Asking(event.Terminal{Kind: event.TerminalFinished, ID: "t", Name: "Shell", Command: "npm run build --watch", Seconds: 12},
+		at, at, time.UTC, "", []string{"read_terminal", terminal.OwnClaude})
+	for _, want := range []string{"do not offer it: ask your own Claude Code with ask_own_claude", "that you have asked it"} {
+		if !strings.Contains(got, want) {
+			t.Errorf("the prompt does not say %q", want)
+		}
+	}
+	if strings.Contains(terminal.Asking(event.Terminal{Kind: event.TerminalFinished, ID: "t", Name: "Shell"}, at, at, time.UTC, "", []string{"read_terminal"}), "ask_own_claude") {
+		t.Error("its own Claude Code was spoken of with none offered")
+	}
+}
+
+// The space's own Claude Code answering is the answer to their question,
+// told as that: not a terminal done, not four parts, and always said.
+func TestItsOwnClaudesAnswerIsToldAsTheAnswer(t *testing.T) {
+	at := time.Date(2026, 10, 19, 11, 0, 0, 0, time.UTC)
+	own := event.Terminal{Kind: event.TerminalAsks, ID: "t", Name: "Work - by Assistant", Own: true,
+		Conversation: "They asked: What folders are in ~/workspace/personal-assistant?\nClaude Code: cmd, internal, docs."}
+	got := terminal.Asking(own, at, at, time.UTC, "", []string{"read_terminal"})
+	for _, want := range []string{"It has answered", "cmd, internal, docs", "Tell them its answer now, as your own", "Never say a terminal is done"} {
+		if !strings.Contains(got, want) {
+			t.Errorf("the prompt does not say %q", want)
+		}
+	}
+	if strings.Contains(got, "four short parts") || strings.Contains(got, "Work - by Assistant") {
+		t.Errorf("its answer was asked about as a terminal's news: %s", got)
+	}
+	if !terminal.Always(own) {
+		t.Error("its answer may go unsaid")
 	}
 }

@@ -23,6 +23,7 @@ type chatRow struct {
 	ConversationID *string    `gorm:"column:conversation_id"`
 	Prompt         string     `gorm:"column:prompt"`
 	Where          *string    `gorm:"column:where_context"`
+	ReplyTo        *string    `gorm:"column:reply_to"`
 	Channel        string     `gorm:"column:channel"`
 	Vendor         *string    `gorm:"column:vendor"`
 	Model          *string    `gorm:"column:model"`
@@ -49,6 +50,7 @@ type summaryRow struct {
 	ID             string     `gorm:"column:id"`
 	ConversationID *string    `gorm:"column:conversation_id"`
 	Prompt         string     `gorm:"column:prompt"`
+	ReplyTo        *string    `gorm:"column:reply_to"`
 	Channel        string     `gorm:"column:channel"`
 	Status         string     `gorm:"column:status"`
 	Error          *string    `gorm:"column:error"`
@@ -62,7 +64,7 @@ type summaryRow struct {
 // summaryColumns : The columns a listing selects. Naming them is what keeps
 // response bodies out of a query that does not need them.
 var summaryColumns = []string{
-	"id", "conversation_id", "prompt", "channel", "status", "error", "error_code",
+	"id", "conversation_id", "prompt", "reply_to", "channel", "status", "error", "error_code",
 	"created_at", "updated_at", "started_at", "finished_at",
 }
 
@@ -158,6 +160,7 @@ func toRow(t *chat.Chat) *chatRow {
 		ConversationID: nullable(t.ConversationID),
 		Prompt:         t.Prompt,
 		Where:          nullable(t.Where),
+		ReplyTo:        nullable(t.ReplyTo),
 		ClientID:       nullable(t.ClientID),
 		Channel:        string(t.Channel),
 		Vendor:         nullable(t.Model.Vendor),
@@ -184,6 +187,7 @@ func (r *chatRow) toChat() *chat.Chat {
 		ConversationID: value(r.ConversationID),
 		Prompt:         r.Prompt,
 		Where:          value(r.Where),
+		ReplyTo:        value(r.ReplyTo),
 		ClientID:       value(r.ClientID),
 		Channel:        chat.Channel(r.Channel),
 		Model:          chat.NewModel(value(r.Vendor), value(r.Model)),
@@ -208,6 +212,7 @@ func (r *summaryRow) toSummary() chat.Summary {
 		ID:             r.ID,
 		ConversationID: value(r.ConversationID),
 		Prompt:         r.Prompt,
+		ReplyTo:        value(r.ReplyTo),
 		Channel:        chat.Channel(r.Channel),
 		Status:         chat.Status(r.Status),
 		Error:          value(r.Error),

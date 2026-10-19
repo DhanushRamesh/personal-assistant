@@ -173,3 +173,38 @@ const AnnounceTitlesSetting = "announce_titles"
 func TitleAnnouncement(title string) string {
 	return "I have called this conversation " + title + "."
 }
+
+// ReplyingTo : What the assistant is told when the person chose one of its
+// messages to reply to (owner, 19 October 2026: "add a reply to a message
+// option, where a reply is specifically for that message, and the server
+// is also told that it is for that message"). The conversation moves
+// between subjects, and its last message is not always the one answered:
+// this says which is. Empty when none was chosen.
+func ReplyingTo(message string) string {
+	message = strings.TrimSpace(message)
+	if message == "" {
+		return ""
+	}
+	return "They are replying to this message of yours, chosen in the app:\n" +
+		"\"" + message + "\"\n\n" +
+		"What they say now is about that message, not whatever came last. " +
+		"A yes means do what it offered; a question is about what it said; " +
+		"a terminal or a Claude Code it names is the one meant."
+}
+
+// SayingYesTo : What the assistant is told when the person answers its
+// last question with a bare yes, typed or said, without choosing the
+// message (owner, 19 October 2026: a "yes" to "Shall I tell it to move
+// on to step 4?" was taken for the terminal in front, and nothing was
+// done). The same as a reply chosen in the app, found by the server.
+// Empty when there is no question.
+func SayingYesTo(question string) string {
+	question = strings.TrimSpace(question)
+	if question == "" {
+		return ""
+	}
+	return "They are saying yes to this, the last thing you asked them:\n" +
+		"\"" + question + "\"\n\n" +
+		"Do what it offered, now, with the terminal or the thing it names -- " +
+		"not whatever is in front of them. Then say in a few words that it is done."
+}

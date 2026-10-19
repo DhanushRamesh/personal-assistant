@@ -57,3 +57,33 @@ func TestWhereIsKeptOnTheChat(t *testing.T) {
 		}
 	}
 }
+
+// The message chosen to reply to is kept on the chat, trimmed and cut.
+func TestAReplyIsKeptOnTheChat(t *testing.T) {
+	ctx := context.Background()
+	repo := memory.New()
+	conv := chat.NewConversation("usr_1", "")
+	if err := repo.CreateConversation(ctx, conv); err != nil {
+		t.Fatal(err)
+	}
+	s := asking.New(slog.New(slog.NewTextHandler(io.Discard, nil)), repo, runner{}, bus{})
+	for _, c := range []struct{ sent, want string }{
+		{"  Shall I tell it to go ahead?\n", "Shall I tell it to go ahead?"},
+		{strings.Repeat("x", chat.MaxReplyToBytes+1), strings.Repeat("x", chat.MaxReplyToBytes)},
+	} {
+		started, err := s.Ask(ctx, asking.Request{
+			UserID: "usr_1", Channel: chat.ChannelDirect, ConversationID: conv.ID, Prompt: "yes", ReplyTo: c.sent,
+		})
+		if err != nil {
+			t.Fatalf("Ask: %v", err)
+		}
+		started.Stop()
+		got, err := repo.Get(ctx, started.Chat.ID)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if got.ReplyTo != c.want {
+			t.Errorf("reply to = %d bytes, want %d", len(got.ReplyTo), len(c.want))
+		}
+	}
+}

@@ -33,6 +33,9 @@ const (
 	// cut rather than refused: it is what was on the screen, and the
 	// question asked about it still deserves an answer.
 	MaxWhereBytes = 8 << 10
+	// MaxReplyToBytes : The most of the message replied to that is kept:
+	// enough to say which it was and what it asked.
+	MaxReplyToBytes = 2 << 10
 )
 
 // StoredPrecision : The precision timestamps are kept at.
@@ -91,6 +94,11 @@ type Chat struct {
 	// kept on the chat so one recovered after a restart is answered as it
 	// was asked. Cut to MaxWhereBytes by CutWhere.
 	Where string
+
+	// ReplyTo : The words of the assistant's message this chat replies to,
+	// when the person chose one, as the client showed them. Empty when it
+	// replies to nothing chosen. Cut to MaxReplyToBytes by CutReplyTo.
+	ReplyTo string
 
 	// Model : Which model was asked, copied from the client when the chat
 	// was accepted. The zero value means the server's configured one.
@@ -218,6 +226,20 @@ func CutWhere(where string) string {
 		cut--
 	}
 	return strings.TrimSpace(where[:cut])
+}
+
+// CutReplyTo : The message replied to as it is kept: trimmed, and cut to
+// MaxReplyToBytes on a character boundary, keeping the start.
+func CutReplyTo(text string) string {
+	text = strings.TrimSpace(text)
+	if len(text) <= MaxReplyToBytes {
+		return text
+	}
+	cut := MaxReplyToBytes
+	for cut > 0 && !utf8.RuneStart(text[cut]) {
+		cut--
+	}
+	return strings.TrimSpace(text[:cut])
 }
 
 // NewID : Returns a fresh chat identifier.

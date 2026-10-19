@@ -118,3 +118,25 @@ func TestAYesToAnOfferIsNotInPassing(t *testing.T) {
 		t.Error("\"Okay.\" with nothing before it is not taken as said in passing")
 	}
 }
+
+func TestAgrees(t *testing.T) {
+	for _, said := range []string{"yes", "Yes.", "Yes, do it.", "okay Nova", "Go ahead.", "yeah go ahead sir", "Sure, please.", "hey Nova yes please", "Tell it."} {
+		if !Agrees(said, "Nova") {
+			t.Errorf("%q is not taken as a bare yes", said)
+		}
+	}
+	for _, said := range []string{"no", "yes but not now", "yes, tell Claude Code to commit", "what is step 4?", "", "Nova"} {
+		if Agrees(said, "Nova") {
+			t.Errorf("%q is taken as a bare yes", said)
+		}
+	}
+}
+
+func TestAsks(t *testing.T) {
+	if !Asks(`Shall I tell it to move on to step 4?`) || !Asks(`Shall I? "`) {
+		t.Error("a question at the end is not seen")
+	}
+	if Asks("Step 3 is in, sir.") || Asks("Is it? It is done.") {
+		t.Error("a statement is taken for a question")
+	}
+}

@@ -56,6 +56,9 @@ type Terminal struct {
 	// sent with its asking: what was asked of it, what it did, what it
 	// said. Empty for anything else.
 	Conversation string
+	// Own : The space's own Claude Code, the assistant's, answering what
+	// it was asked for them -- an answer to tell, not a terminal's news.
+	Own bool
 }
 
 // TerminalOf : The news an event carries, when it is a terminal's.
@@ -84,6 +87,7 @@ func TerminalOf(e *Event) (Terminal, bool) {
 		Tail     string   `json:"tail"`
 		Conv     string   `json:"conversation"`
 		Shared   bool     `json:"shared"`
+		Own      bool     `json:"own"`
 	}
 	if len(e.Payload) > 0 {
 		if err := json.Unmarshal(e.Payload, &p); err != nil {
@@ -103,6 +107,7 @@ func TerminalOf(e *Event) (Terminal, bool) {
 
 		Conversation: strings.TrimSpace(p.Conv),
 		Shared:       p.Shared,
+		Own:          p.Own,
 	}
 	if p.Seconds != nil {
 		t.Seconds = *p.Seconds

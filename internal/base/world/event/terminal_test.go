@@ -69,3 +69,10 @@ func TestATerminalsSharedNameIsRead(t *testing.T) {
 		t.Errorf("read %+v, %v", got, ok)
 	}
 }
+
+func TestTheSpacesOwnClaudeIsRead(t *testing.T) {
+	got, ok := event.TerminalOf(&event.Event{Kind: event.TerminalAsks, Payload: []byte(`{"terminal":"t1","name":"Work","own":true}`)})
+	if !ok || !got.Own {
+		t.Errorf("read %+v, %v", got, ok)
+	}
+}

@@ -806,3 +806,33 @@ func TestConversationTitlesAreReadTogether(t *testing.T) {
 		t.Errorf("no ids gave %v, %v", none, err)
 	}
 }
+
+// The message a chat replies to is kept with it, and listed with it, so
+// the conversation shows what each reply answered after a restart.
+func TestAReplyIsKeptAndListed(t *testing.T) {
+	r := newRepository(t)
+	ctx := context.Background()
+
+	tk, err := chat.New(storedConversation(t, r), chat.ChannelDirect, "yes, go ahead")
+	if err != nil {
+		t.Fatalf("chat.New: %v", err)
+	}
+	tk.ReplyTo = "Claude Code in Server has finished, sir. Shall I tell it to go ahead?"
+	if err := r.Create(ctx, tk); err != nil {
+		t.Fatalf("Create: %v", err)
+	}
+	got, err := r.Get(ctx, tk.ID)
+	if err != nil {
+		t.Fatalf("Get: %v", err)
+	}
+	if got.ReplyTo != tk.ReplyTo {
+		t.Errorf("ReplyTo = %q, want %q", got.ReplyTo, tk.ReplyTo)
+	}
+	listed, err := r.List(ctx, chat.Filter{ConversationID: tk.ConversationID})
+	if err != nil {
+		t.Fatalf("List: %v", err)
+	}
+	if len(listed) != 1 || listed[0].ReplyTo != tk.ReplyTo {
+		t.Errorf("listed %+v", listed)
+	}
+}

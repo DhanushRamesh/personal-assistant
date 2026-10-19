@@ -32,14 +32,16 @@ type Summary struct {
 	ID             string
 	ConversationID string
 	Prompt         string
-	Channel        Channel
-	Status         Status
-	Error          string
-	ErrorCode      string
-	CreatedAt      time.Time
-	UpdatedAt      time.Time
-	StartedAt      *time.Time
-	FinishedAt     *time.Time
+	// ReplyTo : The words of the message the chat replies to, when one was chosen.
+	ReplyTo    string
+	Channel    Channel
+	Status     Status
+	Error      string
+	ErrorCode  string
+	CreatedAt  time.Time
+	UpdatedAt  time.Time
+	StartedAt  *time.Time
+	FinishedAt *time.Time
 }
 
 // Filter : Narrows a listing of chats.

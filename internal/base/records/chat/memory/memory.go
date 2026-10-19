@@ -148,7 +148,7 @@ func (m *Repository) List(_ context.Context, f chat.Filter) ([]chat.Summary, err
 			}
 		}
 		out = append(out, chat.Summary{
-			ID: t.ID, ConversationID: t.ConversationID, Prompt: t.Prompt,
+			ID: t.ID, ConversationID: t.ConversationID, Prompt: t.Prompt, ReplyTo: t.ReplyTo,
 			Channel: t.Channel, Status: t.Status, Error: t.Error,
 			ErrorCode: t.ErrorCode,
 		})

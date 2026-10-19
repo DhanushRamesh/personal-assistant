@@ -189,6 +189,75 @@ it returns:
 They are worked out in Go (`insightsOf`) from every call of the window,
 which `usage.Store.Every` reads with no limit, oldest first.
 
+**News of a terminal can ask the space's own Claude Code** (owner, 19
+October 2026: *"for this it can ask that hidden Claude Code and get the
+result and say it to me"*). The desktop app offers `ask_own_claude`: a
+question for the space's own Claude Code of the assistant's, which runs in
+plan mode and only looks. The terminal reactor is offered it beside the
+terminal tools (`terminal.OwnClaude`). Where it would offer to look closer,
+it is told to ask instead and say in its take that it has asked. The answer
+comes as that terminal's news when it is done.
+
+**A reply is for the message it was chosen for** (owner, 19 October 2026:
+*"add a reply to a message option, where a reply is specifically for that
+message, and the server is also told that it is for that message"*).
+- The live prompt carries `reply_to`, the words of the assistant's message
+  the person chose to reply to.
+- It is kept on the chat (`chats.reply_to`, migration 59, cut to 2 KB),
+  and returned with the chat and in its summary, so the conversation shows
+  what each reply answered.
+- `conversation.ReplyingTo` goes in front of what they said, in the turn
+  itself (`runner.answering`): what they say now is about that message,
+  not whatever came last. It was first in the system prompt; that join
+  was lost when `runner.go` was replaced by later commits, and now lives
+  in `execute.go` beside the yes below.
+- **A bare yes answers the last question** (owner, same day, after "yes"
+  under *"Shall I tell it to move on to step 4?"* did nothing: *"ok do"*).
+  With no message chosen, a prompt that is only a yes (`persona.Agrees`:
+  yes, okay, go ahead, do it ...) after words of the assistant's ending in
+  a question (`persona.Asks`, any kind of message, an announcement too)
+  gets `conversation.SayingYesTo` in front of it: do what it offered,
+  with the terminal it names. The tools and names are then looked for
+  beside that question, not beside the last reply.
+- The send-back to look (`lookFirstFor`) ends by saying the note is the
+  server's, not theirs, and repeats what they said with what it answers.
+  Its round is begun before the answer exists, so it read their "yes"
+  and then the instruction as two turns of theirs, and answered the
+  instruction: *"Understood, sir. I will check the tools before
+  claiming..."*.
+- The migration is numbered 59 because 57 and 58 were run on 17 October by
+  work since taken back, and goose counts them as applied.
+
+**Its own Claude Code's answer is told as the answer** (owner, 19 October
+2026: *"[the assistant]'s Claude Code should not be announced, it's an
+exception"*). News with `own: true` (`event.Terminal.Own`) is not asked
+about as a terminal's: `terminal.answered` has the model tell the answer
+to what was asked, from its record, with no terminal named, no take and
+no question. It is always said.
+
+**Announcements are marked as what they were.** In the model's history,
+every announcement that was not a greeting or a renaming was marked
+"[Reminder announced aloud at …]", terminal news included. After a column
+of those, the model began its own answer the same way and made up the
+news to follow. Immediate and Reaching are now "Said unasked at …, news
+from their devices -- a record of what you said then, never a way to
+begin an answer"; Coming is "Said unasked at …, ahead of something in
+their diary".
+
+**News of a terminal is four short parts** (owner, same day: *"the whole
+point of notifying the terminal's end is to keep my notice and understand
+the gist of it, but it's too long .. it should be minimal .. only 4
+parts"*). The four parts, about thirty words in all:
+1. Where: the terminal by name.
+2. Its status, in a few words.
+3. The assistant's own take: its judgement of what should happen next and
+   why, never a retelling of what Claude Code said.
+4. One short question offering that.
+
+Claude Code's record is given "to judge, not to retell". Where it asks
+something, the take is the answer the assistant would choose, which may
+not be the one Claude Code leans to.
+
 **A terminal whose name another shares is named with its space** (owner,
 18 October 2026: *"what if the same name is for both terminals? .. yes,
 add the space"*). The desktop app marks a terminal's news `shared` when

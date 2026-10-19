@@ -210,3 +210,29 @@ func TestWhereTheyAreOverridesWhatWasSaidEarlier(t *testing.T) {
 		}
 	}
 }
+
+// A reply to a message chosen in the app says which message it answers,
+// and that it is about that one; nothing chosen says nothing.
+func TestReplyingToSaysWhichMessage(t *testing.T) {
+	got := conversation.ReplyingTo("  Claude Code in Server has finished, sir. Shall I tell it to go ahead?  ")
+	for _, want := range []string{"replying to this message of yours", `"Claude Code in Server has finished, sir. Shall I tell it to go ahead?"`, "not whatever came last", "A yes means do what it offered"} {
+		if !strings.Contains(got, want) {
+			t.Errorf("no %q in %q", want, got)
+		}
+	}
+	if conversation.ReplyingTo("  ") != "" {
+		t.Error("nothing chosen said something")
+	}
+}
+
+func TestSayingYesToSaysWhatTheYesIsFor(t *testing.T) {
+	got := conversation.SayingYesTo(" The Server terminal is done, sir. Shall I tell it to move on to step 4? ")
+	for _, want := range []string{"saying yes to this", `"The Server terminal is done, sir. Shall I tell it to move on to step 4?"`, "Do what it offered, now", "not whatever is in front of them"} {
+		if !strings.Contains(got, want) {
+			t.Errorf("no %q in %q", want, got)
+		}
+	}
+	if conversation.SayingYesTo("") != "" {
+		t.Error("no question said something")
+	}
+}
