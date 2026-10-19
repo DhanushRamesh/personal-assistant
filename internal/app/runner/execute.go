@@ -55,9 +55,9 @@ func (r *Runner) execute(ctx, lifeCtx context.Context, t *chat.Chat) {
 
 	// Composed once. It reads the database and searches memory, and every
 	// hop of the tool loop must be given the same one.
-	systemPrompt, missed := r.promptFor(ctx, t)
+	systemPrompt, missed, note := r.promptFor(ctx, t)
 
-	r.consume(runCtx, ctx, t, systemPrompt)
+	r.consume(runCtx, ctx, t, systemPrompt, note)
 	r.changed(ctx, t.ConversationID)
 
 	// Once there is an answer, not before. Marking them while composing
@@ -81,7 +81,7 @@ func (r *Runner) execute(ctx, lifeCtx context.Context, t *chat.Chat) {
 // runCtx bounds the provider's work and is cancelled to stop it. ctx outlives
 // it and is used for the final write, because a cancelled context cannot be
 // used to record that the chat was cancelled.
-func (r *Runner) consume(runCtx, ctx context.Context, t *chat.Chat, systemPrompt string) {
+func (r *Runner) consume(runCtx, ctx context.Context, t *chat.Chat, systemPrompt string, note chat.Recalled) {
 	window := r.history(ctx, t, systemPrompt)
 	turns := toProviderTurns(window.Messages)
 
@@ -101,7 +101,18 @@ func (r *Runner) consume(runCtx, ctx context.Context, t *chat.Chat, systemPrompt
 	// Both positions passed. Only his real conversation failed.
 	turns = append(turns, r.clock()...)
 
+	// The message this turn answers: the one they chose to reply to, or
+	// the question last asked them, when all they said was yes. Put in
+	// front of what they said, where the model reads it last and cannot
+	// miss it, and carried by every send-back after.
+	answers, about := answering(t, window.Messages, r.assistantName)
 	prompt := t.Prompt
+	if about != "" {
+		prompt = about + "\n\n" + prompt
+	}
+	// request : What they asked, with what it answers, kept apart from
+	// prompt, which a send-back replaces with its own instruction.
+	request := prompt
 
 	// What the tools this turn ran have obliged the answer to mention.
 	// Gathered as they run and settled once, at the end, because the
@@ -120,7 +131,13 @@ func (r *Runner) consume(runCtx, ctx context.Context, t *chat.Chat, systemPrompt
 	// Every tool that has run in this turn, so a write can insist its own
 	// domain was read first. Prefetched listings count: the model was
 	// shown them before it was asked anything.
-	ran := r.alreadyRead(t)
+	//
+	// What actually ran, not what would have. Until 19 October 2026
+	// this was the list of tools that get prefetched, whether or not
+	// they returned anything -- so a prefetch that failed still counted
+	// as a read, and a write could pass the read-before-write guard
+	// with nothing read at all.
+	ran := r.alreadyRead(note)
 
 	// Whether a tool has already said where its answer came from. Once
 	// a turn: the words are for the reply to carry, and a second
@@ -226,6 +243,13 @@ func (r *Runner) consume(runCtx, ctx context.Context, t *chat.Chat, systemPrompt
 	// nothing: measured 18 October 2026, "yes" alone put the diary
 	// 75th of 88 tools and 4th with the line before it.
 	said := lastSaid(window.Messages)
+	// A yes to an announcement answers the announcement, not the last
+	// reply: the tools and names for "yes" under "Shall I tell the
+	// Server terminal to go on?" were looked for beside an answer about
+	// another terminal.
+	if answers != "" {
+		said = answers
+	}
 
 	// What the question names, and which record each name belongs to.
 	//
@@ -488,7 +512,7 @@ func (r *Runner) consume(runCtx, ctx context.Context, t *chat.Chat, systemPrompt
 				waiting, stopWaiting, waitingCall = nil, nil, -1
 				turns = append(turns, asUserTurn(prompt)...)
 				turns = append(turns, asAnswer(final.Text)...)
-				prompt = lookFirst
+				prompt = lookFirstFor(request)
 				// Carried into this send-back rather than waited
 				// for. The round after it is the one that gets
 				// spoken, and by then nothing can be taken back,
@@ -694,7 +718,7 @@ func (r *Runner) consume(runCtx, ctx context.Context, t *chat.Chat, systemPrompt
 		// calls were all refused adds nothing and is not charged.
 		before := len(ran)
 
-		ranTurns, ranOwed, reveal, read := r.runTools(ctx, t, final.ToolCalls, &ran, described, &wrote, &told)
+		ranTurns, ranOwed, reveal, read := r.runTools(ctx, runCtx, t, final.ToolCalls, &ran, described, &wrote, &told)
 		if did(ran[before:]) {
 			worked++
 		}
@@ -785,6 +809,22 @@ const lookFirst = "Before that answer goes out: you did not use any tool this tu
 	"of them, search before you send it, whatever else you do with this turn. " +
 	"If a tool fits, use it. If none does, and none of those sentences is in your answer, " +
 	"say the same thing again and it will be sent as it is."
+
+// lookFirstFor : lookFirst, with what they asked said again after it.
+//
+// The round that carries lookFirst is begun before the answer it is
+// about exists, so it reads their words and then the instruction, two
+// turns of theirs side by side. Owner, 19 October 2026: a "yes" to
+// "Shall I tell it to move on to step 4?" came back "Understood, sir. I
+// will check the tools before claiming anything does not exist..." --
+// the instruction answered, as though it were what he had said, and the
+// step never told. So it ends by saying whose words are whose, and what
+// is still to be done.
+func lookFirstFor(request string) string {
+	return lookFirst + " " +
+		"This note is from the server, not from them: do not answer it or promise anything about it. " +
+		"What they said, which is what you answer, was:\n" + first(request, 1200)
+}
 
 // sayItPlainly : What the model is told when it named its machinery.
 //
@@ -1485,7 +1525,7 @@ func (r *Runner) ahead(
 	}))
 	call := t.Asking(time.Now(), true)
 	stream, err := r.environment.Run(ctx, environment.Request{
-		Prompt:  lookFirst,
+		Prompt:  lookFirstFor(prompt),
 		History: append(append([]environment.Turn{}, turns...), asUserTurn(prompt)...),
 		Summary: window.Summary,
 		Vendor:  t.Model.Vendor,
@@ -1587,6 +1627,27 @@ func (r *Runner) pointAt(ctx context.Context, t *chat.Chat, before string) {
 		slog.Any("worldly", pointing.Terms(points, pointing.Worldly)),
 		slog.Any("nowhere", pointing.Terms(points, pointing.Nowhere)),
 		slog.Duration("took", time.Since(started)))
+}
+
+// answering : The message this turn answers, and what the model is told
+// of it; both empty when it answers nothing in particular.
+//
+// The one chosen in the app first (owner, 19 October 2026: *"add a reply
+// to a message option, where a reply is specifically for that message,
+// and the server is also told"*). Without one, a bare yes answers the
+// question last put to them, whichever kind of message carried it -- an
+// announcement as much as a reply.
+func answering(t *chat.Chat, messages []conversation.Message, name string) (string, string) {
+	if chosen := strings.TrimSpace(t.ReplyTo); chosen != "" {
+		return chosen, conversation.ReplyingTo(chosen)
+	}
+	if !persona.Agrees(t.Prompt, name) {
+		return "", ""
+	}
+	if last := lastAloud(messages); persona.Asks(last) {
+		return last, conversation.SayingYesTo(last)
+	}
+	return "", ""
 }
 
 // lastAloud : The assistant's own last words to them in this window, or

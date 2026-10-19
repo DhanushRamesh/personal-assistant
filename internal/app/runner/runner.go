@@ -436,7 +436,7 @@ func (r *Runner) personaID() string {
 // an assistant that has not been told answers from whatever it remembers
 // doing, and remembering having switched somewhere is not the same as being
 // there.
-func (r *Runner) promptFor(ctx context.Context, t *chat.Chat) (string, []remind.Reminder) {
+func (r *Runner) promptFor(ctx context.Context, t *chat.Chat) (string, []remind.Reminder, chat.Recalled) {
 	standing := r.prompt(reading(t)) + r.heard(t)
 
 	// The conversation is read once: it carries both where the assistant is
@@ -505,7 +505,7 @@ func (r *Runner) promptFor(ctx context.Context, t *chat.Chat) (string, []remind.
 	note.TookMS = time.Since(started).Milliseconds()
 	r.recordRecalled(ctx, t, note)
 
-	return prompt, covered
+	return prompt, covered, note
 }
 
 // whereTheyAre : What the person has in front of them in the client that

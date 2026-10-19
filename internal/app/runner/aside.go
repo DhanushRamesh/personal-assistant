@@ -271,13 +271,9 @@ func takeSaying(calls []environment.ToolCall) string {
 // A prefetched listing was put in front of the model as though it had
 // called it, so a write in that domain has already had its read and must
 // not be made to ask twice.
-func (r *Runner) alreadyRead(t *chat.Chat) []string {
-	if r.tools == nil {
-		return nil
-	}
-	wanted := r.tools.Prefetched(t.Channel)
-	out := make([]string, 0, len(wanted))
-	for _, x := range wanted {
+func (r *Runner) alreadyRead(note chat.Recalled) []string {
+	out := make([]string, 0, len(note.Tools))
+	for _, x := range note.Tools {
 		out = append(out, x.Name)
 	}
 	return out

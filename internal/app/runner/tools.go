@@ -220,6 +220,16 @@ func (w writing) claimable() bool { return w.tried == 0 || w.took > 0 }
 // rather than as a question nobody answered.
 func (r *Runner) runTools(
 	ctx context.Context,
+	// running : Bounds the tools themselves, and is cancelled when the
+	// turn is stopped or its deadline passes.
+	//
+	// Apart from ctx, which outlives the run on purpose: every write
+	// here -- the call, the results -- has to be recorded even for a
+	// turn that was abandoned, and a cancelled context cannot record
+	// anything. Until 19 October 2026 the tools ran under ctx too, so
+	// "stop" reached the model and not the thirty-second web search it
+	// had already started, which ran to the end for nobody.
+	running context.Context,
 	t *chat.Chat,
 	calls []environment.ToolCall,
 	seen *[]string,
@@ -272,7 +282,7 @@ func (r *Runner) runTools(
 			continue
 		}
 
-		result := tools.Call(ctx, c.Name, tool.Invocation{
+		result := tools.Call(running, c.Name, tool.Invocation{
 			Caller: caller,
 			Args:   []byte(c.Arguments),
 			Ran:    *seen,

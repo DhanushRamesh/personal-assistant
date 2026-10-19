@@ -264,3 +264,60 @@ func TestTheMachineryGuardCannotReachATypedAnswer(t *testing.T) {
 		t.Errorf("the answer no longer carries the word, so this gap may be closed: %q", got.Response)
 	}
 }
+
+// TestAPrefetchThatFailedIsNotAReadentry : A write is refused until its
+// domain has been read, and a prefetch that did not run is not a read.
+//
+// Until 19 October 2026 the turn counted the tools that *get*
+// prefetched, not the ones that returned anything. So a prefetch that
+// failed still satisfied the guard, and a write could go through with
+// nothing read -- the guard the model was once seen to need when it
+// deleted from a list it had never fetched.
+func TestAPrefetchThatFailedIsNotARead(t *testing.T) {
+	broken, err := tool.NewRegistry(
+		tool.Tool{
+			Name: "task_list", Domain: "task", Lists: true, Prefetch: true,
+			Purpose: "What is on a list.", UseWhen: "They ask what is on it.",
+			Channels: []chat.Channel{chat.ChannelVoice, chat.ChannelDirect},
+			Params:   tool.Schema{Properties: map[string]tool.Property{}},
+			Run: func(context.Context, tool.Invocation) tool.Result {
+				return tool.Failed("That list is not there, sir.")
+			},
+		},
+		tool.Tool{
+			Name: "task_remove", Domain: "task", Writes: true,
+			Purpose: "Remove from a list.", UseWhen: "They ask for something removed.",
+			Channels: []chat.Channel{chat.ChannelVoice, chat.ChannelDirect},
+			Params:   tool.Schema{Properties: map[string]tool.Property{}},
+			Run: func(context.Context, tool.Invocation) tool.Result {
+				return tool.OK("Removed it.")
+			},
+		},
+	)
+	if err != nil {
+		t.Fatalf("registry: %v", err)
+	}
+
+	recorder := &recordingProvider{calls: []string{"task_remove"}}
+	h := newHarness(t, recorder, runner.Options{Tools: broken})
+
+	tk := h.submit(t, "take the milk off the shopping list")
+	h.await(t, tk.ID, chat.StatusCompleted, chat.StatusFailed)
+
+	// The write must have been refused for never having read. The
+	// server says so in the result it hands back in its place.
+	var results []string
+	for _, turn := range recorder.history() {
+		for _, got := range turn.ToolResults {
+			results = append(results, got.Content)
+		}
+	}
+	if len(results) == 0 {
+		t.Fatal("the write never ran at all, so this proves nothing")
+	}
+	for _, got := range results {
+		if strings.Contains(got, "Removed it.") {
+			t.Errorf("the write went through on a prefetch that failed: %q", got)
+		}
+	}
+}

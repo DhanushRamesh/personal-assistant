@@ -306,8 +306,8 @@ func (p *Environment) chat(ctx context.Context, ask environment.Request, onText 
 	// Once only, and only for a connection that died. A service that is
 	// down would otherwise be asked twice for every turn, which is twice
 	// the wait before somebody is told.
-	if status == 0 && dropped(err) && ctx.Err() == nil {
-		p.logger.WarnContext(ctx, "the connection to platform ai was dead, asking again",
+	if status == 0 && (dropped(err) || nameless(err)) && ctx.Err() == nil {
+		p.logger.WarnContext(ctx, "the connection to platform ai never got there, asking again",
 			slog.Any("error", err))
 		tried = append(tried, got)
 		got, _, err = p.attemptChat(ctx, ask, nil)
@@ -398,6 +398,27 @@ func dropped(err error) bool {
 		return true
 	}
 	return false
+}
+
+// nameless : Whether the request failed because the name would not
+// resolve, and the resolver said so in a way that may pass.
+//
+// The same reasoning as [dropped]: nothing was asked, so asking again
+// is not asking twice. A connection that died and one that never
+// opened are the same fact from here.
+//
+// "lookup accounts.zoho.com on 127.0.0.53:53: server misbehaving" is
+// the one that happens, 36 times in one log, and it is a SERVFAIL from
+// the local stub rather than an answer about the name -- see
+// [Docker host networking breaks DNS]. A name that genuinely does not
+// exist is left alone: that is a misconfiguration, and asking twice
+// turns one wrong answer into two.
+func nameless(err error) bool {
+	var dns *net.DNSError
+	if !errors.As(err, &dns) {
+		return false
+	}
+	return !dns.IsNotFound
 }
 
 // attemptChat : One try, returning the HTTP status alongside the failure
