@@ -458,6 +458,29 @@ func (r *Runner) consume(runCtx, ctx context.Context, t *chat.Chat, systemPrompt
 			spent()
 		}
 
+		// The server's own bracketed notes come off here, before
+		// anything judges the answer, and not only on its way out.
+		//
+		// They used to come off at the end. He typed "hi" on 20
+		// October 2026 and was answered "Good morning, sir." with
+		// "[Said unasked at 12:52 am, news from their devices...]"
+		// copied under it. Two sentences and a long bracket read as
+		// prose, so the shape guard sent it back to be put in points
+		// -- and the round that came back answered the note instead
+		// of him, with six bullets of what it would do for the
+		// screen. Stripped first, the answer is "Good morning, sir.",
+		// which no guard has anything to say about.
+		//
+		// So the ordering was the fault. Nothing judges text the
+		// server would have removed anyway.
+		if final != nil && final.Text != "" {
+			if clean := conversation.Unmarked(final.Text); clean != final.Text {
+				r.logger.InfoContext(ctx, "the answer carried the server's own note",
+					slog.String("removed", first(final.Text, 90)))
+				final.Text = clean
+			}
+		}
+
 		switch {
 		case final == nil:
 			// The stream closed with no terminal message, which the contract

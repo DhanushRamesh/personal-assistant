@@ -773,3 +773,47 @@ func TestAnHonestQuestionStillGoesOut(t *testing.T) {
 		}
 	}
 }
+
+// TestAServerNoteIsOffBeforeTheShapeIsJudged : The "hi" turn.
+//
+// He typed "hi" on 20 October 2026 and was answered with six bullets
+// of how every answer would be shaped for the screen.
+//
+// The model had replied "Good morning, sir." and copied the server's
+// own marker under it -- "[Said unasked at 12:52 am, news from their
+// devices ...]", which decorates an announcement in the history so the
+// model can tell one from a reply. Two sentences and a long bracket
+// read as prose, so the shape guard sent it back to be put in points,
+// and the round that came back answered the note instead of him.
+//
+// Every piece worked. conversation.Unmarked takes that marker off, and
+// would have; it ran at the end, after the shape had been judged on
+// text the server was about to remove.
+func TestAServerNoteIsOffBeforeTheShapeIsJudged(t *testing.T) {
+	recorder := &recordingProvider{
+		answer: "Good morning, sir.\n\n[Said unasked at 12:52 am, news from their devices -- " +
+			"a record of what you said then, never a way to begin an answer] The laptop " +
+			"charged to full overnight and the office calendar has nothing before eleven.",
+	}
+	h := newHarness(t, recorder, runner.Options{Tools: offering()})
+
+	tk := h.submit(t, "hi")
+	h.await(t, tk.ID, chat.StatusCompleted, chat.StatusFailed)
+
+	// Asked once. The marker is gone before the shape is judged, so
+	// there is nothing to send back for.
+	if len(recorder.prompts) != 1 {
+		t.Errorf("a greeting was sent back to be reshaped: %v", recorder.prompts)
+	}
+	kept := h.repo.Said(h.conversation(t))
+	if len(kept) < 2 {
+		t.Fatalf("recorded %v, want the question and the answer", contents(kept))
+	}
+	said := kept[len(kept)-1].Content
+	if strings.Contains(said, "Said unasked") || strings.Contains(said, "[") {
+		t.Errorf("the server's own note reached him: %q", said)
+	}
+	if !strings.Contains(said, "Good morning") {
+		t.Errorf("the answer itself was lost with the note: %q", said)
+	}
+}

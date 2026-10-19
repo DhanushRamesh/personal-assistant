@@ -22148,3 +22148,57 @@ credit figure in it. The parse is pinned against a real streamed final
 chunk from the gateway, and the round trip through MySQL is pinned in
 the shared store suite, balance included. The first background pass
 will show it for real.
+
+## A note was judged before it was taken off
+
+He typed **hi** and was answered with six bullets of how every answer
+would be shaped for the screen -- a short bold lead, headings, tables,
+no paragraph over three sentences -- ending *"The fact stays. The shape
+changes."*
+
+The log has the whole chain, and every piece in it worked:
+
+```
+"hi" → said in passing: not sent back to look          (right)
+     → "Good morning, sir.\n\n[Said unasked at 12:52 am, news from
+        their devices -- a record of what you said then, never a way
+        to begin an answer] ..."
+     → a written answer ran as prose                   (shape send-back)
+     → the answer began by agreeing with a note        removed="Understood."
+```
+
+The model copied the server's own marker into its answer. That marker
+decorates an announcement in the history so the model can tell one from
+a reply, and `conversation.Unmarked` exists to take it off again.
+
+**Unmarked ran at the end.** The shape was judged first, on text the
+server was about to remove: two sentences and a long bracket read as
+prose, so it went back to be put in points. The round that came back
+answered the note instead of him, `Preambled` took off the
+*"Understood."* in front of it, and the rest went out.
+
+### The fault was the ordering
+
+Nothing should judge text the server would have removed anyway. The
+notes now come off where the answer arrives, before any guard looks at
+it. Stripped first, the answer is *"Good morning, sir."*, which no
+guard has anything to say about, and the two rounds after it never
+happen.
+
+### What is still open
+
+**It answered the note.** Every send-back ends with *"This note is from
+the server, not from them: do not answer it or mention it"*, and the
+reply was *"Understood. I will reshape every answer for the screen:"*.
+`persona.Preambled` takes off an opening that agrees with a note, which
+is why only the recitation was seen -- the guard caught the tell and
+the body went out behind it.
+
+A note's own words are not a guess: the server sent them this turn and
+still has them. An answer that repeats a run of them is answering the
+note rather than him, and that is checkable without a word of English
+in it. Not built tonight.
+
+**It copied the marker at all.** The wording was changed on 19 October
+for exactly this, and it was copied again the next day. The stripper is
+what holds; the sentence is decoration.
