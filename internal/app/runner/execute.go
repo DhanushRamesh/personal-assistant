@@ -122,6 +122,11 @@ func (r *Runner) consume(runCtx, ctx context.Context, t *chat.Chat, systemPrompt
 	// shown them before it was asked anything.
 	ran := r.alreadyRead(t)
 
+	// Whether a tool has already said where its answer came from. Once
+	// a turn: the words are for the reply to carry, and a second
+	// telling is twenty words the model reads on every round after it.
+	var told bool
+
 	// Whether the model has already been sent back once for giving up
 	// on a change it was asked to make.
 	var nudged bool
@@ -689,7 +694,7 @@ func (r *Runner) consume(runCtx, ctx context.Context, t *chat.Chat, systemPrompt
 		// calls were all refused adds nothing and is not charged.
 		before := len(ran)
 
-		ranTurns, ranOwed, reveal, read := r.runTools(ctx, t, final.ToolCalls, &ran, described, &wrote)
+		ranTurns, ranOwed, reveal, read := r.runTools(ctx, t, final.ToolCalls, &ran, described, &wrote, &told)
 		if did(ran[before:]) {
 			worked++
 		}

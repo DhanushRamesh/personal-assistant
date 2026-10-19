@@ -225,6 +225,7 @@ func (r *Runner) runTools(
 	seen *[]string,
 	described map[string]bool,
 	wrote *writing,
+	told *bool,
 ) (turns []environment.Turn, owed []tool.Owed, reveal, read []string) {
 	asked := make([]conversation.ToolCall, 0, len(calls))
 	for _, c := range calls {
@@ -301,11 +302,25 @@ func (r *Runner) runTools(
 		r.logger.InfoContext(ctx, "tool ran", fields...)
 
 		ran = append(ran, result)
+
+		// Where this came from, in the person's own words, so the
+		// answer can say it. Once a turn: the line is about twenty
+		// words and a turn carries it to the model again on every
+		// round after this one, which is where per-tool text really
+		// costs -- see [One thing said eighteen times].
+		content := result.Content
+		if !*told && result.Outcome != conversation.OutcomeFailed {
+			if carries := x.Carries(); known && carries != "" {
+				content = carries + "\n\n" + content
+				*told = true
+			}
+		}
+
 		got = append(got, conversation.ToolResult{
 			ID:      c.ID,
 			Name:    c.Name,
 			Outcome: result.Outcome,
-			Content: result.Content,
+			Content: content,
 			TookMS:  time.Since(started).Milliseconds(),
 		})
 	}

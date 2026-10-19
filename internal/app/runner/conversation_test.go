@@ -3,6 +3,7 @@ package runner_test
 import (
 	"cmp"
 	"context"
+	"fmt"
 	"strings"
 	"testing"
 	"time"
@@ -175,6 +176,9 @@ type recordingProvider struct {
 	prompts    []string
 	// answer : What it replies with. Empty answers "an answer".
 	answer string
+	// calls : Tools it asks for on its first reply, then answers.
+	calls []string
+	asked bool
 }
 
 // systemPrompt : What the assistant was last told about itself.
@@ -196,6 +200,18 @@ func (p *recordingProvider) Run(ctx context.Context, req environment.Request) (<
 	}
 
 	ch := make(chan environment.Message, 1)
+	if len(p.calls) > 0 && !p.asked {
+		p.asked = true
+		want := make([]environment.ToolCall, 0, len(p.calls))
+		for i, name := range p.calls {
+			want = append(want, environment.ToolCall{
+				ID: fmt.Sprintf("c%d", i), Name: name, Arguments: "{}",
+			})
+		}
+		ch <- environment.Message{Kind: environment.KindToolCalls, ToolCalls: want}
+		close(ch)
+		return ch, nil
+	}
 	if p.failWith != "" {
 		ch <- environment.Failure(p.failWith, p.failCode, p.failDetail)
 	} else {
@@ -488,5 +504,89 @@ func TestASendBackCarriesTheAnswerItIsAbout(t *testing.T) {
 			t.Errorf("two of the person's turns in a row at %d: %v", i, roles)
 			break
 		}
+	}
+}
+
+// reading : A registry whose tools only look, so a result carries where
+// it came from.
+func reading() *tool.Registry {
+	look := func(name, domain, content string) tool.Tool {
+		return tool.Tool{
+			Name: name, Domain: domain, Lists: true,
+			Purpose: "Looks something up.", UseWhen: "They ask about it.",
+			Channels: []chat.Channel{chat.ChannelVoice, chat.ChannelDirect},
+			Params:   tool.Schema{Properties: map[string]tool.Property{}},
+			Run: func(context.Context, tool.Invocation) tool.Result {
+				return tool.OK(content)
+			},
+		}
+	}
+	r, err := tool.NewRegistry(
+		look("calendar_events", "calendar", "Tuesday 20 October, 9am, the dentist."),
+		look("mail_unread", "mail", "Two unread."),
+	)
+	if err != nil {
+		panic(err)
+	}
+	return r
+}
+
+// toolResults : Every tool result the model was shown.
+func toolResults(p *recordingProvider) []string {
+	var out []string
+	for _, turn := range p.history() {
+		for _, got := range turn.ToolResults {
+			out = append(out, got.Content)
+		}
+	}
+	return out
+}
+
+// TestAToolSaysWhereItsAnswerCameFrom : A looked-up answer has to be
+// able to say so, and the words reach the model with the result.
+//
+// Of 353 answers that called a tool, 48 said where anything came from,
+// so a looked-up answer and an invented one read as the same sentence.
+// Owner, 19 October 2026: "i'm not getting trust on our jarvis ...
+// there is something missing". What is missing is being able to check.
+func TestAToolSaysWhereItsAnswerCameFrom(t *testing.T) {
+	recorder := &recordingProvider{calls: []string{"calendar_events"}}
+	h := newHarness(t, recorder, runner.Options{Tools: reading()})
+
+	tk := h.submit(t, "what is on tomorrow")
+	h.await(t, tk.ID, chat.StatusCompleted, chat.StatusFailed)
+
+	results := toolResults(recorder)
+	if len(results) == 0 {
+		t.Fatal("no tool result reached the model")
+	}
+	if !strings.Contains(results[0], "your diary") {
+		t.Errorf("the result did not say where it came from:\n%s", results[0])
+	}
+	// In the person's words, never the machine's: this is the leak
+	// persona.NamesMachinery exists to stop, arriving by another route.
+	if strings.Contains(results[0], "calendar_events") {
+		t.Errorf("the result named the tool to the model as its source:\n%s", results[0])
+	}
+}
+
+// Said once a turn. Every result is carried back to the model on each
+// round after it, so a second telling is twenty words re-read for the
+// rest of the turn -- see "One thing said eighteen times".
+func TestWhereItCameFromIsSaidOnceATurn(t *testing.T) {
+	recorder := &recordingProvider{calls: []string{"calendar_events", "mail_unread"}}
+	h := newHarness(t, recorder, runner.Options{Tools: reading()})
+
+	tk := h.submit(t, "what is on, and any mail")
+	h.await(t, tk.ID, chat.StatusCompleted, chat.StatusFailed)
+
+	said := 0
+	for _, content := range toolResults(recorder) {
+		if strings.Contains(content, "Say where this came from") {
+			said++
+		}
+	}
+	if said != 1 {
+		t.Errorf("where it came from was said %d times in one turn, want once", said)
 	}
 }
