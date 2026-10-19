@@ -74,9 +74,10 @@ func TestNoExchangesProduceNoBlock(t *testing.T) {
 
 // fakeTranscript : A transcript held in a slice.
 type fakeTranscript struct {
-	pending []memory.Exchange
-	indexed map[string][]float32
-	skipped string
+	pending  []memory.Exchange
+	indexed  map[string][]float32
+	skipped  string
+	searched int
 }
 
 func (f *fakeTranscript) Unindexed(_ context.Context, _ string, limit int) ([]memory.Exchange, error) {
@@ -101,6 +102,7 @@ func (f *fakeTranscript) NearestTo(_ context.Context, _ string, q []float32, _ s
 	skip string, limit int) ([]memory.Heard, error) {
 
 	f.skipped = skip
+	f.searched++
 	var out []memory.Heard
 	for _, e := range f.pending {
 		if v := f.indexed[e.MessageID]; v != nil && e.ConversationID != skip {
@@ -304,7 +306,7 @@ func TestOnlyTheNearestExchangeIsOffered(t *testing.T) {
 		{Exchange: memory.Exchange{MessageID: "m3", Text: "They said: that's what I'm saying"}, Score: 0.712},
 	}
 	r := &memory.Recall{Transcript: held, Embedder: embed.Fake{}}
-	got, err := r.Said(context.Background(), "usr_1", "why did you say that", "")
+	got, err := r.Said(context.Background(), "usr_1", "why did you say that about the roofer", "")
 	if err != nil {
 		t.Fatalf("Said: %v", err)
 	}
@@ -322,5 +324,51 @@ func TestTheConversationComesFirst(t *testing.T) {
 
 	if !strings.Contains(block, "conversation in front of you comes first") {
 		t.Error("the recalled block does not say the conversation comes first")
+	}
+}
+
+// TestAShortQuestionDoesNotSearchTheTranscript : A question too short
+// to carry a subject matches the shape of other short questions and
+// nothing else.
+//
+// Told that Avengers: Doomsday releases on 18 December, he asked "Are
+// you sure?" and was answered about Jailer 2. The one exchange
+// recalled was "They said: Are you sure? You answered: Yes, sir." from
+// five minutes earlier, at 0.797 -- a past bare question matched for
+// being a bare question, carrying its own subject in with it.
+//
+// Measured over 1,334 of his short questions: 1,039 came back with
+// another of six words or fewer.
+func TestAShortQuestionDoesNotSearchTheTranscript(t *testing.T) {
+	f := &fakeTranscript{pending: []memory.Exchange{
+		{MessageID: "m1", UserID: "usr_1", Text: "They said: Are you sure? You answered: Yes, sir.", At: time.Now()},
+		{MessageID: "m2", UserID: "usr_1", Text: "They said: what did the roofer quote You answered: Forty thousand.", At: time.Now()},
+	}}
+	r := &memory.Recall{Transcript: f, Embedder: embed.Fake{}}
+	if _, err := r.IndexTranscript(context.Background(), 10); err != nil {
+		t.Fatalf("IndexTranscript: %v", err)
+	}
+
+	for _, said := range []string{"Are you sure?", "from and to?", "Why did you say that?", "that one", "no, the other one"} {
+		got, err := r.Said(context.Background(), "usr_1", said, "")
+		if err != nil {
+			t.Fatalf("Said(%q): %v", said, err)
+		}
+		if len(got) != 0 {
+			t.Errorf("%q searched the transcript and found %d", said, len(got))
+		}
+	}
+	if f.searched != 0 {
+		t.Errorf("the transcript was searched %d times for questions with no subject", f.searched)
+	}
+
+	// A question that names something is searched as before, however
+	// short it is: "what did the roofer quote" is five words and names
+	// a roofer.
+	if _, err := r.Said(context.Background(), "usr_1", "what did the roofer quote", ""); err != nil {
+		t.Fatalf("Said: %v", err)
+	}
+	if f.searched != 1 {
+		t.Error("a question that names a roofer did not search the transcript")
 	}
 }

@@ -173,6 +173,28 @@ func (r *Recall) Said(ctx context.Context, userID, question, skipConversation st
 		return nil, nil
 	}
 
+	// A question too short to carry a subject is not searched at all.
+	//
+	// It matches the shape of other short questions and nothing else:
+	// measured over 1,334 of his, 1,039 -- 78% -- came back with
+	// another question of six words or fewer, at a mean score of
+	// 0.662, well clear of any floor.
+	//
+	// What it cost him, 19 October 2026. Told that Avengers: Doomsday
+	// releases on 18 December, he asked "Are you sure?" and was
+	// answered about Jailer 2. The one exchange recalled was "They
+	// said: Are you sure? You answered: Yes, sir." from five minutes
+	// earlier, scoring 0.797 -- a past bare question matched by being
+	// a bare question, carrying its own subject in with it.
+	//
+	// Nothing is lost that is not already there. The conversation
+	// itself is in the history, which is where a follow-up's subject
+	// belongs; the curated memories are searched as before; and this
+	// is the transcript search alone.
+	if Brief(question) {
+		return nil, nil
+	}
+
 	q, err := r.Embedder.Query(ctx, question)
 	if err != nil {
 		return nil, err
@@ -246,4 +268,49 @@ func (r *Recall) IndexTranscript(ctx context.Context, limit int) (int, error) {
 		}
 	}
 	return done, nil
+}
+
+// subjectless : Words that name nothing, so a question made only of
+// them has no subject to search the transcript with.
+//
+// Pronouns and function words, and the handful of words a follow-up is
+// actually built from -- sure, right, again, more, that one. The
+// assistant's own name is stripped before this is consulted, since
+// "Okay, Jarvis" is two words of address and none of subject.
+var subjectless = words(`a an the of in on at to for and or but with from by about as so
+is are was were am be been being do does did done will would can could shall should may might have has had
+i me my mine you your yours he him his she her it its we us our they them their this that these those
+what which who whom whose when where why how if then than not no yes ok okay
+sure right correct true really again more else other another same one two both either neither
+say said tell told mean meant think thought know knew get got go went come came take took give gave
+do it that one thing anything something nothing now still just only even also please thanks thank`)
+
+// words : A lookup built from whitespace-separated text.
+func words(list string) map[string]bool {
+	out := map[string]bool{}
+	for _, w := range strings.Fields(list) {
+		out[w] = true
+	}
+	return out
+}
+
+// Brief : Whether a question has nothing in it to search the
+// transcript with.
+//
+// Not a count of words. "what did the roofer quote" is five words and
+// names a roofer; "Are you sure?" is three and names nothing. The
+// first is worth searching and the second matches the shape of every
+// other bare question ever asked.
+//
+// Judged by what is left after the pronouns, the function words and
+// the handful a follow-up is built from. Nothing left, nothing to
+// search with.
+func Brief(question string) bool {
+	for _, w := range strings.Fields(strings.ToLower(question)) {
+		w = strings.Trim(w, `.,!?;:'"()`)
+		if w != "" && !subjectless[w] {
+			return false
+		}
+	}
+	return true
 }
