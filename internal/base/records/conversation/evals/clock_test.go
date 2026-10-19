@@ -159,25 +159,45 @@ func TestTheClockBeatsTheConversation(t *testing.T) {
 	// The two orders, built from the same pieces so that position is
 	// the only thing that differs between them.
 	orders := []struct {
-		name  string
-		after bool // the clock goes after the history, as a turn
-		build func(now time.Time) string
+		name   string
+		after  bool // the clock goes after the history, as a turn
+		alone  bool // and without an answer put in its mouth
+		folded bool // or inside the question's own turn, which is neither
+		build  func(now time.Time) string
 	}{
-		{"clock first, as it was", false, func(now time.Time) string {
+		{"clock first, as it was", false, false, false, func(now time.Time) string {
 			return persona.Prompt(cfg.Assistant.Persona, cfg.Assistant.Name, persona.Spoken) +
 				" " + conversation.Now(now) +
 				" " + conversation.Heard() +
 				" " + conversation.Whereabouts("conv_01M3D477HXQ4YNQX7BNXJZZCV0", "The time") +
 				"\n\n" + stale(now)
 		}},
-		{"clock last in the system prompt", false, func(now time.Time) string {
+		{"clock last in the system prompt", false, false, false, func(now time.Time) string {
 			return persona.Prompt(cfg.Assistant.Persona, cfg.Assistant.Name, persona.Spoken) +
 				" " + conversation.Heard() +
 				" " + conversation.Whereabouts("conv_01M3D477HXQ4YNQX7BNXJZZCV0", "The time") +
 				"\n\n" + stale(now) +
 				"\n\n" + conversation.Now(now)
 		}},
-		{"clock after the history", true, func(now time.Time) string {
+		{"clock after the history", true, false, false, func(now time.Time) string {
+			return persona.Prompt(cfg.Assistant.Persona, cfg.Assistant.Name, persona.Spoken) +
+				" " + conversation.Heard() +
+				" " + conversation.Whereabouts("conv_01M3D477HXQ4YNQX7BNXJZZCV0", "The time") +
+				"\n\n" + stale(now)
+		}},
+		// The same position with no reply at all. Not what ships --
+		// two of the person's turns side by side read as one thing he
+		// said -- but it shows the reply is not what beats the stale
+		// times.
+		{"clock after the history, said once", true, true, false, func(now time.Time) string {
+			return persona.Prompt(cfg.Assistant.Persona, cfg.Assistant.Name, persona.Spoken) +
+				" " + conversation.Heard() +
+				" " + conversation.Whereabouts("conv_01M3D477HXQ4YNQX7BNXJZZCV0", "The time") +
+				"\n\n" + stale(now)
+		}},
+		// Inside the question's turn: the same position, with no turn
+		// of the server's own standing beside it. What ships.
+		{"clock folded into the question", false, false, true, func(now time.Time) string {
 			return persona.Prompt(cfg.Assistant.Persona, cfg.Assistant.Name, persona.Spoken) +
 				" " + conversation.Heard() +
 				" " + conversation.Whereabouts("conv_01M3D477HXQ4YNQX7BNXJZZCV0", "The time") +
@@ -204,11 +224,17 @@ func TestTheClockBeatsTheConversation(t *testing.T) {
 			behind := history
 			if order.after {
 				behind = append(append([]environment.Turn{}, history...),
-					environment.Turn{Role: environment.RoleUser, Text: conversation.Now(now)},
-					environment.Turn{Role: environment.RoleAssistant,
-						Text: conversation.Acknowledged})
+					environment.Turn{Role: environment.RoleUser, Text: conversation.Now(now)})
+				if !order.alone {
+					behind = append(behind, environment.Turn{
+						Role: environment.RoleAssistant, Text: conversation.Receipt})
+				}
 			}
-			answer := answered(t, env, order.build(now), behind, ask)
+			question := ask
+			if order.folded {
+				question = conversation.Now(now) + "\n\n" + ask
+			}
+			answer := answered(t, env, order.build(now), behind, question)
 
 			if saidTheTime(answer, now) {
 				right++
@@ -219,9 +245,9 @@ func TestTheClockBeatsTheConversation(t *testing.T) {
 				ask, firstTime(answer), now.Format("3:04 pm"))
 		}
 		t.Logf("%-32s %d of %d right, %d stale", order.name, right, len(asking), wrong)
-		if order.after && wrong > 0 {
-			t.Errorf("the clock went last and %d of %d answers were still stale",
-				wrong, len(asking))
+		if (order.after || order.folded) && wrong > 0 {
+			t.Errorf("%s and %d of %d answers were still stale",
+				order.name, wrong, len(asking))
 		}
 	}
 }
@@ -279,4 +305,154 @@ func answered(t *testing.T, env *platformai.Environment, system string,
 		return "reached for " + final.ToolCalls[0].Name
 	}
 	return strings.TrimSpace(final.Text)
+}
+
+// TestAFollowUpLandsOnTheAnswerAndNotTheClock : What the clock's
+// acknowledgement cost, and what dropping it risks.
+//
+// On 19 October 2026 he was told a film's plot, said "I don't
+// understand, can you just say me in a simple words", and was told:
+// "I meant: from now on, I will use only the time you just gave me --
+// 10:39 pm Monday 19 October -- and never mention any earlier time in
+// this conversation."
+//
+// That answer is correct for what the model could see. The server
+// appends the clock as a pair of turns, the second written in the
+// assistant's own voice, so the last thing it had said was about the
+// clock and a follow-up with no subject of its own landed there.
+//
+// Dropping that half has its own risk, and it is the reason the half
+// was written: a turn in the person's voice with no reply can read as
+// something they said and left hanging, and get answered instead of
+// the question. So both are checked here -- that a follow-up reaches
+// the real answer, and that an ordinary question is still answered.
+func TestAFollowUpLandsOnTheAnswerAndNotTheClock(t *testing.T) {
+	cfg, err := config.Load("../../../../../config.ini", os.LookupEnv)
+	if err != nil {
+		t.Fatalf("config: %v", err)
+	}
+	if cfg.Provider.Name != config.ProviderPlatformAI {
+		t.Skip("no real environment configured, so there is nothing to ask")
+	}
+	env, err := platformai.New(platformai.Config{
+		ClientID: cfg.PlatformAI.ClientID, ClientSecret: cfg.PlatformAI.ClientSecret,
+		RefreshToken: cfg.PlatformAI.RefreshToken, PortalID: cfg.PlatformAI.PortalID,
+		TokenURL: cfg.PlatformAI.TokenURL, ChatURL: cfg.PlatformAI.ChatURL,
+		Scope: cfg.PlatformAI.Scope, RedirectURI: cfg.PlatformAI.RedirectURI,
+		Vendor: cfg.PlatformAI.Vendor, Model: cfg.PlatformAI.Model,
+		Timeout: 90 * time.Second,
+	}, slog.New(slog.NewTextHandler(io.Discard, nil)))
+	if err != nil {
+		t.Fatalf("platformai.New: %v", err)
+	}
+
+	// His own conversation, with the exchange he actually had put on
+	// the end of it. A short invented history does not reproduce this:
+	// the recalled quotes in the system prompt outweigh two turns, and
+	// the model answers from them. It took the real weight of a real
+	// conversation behind the question for the clock to be what the
+	// follow-up reached.
+	plot := "Animals is about a Los Angeles mayoral candidate and his wife " +
+		"whose son is kidnapped, and the secrets that surface while they try " +
+		"to pay the ransom."
+	said := append(real(t, cfg, 140),
+		environment.Turn{Role: environment.RoleUser, Text: "What is the movie about?"},
+		environment.Turn{Role: environment.RoleAssistant, Text: plot},
+	)
+
+	// Follow-ups carrying no subject of their own, which is the whole
+	// class. Four was too few to tell the arrangements apart: the
+	// receipt scored none of four and then one of four on the same
+	// code.
+	asking := []struct {
+		ask   string
+		about string // a word the answer must carry to be about the right thing
+	}{
+		{"I don't understand. Can you just say me in a simple words?", "son"},
+		{"what do you mean", "son"},
+		{"say that again", "son"},
+		{"simpler please", "son"},
+		{"explain that", "son"},
+		{"what was that about", "son"},
+		{"can you repeat", "son"},
+		{"i didn't follow that", "son"},
+		{"say it shorter", "son"},
+		// Not follow-ups at all: the ordinary case a reply to the clock
+		// protects, where a dangling turn of his could be answered
+		// instead of the question.
+		{"what is two plus two", "four"},
+		{"how many days in a week", "seven"},
+	}
+
+	arms := []struct {
+		name   string
+		with   string // the assistant half, or empty for none
+		folded bool   // the clock goes inside the question's own turn
+	}{
+		{"with the acknowledgement", conversation.Acknowledged, false},
+		{"said once", "", false},
+		{"with a receipt", conversation.Receipt, false},
+		{"folded into the question", "", true},
+	}
+	for _, arm := range arms {
+		paired, name := arm.with != "", arm.name
+
+		var reached, clocked int
+		for _, c := range asking {
+			now := time.Now()
+			behind := append([]environment.Turn{}, said...)
+			ask := c.ask
+			if arm.folded {
+				ask = conversation.Now(now) + "\n\n" + c.ask
+			} else {
+				behind = append(behind,
+					environment.Turn{Role: environment.RoleUser, Text: conversation.Now(now)})
+				if paired {
+					behind = append(behind, environment.Turn{
+						Role: environment.RoleAssistant, Text: arm.with})
+				}
+			}
+
+			// The quoted recall matters as much as the turns. On the
+			// evening this happened he had asked the time six minutes
+			// earlier, so the transcript search put old time exchanges
+			// in the system prompt -- 2,928 bytes of them -- and the
+			// clock had company.
+			system := persona.Prompt(cfg.Assistant.Persona, cfg.Assistant.Name, persona.Spoken) +
+				" " + conversation.Heard() +
+				" " + conversation.Whereabouts("conv_01M3D477HXQ4YNQX7BNXJZZCV0", "A film") +
+				"\n\n" + stale(now)
+			answer := answered(t, env, system, behind, ask)
+
+			// Two things are counted, and the second is the one this
+			// test is for. Whether the answer reached what was really
+			// being asked about is the ideal; whether it went to the
+			// clock instead is the fault.
+			if strings.Contains(strings.ToLower(answer), c.about) {
+				reached++
+			}
+			if saidTheTime(answer, now) {
+				clocked++
+				t.Logf("  %-56q answered %q", c.ask, first(answer, 90))
+			}
+		}
+		t.Logf("%-26s %d of %d went to the clock, %d reached the answer",
+			name, clocked, len(asking), reached)
+
+		// Only the arrangement that ships is held to it. The others are
+		// here to show what they cost.
+		if arm.folded && clocked > 0 {
+			t.Errorf("folded into the question, %d of %d follow-ups still answered the clock",
+				clocked, len(asking))
+		}
+	}
+}
+
+// first : The opening of a string, for a log line.
+func first(s string, n int) string {
+	s = strings.Join(strings.Fields(s), " ")
+	if len(s) <= n {
+		return s
+	}
+	return s[:n-1] + "…"
 }

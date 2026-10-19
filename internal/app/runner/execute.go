@@ -85,22 +85,6 @@ func (r *Runner) consume(runCtx, ctx context.Context, t *chat.Chat, systemPrompt
 	window := r.history(ctx, t, systemPrompt)
 	turns := toProviderTurns(window.Messages)
 
-	// The clock goes after everything that was said, not up in the
-	// system prompt beside the manner.
-	//
-	// Measured against his own 140-message conversation on 11 October
-	// 2026, asked the time four ways: from the system prompt, whether
-	// placed first or last in it, it answered between 12:55 and 12:57
-	// pm every single time while it was 8:04 pm -- a time it had said
-	// itself, hours earlier, in that conversation. Given here instead,
-	// after the history and before the question, it was right four
-	// times out of four. The wording did not change; only where it
-	// sits relative to the times it has to beat.
-	//
-	// Forty invented turns over one hour did not reproduce any of it.
-	// Both positions passed. Only his real conversation failed.
-	turns = append(turns, r.clock()...)
-
 	// The message this turn answers: the one they chose to reply to, or
 	// the question last asked them, when all they said was yes. Put in
 	// front of what they said, where the model reads it last and cannot
@@ -382,6 +366,7 @@ func (r *Runner) consume(runCtx, ctx context.Context, t *chat.Chat, systemPrompt
 				Feature: environment.FeatureChat,
 			}), environment.Request{
 				Prompt:  prompt,
+				Clock:   r.clock(),
 				History: turns,
 				Summary: window.Summary,
 				Vendor:  t.Model.Vendor,

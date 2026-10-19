@@ -162,9 +162,9 @@ evals-machinery: ## Check the word "tool" never reaches the person (costs API ca
 		-run TestItNeverNamesItsOwnMachinery $(ARGS)
 
 .PHONY: evals-clock
-evals-clock: ## Ask the time against a history full of stale times (costs API calls)
+evals-clock: ## Whether the clock beats a history of stale times, and what a follow-up lands on (costs API calls)
 	@go test ./internal/base/records/conversation/evals/ -tags evals -count=1 -v -timeout 10m \
-		-run TestTheClockBeatsTheConversation $(ARGS)
+		-run 'TestTheClockBeatsTheConversation|TestAFollowUpLandsOnTheAnswerAndNotTheClock' $(ARGS)
 
 .PHONY: evals-rhythm
 evals-rhythm: ## Print the counted half of the description from the real database (no API calls)

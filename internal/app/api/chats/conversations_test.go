@@ -77,7 +77,9 @@ func TestThePromptIsNotAlsoInItsOwnHistory(t *testing.T) {
 	first := e.CreateIn(t, "", "List three programming languages.", "?wait=5s")
 	e.CreateIn(t, first.ConversationID, "No, make it four.", "?wait=5s")
 
-	if got := recorder.LastPrompt(); got != "No, make it four." {
+	// Ends with it rather than equals it: the clock is folded in
+	// front of the question. See Runner.clock.
+	if got := recorder.LastPrompt(); !strings.HasSuffix(got, "No, make it four.") {
 		t.Fatalf("prompt = %q", got)
 	}
 	for _, turn := range recorder.LastHistory() {
@@ -97,12 +99,9 @@ func TestHistoryCarriesBothSpeakers(t *testing.T) {
 	first := e.CreateIn(t, "", "List three programming languages.", "?wait=5s")
 	e.CreateIn(t, first.ConversationID, "No, make it four.", "?wait=5s")
 
-	// Without the clock pair every turn ends with, which is not what
-	// this is about. See Runner.clock.
+	// The clock is folded into the question and adds no turn, so the
+	// history is the exchange and nothing else. See Runner.clock.
 	sent := recorder.LastHistory()
-	if len(sent) >= 2 {
-		sent = sent[:len(sent)-2]
-	}
 
 	var roles []environment.Role
 	for _, turn := range sent {

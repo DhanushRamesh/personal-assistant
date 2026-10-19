@@ -216,6 +216,17 @@ type Request struct {
 	// asked to go on from what they returned. The question is then already
 	// in History and repeating it would have the model answer it twice.
 	Prompt string
+	// Clock : The time where the person is, which goes in front of the
+	// question inside the same message rather than in a turn of its own.
+	//
+	// Carried here rather than glued onto Prompt because Prompt is what
+	// they said: it is restated back to the model by every send-back as
+	// "what they said, which is what you answer", and a note of the
+	// server's inside it is read as their words.
+	//
+	// Why it is not in the system prompt, and why it is not a turn, is
+	// measured in Runner.clock.
+	Clock string
 	// History : What was said earlier in the same conversation, oldest first,
 	// excluding this prompt. Without it a correction such as "no, make it
 	// four" reaches the model with nothing to make four.

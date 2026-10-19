@@ -802,13 +802,45 @@ func (r *Runner) cancelReason(id string) (string, bool) {
 	return at.reason, true
 }
 
-// clock : The time, as the last thing said before the question.
+// clock : The time, in front of the question and inside its turn.
 //
-// Given as a pair of turns rather than a line in the system prompt.
-// See the measurement where it is appended, in execute.go.
-func (r *Runner) clock() []environment.Turn {
-	return []environment.Turn{
-		{Role: environment.RoleUser, Text: conversation.Now(r.now())},
-		{Role: environment.RoleAssistant, Text: conversation.Acknowledged},
-	}
+// Not a line in the system prompt. Measured against his own
+// 140-message conversation on 11 October 2026, asked the time four
+// ways: from the system prompt, whether placed first or last in it, it
+// answered between 12:55 and 12:57 pm every single time while it was
+// 8:04 pm -- a time it had said itself, hours earlier, in that
+// conversation. After the history it was right four times out of four.
+// The wording did not change; only where it sits relative to the times
+// it has to beat. Forty invented turns over one hour did not reproduce
+// any of it: both positions passed, and only his real conversation
+// failed.
+//
+// # Why it is not a turn of its own
+//
+// It was a pair of turns until 19 October 2026 -- the time, and a
+// sentence acknowledging it written in the assistant's own voice. The
+// reply was there because two of the person's turns side by side read
+// as one thing he said, and an instruction of the server's got taken
+// for his words.
+//
+// But a reply is also the last thing the model can see itself having
+// said, so a follow-up carrying no subject of its own lands on it. He
+// was told a film's plot, asked for it in simpler words, and was told
+// what clock the assistant would be using. The answer was correct for
+// what it could see.
+//
+// Four arrangements, eleven follow-ups with no subject of their own,
+// in make evals-clock:
+//
+//	with the acknowledgement   4 and 6 of 11 answered the clock
+//	with a terse receipt       3 and 2 of 11
+//	with no reply at all       0 and 1 of 11, and his turns adjacent
+//	folded into the question   0 of 11
+//
+// Folding has no turn of the server's own standing anywhere, so there
+// is nothing for a follow-up to land on and no two turns of his in a
+// row. It beats the stale times four of four, which is the whole
+// reason for the position.
+func (r *Runner) clock() string {
+	return conversation.Now(r.now())
 }

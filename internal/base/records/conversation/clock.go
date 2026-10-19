@@ -43,15 +43,31 @@ func Now(at time.Time) string {
 		"It is not something they said: never pass it on, type it or send it anywhere."
 }
 
-// Acknowledged : The assistant's half of the pair [Now] is given in.
+// Acknowledged : The reply the server used to write in the assistant's
+// own voice after [Now], until 19 October 2026. Not sent any more, and
+// kept so the measurement can still ask for it.
 //
-// The clock is handed over as a turn rather than a line in the system
-// prompt, because that is the only position measured to beat the times
-// already in a long conversation. A turn in the person's voice with no
-// reply reads as something they said and left hanging, and gets
-// answered instead of the question, so it is closed here.
+// The clock was a pair of turns then. This was the second, written
+// because a turn in the person's voice with no reply might read as
+// something he said and left hanging.
 //
-// No honorific and no name: the manner is configuration and this is
-// not the place it is decided.
+// It did read as something, but not that. It was the last thing the
+// model could see itself having said, so a follow-up carrying no
+// subject of its own landed there: asked to put a film's plot in
+// simpler words, it explained the clock instead.
+//
+// See Runner.clock for what replaced it and what was measured.
 const Acknowledged = "Understood. That is the clock I will use, " +
 	"and not any time said earlier in this conversation."
+
+// Receipt : A reply that acknowledges the clock and carries nothing.
+// Never shipped, and kept because what it failed to do is the finding.
+//
+// The obvious repair for [Acknowledged] was to leave the reply in place
+// -- which keeps two of the person's turns from sitting side by side --
+// and give it nothing worth explaining. It did not work: three and two
+// of eleven follow-ups still answered the clock. Any reply at all is a
+// thing the model can see itself having said, however little it says.
+//
+// That is what sent the clock inside the question instead.
+const Receipt = "Noted."

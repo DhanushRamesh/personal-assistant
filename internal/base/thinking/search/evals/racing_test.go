@@ -136,3 +136,116 @@ func first(s string, n int) string {
 	}
 	return s[:n-1] + "…"
 }
+
+// answerable : Questions with a fact that can be checked in what comes
+// back, so accuracy is counted rather than judged by eye.
+//
+// The fact is looked for in the titles and snippets together, which is
+// all the model is given before it decides whether to read a page. A
+// service that returns the right pages but says nothing useful about
+// them has not answered: the next step costs another round.
+//
+// Facts chosen to be stable or to have been seen in a real run, never
+// invented. Want is any-of: several wordings of the same fact.
+var answerable = []struct {
+	Say  string
+	Days int
+	Want []string
+	Why  string
+}{
+	{Say: "who is the chief minister of Tamil Nadu",
+		Want: []string{"vijay"}, Why: "the name"},
+	{Say: "what is the capital of Japan",
+		Want: []string{"tokyo"}, Why: "the city"},
+	{Say: "Phoenix Marketcity Chennai mall timings",
+		Want: []string{"10:00 am", "10 am", "10am"}, Why: "when it opens"},
+	{Say: "petrol price in Chennai today", Days: 2,
+		Want: []string{"100.", "101.", "102.", "99."}, Why: "a rupee figure"},
+	{Say: "Chennai weather forecast tomorrow", Days: 1,
+		Want: []string{"chennai"}, Why: "the right city"},
+	{Say: "latest Claude model from Anthropic",
+		Want: []string{"claude"}, Why: "the subject at all"},
+}
+
+// TestHowOftenEachSearchAnswers : Accuracy, counted.
+//
+// Owner, 18 October 2026, told that Tavily was the slowest: *"based on
+// accuracy."* Speed was the easy half; this is the half that decides
+// which service is worth asking first.
+func TestHowOftenEachSearchAnswers(t *testing.T) {
+	services := configured(t)
+	if len(services) < 2 {
+		t.Skip("fewer than two services have keys, so there is nothing to compare")
+	}
+
+	right := map[string]int{}
+	for _, q := range answerable {
+		fmt.Printf("\n  \"%s\"  -- wanted: %s\n", q.Say, q.Why)
+		for _, s := range services {
+			got, err := s.Search(context.Background(), search.Ask{
+				Query: q.Say, Limit: 3, Days: q.Days,
+			})
+			if err != nil {
+				fmt.Printf("    %-10s FAILED: %v\n", s.Where(), err)
+				continue
+			}
+			var all strings.Builder
+			for _, r := range got {
+				all.WriteString(strings.ToLower(r.Title + " " + r.Snippet + " "))
+			}
+			found := ""
+			for _, w := range q.Want {
+				if strings.Contains(all.String(), w) {
+					found = w
+					break
+				}
+			}
+			if found != "" {
+				right[s.Where()]++
+				fmt.Printf("    %-10s yes   (%q)\n", s.Where(), found)
+			} else {
+				fmt.Printf("    %-10s no    top: %s\n", s.Where(), first(topOf(got), 86))
+			}
+		}
+	}
+
+	fmt.Printf("\n  answered, out of %d:\n", len(answerable))
+	names := make([]string, 0, len(right))
+	for _, s := range services {
+		names = append(names, s.Where())
+	}
+	sort.Strings(names)
+	for _, n := range names {
+		fmt.Printf("    %-10s %d of %d\n", n, right[n], len(answerable))
+	}
+	fmt.Println()
+}
+
+// topOf : The first result's title, for saying what came back instead.
+func topOf(got []search.Result) string {
+	if len(got) == 0 {
+		return "(nothing)"
+	}
+	return got[0].Title
+}
+
+// configured : The services that have a key, in the order the server
+// asks them.
+func configured(t *testing.T) []search.Service {
+	t.Helper()
+	cfg, err := config.Load("../../../../../config.ini", os.LookupEnv)
+	if err != nil {
+		t.Fatalf("config: %v", err)
+	}
+	out := []search.Service{}
+	for _, s := range []search.Service{
+		tinyfish.New(string(cfg.Search.TinyFish), 30*time.Second),
+		tavily.New(string(cfg.Search.Tavily), 30*time.Second),
+		firecrawl.New(string(cfg.Search.Firecrawl), 30*time.Second),
+	} {
+		if s != nil && !nilUnder(s) {
+			out = append(out, s)
+		}
+	}
+	return out
+}
