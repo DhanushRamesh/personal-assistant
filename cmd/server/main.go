@@ -37,6 +37,7 @@ import (
 	"personal-assistant/internal/app/noted"
 	"personal-assistant/internal/app/noticing"
 	"personal-assistant/internal/app/pattern"
+	"personal-assistant/internal/app/pointing"
 	"personal-assistant/internal/app/profile"
 	"personal-assistant/internal/app/runner"
 	"personal-assistant/internal/app/terminal"
@@ -68,6 +69,7 @@ import (
 	"personal-assistant/internal/base/thinking/environment"
 	"personal-assistant/internal/base/thinking/environment/platformai"
 	"personal-assistant/internal/base/thinking/llm"
+	"personal-assistant/internal/base/thinking/naming/gliner"
 	"personal-assistant/internal/base/thinking/prompt"
 	"personal-assistant/internal/base/thinking/search"
 	"personal-assistant/internal/base/thinking/search/firecrawl"
@@ -104,6 +106,7 @@ import (
 	"personal-assistant/internal/domain/outbox"
 	outboxmysql "personal-assistant/internal/domain/outbox/mysql"
 	"personal-assistant/internal/domain/persona"
+	"personal-assistant/internal/domain/places"
 	placesmysql "personal-assistant/internal/domain/places/mysql"
 	"personal-assistant/internal/domain/remind"
 	remindmysql "personal-assistant/internal/domain/remind/mysql"
@@ -574,6 +577,15 @@ func run() error {
 	// October 2026.
 	picking := picker(cfg, registry, logger.Logger)
 
+	// The names he says, kept for speech recognition and read here as
+	// well: they are the correct spellings of exactly the words a
+	// microphone gets wrong.
+	names := vocabularymysql.New(db)
+
+	// What a question names, and which record each name belongs to. Nil
+	// where no name service is configured.
+	pointed := pointer(cfg, logger.Logger, names, drawnPlaces, deviceEvents)
+
 	chatRunner, err := runner.New(runner.Options{
 		Repository:    chats,
 		Messages:      chats,
@@ -586,6 +598,7 @@ func run() error {
 		HistoryLimits: historyLimits(cfg, logger.Logger),
 		AssistantName: cfg.Assistant.Name,
 		Picker:        picking,
+		Pointer:       pointed,
 		ToolsNearest:  cfg.Assistant.ToolsNearest,
 		Persona:       manner,
 		Announcer:     voices,
@@ -668,7 +681,6 @@ func run() error {
 		slog.Duration("every", remind.DefaultEvery),
 		slog.Duration("grace", remind.DefaultGrace))
 
-	names := vocabularymysql.New(db)
 	// What the assistant considered saying unasked, so that a watcher
 	// which is working and one which has stopped do not look alike.
 	remarked := noticemysql.New(db.DB).OnChange(changed(live.AreaRemarks))
@@ -1884,6 +1896,72 @@ func embedder(cfg config.Config, logger *slog.Logger) embed.Embedder {
 	logger.Info("embedding memories", slog.String("model", client.Model()))
 	return client
 }
+
+// pointer : What finds the names in a question and says where each
+// belongs -- his own record, the world, or nowhere.
+//
+// Nothing when no name service is configured, which leaves nothing
+// looked up ahead of a question. A service that is configured but not
+// answering is not checked here, for the reason embedder does not check
+// either: it is reached per request.
+//
+// The record reads three sources, all of them already kept. The nightly
+// list of names he says, the places he has drawn, and the names his own
+// devices reported -- which are worth most, because a contact name read
+// off the phone is spelt the way he spells it and the same name through
+// a microphone is a guess.
+func pointer(cfg config.Config, logger *slog.Logger,
+	said vocabulary.Store, drawn places.Store, reported event.Watching) *pointing.Pointer {
+
+	if !cfg.Naming.Configured() {
+		logger.Info("no name service, so nothing is looked up ahead of a question")
+		return nil
+	}
+
+	record := &pointing.Record{Sources: []pointing.Names{
+		pointing.NamesFunc(func(ctx context.Context, userID string) ([]string, error) {
+			terms, _, err := said.Get(ctx, userID)
+			return terms, err
+		}),
+		pointing.NamesFunc(func(ctx context.Context, userID string) ([]string, error) {
+			kept, err := drawn.List(ctx, userID)
+			if err != nil {
+				return nil, err
+			}
+			out := make([]string, 0, len(kept))
+			for _, place := range kept {
+				out = append(out, place.Name)
+			}
+			return out, nil
+		}),
+		pointing.NamesFunc(func(ctx context.Context, userID string) ([]string, error) {
+			events, err := reported.Recent(ctx, userID, event.Query{
+				Since: cfg.Assistant.Now().Add(-vocabulary.Reported),
+				Limit: namingEventsRead,
+			})
+			if err != nil {
+				return nil, err
+			}
+			return vocabulary.Heard(events), nil
+		}),
+	}}
+
+	logger.Info("names in a question are looked up before it is answered",
+		slog.String("url", cfg.Naming.URL))
+	return &pointing.Pointer{
+		Finder:    gliner.New(gliner.Config{URL: cfg.Naming.URL, Timeout: cfg.Naming.Timeout}),
+		Known:     record,
+		Assistant: cfg.Assistant.Name,
+	}
+}
+
+// namingEventsRead : The most events read to collect the names his own
+// devices have reported.
+//
+// vocabulary.Heard caps what it keeps; this caps what it is given, so a
+// month of location fixes cannot be pulled into memory to find a handful
+// of contact names.
+const namingEventsRead = 4000
 
 // catchUpEmbeddings : Gives a vector to memories written while the embedding
 // server was away.

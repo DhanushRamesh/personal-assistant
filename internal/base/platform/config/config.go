@@ -63,6 +63,7 @@ type Config struct {
 	HomeAssistant HomeAssistant
 	Google        Google
 	Embedding     Embedding
+	Naming        Naming
 	Geoapify      Geoapify
 	Provider      Provider
 	PlatformAI    PlatformAI
@@ -260,6 +261,21 @@ type Embedding struct {
 
 // Configured : Whether there is an embedding server to reach.
 func (e Embedding) Configured() bool { return strings.TrimSpace(e.URL) != "" }
+
+// Naming : How to reach the service that points at the names in a
+// sentence, so that what a question is about can be looked up before the
+// question is answered.
+type Naming struct {
+	// URL : Where it answers. Empty leaves names unfound, and every
+	// question goes out with nothing looked up ahead of it.
+	URL string
+	// Timeout : How long one call may take. This sits in front of the
+	// first word of an answer, so it is short.
+	Timeout time.Duration
+}
+
+// Configured : Whether there is a name service to reach.
+func (n Naming) Configured() bool { return strings.TrimSpace(n.URL) != "" }
 
 // HomeAssistant : How to reach Home Assistant, for the things the assistant
 // says without having been asked.
@@ -560,6 +576,7 @@ func (c Config) LogValue() slog.Value {
 		// anyone reads a log for.
 		slog.Bool("homeassistant.configured", c.HomeAssistant.Configured()),
 		slog.Bool("embedding.configured", c.Embedding.Configured()),
+		slog.Bool("naming.configured", c.Naming.Configured()),
 		slog.String("assistant.timezone", c.Assistant.Location.String()),
 	)
 }
@@ -688,6 +705,10 @@ func Load(path string, lookup Lookup) (Config, error) {
 			URL:     l.str("embedding", "url", ""),
 			Model:   l.str("embedding", "model", ""),
 			Timeout: l.duration("embedding", "timeout", 30*time.Second),
+		},
+		Naming: Naming{
+			URL:     l.str("naming", "url", ""),
+			Timeout: l.duration("naming", "timeout", 2*time.Second),
 		},
 		Geoapify: Geoapify{
 			Key:     logging.Secret(l.str("geoapify", "key", "")),

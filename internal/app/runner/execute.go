@@ -7,6 +7,7 @@ import (
 	"strings"
 	"time"
 
+	"personal-assistant/internal/app/pointing"
 	"personal-assistant/internal/app/tool"
 	"personal-assistant/internal/base/platform/failure"
 	"personal-assistant/internal/base/records/chat"
@@ -220,6 +221,13 @@ func (r *Runner) consume(runCtx, ctx context.Context, t *chat.Chat, systemPrompt
 	// nothing: measured 18 October 2026, "yes" alone put the diary
 	// 75th of 88 tools and 4th with the line before it.
 	said := lastSaid(window.Messages)
+
+	// What the question names, and which record each name belongs to.
+	//
+	// Nothing is done with this yet: it runs beside the turn and is
+	// written down, so that what it would have looked up can be read
+	// against real questions before any of it changes an answer.
+	r.pointAt(ctx, t, said)
 
 	// What the person's own devices offer, taken as the chat begins.
 	//
@@ -1508,6 +1516,44 @@ func lastSaid(messages []conversation.Message) string {
 		}
 	}
 	return ""
+}
+
+// pointAt : Writes down the names in what they said and where each
+// belongs.
+//
+// Never fatal and never slow: the name service answers a sentence in
+// about sixty milliseconds, and a failure is one log line, because
+// nothing downstream depends on it yet.
+func (r *Runner) pointAt(ctx context.Context, t *chat.Chat, before string) {
+	if r.pointer == nil {
+		return
+	}
+
+	asked := strings.TrimSpace(t.Prompt)
+	if asked == "" {
+		return
+	}
+	// The line before it as well, since half of what he says carries no
+	// subject of its own and a name in it is in the question before.
+	if before != "" {
+		asked = before + "\n" + asked
+	}
+
+	started := time.Now()
+	points, err := r.pointer.Points(pointing.WithUser(ctx, r.callerFor(ctx, t).UserID), asked)
+	if err != nil {
+		r.logger.InfoContext(ctx, "could not find the names in the question",
+			slog.String("error", err.Error()))
+		return
+	}
+	if len(points) == 0 {
+		return
+	}
+	r.logger.InfoContext(ctx, "what the question names",
+		slog.Any("his", pointing.Terms(points, pointing.His)),
+		slog.Any("worldly", pointing.Terms(points, pointing.Worldly)),
+		slog.Any("nowhere", pointing.Terms(points, pointing.Nowhere)),
+		slog.Duration("took", time.Since(started)))
 }
 
 // lastAloud : The assistant's own last words to them in this window, or

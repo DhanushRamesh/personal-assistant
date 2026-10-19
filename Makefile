@@ -113,6 +113,10 @@ test: ## Run the tests
 evals-greeting: ## Greet real arrivals sampled from the last four weeks (costs API calls)
 	@go test ./internal/domain/greet/evals/ -tags evals -count=1 -v -timeout 20m $(ARGS)
 
+.PHONY: evals-pointing
+evals-pointing: ## Replay real spans through the three-way routing (no model, no network)
+	@go test ./internal/app/pointing/evals/ -tags evals -count=1 -v $(ARGS)
+
 .PHONY: evals-models
 evals-models: ## Ask which models this gateway will accept (costs API calls)
 	@go test ./internal/app/noticing/evals/ -tags evals -count=1 -v -timeout 10m \

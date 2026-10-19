@@ -1,0 +1,826 @@
+{
+ "note": "GLiNER small-v2.1 over 140 of his own questions, 19 October 2026. worth is judged by hand: whether the span names something a lookup could answer for.",
+ "worth": [
+  "avengers",
+  "chennai",
+  "chintada",
+  "coolie",
+  "deepika",
+  "dravid",
+  "google cloud",
+  "home",
+  "jailer",
+  "jaylen",
+  "loggers",
+  "matron",
+  "office",
+  "remmina",
+  "rental house",
+  "so stone",
+  "spotify",
+  "sri lanka",
+  "vps"
+ ],
+ "asked": [
+  {
+   "said": "Did I talk to my mom?",
+   "spans": [
+    {
+     "text": "my mom",
+     "label": "person",
+     "score": 0.497
+    }
+   ]
+  },
+  {
+   "said": "What am I looking at?",
+   "spans": [
+    {
+     "text": "I",
+     "label": "person",
+     "score": 0.453
+    }
+   ]
+  },
+  {
+   "said": "imena search for the content in theretermnal ..annd verify it online",
+   "spans": [
+    {
+     "text": "imena",
+     "label": "person",
+     "score": 0.464
+    },
+    {
+     "text": "theretermnal",
+     "label": "place",
+     "score": 0.408
+    },
+    {
+     "text": "annd",
+     "label": "person",
+     "score": 0.437
+    }
+   ]
+  },
+  {
+   "said": "Hey, Dravid.",
+   "spans": [
+    {
+     "text": "Dravid",
+     "label": "person",
+     "score": 0.922
+    }
+   ]
+  },
+  {
+   "said": "Open Spotify?",
+   "spans": [
+    {
+     "text": "Spotify",
+     "label": "app",
+     "score": 0.948
+    }
+   ]
+  },
+  {
+   "said": "Okay, Jarvis. I just know that.",
+   "spans": [
+    {
+     "text": "Jarvis",
+     "label": "person",
+     "score": 0.945
+    }
+   ]
+  },
+  {
+   "said": "when wa the lastr time i was at home",
+   "spans": [
+    {
+     "text": "i",
+     "label": "person",
+     "score": 0.7
+    },
+    {
+     "text": "home",
+     "label": "place",
+     "score": 0.624
+    }
+   ]
+  },
+  {
+   "said": "Jarvis, you explain what is the logic.",
+   "spans": [
+    {
+     "text": "Jarvis",
+     "label": "person",
+     "score": 0.929
+    }
+   ]
+  },
+  {
+   "said": "Ask him to check whether it will work or not.",
+   "spans": [
+    {
+     "text": "him",
+     "label": "person",
+     "score": 0.503
+    }
+   ]
+  },
+  {
+   "said": "Remmina said need to go to sleep. Right?",
+   "spans": [
+    {
+     "text": "Remmina",
+     "label": "person",
+     "score": 0.96
+    }
+   ]
+  },
+  {
+   "said": "Yes, Jarvis.",
+   "spans": [
+    {
+     "text": "Jarvis",
+     "label": "person",
+     "score": 0.937
+    }
+   ]
+  },
+  {
+   "said": "Just, make an event that I'm going to a movie on, Sundays, it's 10PM.",
+   "spans": [
+    {
+     "text": "I",
+     "label": "person",
+     "score": 0.793
+    }
+   ]
+  },
+  {
+   "said": "Do you think about this application?",
+   "spans": [
+    {
+     "text": "application",
+     "label": "app",
+     "score": 0.429
+    }
+   ]
+  },
+  {
+   "said": "Your wife is the door and it stays open.",
+   "spans": [
+    {
+     "text": "Your wife",
+     "label": "person",
+     "score": 0.831
+    },
+    {
+     "text": "door",
+     "label": "place",
+     "score": 0.617
+    }
+   ]
+  },
+  {
+   "said": "six to a new conversation, eight to one, I couldn't touch it, any more, since the new conversation,",
+   "spans": [
+    {
+     "text": "I",
+     "label": "person",
+     "score": 0.667
+    }
+   ]
+  },
+  {
+   "said": "What was it, honey?",
+   "spans": [
+    {
+     "text": "honey",
+     "label": "person",
+     "score": 0.823
+    }
+   ]
+  },
+  {
+   "said": "Are you sure, Jarvis? Did you check it?",
+   "spans": [
+    {
+     "text": "Jarvis",
+     "label": "person",
+     "score": 0.946
+    }
+   ]
+  },
+  {
+   "said": "Do you know Avengers Tuesday?",
+   "spans": [
+    {
+     "text": "Avengers",
+     "label": "app",
+     "score": 0.47
+    }
+   ]
+  },
+  {
+   "said": "What did I ask you earlier?",
+   "spans": [
+    {
+     "text": "I",
+     "label": "person",
+     "score": 0.537
+    }
+   ]
+  },
+  {
+   "said": "Hey, Jarvis. What is the time?",
+   "spans": [
+    {
+     "text": "Jarvis",
+     "label": "person",
+     "score": 0.934
+    }
+   ]
+  },
+  {
+   "said": "Is Jaylen will be releasing tomorrow?",
+   "spans": [
+    {
+     "text": "Jaylen",
+     "label": "person",
+     "score": 0.936
+    }
+   ]
+  },
+  {
+   "said": "her name is \"Deepika TTF\"",
+   "spans": [
+    {
+     "text": "Deepika",
+     "label": "person",
+     "score": 0.915
+    }
+   ]
+  },
+  {
+   "said": "remind me to message Chintada about the ZOHO deadline",
+   "spans": [
+    {
+     "text": "Chintada",
+     "label": "person",
+     "score": 0.931
+    }
+   ]
+  },
+  {
+   "said": "Who are you?",
+   "spans": [
+    {
+     "text": "Who are you",
+     "label": "person",
+     "score": 0.48
+    }
+   ]
+  },
+  {
+   "said": "What was the last song that I learned today?",
+   "spans": [
+    {
+     "text": "song",
+     "label": "song",
+     "score": 0.448
+    },
+    {
+     "text": "I",
+     "label": "person",
+     "score": 0.682
+    }
+   ]
+  },
+  {
+   "said": "when was the last time i",
+   "spans": [
+    {
+     "text": "i",
+     "label": "person",
+     "score": 0.521
+    }
+   ]
+  },
+  {
+   "said": "Okay, Jarvis. Never mind. Stop.",
+   "spans": [
+    {
+     "text": "Jarvis",
+     "label": "person",
+     "score": 0.948
+    }
+   ]
+  },
+  {
+   "said": "Do I have anything today?",
+   "spans": [
+    {
+     "text": "I",
+     "label": "person",
+     "score": 0.446
+    }
+   ]
+  },
+  {
+   "said": "I said males male",
+   "spans": [
+    {
+     "text": "I",
+     "label": "person",
+     "score": 0.481
+    }
+   ]
+  },
+  {
+   "said": "I love, I love,",
+   "spans": [
+    {
+     "text": "I",
+     "label": "person",
+     "score": 0.801
+    },
+    {
+     "text": "I",
+     "label": "person",
+     "score": 0.711
+    }
+   ]
+  },
+  {
+   "said": "Go to chat.",
+   "spans": [
+    {
+     "text": "chat",
+     "label": "app",
+     "score": 0.43
+    }
+   ]
+  },
+  {
+   "said": "I don't understand what it is saying about.",
+   "spans": [
+    {
+     "text": "I",
+     "label": "person",
+     "score": 0.609
+    }
+   ]
+  },
+  {
+   "said": "When did Sri Lanka go into development?",
+   "spans": [
+    {
+     "text": "Sri Lanka",
+     "label": "place",
+     "score": 0.721
+    }
+   ]
+  },
+  {
+   "said": "Is the movie called jailer",
+   "spans": [
+    {
+     "text": "jailer",
+     "label": "app",
+     "score": 0.427
+    }
+   ]
+  },
+  {
+   "said": "I think there should be more stuffs",
+   "spans": [
+    {
+     "text": "I",
+     "label": "person",
+     "score": 0.678
+    }
+   ]
+  },
+  {
+   "said": "Wait, Jarvis. Ask you to do, like, when connecting back to network, it should announce, like, I am here. So",
+   "spans": [
+    {
+     "text": "Jarvis",
+     "label": "person",
+     "score": 0.934
+    },
+    {
+     "text": "network",
+     "label": "place",
+     "score": 0.491
+    },
+    {
+     "text": "I",
+     "label": "person",
+     "score": 0.409
+    }
+   ]
+  },
+  {
+   "said": "you remember some grcery itemsin lmemory right ..remove them",
+   "spans": [
+    {
+     "text": "you",
+     "label": "person",
+     "score": 0.578
+    }
+   ]
+  },
+  {
+   "said": "When is Deepika's birthday?",
+   "spans": [
+    {
+     "text": "Deepika",
+     "label": "person",
+     "score": 0.95
+    }
+   ]
+  },
+  {
+   "said": "Hey, Jarvis. Sup?",
+   "spans": [
+    {
+     "text": "Jarvis",
+     "label": "person",
+     "score": 0.938
+    }
+   ]
+  },
+  {
+   "said": "you said",
+   "spans": [
+    {
+     "text": "you",
+     "label": "person",
+     "score": 0.677
+    }
+   ]
+  },
+  {
+   "said": "What I'm seeing right now?",
+   "spans": [
+    {
+     "text": "I",
+     "label": "person",
+     "score": 0.665
+    }
+   ]
+  },
+  {
+   "said": "Is Google Cloud a VPS?",
+   "spans": [
+    {
+     "text": "Google Cloud",
+     "label": "app",
+     "score": 0.641
+    },
+    {
+     "text": "VPS",
+     "label": "place",
+     "score": 0.461
+    }
+   ]
+  },
+  {
+   "said": "i meant about kabya marraiage",
+   "spans": [
+    {
+     "text": "i",
+     "label": "person",
+     "score": 0.481
+    }
+   ]
+  },
+  {
+   "said": "I'm gonna see... Say a list. Just, make a note of it and say the amount. Okay?",
+   "spans": [
+    {
+     "text": "I",
+     "label": "person",
+     "score": 0.688
+    }
+   ]
+  },
+  {
+   "said": "No, Jarvis. I'm in my current terminal.",
+   "spans": [
+    {
+     "text": "Jarvis",
+     "label": "person",
+     "score": 0.955
+    },
+    {
+     "text": "I",
+     "label": "person",
+     "score": 0.482
+    },
+    {
+     "text": "my current terminal",
+     "label": "place",
+     "score": 0.572
+    }
+   ]
+  },
+  {
+   "said": "You are right. It's the door, and it stays open.",
+   "spans": [
+    {
+     "text": "door",
+     "label": "place",
+     "score": 0.667
+    }
+   ]
+  },
+  {
+   "said": "You mind me tomorrow at eight thirty AM that I should talk to this guy about this rent or rental house?",
+   "spans": [
+    {
+     "text": "this guy",
+     "label": "person",
+     "score": 0.71
+    },
+    {
+     "text": "rental house",
+     "label": "place",
+     "score": 0.621
+    }
+   ]
+  },
+  {
+   "said": "Today evening, 06:00, I'll be meeting a cousin, and tomorrow, I'll be going to movie.",
+   "spans": [
+    {
+     "text": "I",
+     "label": "person",
+     "score": 0.866
+    },
+    {
+     "text": "cousin",
+     "label": "person",
+     "score": 0.826
+    },
+    {
+     "text": "I",
+     "label": "person",
+     "score": 0.834
+    },
+    {
+     "text": "movie",
+     "label": "place",
+     "score": 0.546
+    }
+   ]
+  },
+  {
+   "said": "Do you know a movie called Matron?",
+   "spans": [
+    {
+     "text": "Matron",
+     "label": "song",
+     "score": 0.407
+    }
+   ]
+  },
+  {
+   "said": "when was the last time i went to the office office",
+   "spans": [
+    {
+     "text": "i",
+     "label": "person",
+     "score": 0.74
+    },
+    {
+     "text": "office",
+     "label": "place",
+     "score": 0.632
+    },
+    {
+     "text": "office",
+     "label": "place",
+     "score": 0.69
+    }
+   ]
+  },
+  {
+   "said": "So Stone.",
+   "spans": [
+    {
+     "text": "So Stone",
+     "label": "song",
+     "score": 0.451
+    }
+   ]
+  },
+  {
+   "said": "I said star four.",
+   "spans": [
+    {
+     "text": "I",
+     "label": "person",
+     "score": 0.609
+    }
+   ]
+  },
+  {
+   "said": "A decision about the terminal",
+   "spans": [
+    {
+     "text": "terminal",
+     "label": "place",
+     "score": 0.577
+    }
+   ]
+  },
+  {
+   "said": "I think I'm gonna meet him around 6PM, I guess.",
+   "spans": [
+    {
+     "text": "I",
+     "label": "person",
+     "score": 0.608
+    },
+    {
+     "text": "I",
+     "label": "person",
+     "score": 0.721
+    },
+    {
+     "text": "him",
+     "label": "person",
+     "score": 0.475
+    },
+    {
+     "text": "I",
+     "label": "person",
+     "score": 0.482
+    }
+   ]
+  },
+  {
+   "said": "I'm going to office right now.",
+   "spans": [
+    {
+     "text": "I",
+     "label": "person",
+     "score": 0.872
+    },
+    {
+     "text": "office",
+     "label": "place",
+     "score": 0.803
+    }
+   ]
+  },
+  {
+   "said": "Okay, Jarvis. Thank you.",
+   "spans": [
+    {
+     "text": "Jarvis",
+     "label": "person",
+     "score": 0.953
+    }
+   ]
+  },
+  {
+   "said": "Hey, Jarvis. I want to know about web m c p.",
+   "spans": [
+    {
+     "text": "Jarvis",
+     "label": "person",
+     "score": 0.959
+    }
+   ]
+  },
+  {
+   "said": "I'm gonna go home right now.",
+   "spans": [
+    {
+     "text": "I",
+     "label": "person",
+     "score": 0.855
+    }
+   ]
+  },
+  {
+   "said": "The side got the same compact wheel.",
+   "spans": [
+    {
+     "text": "The side",
+     "label": "place",
+     "score": 0.453
+    }
+   ]
+  },
+  {
+   "said": "is the movie Coolie releasing this week",
+   "spans": [
+    {
+     "text": "Coolie",
+     "label": "app",
+     "score": 0.417
+    }
+   ]
+  },
+  {
+   "said": "What is the capital of Australia?",
+   "spans": [
+    {
+     "text": "capital of Australia",
+     "label": "place",
+     "score": 0.663
+    }
+   ]
+  },
+  {
+   "said": "Okay, Jarvis. I'll ask you to proceed.",
+   "spans": [
+    {
+     "text": "Jarvis",
+     "label": "person",
+     "score": 0.952
+    }
+   ]
+  },
+  {
+   "said": "How long did I sleep yesterday?",
+   "spans": [
+    {
+     "text": "I",
+     "label": "person",
+     "score": 0.407
+    }
+   ]
+  },
+  {
+   "said": "read https://en.wikipedia.org/wiki/Chennai and tell me the population in one sentence",
+   "spans": [
+    {
+     "text": "Chennai",
+     "label": "place",
+     "score": 0.876
+    }
+   ]
+  },
+  {
+   "said": "What are the things that you could do for me?",
+   "spans": [
+    {
+     "text": "you",
+     "label": "person",
+     "score": 0.565
+    }
+   ]
+  },
+  {
+   "said": "Okay. Loggers. Stop.",
+   "spans": [
+    {
+     "text": "Loggers",
+     "label": "person",
+     "score": 0.654
+    }
+   ]
+  },
+  {
+   "said": "T o n I and guy, g u y.",
+   "spans": [
+    {
+     "text": "I",
+     "label": "person",
+     "score": 0.539
+    },
+    {
+     "text": "guy",
+     "label": "person",
+     "score": 0.712
+    }
+   ]
+  },
+  {
+   "said": "In Jailer movie, who is the protagonist?",
+   "spans": [
+    {
+     "text": "protagonist",
+     "label": "person",
+     "score": 0.593
+    }
+   ]
+  },
+  {
+   "said": "It's just a time that I usually, uh, sleep.",
+   "spans": [
+    {
+     "text": "I",
+     "label": "person",
+     "score": 0.81
+    }
+   ]
+  }
+ ]
+}

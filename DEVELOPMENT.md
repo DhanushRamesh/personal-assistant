@@ -21397,3 +21397,82 @@ would hide the question before it.
 The lesson: a guard that reads one turn in isolation cannot tell a
 shrug from a yes. The ambiguity is between turns, so the guard has to
 see the turn before.
+
+**What a question names, and where each name belongs** (19 October 2026).
+
+The plan is that only the persona goes to the model every time, and what
+the question is about is looked up and injected. That needs the names out
+of the sentence first, and no model tested could find them. Measured over
+140 of his own questions:
+
+| | all 140 | the 22 carrying a time |
+| --- | --- | --- |
+| answer "none" always | 84% | 0 of 22 |
+| qwen2.5:1.5b, free | 45% | -- |
+| qwen2.5:1.5b, forced | 11% | -- |
+| bge-base nearest prototype | 89% | 10 of 22 |
+| GLiNER small-v2.1 | 90% | 14 of 22 |
+| a word list | 100% | 22 of 22 |
+
+Two of those were my own fault rather than the model's. qwen was allowed
+to write free text, so 47 answers were off the list -- which is a missing
+schema, not a misunderstanding. Then it was forced to choose, on a job
+where 118 of 140 questions have no time in them at all, with no way to
+say none.
+
+**Dates are a word list, not a model.** Stripped of the one phrase fitted
+to the data -- "right now" -- it still scores 96% and 17 of 22, on
+nothing but month names, weekday names, tomorrow, yesterday, today and
+tonight.
+
+**Names are GLiNER**, which is not a writing model: it is given the
+labels at call time and answers spans cut out of the sentence, so a name
+it reports was certainly said. 47ms median on CPU, 60ms through the Go
+client, 59ms slowest over thirty real questions. The weights are 610MB
+and fetched once.
+
+**Three answers, not one.** Over 91 spans from those questions:
+
+- the word lists keep every span worth a lookup and four that are not --
+  100% recall, 84% precision. Recall is what matters: a name wrongly
+  dropped is a lookup that never happens, and a name wrongly kept is one
+  query that finds nothing.
+- looking a name up in what the server already holds is never wrong and
+  finds 9 of 22. Alone it is useless as a filter.
+
+So the lookup does not filter, it **sorts**. A name the record holds is
+his and is asked of his own record, spelt the way the record spells it. A
+name it does not hold is real but worldly -- Spotify, Chennai, Coolie --
+and his own record cannot answer for it. Everything else is not a name.
+That middle answer is what neither half could give alone.
+
+Three sources feed the record, all already kept: the nightly list of
+names he says, the places he has drawn, and the names his own devices
+reported. The last are worth most, for the reason `vocabulary/heard.go`
+already gives -- a contact name read off the phone is spelt the way he
+spells it, and the same name through a microphone is a guess.
+
+**`heard.Best` matched "Tada" to "Alekhya Chintada".** Found by running
+thirty of his real questions through the whole chain: *"Search online
+about Alekhya in Tada"* sent a town to his contacts. `heard.Normalise`
+strips the spaces, so the containment rule that matches "holidays" to
+"Holidays in India" is a bare substring test by the time it runs, and
+"tada" is inside "alekhyachintada". Four characters clears `Shortest`.
+
+Left alone where it is: five tools match titles with it, and loosening
+or tightening that is its own decision. `pointing` matches strictly
+instead -- exact, or one name beginning another, or likeness -- which
+keeps "realme" for "realme Buds Air8" and refuses Tada.
+
+Likeness earns its place elsewhere in the same set: "Jaylen" in *"Is
+Jaylen will be releasing tomorrow?"* is "Jailer" misheard, and the record
+holds Jailer because he talks about the film. It scores 0.667 against a
+bar of 0.6 and nothing else comes near -- Spotify to Spectra is 0.286,
+Chennai to Chintada 0.500.
+
+**Nothing uses it yet.** It runs beside every turn and writes down what
+it would have looked up, so it can be read against real questions before
+it changes an answer. What each route should prefetch is the next
+decision. `make evals-pointing` holds the numbers; the service is
+`deployments/gliner-service.py` behind `[naming]` in the config, on 8092
+because `tei-m3` still holds 8091 from the rejected bge-m3 trial.

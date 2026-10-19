@@ -27,6 +27,7 @@ import (
 	"personal-assistant/internal/domain/remind"
 	// Aliased: aside.go already has a speech of its own, which is the one
 	// being spoken rather than the one that was heard.
+	"personal-assistant/internal/app/pointing"
 	"personal-assistant/internal/app/tool"
 	"personal-assistant/internal/app/tool/nearest"
 	utterance "personal-assistant/internal/base/world/speech"
@@ -109,6 +110,10 @@ type Options struct {
 	// AssistantName : What the assistant calls itself when it introduces
 	// itself. Empty leaves it nameless.
 	AssistantName string
+	// Pointer : Finds the names in a question and says where each
+	// belongs -- his own record, the world, or nowhere. Optional; nil
+	// leaves nothing looked up ahead of a question.
+	Pointer *pointing.Pointer
 	// Picker : Chooses which tools a question is shown in full, by what
 	// it means. Nil leaves the hand-written list of twenty-five, which
 	// is what the server sent until 18 October 2026.
@@ -182,7 +187,8 @@ type Runner struct {
 	// picker : Chooses which tools to describe for a question. Nil
 	// leaves the hand-written list, which is what the server sent
 	// until 18 October 2026.
-	picker *nearest.Picker
+	picker  *nearest.Picker
+	pointer *pointing.Pointer
 	// toolsNearest : How many tools a question is shown in full. Zero
 	// leaves the hand-written list.
 	toolsNearest int
@@ -272,6 +278,7 @@ func New(opts Options) (*Runner, error) {
 		condenseTimeout: opts.CondenseTimeout,
 		assistantName:   opts.AssistantName,
 		picker:          opts.Picker,
+		pointer:         opts.Pointer,
 		toolsNearest:    opts.ToolsNearest,
 		persona:         opts.Persona,
 		cut:             opts.Cut,

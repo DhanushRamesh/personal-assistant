@@ -23,3 +23,4 @@ client/*.iml
 
 # Written by `make start`, holding the background server's process id.
 personal-assistant.pid
+/internal/app/pointing/evals/recent.txt
