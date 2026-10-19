@@ -578,6 +578,14 @@ type Persona struct {
 	// Manner : What the model is told about its bearing. Empty for a persona
 	// that asks for none.
 	Manner string
+	// Rules : Everything it is told beyond its manner, for a persona that
+	// carries its own. Nil uses the shared blocks, which is what every
+	// persona did until 19 October 2026.
+	//
+	// Here so a shorter prompt can be run beside the long one and
+	// switched by a line of configuration, rather than replacing it and
+	// hoping. See the brief persona.
+	Rules func(how Reading) string
 	// Address : What this persona calls the person, such as sir. Empty for
 	// one that calls them nothing. Needed outside the manner because what
 	// is said mid-turn is written to a schema rather than to the prompt,
@@ -599,6 +607,14 @@ var registry = []Persona{
 		Address: "",
 		Summary: "No manner at all. Answers and stops.",
 		Manner:  "",
+	},
+	{
+		ID:      "jarvis-brief",
+		Name:    "Jarvis, briefly",
+		Address: "sir",
+		Summary: "The same manner, said in a page instead of thirty. Being tried.",
+		Manner:  briefManner,
+		Rules:   briefRules,
 	},
 	{
 		ID:      "jarvis",
@@ -784,6 +800,11 @@ func Prompt(id, name string, how Reading) string {
 	// anything to do with a date -- was the closing sentence of a wall.
 	// Being told a thing once, visibly, beats being told it fourth in a
 	// run-on.
+	if p, ok := Find(id); ok && p.Rules != nil {
+		b.WriteString(p.Rules(how))
+		return b.String()
+	}
+
 	shape := writtenRules
 	if how == Spoken {
 		shape = spokenRules
