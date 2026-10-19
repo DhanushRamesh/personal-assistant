@@ -32,6 +32,7 @@ import (
 	"personal-assistant/internal/app/api/httpx"
 	"personal-assistant/internal/app/asking"
 	livehub "personal-assistant/internal/app/live"
+	eventstool "personal-assistant/internal/app/tool/events"
 	"personal-assistant/internal/base/records/chat"
 	"personal-assistant/internal/base/world/events"
 	"personal-assistant/internal/base/world/speech"
@@ -86,7 +87,18 @@ type Runner interface {
 // stopped this before it finished." They had not. The transcript is
 // what the assistant reads back and what the owner reads back, and a
 // false account of why something ended is worse than none.
-const callerLeft = "This was cut short after thirty seconds: whatever asked the question stopped waiting for the answer. Nobody stopped it deliberately."
+//
+// Said with the real time from 19 October 2026. "Thirty seconds" was
+// written when every measured hang-up was at 29.98, and it is not what
+// happens: of 144 turns labelled this way, half were cut at 1.8
+// seconds. So the sentence written to correct a false account of why a
+// turn ended became one -- and the assistant reads it back as its own
+// past, which is the only reason any of this is worded carefully.
+func callerLeft(since time.Duration) string {
+	return "This was cut short after " + eventstool.Span(since) +
+		": whatever asked the question stopped waiting for the answer. " +
+		"Nobody stopped it deliberately."
+}
 
 // Subscriber : Somewhere to listen for a chat's messages as they happen.
 type Subscriber interface {
@@ -614,7 +626,7 @@ func (h *Handler) follow(
 			// seconds and then hangs up, and recording that as the
 			// person having stopped it puts a thing in the transcript
 			// that never happened.
-			if h.runner.CancelBecause(chatID, callerLeft) {
+			if h.runner.CancelBecause(chatID, callerLeft(time.Since(arrived))) {
 				h.Logger.InfoContext(ctx, "assist caller left, chat cancelled",
 					slog.String("chat_id", chatID))
 			}

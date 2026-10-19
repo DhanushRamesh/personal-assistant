@@ -138,6 +138,11 @@ func Span(d time.Duration) string {
 		d = -d
 	}
 	switch {
+	case d < 3*time.Second:
+		// Rounded to five seconds, anything under two and a half
+		// reads as "0 seconds", which is a thing that did not take
+		// no time -- it took hardly any. Said that way instead.
+		return "barely a moment"
 	case d < time.Minute:
 		return count(int(d.Round(5*time.Second).Seconds()), "second")
 	case d < 90*time.Minute:
