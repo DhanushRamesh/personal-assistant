@@ -311,7 +311,7 @@ var timekeeping = prompt.Text(
 // about a list never read. "I don't have Alekhya's birthday on
 // record", with the calendar unopened.
 //
-// readFirst cannot catch either. That guard lives in Registry.Call, so
+// listFirst cannot catch either. That guard lives in Registry.Call, so
 // it fires when a tool is attempted; refusing to act attempts nothing.
 // The rule is read-before-write and this is refuse-before-read, which
 // no code here guards -- deciding a question is about tasks, or about

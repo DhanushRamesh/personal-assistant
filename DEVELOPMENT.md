@@ -21776,3 +21776,101 @@ a credit card, a two-factor setting or a product's battery life is
 searched rather than handed back. Four tests in the package hold the
 sentences the shape checks depend on. The long prompt is one line of
 configuration away for as long as both are compiled in.
+
+## An identifier comes from a listing, on a read as much as a write
+
+He asked *"did I get any mail today?"*, was given ten lines including
+*"Netflix -- New film added to your list at 18:00"*, and asked *"whats
+the new film?"*. The answer was about Netflix's October releases in
+general, ending *"Without the exact message timestamp, I cannot say
+which specific one Netflix..."*.
+
+The log says what happened, and it is not what the answer suggests:
+
+```
+22:26:14  mail_read {"id": "netflix_new_film"}
+22:26:18  web_search {"query": "Netflix new films October 2026"}
+          saying="I don't have the message identifier from the l..."
+```
+
+It reasoned correctly. It went to his mail first, and it wanted the one
+message. It had no identifier, so it made one up in the shape of the
+subject line, and when that failed it left the domain it was in and
+asked the web instead.
+
+### Why it had no identifier
+
+Deliberately. `conversation.withdrawn` takes the contents out of every
+tool result from an earlier turn, identifiers included, because a
+result is true when it runs and not afterwards -- four questions in a
+row once produced no tool calls at all, every answer coming from
+results already in the window, and an event was cancelled by an
+identifier from a stale listing. What is left says the tool ran and to
+call it again.
+
+That decision is right and stands. The listing it needed was one call
+away. It invented an identifier instead.
+
+### Why nothing stopped it
+
+The guard for exactly this exists, and had since September: a call is
+refused until its own domain has been listed in the same turn, and the
+server does the listing while refusing so the turn does not lose a
+round. Its first line was `if !t.Writes`.
+
+`mail_read` is the only tool in the server that requires an identifier
+and changes nothing. Every other one -- `calendar_update`,
+`reminder_update`, `task_update`, `rule_update`, `rule_quiet`,
+`rule_cancel` -- writes, and was covered. The one read fell through the
+one condition.
+
+Its own description forbids the mistake twice: *"Needs the identifier
+from a listing"*, and *"Do not guess an identifier. It comes from a
+listing and nowhere else, and an invented one fails."* The model
+guessed anyway. A rule in prose loses; this is the thirteenth time that
+has been written down here.
+
+**A failed read is not the smaller harm.** A refused write says so and
+stops. A failed read leaves the model holding a question it cannot
+answer from the domain it is in, and it goes somewhere else for an
+answer rather than looking again. That is how a question about his
+inbox became a web search.
+
+### What changed
+
+The guard now asks what it was always about. `beforewriting.go` is
+`listfirst.go`, `readFirst` is `listFirst`, and the condition is
+`t.Writes || NamesSomething(t)`.
+
+`NamesSomething` is read off the schema -- a required argument named
+`id` or `ids`, or an array or object of them -- and not declared on the
+tool. A flag is a thing somebody forgets to set on the one tool that
+needed it, which is the whole of this fault in a sentence. An optional
+identifier does not count: that is a listing narrowed, which is where
+identifiers come from.
+
+A refused read no longer opens with "Nothing has been changed", which
+on a read is noise about a danger that was never there, and invites the
+model to tell him nothing was changed when he asked to be told
+something.
+
+### The next one of these
+
+`NewRegistry` now refuses to build a registry in which something takes
+an identifier and nothing in its domain lists. It runs at startup, so
+it is a server that will not boot rather than an answer that is wrong,
+and it needs nobody to remember to run it.
+
+`make test` covers the behaviour: an invented identifier on a read is
+refused, the listing is done for it, the same call goes through once it
+has run, and the refusal does not talk about changes.
+
+### What was not done
+
+No sentence was added to the prompt. He described the behaviour he
+wants -- *"it should first look at the previous message, mostly my
+question will be related to that; if not, behave normally"* -- and the
+model already did that part: it went to mail, not to the web, and only
+fell out of the domain when the call failed. Adding a rule about it
+would be a sentence covering a case the code now covers, which is the
+habit that made the first prompt 28,914 characters.

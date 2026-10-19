@@ -46,7 +46,51 @@ func NewRegistry(tools ...Tool) (*Registry, error) {
 			return nil, err
 		}
 	}
+	if err := r.listable(); err != nil {
+		return nil, err
+	}
 	return r, nil
+}
+
+// listable : Refuses a registry where something takes an identifier and
+// nothing can produce one.
+//
+// Here rather than in Add, because it is the only check that is about
+// more than one tool: whether a domain lists cannot be known until
+// every tool in it has been registered.
+//
+// It exists because of mail_read, which required an identifier and had
+// no guard on it for a month -- the guard asked whether a tool writes,
+// and mail_read only reads. That particular gap is closed by listFirst
+// now asking the right question. This closes the next one: a tool added
+// to a domain with no listing, where the guard looks for a listing to
+// do and finds none, and the call goes through on whatever identifier
+// the model supplied.
+//
+// At startup, so it is a server that will not boot rather than an
+// answer that is wrong.
+func (r *Registry) listable() error {
+	lists := map[string]bool{}
+	for _, name := range r.order {
+		if t := r.tools[name]; t.Lists && t.Domain != "" {
+			lists[t.Domain] = true
+		}
+	}
+	for _, name := range r.order {
+		t := r.tools[name]
+		if !NamesSomething(t) {
+			continue
+		}
+		if t.Domain == "" {
+			return fmt.Errorf("tool: %s takes an identifier and has no domain, "+
+				"so nothing can list one for it", t.Name)
+		}
+		if !lists[t.Domain] {
+			return fmt.Errorf("tool: %s takes an identifier and nothing in %s lists, "+
+				"so an invented one would go through", t.Name, t.Domain)
+		}
+	}
+	return nil
 }
 
 // Add : Registers a tool, refusing one that is not usable.
@@ -217,10 +261,10 @@ func (r *Registry) Call(ctx context.Context, name string, in Invocation) Result 
 			name))
 	}
 
-	// Read before write, for every domain that has something to read.
-	// The reading is done here when it can be, so the model is handed
-	// what is there rather than sent to fetch it.
-	if sent := r.readFirst(ctx, t, in); sent != nil {
+	// List before naming a thing by identifier, for every domain that
+	// has a listing. The listing is done here when it can be, so the
+	// model is handed what is there rather than sent to fetch it.
+	if sent := r.listFirst(ctx, t, in); sent != nil {
 		return *sent
 	}
 
