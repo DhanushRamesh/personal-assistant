@@ -136,7 +136,7 @@ func TestWhatHeWouldWriteIfHeCould(t *testing.T) {
 	// is the thing this file exists to tell apart.
 	var raw string
 	watcher := noticing.Watcher{
-		Ask: func(ctx context.Context, system, ask string) (string, error) {
+		Ask: func(ctx context.Context, userID, system, ask string) (string, error) {
 			out, err := asked(ctx, env, cfg, system, ask)
 			raw = out
 			if err != nil {
