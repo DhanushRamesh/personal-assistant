@@ -20,7 +20,11 @@ func TestOnlyJudgementReasons(t *testing.T) {
 		purpose environment.Purpose
 		want    string
 	}{
-		{environment.PurposeProfile, "low"},
+		// Not the profile pass either, from 19 October 2026: at
+		// "low" it still failed 43 calls of 189, spending 1,535
+		// tokens and 35 seconds each before returning nothing, and
+		// the owner's description of himself stopped rebuilding.
+		{environment.PurposeProfile, ""},
 		// Not the greeting, though it wants it most: 29 to 46
 		// seconds against a five-second budget means a better
 		// greeting written every time and heard none of the time.
@@ -36,16 +40,35 @@ func TestOnlyJudgementReasons(t *testing.T) {
 }
 
 // TestItNeverReasonsLessThanAsked : Somebody who set it globally
-// meant it, and a purpose asking for medium must not quieten a
-// server told to think hard about everything.
+// meant it, and no purpose may quieten a server told to think hard
+// about everything.
+//
+// No purpose asks for more any more, so the other half of this -- a
+// purpose raising a quiet configuration -- is held by
+// TestNoPurposeAsksForMoreThanIsConfigured below.
 func TestItNeverReasonsLessThanAsked(t *testing.T) {
 	if got := thinking("high", environment.PurposeRemark); got != "high" {
 		t.Errorf("a global high was reduced to %q", got)
 	}
-	if got := thinking("none", environment.PurposeProfile); got != "low" {
-		t.Errorf("a purpose asking for more got %q", got)
-	}
 	if got := thinking("medium", environment.PurposeChat); got != "medium" {
 		t.Errorf("an ordinary turn lost its configured %q", got)
+	}
+	if got := thinking("high", environment.PurposeProfile); got != "high" {
+		t.Errorf("the profile pass lost a global high, now %q", got)
+	}
+}
+
+// TestNoPurposeAsksForMoreThanIsConfigured : The profile pass was the
+// last one, and raising it is what stopped the description rebuilding.
+//
+// Reasoning and the answer come out of one three-thousand-token
+// budget, and the gateway has no field to raise it. A purpose put
+// back into Hard is a purpose that can spend the whole budget
+// thinking and return nothing, so it has to be argued for here.
+func TestNoPurposeAsksForMoreThanIsConfigured(t *testing.T) {
+	for purpose, want := range Hard {
+		t.Errorf("%q asks for %q more than the configuration; "+
+			"reasoning and the answer share one budget, so say here why it can afford to",
+			purpose, want)
 	}
 }

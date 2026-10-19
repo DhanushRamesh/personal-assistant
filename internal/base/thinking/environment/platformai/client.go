@@ -813,9 +813,20 @@ func excerpt(raw []byte, most int) string {
 // of 3000 either way, which says the effort is not what decides
 // how long it thinks for; an open question and room to think is.
 // So the room is what is taken away.
-var Hard = map[environment.Purpose]string{
-	environment.PurposeProfile: "low",
-}
+//
+// Empty from 19 October 2026, and the profile pass with it. "low" was
+// a reduction from high and medium, and it was chosen while the
+// configured effort was higher than none. It is now none, so this map
+// was raising the one pass that cannot afford reasoning above
+// everything else -- and it was still failing 43 calls of 189, each
+// spending an average of 1,535 tokens and 35 seconds before returning
+// nothing. The owner's description of himself last rebuilt on 17
+// October and every prompt since has carried that one.
+//
+// Kept rather than deleted: whether a purpose may be given more
+// reasoning than the configuration asks for is the question this
+// answers, and the answer for now is that none of them needs it.
+var Hard = map[environment.Purpose]string{}
 
 // thinking : How much reasoning this call may do.
 //

@@ -5,6 +5,7 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
 	"strings"
@@ -191,7 +192,23 @@ func (p *Environment) fromStream(_ context.Context, body io.Reader, status int,
 		return reply{}, status, fmt.Errorf("platformai: the streamed reply was empty")
 	}
 
+	// Cut off at the budget rather than finished.
+	//
+	// Read whatever came back, which until 19 October 2026 was only
+	// read when nothing came back at all: a reply that hit the three
+	// thousand tokens with text in it, or a tool call whose arguments
+	// stopped mid-JSON, was handed on as a normal answer. The model
+	// cannot tell, and neither could anything after it.
+	//
+	// A cut-off tool call is the worse half. Arguments that stop
+	// halfway do not parse, and an unparseable call reads from here
+	// as a call that was never made.
 	text := strings.TrimSpace(got.text.String())
+	if Cut(got.finish) {
+		return reply{Text: text, ToolCalls: got.calls, Usage: got.usage}, status, fmt.Errorf(
+			"%w (%d events, %d words written)", ErrCut, got.events, got.usage.Output)
+	}
+
 	if len(got.calls) > 0 {
 		return reply{Text: text, ToolCalls: got.calls, Usage: got.usage}, status, nil
 	}
@@ -205,4 +222,25 @@ func (p *Environment) fromStream(_ context.Context, body io.Reader, status int,
 			got.events, got.finish, got.usage.Output)
 	}
 	return reply{Text: text, Usage: got.usage}, status, nil
+}
+
+// ErrCut : The reply stopped at the budget rather than at its end.
+//
+// Carried as an error because a cut-off answer is not an answer: half a
+// sentence reads as a whole one, and a tool call whose arguments stop
+// mid-JSON does not parse at all. What came back is returned beside it,
+// so a caller that would rather have half than nothing still can.
+var ErrCut = errors.New("platformai: the reply was cut off at the token budget")
+
+// Cut : Whether a finish reason says the reply ran out of budget.
+//
+// Both spellings, because the gateway has used each: "maxtokens" is
+// what it sends, and "max_tokens" is what the vendor's own API sends
+// and what it may pass through unchanged.
+func Cut(finish string) bool {
+	switch strings.ToLower(strings.TrimSpace(finish)) {
+	case "maxtokens", "max_tokens", "length":
+		return true
+	}
+	return false
 }
