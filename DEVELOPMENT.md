@@ -22499,3 +22499,32 @@ nothing when it is not.
 
 Not built. The patience to set is a measurement nobody has taken: how
 often it runs long, and at what cut the good answers survive.
+
+### And the free tier is twenty a day
+
+Asked to put Gemini first on 20 October 2026, the first thing measured
+was how long it takes. Fifteen of sixteen searches failed in under half
+a second, which is not a timeout:
+
+```
+HTTP 429 RESOURCE_EXHAUSTED
+quota: GenerateRequestsPerDayPerProjectPerModel-FreeTier  value: 20
+retry after: 35758s
+```
+
+Twenty requests a day for the whole project, and the evals that proved
+the answers were good had already spent them. Ten hours until it
+answers again.
+
+He searched 32 times in two days, which is sixteen a day, so the free
+tier is under what he already uses before anything is made primary --
+and the background loops search too.
+
+**So it is not made primary, and the thirty-second timeout measured
+earlier was probably this as well**: a call that fails fast on a
+refused quota looks nothing like a slow answer, but a call throttled
+rather than refused looks exactly like one.
+
+The answers were still better. What stands in the way is an allowance,
+which is a decision about money rather than about which service is
+good, and that is the owner's.
