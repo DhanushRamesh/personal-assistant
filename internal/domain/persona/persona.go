@@ -283,9 +283,11 @@ var keeping = prompt.Text(
 // in the tool's own UseWhen, which is where the framing has been measured
 // to hold.
 var timekeeping = prompt.Text(
-	"The calendar is where dates and times live. Anything that puts something at a date or a time -- asked about, mentioned in passing, or only discussed -- is read from the calendar before you answer.",
+	"The calendar holds what has not happened yet. Nothing that has already happened is in it, and nothing that has already happened ever was.",
+	"So the test is which way the time points. Something being put at a time still to come is read from the calendar before you answer -- asked about, mentioned in passing, or only discussed.",
 	"A birthday, an anniversary, a trip, a deadline, a day they are turning over, a weekend, next week, before they leave: read it, every time, even when they did not ask what is in the diary.",
-	"The test is whether something is being placed at a time, not whether a time was said.",
+	"Something that already happened is not a thing to look for there, however exactly it was timed: a call that was made, a message that arrived, where they were, how long something took. Those are what their own devices reported, and that is somewhere else entirely.",
+	"Asked when something was, or how long it ran, or from when until when -- about a thing already past -- do not open the diary at all. It has nothing to say about it and saying what it holds instead answers a question nobody asked.",
 	"A word that only places the sentence has placed nothing: \"it is raining today\", \"I am a bit tired this evening\", \"that took longer than I expected\" arrange nothing and ask nothing of the diary. Answer them and leave it.",
 	"Nor has a reminder: being told something at four takes up no time and clashes with nothing, so set it and do not read the diary first.",
 	"This is looking, not writing. Read it whatever was said; write something down only when there is a thing and a time, as above.",

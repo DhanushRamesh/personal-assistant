@@ -113,6 +113,11 @@ test: ## Run the tests
 evals-greeting: ## Greet real arrivals sampled from the last four weeks (costs API calls)
 	@go test ./internal/domain/greet/evals/ -tags evals -count=1 -v -timeout 20m $(ARGS)
 
+.PHONY: evals-diary
+evals-diary: ## Whether a question about something already past opens the calendar (costs API calls)
+	@go test ./internal/app/tool/evals/ -tags evals -count=1 -v -timeout 10m \
+		-run TestTheDiaryIsOnlyForWhatHasNotHappened $(ARGS)
+
 .PHONY: evals-sourcing
 evals-sourcing: ## Of the answers that looked something up, how many say so (reads the database, no API calls)
 	@go test ./internal/app/tool/evals/ -tags evals -count=1 -v -timeout 5m \
