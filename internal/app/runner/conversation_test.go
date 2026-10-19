@@ -79,14 +79,24 @@ func TestTheEarlierExchangeReachesTheModel(t *testing.T) {
 	second := h.submit(t, "No, make it four.")
 	h.await(t, second.ID, chat.StatusCompleted, chat.StatusFailed)
 
-	// The last two are the clock and its acknowledgement, which every
-	// turn carries after the history. See Runner.clock.
+	// Five: the question, the answer, the naming of the conversation,
+	// and the clock pair every turn carries after the history. The
+	// naming is a turn of its own since 20 October 2026 -- anything the
+	// server marks is kept apart from the reply above it, so that what
+	// it last said is the last thing and not a paragraph inside one.
+	// See conversation.Message.joinable and Runner.clock.
 	seen := recorder.history()
-	if len(seen) != 4 {
-		t.Fatalf("model saw %d turns, want the question, the answer and the clock", len(seen))
+	if len(seen) != 5 {
+		for i, turn := range seen {
+			t.Logf("  turn %d: %-9s %q", i, turn.Role, turn.Text)
+		}
+		t.Fatalf("model saw %d turns, want the exchange, the naming and the clock", len(seen))
 	}
-	if !strings.Contains(seen[2].Text, "The time where the person is") {
-		t.Errorf("the clock is not the last thing before the question: %q", seen[2].Text)
+	if !strings.Contains(seen[2].Text, "You named this conversation") {
+		t.Errorf("the naming was joined to the answer again: %q", seen[2].Text)
+	}
+	if !strings.Contains(seen[3].Text, "The time where the person is") {
+		t.Errorf("the clock is not the last thing before the question: %q", seen[3].Text)
 	}
 	seen = seen[:2]
 	if seen[0].Role != environment.RoleUser || !strings.Contains(seen[0].Text, "List three") {
@@ -815,5 +825,53 @@ func TestAServerNoteIsOffBeforeTheShapeIsJudged(t *testing.T) {
 	}
 	if !strings.Contains(said, "Good morning") {
 		t.Errorf("the answer itself was lost with the note: %q", said)
+	}
+}
+
+// TestTheSubjectIsWhateverItSaidLast : An announcement is something it
+// said, and what he says next answers it.
+//
+// On 20 October 2026 it announced that Claude Code had drawn a layout
+// on the canvas and wanted approval. He answered "you didn't even look
+// at" and was told how long he had slept the night before -- which was
+// the subject of the last reply, two announcements earlier.
+//
+// lastSaid takes replies only, and the subject handed over was an
+// answer he had stopped talking about. lastAloud takes whatever it
+// last said, which is the distinction the runner already drew for a
+// yes to an offer and had not drawn here.
+func TestTheSubjectIsWhateverItSaidLast(t *testing.T) {
+	recorder := &recordingProvider{answer: "Which did you mean, sir?"}
+	h := newHarness(t, recorder, runner.Options{Tools: offering()})
+	conv := h.conversation(t)
+
+	for _, m := range []conversation.Message{
+		{Kind: conversation.Chat, Content: "You typically sleep around 2:30 am, sir."},
+		{Kind: conversation.Immediate, Content: "Your battery is running low, sir -- nineteen percent."},
+		{Kind: conversation.Immediate, Content: "Claude Code has drawn the new usage layout on the canvas and wants approval."},
+	} {
+		m.ID, m.ConversationID, m.Role, m.At = conversation.NewMessageID(), conv, conversation.Assistant, time.Now().UTC()
+		if _, err := h.repo.Append(context.Background(), m); err != nil {
+			t.Fatalf("Append: %v", err)
+		}
+	}
+
+	tk := h.submit(t, "you didn't even look at")
+	h.await(t, tk.ID, chat.StatusCompleted, chat.StatusFailed)
+
+	var sent string
+	for _, p := range recorder.prompts {
+		if strings.Contains(p, "The subject is what you yourself said last") {
+			sent = p
+		}
+	}
+	if sent == "" {
+		t.Fatalf("the subject was never handed over: %v", recorder.prompts)
+	}
+	if !strings.Contains(sent, "drawn the new usage layout") {
+		t.Errorf("the subject handed over was not the last thing it said: %q", sent)
+	}
+	if strings.Contains(sent, "sleep around 2:30") {
+		t.Errorf("the subject was a reply he had stopped talking about: %q", sent)
 	}
 }

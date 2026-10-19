@@ -557,8 +557,16 @@ func ForModel(messages []Message) []Message {
 		// no words to append to and must not be merged into the message
 		// beside it: the call and its answer are a pair, and a model reading
 		// them run together cannot tell which answer belongs to which call.
+		//
+		// Nor is anything the server marked. An announcement is its own
+		// utterance, said unasked and at its own moment, and joining it to
+		// the reply above it loses the boundary between them. On 20 October
+		// 2026 a reply about how long he slept, a battery warning and a note
+		// that Claude Code wanted approval were one message by the time
+		// anything read them, so "the last thing you said" began with the
+		// sleep. He answered the third and was told about the first.
 		n := len(kept)
-		if n > 0 && kept[n-1].Role == m.Role && kept[n-1].plain() && m.plain() {
+		if n > 0 && kept[n-1].Role == m.Role && kept[n-1].joinable() && m.joinable() {
 			// The joined message keeps the earlier time and position: that
 			// is when the speaker started saying all of it.
 			kept[n-1].Content += "\n\n" + m.Content
@@ -572,6 +580,17 @@ func ForModel(messages []Message) []Message {
 // plain : Whether this message is words and nothing else.
 func (m Message) plain() bool {
 	return len(m.ToolCalls) == 0 && len(m.ToolResults) == 0
+}
+
+// joinable : Whether this message may be run together with the one
+// beside it.
+//
+// Words and nothing else, and nothing the server put a mark in front
+// of. A marked message is a separate thing said at a separate moment,
+// and what they say next may be answering it rather than the reply
+// above it.
+func (m Message) joinable() bool {
+	return m.plain() && !m.Kind.Announcement() && m.Kind != Renaming
 }
 
 // empty : Whether there is nothing in this message worth sending anywhere.

@@ -22202,3 +22202,60 @@ in it. Not built tonight.
 **It copied the marker at all.** The wording was changed on 19 October
 for exactly this, and it was copied again the next day. The stripper is
 what holds; the sentence is decoration.
+
+## Three things it said were one message by the time anything read them
+
+It said three things in a row, each at its own moment:
+
+| 1:00 am | a reply | *"You typically sleep around 2:30 am..."* |
+| 1:01 am | announced | *"Your battery is running low, sir -- nineteen percent."* |
+| 1:03 am | announced | *"Claude Code ... has drawn the new usage layout on the canvas and wants approval. Shall I tell it to go ahead?"* |
+
+He answered the third -- *"You didn't even look at"* -- and was told
+how long he had slept the night before.
+
+### What it was handed
+
+The answer was a question back, so `subjectIs` fired and handed over
+the subject, which is *"what you yourself said last"*. What it handed
+over was this:
+
+> You typically sleep around 2:30 am, sir.
+>
+> [Said unasked...] Your battery is running low, sir -- nineteen per cent.
+>
+> [Said unasked...] Claude Code has drawn the new usage layout...
+
+All three, as one message, led by the one he had stopped talking about.
+It read the beginning and went to look up his sleep, which is the right
+thing to do with the wrong subject.
+
+### Why they were one message
+
+`conversation.ForModel` runs consecutive messages from the same speaker
+together, because a model reading a column of one-line turns reads them
+as a stutter. The three were all the assistant's and all plain prose,
+so they were joined, and the boundaries between them -- which are the
+only thing that says which one he was answering -- went with it.
+
+**Two guards were dead because of it.** `lastSaid` takes replies and
+skips announcements; the joined message's kind is the first one's, so
+it returned all three. `lastAloud` skips a renaming for the same
+reason, and a renaming joined to the reply above it was never skipped
+either.
+
+### What changed
+
+Nothing the server has marked is joined to the message beside it.
+`Message.joinable` is `plain` and not an announcement and not a
+renaming: a marked message is its own utterance, said unasked and at
+its own moment, and what he says next may be answering it rather than
+the reply above.
+
+`subjectIs` now takes `lastAloud` rather than `lastSaid`, which is the
+distinction the runner had already drawn for a yes to an offer and had
+not drawn here. The two are the same fix: what it last said is what he
+is answering, whichever kind of message carried it.
+
+A conversation's naming is a turn of its own now, which is the one
+visible change to the window and is what the test counts.

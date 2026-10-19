@@ -591,8 +591,18 @@ func (r *Runner) consume(runCtx, ctx context.Context, t *chat.Chat, systemPrompt
 			// previous answer; that is the subject. Once per turn,
 			// and only when nothing was looked at, so an honest
 			// question after reading something still goes out.
+			//
+			// The last thing it said, whether that was a reply or
+			// something it said unasked. An announcement is said
+			// aloud and answered like anything else: on 20 October
+			// 2026 it announced that Claude Code had drawn a layout
+			// and wanted approval, he answered "you didn't even look
+			// at", and the subject handed over was the reply before
+			// the two announcements -- how long he had slept. It
+			// went and read his sleep, which is the right thing to
+			// do with the wrong subject.
 			if !reached && !askedBack && onlyAsking(final.Text) {
-				if said := lastSaid(window.Messages); said != "" {
+				if said := lastAloud(window.Messages); said != "" {
 					r.logger.InfoContext(ctx, "an answer that was only a question was sent back with its subject",
 						slog.String("thrown_away", first(final.Text, 90)))
 					askedBack = true
