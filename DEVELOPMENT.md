@@ -21875,87 +21875,45 @@ fell out of the domain when the call failed. Adding a rule about it
 would be a sentence covering a case the code now covers, which is the
 habit that made the first prompt 28,914 characters.
 
-## The clock was a turn, so every follow-up landed on it
+### The folded clock was reverted the same night
 
-He was told what a film was about, said *"I don't understand. Can you
-just say me in a simple words?"*, and got:
+It went out at 23:10 and broke the first real question he asked:
 
-> I meant: from now on, I will use only the time you just gave me --
-> 10:39 pm Monday 19 October -- and never mention any earlier time in
-> this conversation. That is all.
+> **What's the status of the terminal Jarvis Server?**
+>
+> I understand, sir. I will use 11:24 pm Monday 19 October as the only
+> time I have now, never earlier times from this conversation, and keep
+> my answers short without losing the fact.
 
-That answer is correct for what the model could see. The server
-appended the clock as two turns, and the second was written in the
-assistant's own voice:
+The log shows it did the work. `read_terminal` ran, returned, and the
+answer was thrown away for an acknowledgement of the clock.
 
-```
-user:      The time where the person is: 10:39 pm on Monday 19 October…
-assistant: Understood. That is the clock I will use, and not any time
-           said earlier in this conversation.
-```
+**The round after a tool is not the round before it.** `execute.go`
+sets `prompt = ""` once tools have run, because the question is
+already in the history and asking it twice has the model answer it
+twice. So on that round there was no question to fold the clock into,
+and the branch written for that case sent it as a user message of its
+own, standing after the tool results -- which is the exact arrangement
+the whole change existed to abolish, reintroduced in the one place the
+measurement never looked.
 
-So the last thing it had said was about the clock, and a follow-up
-carrying no subject of its own has nowhere else to land.
+The comment on that branch said *"nothing of the person's stands
+beside it there"*. True, and beside the point: nothing had to stand
+beside it for the model to answer it.
 
-### Why the reply was there
+**What the measurement missed.** Four of four on stale times, none of
+eleven follow-ups, none of six plain questions -- and broken on the
+first question he asked. The eval asks one round and never runs a
+tool, so it never reached the round after one. Roughly half the rounds
+that happen are rounds it cannot see.
 
-Because a turn in his voice with no answer reads as something he said
-and left hanging, and gets answered instead of the question. That is
-not a guess: `internal/app/runner` has a test asserting two of his
-turns never sit side by side, written after an instruction of the
-server's was taken for his words.
+Reverted to the pair, which has a known and smaller fault: two to six
+of eleven subjectless follow-ups answer the clock, and no question
+with a subject of its own does.
 
-So the two faults are the same fault. The clock has to sit after the
-history, which is the only position that beats the stale times in a
-long conversation. Anything the server puts there is either a turn of
-his with nothing after it, or a turn of the assistant's that it never
-said.
-
-### Four arrangements, measured
-
-`make evals-clock` now runs two tests: whether the clock beats a
-history full of stale times, and what eleven follow-ups with no subject
-of their own land on. Over two runs each:
-
-| | stale times | follow-ups answering the clock |
-| --- | --- | --- |
-| the acknowledgement | 4 of 4 | 4, 6, and 2 of 11 |
-| a terse receipt, "Noted." | 4 of 4 | 3, 2, and 1 of 11 |
-| no reply at all | 4 of 4 | 0, 1, and 0 of 11 -- his turns adjacent |
-| **folded into the question** | **4 of 4** | **0 of 11, three times** |
-
-The receipt is the finding worth keeping. The obvious repair was to
-leave the reply in place and give it nothing worth explaining, and it
-did not work: any reply at all is something the model can see itself
-having said, however little it says.
-
-Four questions could not tell the arrangements apart -- the receipt
-scored none of four and then one of four on identical code. Eleven
-could.
-
-### Where it goes
-
-Inside the question's own message, in front of it. No turn of the
-server's stands anywhere, so there is nothing for a follow-up to land
-on and no two turns of his in a row.
-
-**Not by gluing it onto the prompt string.** That was the first
-attempt, and it broke four tests in a way worth recording: `prompt` is
-what he said, and every send-back restates it as *"what they said,
-which is what you answer, was:"*. With the clock glued on, the server
-was quoting its own note back to the model as his words.
-
-So it travels as `environment.Request.Clock`, and the provider folds it
-into the front of the last user message. `prompt` stays his words
-everywhere it is read, and only the wire carries the fold. On a
-continuation, where tools have run and there is no new question, it
-goes on its own after the tool results -- nothing of his stands beside
-it there.
-
-### What this did not fix
-
-Of eleven follow-ups, two or three reach what was really being asked
-about, in every arrangement including the one that ships. The clock is
-no longer what they land on; they land on the conversation's title
-instead, or ask which film he means. That is a separate fault about
-what outweighs what in a long window, and it is not touched here.
+Three repairs are now measured and none has shipped: a terse receipt
+(does not work -- any reply is something the model can see itself
+having said), no reply at all (works, but puts two of his turns side
+by side), and folding (works on first rounds, breaks continuations).
+The pair stands until something beats it on both counts, and the next
+attempt is not worth making until the eval runs a tool.

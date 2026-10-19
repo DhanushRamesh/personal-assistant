@@ -310,6 +310,20 @@ func answered(t *testing.T, env *platformai.Environment, system string,
 // TestAFollowUpLandsOnTheAnswerAndNotTheClock : What the clock's
 // acknowledgement cost, and what dropping it risks.
 //
+// # What this test could not see
+//
+// It asks one round and never runs a tool, so it never reaches the
+// round after one. That is where folding the clock into the question
+// failed in front of him on 19 October 2026: the runner clears the
+// prompt once tools have run, so a clock with nowhere to fold went out
+// as a user message of its own standing after the tool results, and
+// the model answered it instead of saying what the terminal showed.
+//
+// Four of four, zero of eleven and zero of six plain questions here,
+// and broken on the first real question he asked. Any arrangement
+// measured only on first rounds is measured on about half the rounds
+// that happen.
+//
 // On 19 October 2026 he was told a film's plot, said "I don't
 // understand, can you just say me in a simple words", and was told:
 // "I meant: from now on, I will use only the time you just gave me --
@@ -367,21 +381,30 @@ func TestAFollowUpLandsOnTheAnswerAndNotTheClock(t *testing.T) {
 	asking := []struct {
 		ask   string
 		about string // a word the answer must carry to be about the right thing
+		plain bool   // a question with a subject of its own, not a follow-up
 	}{
-		{"I don't understand. Can you just say me in a simple words?", "son"},
-		{"what do you mean", "son"},
-		{"say that again", "son"},
-		{"simpler please", "son"},
-		{"explain that", "son"},
-		{"what was that about", "son"},
-		{"can you repeat", "son"},
-		{"i didn't follow that", "son"},
-		{"say it shorter", "son"},
+		{"I don't understand. Can you just say me in a simple words?", "son", false},
+		{"what do you mean", "son", false},
+		{"say that again", "son", false},
+		{"simpler please", "son", false},
+		{"explain that", "son", false},
+		{"what was that about", "son", false},
+		{"can you repeat", "son", false},
+		{"i didn't follow that", "son", false},
+		{"say it shorter", "son", false},
 		// Not follow-ups at all: the ordinary case a reply to the clock
 		// protects, where a dangling turn of his could be answered
 		// instead of the question.
-		{"what is two plus two", "four"},
-		{"how many days in a week", "seven"},
+		{"what is two plus two", "four", true},
+		{"how many days in a week", "seven", true},
+		// Questions with a subject of their own, which is the class
+		// the folded clock broke. Two arithmetic ones were not enough:
+		// they are answered in a word, and the clock in front of them
+		// never competed. A question that takes real work does.
+		{"What's the status of the terminal Jarvis Server?", "", true},
+		{"what is the capital of France", "paris", true},
+		{"who wrote Hamlet", "shakespeare", true},
+		{"how far is the moon from the earth", "", true},
 	}
 
 	arms := []struct {
@@ -397,8 +420,11 @@ func TestAFollowUpLandsOnTheAnswerAndNotTheClock(t *testing.T) {
 	for _, arm := range arms {
 		paired, name := arm.with != "", arm.name
 
-		var reached, clocked int
+		var reached, clocked, clockedPlain, plain int
 		for _, c := range asking {
+			if c.plain {
+				plain++
+			}
 			now := time.Now()
 			behind := append([]environment.Turn{}, said...)
 			ask := c.ask
@@ -433,17 +459,24 @@ func TestAFollowUpLandsOnTheAnswerAndNotTheClock(t *testing.T) {
 			}
 			if saidTheTime(answer, now) {
 				clocked++
+				if c.plain {
+					clockedPlain++
+				}
 				t.Logf("  %-56q answered %q", c.ask, first(answer, 90))
 			}
 		}
-		t.Logf("%-26s %d of %d went to the clock, %d reached the answer",
-			name, clocked, len(asking), reached)
+		t.Logf("%-26s %d of %d went to the clock (%d of %d plain questions), %d reached the answer",
+			name, clocked, len(asking), clockedPlain, plain, reached)
 
-		// Only the arrangement that ships is held to it. The others are
-		// here to show what they cost.
-		if arm.folded && clocked > 0 {
-			t.Errorf("folded into the question, %d of %d follow-ups still answered the clock",
-				clocked, len(asking))
+		// What ships is held to the plain questions, which is the
+		// stricter of the two and the one that cannot be allowed to
+		// break: a question with a subject of its own must never be
+		// answered with the clock. No arrangement passes both classes,
+		// and the follow-up counts are reported rather than asserted
+		// because the one that fixed them broke these.
+		if arm.with == conversation.Acknowledged && clockedPlain > 0 {
+			t.Errorf("what ships answered the clock for %d of %d questions that had a subject",
+				clockedPlain, plain)
 		}
 	}
 }

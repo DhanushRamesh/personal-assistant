@@ -79,12 +79,16 @@ func TestTheEarlierExchangeReachesTheModel(t *testing.T) {
 	second := h.submit(t, "No, make it four.")
 	h.await(t, second.ID, chat.StatusCompleted, chat.StatusFailed)
 
-	// The clock is folded into the question and adds no turn, so the
-	// history is the exchange and nothing else. See Runner.clock.
+	// The last two are the clock and its acknowledgement, which every
+	// turn carries after the history. See Runner.clock.
 	seen := recorder.history()
-	if len(seen) != 2 {
-		t.Fatalf("model saw %d turns, want the question and the answer", len(seen))
+	if len(seen) != 4 {
+		t.Fatalf("model saw %d turns, want the question, the answer and the clock", len(seen))
 	}
+	if !strings.Contains(seen[2].Text, "The time where the person is") {
+		t.Errorf("the clock is not the last thing before the question: %q", seen[2].Text)
+	}
+	seen = seen[:2]
 	if seen[0].Role != environment.RoleUser || !strings.Contains(seen[0].Text, "List three") {
 		t.Errorf("first turn = %q by %q", seen[0].Text, seen[0].Role)
 	}
@@ -170,7 +174,6 @@ type recordingProvider struct {
 	seen       []environment.Turn
 	system     string
 	prompts    []string
-	clocks     []string
 	// answer : What it replies with. Empty answers "an answer".
 	answer string
 	// calls : Tools it asks for on its first reply, then answers.
@@ -180,15 +183,6 @@ type recordingProvider struct {
 
 // systemPrompt : What the assistant was last told about itself.
 func (p *recordingProvider) systemPrompt() string { return p.system }
-
-// clock : The time sent with the last question, which the provider
-// folds into the front of it. See Runner.clock.
-func (p *recordingProvider) clock() string {
-	if len(p.clocks) == 0 {
-		return ""
-	}
-	return p.clocks[len(p.clocks)-1]
-}
 
 func (p *recordingProvider) Name() string { return "recording" }
 
@@ -203,7 +197,6 @@ func (p *recordingProvider) Run(ctx context.Context, req environment.Request) (<
 		p.seen = append([]environment.Turn(nil), req.History...)
 		p.system = req.SystemPrompt
 		p.prompts = append(p.prompts, req.Prompt)
-		p.clocks = append(p.clocks, req.Clock)
 	}
 
 	ch := make(chan environment.Message, 1)

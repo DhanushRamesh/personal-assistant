@@ -104,10 +104,8 @@ func TestTheQuestionIsTheLastThingTheUserSaid(t *testing.T) {
 		t.Fatalf("status = %d, want 200: %s", rec.Code, rec.Body.String())
 	}
 
-	// Ends with it rather than equals it: the clock is folded in
-	// front of the question. See Runner.clock.
-	if got := recorder.LastPrompt(); !strings.HasSuffix(got, "and the date") {
-		t.Errorf("prompt = %q, want it to end with %q", got, "and the date")
+	if got := recorder.LastPrompt(); got != "and the date" {
+		t.Errorf("prompt = %q, want %q", got, "and the date")
 	}
 }
 

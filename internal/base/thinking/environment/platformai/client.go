@@ -469,26 +469,10 @@ func (p *Environment) attemptOnce(ctx context.Context, ask environment.Request, 
 	// Only when there is one. A continuation after tools ran has no new
 	// question, and appending an empty user message would have the model
 	// answer a thing nobody said.
-	//
-	// The clock goes in front of the question, in the same message. On
-	// a continuation there is no question to put it in front of, so it
-	// goes on its own after the tool results -- nothing of the person's
-	// stands beside it there.
-	switch said := strings.TrimSpace(ask.Prompt); {
-	case said != "" && ask.Clock != "":
-		messages = append(messages, chatMessage{
-			Role:    string(environment.RoleUser),
-			Content: ask.Clock + "\n\n" + ask.Prompt,
-		})
-	case said != "":
+	if strings.TrimSpace(ask.Prompt) != "" {
 		messages = append(messages, chatMessage{
 			Role:    string(environment.RoleUser),
 			Content: ask.Prompt,
-		})
-	case ask.Clock != "":
-		messages = append(messages, chatMessage{
-			Role:    string(environment.RoleUser),
-			Content: ask.Clock,
 		})
 	}
 
