@@ -32,3 +32,49 @@ var inside = regexp.MustCompile(`(?i)\btools?\b`)
 func NamesMachinery(answer string) bool {
 	return inside.MatchString(strings.TrimSpace(answer))
 }
+
+// unsearched : The shapes of an answer that pushed a question back
+// instead of looking it up.
+//
+// Not "I cannot" in general. Saying you cannot do a thing is right and
+// the manner asks for it -- *"I cannot put a call on speaker from
+// here, sir"*. What is banned is refusing to **tell** somebody
+// something, which is never a limit: the web is a tool like any other,
+// and "how do I check my card's points" is a question with an answer
+// on it.
+//
+// The fault, 19 October 2026. Asked how to see the points on his HDFC
+// card, it answered "I cannot see your credit card account or its
+// balance from here, sir. That is something you would need to check
+// through the HDFC Bank app or website". It read a question about how
+// to do something as a request to do it. The send-back had already
+// fired and told it to read its tools; it answered again without
+// calling one. Owner: *"jarvis has no limit, it should never say it
+// doesn't know, it should do a websearch"*.
+//
+// Narrow on purpose, like the ban on the word "tool": every one of
+// these is about handing the question back, and none of them is about
+// an action it cannot take.
+var unsearched = regexp.MustCompile(`(?i)\b(` +
+	`i cannot tell you|i can't tell you|i am not able to tell you|` +
+	`i cannot see your|i can't see your|i do not have access|i don't have access|` +
+	`you would need to (check|look|find|visit|log)|` +
+	`you will have to (check|look|find|visit|log)|` +
+	`you'll have to (check|look|find|visit|log)|` +
+	`that is something you would need|` +
+	`i have no information|i do not have information|i don't have information|` +
+	`i am not sure how to|i do not know how to|i don't know how to` +
+	`)\b`)
+
+// Unsearched : Whether an answer handed the question back rather than
+// looking it up.
+//
+// A check on the finished answer, not a rule in front of it, for the
+// reason [NamesMachinery] is one: the rule was in lookFirst already
+// -- *"if you were about to say you cannot do something, that is a
+// claim to check"* -- it fired on this very turn, and the answer came
+// back the same. A sentence the server will not send does not have to
+// win an argument.
+func Unsearched(answer string) bool {
+	return unsearched.MatchString(strings.TrimSpace(answer))
+}

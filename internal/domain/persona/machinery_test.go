@@ -38,3 +38,39 @@ func TestWhatCountsAsNamingItsMachinery(t *testing.T) {
 		}
 	}
 }
+
+// TestHandingTheQuestionBackIsCaught : Asked how to see the points on
+// his credit card, it told him to use the bank's app.
+//
+// The web answers "how do I" questions. Refusing to tell somebody
+// something is never a limit; refusing to do something can be.
+func TestHandingTheQuestionBackIsCaught(t *testing.T) {
+	// What it actually sent him.
+	for _, said := range []string{
+		"I cannot see your credit card account or its balance from here, sir.",
+		"That is something you would need to check through the HDFC Bank app or website.",
+		"I cannot tell you how to check your points from here, sir.",
+		"You will have to log in to their website, sir.",
+		"I do not have access to that, sir.",
+		"I don't know how to do that, sir.",
+	} {
+		if !persona.Unsearched(said) {
+			t.Errorf("not caught: %q", said)
+		}
+	}
+
+	// Saying you cannot do a thing is right, and the manner asks for
+	// it. None of these is a refusal to tell him something.
+	for _, said := range []string{
+		"I cannot put a call on speaker from here, sir.",
+		"I cannot send that from here, sir.",
+		"There is no list called that, sir. Shall I make one?",
+		"Your diary has nothing on Thursday, sir.",
+		"It is twenty past four, sir.",
+		"The reminder is set for nine, sir.",
+	} {
+		if persona.Unsearched(said) {
+			t.Errorf("wrongly caught: %q", said)
+		}
+	}
+}

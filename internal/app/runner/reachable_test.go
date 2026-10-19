@@ -117,6 +117,12 @@ func TestEveryGuardIsReachableFromARealTurn(t *testing.T) {
 			shows:   "they are listening to it",
 		},
 		{
+			guard:  "an answer that handed the question back",
+			said:   "i have hdfc credit card, how to see credit points",
+			answer: "I cannot see your credit card account or its balance from here, sir. That is something you would need to check through the bank's app.",
+			shows:  "it tells him to go and find this out himself",
+		},
+		{
 			guard: "a written answer that ran as prose",
 			said:  "why not the pasted prompt is not good?",
 			answer: "It rejected most of the changes because they were rewording only. " +

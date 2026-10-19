@@ -147,6 +147,9 @@ func (r *Runner) consume(runCtx, ctx context.Context, t *chat.Chat, systemPrompt
 	// Whether the model has already been sent back once for giving up
 	// on a change it was asked to make.
 	var nudged bool
+	// Whether an answer has already been sent back for handing the
+	// question back rather than looking it up. Once a turn.
+	var searched bool
 	// Whether a written answer has already been sent back for running
 	// as paragraphs rather than points. Once a turn.
 	var pointed bool
@@ -639,6 +642,30 @@ func (r *Runner) consume(runCtx, ctx context.Context, t *chat.Chat, systemPrompt
 				continue
 			}
 
+			// An answer that handed the question back instead of
+			// looking it up.
+			//
+			// Asked how to see the points on his credit card, it
+			// said "I cannot see your credit card account or its
+			// balance from here, sir" and told him to use the bank's
+			// app -- a question about how to do something, read as a
+			// request to do it. lookFirst had already fired on that
+			// turn and told it to read its tools. It answered again
+			// without calling one, which makes eight.
+			//
+			// Owner: *"jarvis has no limit, it should never say it
+			// doesn't know, it should do a websearch"*.
+			if !searched && !published && !reached && len(tools) > 0 &&
+				persona.Unsearched(final.Text) {
+				r.logger.InfoContext(ctx, "an answer handed the question back",
+					slog.String("said", first(final.Text, 90)))
+				searched = true
+				turns = append(turns, asUserTurn(prompt)...)
+				turns = append(turns, asAnswer(final.Text)...)
+				prompt = lookItUp
+				continue
+			}
+
 			// A written answer that runs as paragraphs of prose.
 			//
 			// The manner says it -- "Never a wall of prose. More than
@@ -855,6 +882,22 @@ func lookFirstFor(request string) string {
 //
 // Not a reminder of the rule. It has the rule and broke it. This
 // says what to write instead, which is the thing it was missing.
+// lookItUp : Sent back when an answer handed the question back.
+//
+// Names what it did rather than what it should believe. "You have no
+// limits" is a thing to weigh; "you wrote a sentence that refuses to
+// tell him something, and here is the search to run instead" is a
+// thing to do.
+const lookItUp = "Before that answer goes out: it tells him to go and find this out himself. " +
+	"It is not a thing you cannot do -- it is a thing you did not look up. " +
+	"How to do something, where to find something, what a company's own process is, " +
+	"what a product does, what something costs: all of that is written down somewhere " +
+	"and web_search reads it. He asked you because he wanted the answer, not the address " +
+	"of somewhere else to ask. " +
+	"Search for it now and answer from what comes back, with the actual steps in it. " +
+	"Where a name in his question looks misspelt, search the one he plainly meant. " +
+	"Saying you cannot is for a thing you cannot do, never for a thing you have not read."
+
 // sayItInPoints : Sent back when a written answer ran as prose.
 //
 // Names the paragraph rather than the principle. "Be more concise"
