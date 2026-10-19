@@ -21705,3 +21705,74 @@ holds the 179 cases to measure it against.
 "tools" twice and `persona.NamesMachinery` did not fire. And
 `type_into_terminal` was among the 41 tools described to it that turn,
 so telling Claude Code to carry on was reachable and it never tried.
+
+## A second prompt, written rather than condensed
+
+The persona that runs is configuration: `[assistant] persona`, `jarvis`
+or `jarvis-brief`, with both compiled in and nothing deleted either
+way. `jarvis` is 28,914 characters. `jarvis-brief` is about 4,000.
+
+The owner asked for the short one on 19 October 2026 -- *"i think we
+should condense the system prompt .. have it as a developmental flag
+.. so both sys prompts exist, let's try with the condensed one and if
+it doesn't work we will revert back"*. It is an experiment with a
+switch, not a replacement.
+
+### Why a long prompt gets long
+
+Thirteen rules in `jarvis` were added after something went wrong, and
+each one is a sentence about that thing. They accumulate because
+nothing ever removes them: the incident is over, the sentence stays,
+and the next incident adds another. By the end the document is
+organised by its own history instead of by its subject, and the model
+reads three sentences about hand-backs in three different places.
+
+What made the short one possible is that the rules that actually hold
+are not in either prompt. A wall of prose, a buried date, a hand-back,
+the word "tool", a reply that is only a question, a change claimed and
+not made: each is checked in `internal/domain/persona` after the
+answer is written, and none of it depends on prompt wording. Thirteen
+prompt rules lost in a single day's traffic. Everything that held was
+a count or a check.
+
+### The patch that proved the point
+
+The first `jarvis-brief` was a condensation, and within the hour it
+had a patch bolted on: three sentences listing phrases it may not
+send, added after it told the owner there was no news of a film
+without searching. That is the same habit, on a document a day old.
+
+So it was rewritten the same evening -- *"the new v2 prompt should not
+cover the patches, it should have a proper prompt"* -- organised by
+subject, with every rule stated once where it belongs:
+
+| Section | What it is about |
+| --- | --- |
+| `briefManner` | bearing, and nothing else |
+| `briefAnswering` | what they want, and how a reply ends |
+| `briefKnowing` | what it can know, and what it must look up |
+| `briefSpoken` / `briefWritten` | the same answer, heard or skimmed |
+| `briefHonesty` | the line it does not cross |
+
+The banned sentences survive, but not as a list of phrases appended to
+the end. They are the consequence of the paragraph above them: two
+things are never in you and always a call away, their own life and the
+world since training, so there is no such thing as not knowing, only
+not having looked -- *therefore* these sentences may not be sent
+without searching first. A rule that follows from something is one the
+model can apply to a case the rule never named.
+
+**The decision is general.** A rule goes in the section it is about,
+derived from what that section is for. Where it exists because
+something went wrong, the rule goes in the prompt and the incident
+goes in the commit. If a fix will not fit that way, that is the sign
+it belongs in a check and not in prose at all.
+
+### What holds it
+
+`make evals-diary` 7/7 and `make evals-looking` 5/5, on the brief
+persona: a date question does not open the diary, and a question about
+a credit card, a two-factor setting or a product's battery life is
+searched rather than handed back. Four tests in the package hold the
+sentences the shape checks depend on. The long prompt is one line of
+configuration away for as long as both are compiled in.
