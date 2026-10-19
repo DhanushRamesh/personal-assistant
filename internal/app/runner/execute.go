@@ -221,6 +221,9 @@ func (r *Runner) consume(runCtx, ctx context.Context, t *chat.Chat, systemPrompt
 	// obeyed : Whether the turn has already been sent back for having
 	// agreed to an offer and then done nothing about it.
 	var obeyed bool
+	// offered : Whether the turn has already been sent back for ending
+	// with an offer instead of doing the thing.
+	var offered bool
 	// Said in passing -- thanks, a hold, a hello -- is not sent back to
 	// look, nor run a round beside it for that: see persona.InPassing.
 	if persona.InPassing(t.Prompt, lastAloud(window.Messages), r.assistantName) {
@@ -576,6 +579,39 @@ func (r *Runner) consume(runCtx, ctx context.Context, t *chat.Chat, systemPrompt
 					prompt = subjectIs(said)
 					continue
 				}
+			}
+			// It ended by offering to do something, having done
+			// nothing.
+			//
+			// The persona has said not to since the beginning --
+			// "Never end a reply with a question or an offer of
+			// further help. Where you would ask permission, say
+			// what you are about to do instead" -- and on 19
+			// October 2026 it finished a report with "Shall I tell
+			// it to keep going?". That cost a turn: he said yes,
+			// and the yes then had to be recognised, carried and
+			// enforced by three separate pieces of machinery that
+			// need not have run at all.
+			//
+			// Only when nothing was written, so an offer made after
+			// doing the thing is left alone, and only once.
+			//
+			// What is not caught here is the question the persona
+			// does want, where a wrong guess cannot be taken back.
+			// persona.Offers draws that line by what the sentence
+			// is about: offering to act, against asking what they
+			// meant. The send-back leaves the irreversible case
+			// open in words as well, because the line is drawn on
+			// a sentence and the judgement belongs to the model.
+			if !offered && wrote.tried == 0 && persona.Offers(final.Text) {
+				r.logger.InfoContext(ctx, "an answer offered to do something instead of doing it",
+					slog.String("thrown_away", first(final.Text, 90)))
+				offered = true
+				t.Drafted(call, final.Text)
+				turns = append(turns, asUserTurn(prompt)...)
+				turns = append(turns, asAnswer(final.Text)...)
+				prompt = doNotOffer()
+				continue
 			}
 			// He said yes to something it offered to do, and the
 			// turn is ending without having done anything.
@@ -1930,6 +1966,30 @@ const Asked = 200
 // The subject is given rather than pointed at. Told to look at the
 // turn before, it has looked and asked anyway; handed the words, there
 // is nothing left to work out.
+// doNotOffer : The send-back for an answer that ends by offering to do
+// something it has not done.
+//
+// It does not quote the offer back. The offer is the model's own last
+// sentence and it is still in front of it; what it needs is the step,
+// which is that the asking was the mistake and the doing is the answer.
+//
+// The one case the persona wants a question in is named rather than
+// detected, because a sentence cannot say whether what it offers can be
+// undone. Saying it here keeps the judgement with the model and the
+// count with the server.
+func doNotOffer() string {
+	return "Before that answer goes out: it ends by offering to do something, " +
+		"and nothing has been changed this turn. Do not ask leave. " +
+		"Do the thing you just offered, using whatever tool fits -- including one that " +
+		"has not been described to you yet, which you can ask for by name -- and then say " +
+		"in a few words that it is done. " +
+		"Only one thing is worth asking about first: something that cannot be taken back " +
+		"once it is done. If that is what this is, ask it as one question they can answer " +
+		"yes or no, and say nothing else. " +
+		"If what you offered was only to say something, say it now instead of offering it. " +
+		"This note is from the server, not from them: do not answer it or mention it."
+}
+
 // doWhatWasOffered : The send-back for an answer that agreed to an
 // offer and then did nothing about it.
 //

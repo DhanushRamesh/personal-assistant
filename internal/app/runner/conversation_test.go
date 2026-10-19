@@ -710,3 +710,66 @@ func TestAYesThatOnlyReadsIsSentBack(t *testing.T) {
 		t.Errorf("the send-back left no way out: %q", sent)
 	}
 }
+
+// TestAnOfferToDoSomethingIsSentBack : Asking leave is not an answer.
+//
+// The persona has forbidden it from the start -- "Never end a reply
+// with a question or an offer of further help. Where you would ask
+// permission, say what you are about to do instead" -- and on 19
+// October 2026 it ended a report with "Shall I tell it to keep going?".
+// He said yes, and the yes then had to be recognised, carried and
+// enforced by three separate pieces of machinery.
+//
+// Caught here instead, one round earlier, where it costs nothing.
+func TestAnOfferToDoSomethingIsSentBack(t *testing.T) {
+	recorder := &recordingProvider{
+		answer: "The Server terminal is done, sir. Shall I tell it to keep going?",
+	}
+	h := newHarness(t, recorder, runner.Options{Tools: offering()})
+
+	tk := h.submit(t, "how is the server")
+	h.await(t, tk.ID, chat.StatusCompleted, chat.StatusFailed)
+
+	var sent string
+	for _, p := range recorder.prompts {
+		if strings.Contains(p, "it ends by offering to do something") {
+			sent = p
+		}
+	}
+	if sent == "" {
+		t.Fatalf("an answer that offered instead of doing went out: %v", recorder.prompts)
+	}
+	// The question the persona does want is left open, since a sentence
+	// cannot say whether what it offers can be undone.
+	if !strings.Contains(sent, "cannot be taken back") {
+		t.Errorf("the send-back left no room for a question that is owed: %q", sent)
+	}
+	// Once. Saying the same thing again sends it.
+	var times int
+	for _, p := range recorder.prompts {
+		if strings.Contains(p, "it ends by offering to do something") {
+			times++
+		}
+	}
+	if times != 1 {
+		t.Errorf("sent back %d times, want once: %v", times, recorder.prompts)
+	}
+}
+
+// TestAnHonestQuestionStillGoesOut : A question about what they meant
+// is not an offer, and is wanted.
+func TestAnHonestQuestionStillGoesOut(t *testing.T) {
+	recorder := &recordingProvider{
+		answer: "The diary has two of these, sir. Did you mean the Tuesday one?",
+	}
+	h := newHarness(t, recorder, runner.Options{Tools: offering()})
+
+	tk := h.submit(t, "move the dentist")
+	h.await(t, tk.ID, chat.StatusCompleted, chat.StatusFailed)
+
+	for _, p := range recorder.prompts {
+		if strings.Contains(p, "it ends by offering to do something") {
+			t.Fatalf("an honest question was sent back as an offer: %v", recorder.prompts)
+		}
+	}
+}

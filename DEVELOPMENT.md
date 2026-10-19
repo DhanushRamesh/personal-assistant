@@ -21985,3 +21985,47 @@ That guard is not written here. `onlyAsking` covers an answer that is
 nothing but a question, and the hard part of the general case is that
 an honest question after a listing -- *"the diary has two of these,
 did you mean the Tuesday one?"* -- is wanted, and reads the same way.
+
+### And now it does not ask
+
+The open half of the entry above is closed. *"Never end a reply with a
+question or an offer of further help. Where you would ask permission,
+say what you are about to do instead"* now has a count behind it:
+`persona.Offers` on the answer, `writing.tried == 0`, sent back once.
+
+**The hard part was never detecting a question.** It was telling an
+offer from the question the persona wants. `persona.Asks` is a `?` at
+the end, and that catches both:
+
+| | |
+| --- | --- |
+| offer | *"Seven of them, sir. Do you want me to cancel the Tuesday one?"* |
+| question | *"The diary has two of these, sir. Did you mean the Tuesday one?"* |
+
+The line is drawn on what the last sentence is **about**: offering to
+act, against asking what they meant. First person and the assistant's
+own next action -- shall I, should I, would you like me to, do you want
+me to, want me to, anything else, let me know if.
+
+`may I` and `can I` are left out on purpose, and so is a bare `would
+you like`. Each introduces a clarifier as readily as an offer -- *"can
+I confirm which one you meant"* -- and a guard that fires on an honest
+question is worse than one that misses an offer, because a missed offer
+is caught again the moment he says yes to it.
+
+**What a sentence cannot say** is whether the thing offered can be
+undone, and that is the one case the persona does want asked about. So
+the send-back names it rather than detecting it: *"Only one thing is
+worth asking about first: something that cannot be taken back once it
+is done. If that is what this is, ask it as one question they can
+answer yes or no, and say nothing else."* The line stays with the
+model, the count stays with the server.
+
+Fired only when nothing was written, so an offer made after doing the
+thing is left alone, and only once per turn.
+
+**The cheaper half of the same fault.** Caught here, the turn ends with
+the thing done. Caught at the yes, it costs the round that understands
+the yes, the round that looks, and the round that finally does it --
+and three pieces of machinery had to exist to carry the subject that
+far.

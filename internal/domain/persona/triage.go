@@ -187,6 +187,58 @@ func Asks(said string) bool {
 	return asking.MatchString(strings.TrimRight(said, ` "'”’)]`))
 }
 
+// offering : An answer whose last sentence asks leave to do something,
+// or offers to do more.
+//
+// First person and about the assistant's own next action. That is the
+// whole of the distinction being drawn: an offer asks whether it should
+// act, and a question that is allowed asks what they meant.
+//
+// "may I" and "can I" are left out deliberately, and so is a bare
+// "would you like". Each of them introduces a clarifier as readily as
+// an offer -- "can I confirm which one you meant" -- and a guard that
+// fires on an honest question is worse than one that misses an offer,
+// since the offer is caught again the moment they say yes to it.
+var offering = regexp.MustCompile(`(?i)\b(?:shall i|should i|would you like me to|` +
+	`do you want me to|did you want me to|want me to|would you like that|` +
+	`anything else|let me know if)\b`)
+
+// Offers : Whether the answer ends by offering to do something rather
+// than having done it.
+//
+// The persona says it plainly -- "Never end a reply with a question or
+// an offer of further help. Where you would ask permission, say what
+// you are about to do instead" -- and said it to no effect. On 19
+// October 2026 it finished a report with "Shall I tell it to keep
+// going?", which cost a turn: he said yes, and the yes had to be
+// understood, carried and enforced by three separate pieces of
+// machinery that need not have existed for that answer.
+//
+// Only the last sentence is read. An offer made in the middle of an
+// answer and then acted on is not what this is about.
+func Offers(said string) bool {
+	return offering.MatchString(lastSentence(said))
+}
+
+// lastSentence : The final sentence of an answer, or the whole of it
+// when it is one sentence.
+//
+// Split on what ends a sentence, and on the line breaks a written
+// answer uses instead -- a bullet or a heading is a sentence here, and
+// an offer is just as much an offer for being the last bullet.
+func lastSentence(said string) string {
+	said = strings.TrimRight(strings.TrimSpace(said), ` "'”’)]`)
+	parts := strings.FieldsFunc(said, func(r rune) bool {
+		return r == '.' || r == '!' || r == '?' || r == '\n'
+	})
+	for i := len(parts) - 1; i >= 0; i-- {
+		if part := strings.TrimSpace(parts[i]); part != "" {
+			return part
+		}
+	}
+	return ""
+}
+
 // Wall : How many sentences in a row make a paragraph a wall.
 //
 // The written manner says it already -- *"Never a wall of prose. More
