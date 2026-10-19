@@ -21581,3 +21581,52 @@ as to `describe`.
 The lesson, and it is the second time today: when a guard exists and the
 fault happens anyway, check whether the guard ran before changing what
 it says. Both faults today were a correct guard that nothing reached.
+
+**The instruction read back as a promise** (19 October 2026).
+
+Jarvis offered to tell Claude Code to carry on. He said *"ok"*. It
+answered:
+
+> Understood, sir. I will search before claiming that anything has not
+> happened, does not exist, or is unknown. I will read both lists of
+> tools before saying I cannot do something. If a tool fits, I will use
+> it.
+
+That is `lookFirst`, read back to him almost word for word. Three
+guards were involved and all three behaved as written.
+
+The *"okay" after a question* fix held: the turn was not said in
+passing, and it did go back to look. Its first answer was one word,
+`Sir.`, which the send-back then discarded.
+
+**Why it answered the instruction.** Every send-back appended only a
+user turn -- the question, then the instruction, with nothing between
+them. The model never saw its own answer, so `lookFirst` arrived as the
+person speaking and it replied to the person. The same gap is why *"say
+it shorter"* produces a fresh answer rather than a shorter one, which is
+the likeliest reason a send-back improves an answer about as often as it
+spoils it: 8 better, 5 worse, 12 the same, over the 25 cases that carry
+their draft.
+
+`asAnswer` now puts the answer into the history before the instruction,
+at all five send-backs.
+
+**It cannot reach the one that caused this.** `lookFirst` is begun
+speculatively, while the first answer is still being written -- which is
+the only reason a needless send-back costs 0.11s instead of a round. A
+request sent before the answer existed cannot carry it, and the code
+already said so about `alsoShorter`: *"It cannot reach a round that was
+already running when the send-back was decided."* In this log that is
+**109 send-backs of 109**. So the change is live for the other four --
+say it shorter, say it plainly, finish it, the subject is -- which are
+the instructions actually about the text, and dead for look-first.
+
+Closing that needs the speculation given up on look-first: a full round,
+roughly four seconds, on the 17% of turns that send back. Not taken
+here; it is a trade for the owner to make, and `make evals-doubting`
+holds the 179 cases to measure it against.
+
+**Two other faults in the same answer, both still open.** It said
+"tools" twice and `persona.NamesMachinery` did not fire. And
+`type_into_terminal` was among the 41 tools described to it that turn,
+so telling Claude Code to carry on was reachable and it never tried.

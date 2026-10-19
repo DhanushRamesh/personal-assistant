@@ -482,6 +482,7 @@ func (r *Runner) consume(runCtx, ctx context.Context, t *chat.Chat, systemPrompt
 				accepted, stopAccepted, acceptedCall = waiting, stopWaiting, waitingCall
 				waiting, stopWaiting, waitingCall = nil, nil, -1
 				turns = append(turns, asUserTurn(prompt)...)
+				turns = append(turns, asAnswer(final.Text)...)
 				prompt = lookFirst
 				// Carried into this send-back rather than waited
 				// for. The round after it is the one that gets
@@ -533,6 +534,7 @@ func (r *Runner) consume(runCtx, ctx context.Context, t *chat.Chat, systemPrompt
 					askedBack = true
 					t.Drafted(call, final.Text)
 					turns = append(turns, asUserTurn(prompt)...)
+					turns = append(turns, asAnswer(final.Text)...)
 					prompt = subjectIs(said)
 					continue
 				}
@@ -554,6 +556,7 @@ func (r *Runner) consume(runCtx, ctx context.Context, t *chat.Chat, systemPrompt
 					slog.Int("writes_tried", wrote.tried))
 				nudged = true
 				turns = append(turns, asUserTurn(prompt)...)
+				turns = append(turns, asAnswer(final.Text)...)
 				prompt = finishIt
 				continue
 			}
@@ -599,6 +602,7 @@ func (r *Runner) consume(runCtx, ctx context.Context, t *chat.Chat, systemPrompt
 					slog.String("said", first(final.Text, 90)))
 				shortened = true
 				turns = append(turns, asUserTurn(prompt)...)
+				turns = append(turns, asAnswer(final.Text)...)
 				prompt = sayItShorter
 				continue
 			}
@@ -608,6 +612,7 @@ func (r *Runner) consume(runCtx, ctx context.Context, t *chat.Chat, systemPrompt
 					slog.String("said", first(final.Text, 90)))
 				plainly = true
 				turns = append(turns, asUserTurn(prompt)...)
+				turns = append(turns, asAnswer(final.Text)...)
 				prompt = sayItPlainly
 				continue
 			}
@@ -889,6 +894,29 @@ func asUserTurn(prompt string) []environment.Turn {
 		return nil
 	}
 	return []environment.Turn{{Role: environment.RoleUser, Text: prompt}}
+}
+
+// asAnswer : The answer being sent back, as the turn that wrote it.
+//
+// Every send-back instruction is a note about an answer, and until 19
+// October 2026 the answer was not there to note. The history went
+// user, user: the question, then "say it shorter" or "go and look"
+// with nothing between them, so the instruction arrived as the person
+// speaking and the model had nothing to revise.
+//
+// Both halves of that showed. Asked for a shorter answer it wrote a
+// fresh one rather than a shorter one, which is why a send-back
+// improves an answer about as often as it spoils it. And handed
+// lookFirst after saying only "Sir.", it replied "Understood, sir. I
+// will search before claiming that anything has not happened... I will
+// read both lists of tools before saying I cannot do something" -- the
+// instruction read back to him, nearly word for word, as though he had
+// asked for a promise.
+func asAnswer(said string) []environment.Turn {
+	if strings.TrimSpace(said) == "" {
+		return nil
+	}
+	return []environment.Turn{{Role: environment.RoleAssistant, Text: said}}
 }
 
 // drain : Reads a stream to its end, returning its terminal message.

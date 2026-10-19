@@ -1,6 +1,7 @@
 package runner_test
 
 import (
+	"cmp"
 	"context"
 	"strings"
 	"testing"
@@ -172,6 +173,8 @@ type recordingProvider struct {
 	seen       []environment.Turn
 	system     string
 	prompts    []string
+	// answer : What it replies with. Empty answers "an answer".
+	answer string
 }
 
 // systemPrompt : What the assistant was last told about itself.
@@ -196,7 +199,7 @@ func (p *recordingProvider) Run(ctx context.Context, req environment.Request) (<
 	if p.failWith != "" {
 		ch <- environment.Failure(p.failWith, p.failCode, p.failDetail)
 	} else {
-		ch <- environment.Final("an answer")
+		ch <- environment.Final(cmp.Or(p.answer, "an answer"))
 	}
 	close(ch)
 	return ch, nil
@@ -428,5 +431,62 @@ func TestWhatIsSaidInPassingIsNotSentBack(t *testing.T) {
 
 	if len(recorder.prompts) != 1 {
 		t.Errorf("asked %d times, want once: %v", len(recorder.prompts), recorder.prompts)
+	}
+}
+
+// TestASendBackCarriesTheAnswerItIsAbout : A send-back is a note about
+// an answer, so the answer has to be there to note.
+//
+// It was not. The history went user, user -- the question, then "say
+// it shorter" with nothing between them -- so the instruction arrived
+// as the person speaking and there was nothing to revise. On 19
+// October 2026, after answering only "Sir.", the model was handed
+// lookFirst and replied "Understood, sir. I will search before
+// claiming that anything has not happened... I will read both lists of
+// tools before saying I cannot do something": the instruction read
+// back to him, nearly word for word, as though he had asked for a
+// promise.
+//
+// Driven here through the length send-back, with no tools offered so
+// that lookFirst cannot fire. lookFirst is the one send-back this
+// cannot reach: it is always begun speculatively, 109 times of 109 in
+// the log, and a request sent before the answer existed cannot carry
+// it. See TestTheLookFirstRoundCannotCarryTheAnswer.
+func TestASendBackCarriesTheAnswerItIsAbout(t *testing.T) {
+	recorder := &recordingProvider{answer: "One. Two. Three. Four."}
+	h := newHarness(t, recorder, runner.Options{})
+
+	tk := h.submitOn(t, chat.ChannelVoice, "how was the traffic")
+	h.await(t, tk.ID, chat.StatusCompleted, chat.StatusFailed)
+
+	if len(recorder.prompts) < 2 {
+		t.Fatalf("a long spoken answer was not sent back: %v", recorder.prompts)
+	}
+
+	seen := recorder.history()
+	var roles []environment.Role
+	for _, turn := range seen {
+		roles = append(roles, turn.Role)
+	}
+	if len(seen) < 2 {
+		t.Fatalf("the send-back carried %d turns: %v", len(seen), roles)
+	}
+
+	last := seen[len(seen)-1]
+	if last.Role != environment.RoleAssistant || last.Text != recorder.answer {
+		t.Errorf("the send-back's history ends with %s %q, want the answer it is about: %v",
+			last.Role, last.Text, roles)
+	}
+	if seen[len(seen)-2].Role != environment.RoleUser {
+		t.Errorf("the turn before the answer is %s, want the question: %v", seen[len(seen)-2].Role, roles)
+	}
+
+	// And two of the person's turns never sit side by side, which is
+	// what made an instruction read as something he said.
+	for i := 1; i < len(roles); i++ {
+		if roles[i] == environment.RoleUser && roles[i-1] == environment.RoleUser {
+			t.Errorf("two of the person's turns in a row at %d: %v", i, roles)
+			break
+		}
 	}
 }
