@@ -73,14 +73,48 @@ func TestNothingUnderneathIsLeftAlone(t *testing.T) {
 // Thanks, a hold or a hello is said in passing; a command, a question or
 // a yes never is, however short.
 func TestInPassing(t *testing.T) {
+	const after = "It is twenty past four, sir."
 	for _, said := range []string{"Thanks, Nova.", "Okay, Nova.", "Wait.", "Not now, Nova.", "Nova.", "hey Nova good morning", "I was just checking in."} {
-		if !InPassing(said, "Nova") {
+		if !InPassing(said, after, "Nova") {
 			t.Errorf("%q is not taken as said in passing", said)
 		}
 	}
 	for _, said := range []string{"Yes, do it.", "Open Spotify.", "What's the time?", "okay open the terminal", "go to machines", ""} {
-		if InPassing(said, "Nova") {
+		if InPassing(said, after, "Nova") {
 			t.Errorf("%q is taken as said in passing", said)
 		}
+	}
+}
+
+// An offer is answered by doing the thing offered. "Okay" after a
+// question is consent, so it goes back to look at the tools; the same
+// word after a statement is a shrug and does not.
+//
+// The fault: "Claude Code in Server has finished the GLiNER run, sir --
+// shall I ask it to say the numbers?" was answered "Okay." and then
+// "Very well, sir.", with nothing done and type_into_terminal among the
+// tools the laptop had offered.
+func TestAYesToAnOfferIsNotInPassing(t *testing.T) {
+	const offer = "Claude Code in Server has finished the GLiNER run, sir -- shall I ask it to say the numbers?"
+	for _, said := range []string{"Okay.", "okay", "OK", "Alright.", "All right, Nova.", "Fine."} {
+		if InPassing(said, offer, "Nova") {
+			t.Errorf("%q answering an offer is taken as said in passing", said)
+		}
+		if !InPassing(said, "The run has finished, sir.", "Nova") {
+			t.Errorf("%q after a statement is not taken as said in passing", said)
+		}
+	}
+
+	// An acknowledgement is not consent, and neither is a refusal. Sending
+	// those back to look costs a round and changes no answer.
+	for _, said := range []string{"Thanks, Nova.", "Got it.", "Understood.", "No thanks.", "Never mind."} {
+		if !InPassing(said, offer, "Nova") {
+			t.Errorf("%q answering an offer is not taken as said in passing", said)
+		}
+	}
+
+	// With nothing said before it, there is no offer to agree to.
+	if !InPassing("Okay.", "", "Nova") {
+		t.Error("\"Okay.\" with nothing before it is not taken as said in passing")
 	}
 }

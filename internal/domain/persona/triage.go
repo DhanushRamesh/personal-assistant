@@ -111,9 +111,26 @@ func TooLong(answer string, how Reading) bool {
 // it.
 var inPassing = regexp.MustCompile(`^(?:thanks|thank you|thanks a lot|thank you so much|cheers|okay|ok|okay then|alright|all right|got it|understood|cool|great|nice|good|fine|perfect|wait|hold on|one moment|one second|not now|never mind|nevermind|nothing|forget it|leave it|no|no thanks|hello|hi|hey|good morning|good afternoon|good evening|good night|bye|goodbye|see you|i was just checking|just checking|i was just checking in)$`)
 
+// agreeing : The in-passing words that mean yes when they answer a
+// question.
+//
+// "Okay" alone is a shrug; "okay" after "shall I read it out?" is
+// consent, and the word is the same either way. Only the plain yesses
+// belong here: an acknowledgement -- got it, understood, cool -- is not
+// an instruction even after a question.
+var agreeing = regexp.MustCompile(`^(?:okay|ok|okay then|alright|all right|fine)$`)
+
+// asking : Whether the assistant's last words put a question to them.
+var asking = regexp.MustCompile(`\?\s*$`)
+
 // InPassing : Whether what was said is said in passing, with nothing to
 // look up or do, so its answer is not sent back to look at the tools,
 // and no round is run beside it for that.
+//
+// before is the assistant's own last words, whatever kind of message
+// carried them. When those ended in a question, an [agreeing] answer to
+// it is an instruction and not in passing: it was consent to an offer
+// the assistant made, and the thing offered still has to be done.
 //
 // Owner, 17 October 2026, asking for a faster round trip: of two hundred
 // answers sent back to look, the commonest thrown away were "Here, sir."
@@ -123,7 +140,7 @@ var inPassing = regexp.MustCompile(`^(?:thanks|thank you|thanks a lot|thank you 
 // five when it reaches for a tool anyway. A command or a question is not
 // in passing, however short: "open Spotify" was answered "I cannot" until
 // it was sent back, which is what the send-back is for.
-func InPassing(said, name string) bool {
+func InPassing(said, before, name string) bool {
 	s := strings.ToLower(said)
 	s = regexp.MustCompile(`[^a-z' ]+`).ReplaceAllString(s, " ")
 	s = strings.Join(strings.Fields(s), " ")
@@ -134,5 +151,8 @@ func InPassing(said, name string) bool {
 			return true
 		}
 	}
-	return s != "" && inPassing.MatchString(s)
+	if s == "" || !inPassing.MatchString(s) {
+		return false
+	}
+	return !(agreeing.MatchString(s) && asking.MatchString(before))
 }

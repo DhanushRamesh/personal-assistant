@@ -21361,3 +21361,39 @@ The lesson for the picker: switching on a new way of choosing what
 goes out means auditing everything that asks *what went out*. I
 changed the first and not the second, and it was silently wrong from
 that evening until this morning.
+
+**"Okay" to an offer was a shrug** (19 October 2026).
+
+A terminal reaction announced *"Claude Code in Server has finished the
+GLiNER run, sir -- shall I ask it to say the numbers?"*. He answered
+*"Okay."* and got *"Very well, sir."* -- eight tokens, no tool, nothing
+done.
+
+Nothing was missing. His laptop had offered twenty-eight tools,
+`type_into_terminal` among them; ninety-four were reachable and twelve
+were described. The turn simply never went back to look:
+
+    execute.go  "said in passing: not sent back to look"
+
+`okay` and `ok` are on the in-passing list, whose own comment reads
+*"Never a yes: a yes to something offered is answered by doing it."*
+The principle was written down and then contradicted two lines later,
+because "okay" alone really is a shrug. What tells the two apart is not
+the word but what came before it.
+
+`InPassing` now takes the assistant's own last words. When those ended
+in a question, `okay`, `ok`, `okay then`, `alright`, `all right` and
+`fine` are an instruction and go back to look. Only those: an
+acknowledgement -- got it, understood, cool -- is not consent even
+after a question, and a refusal is not either.
+
+The question is found by `lastAloud`, which is wider than `lastSaid`.
+An offer can come from an announcement as easily as from a reply --
+this one was `conversation.Immediate` -- so it was never in the reply
+history at all. `Renaming` is skipped there for the reason `lastSaid`
+skips it: it counts as an announcement, never ends in a question, and
+would hide the question before it.
+
+The lesson: a guard that reads one turn in isolation cannot tell a
+shrug from a yes. The ambiguity is between turns, so the guard has to
+see the turn before.

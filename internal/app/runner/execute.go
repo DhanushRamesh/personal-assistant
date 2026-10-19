@@ -191,7 +191,7 @@ func (r *Runner) consume(runCtx, ctx context.Context, t *chat.Chat, systemPrompt
 	var askedBack bool
 	// Said in passing -- thanks, a hold, a hello -- is not sent back to
 	// look, nor run a round beside it for that: see persona.InPassing.
-	if persona.InPassing(t.Prompt, r.assistantName) {
+	if persona.InPassing(t.Prompt, lastAloud(window.Messages), r.assistantName) {
 		pressed = true
 		r.logger.InfoContext(ctx, "said in passing: not sent back to look")
 	}
@@ -1504,6 +1504,32 @@ func lastSaid(messages []conversation.Message) string {
 		// anything they said next.
 		if m.Role == conversation.Assistant && m.Kind == conversation.Chat &&
 			strings.TrimSpace(m.Content) != "" {
+			return m.Content
+		}
+	}
+	return ""
+}
+
+// lastAloud : The assistant's own last words to them in this window, or
+// empty.
+//
+// Wider than [lastSaid], which is a reply and nothing else. An offer can
+// come from an announcement as easily as from a reply -- a terminal
+// asking for the owner is published as conversation.Immediate -- and the
+// yes that answers it has to find the question whichever carried it.
+func lastAloud(messages []conversation.Message) string {
+	for i := len(messages) - 1; i >= 0; i-- {
+		m := messages[i]
+		if m.Role != conversation.Assistant || strings.TrimSpace(m.Content) == "" {
+			continue
+		}
+		// Renaming counts as an announcement and is housekeeping, as
+		// in lastSaid. It never ends in a question, so leaving it in
+		// would hide the question before it rather than answer one.
+		if m.Kind == conversation.Renaming {
+			continue
+		}
+		if m.Kind == conversation.Chat || m.Kind.Announcement() {
 			return m.Content
 		}
 	}

@@ -387,6 +387,36 @@ func TestNothingIsSentBackWhenThereAreNoTools(t *testing.T) {
 	}
 }
 
+// TestAYesToAnOfferIsSentBack : An offer the assistant made itself is
+// answered by doing the thing offered, so "okay" to it goes back to look
+// at the tools.
+//
+// The offer arrives as conversation.Immediate, which is how a terminal
+// asking for the owner is published, so the question is not in the reply
+// history at all.
+func TestAYesToAnOfferIsSentBack(t *testing.T) {
+	recorder := &recordingProvider{}
+	h := newHarness(t, recorder, runner.Options{Tools: offering()})
+
+	if _, err := h.repo.Append(context.Background(), conversation.Message{
+		ID:             conversation.NewMessageID(),
+		ConversationID: h.conversation(t),
+		Kind:           conversation.Immediate,
+		Role:           conversation.Assistant,
+		Content:        "The run has finished, sir -- shall I read the numbers out?",
+		At:             time.Now().UTC(),
+	}); err != nil {
+		t.Fatalf("Append: %v", err)
+	}
+
+	tk := h.submit(t, "okay")
+	h.await(t, tk.ID, chat.StatusCompleted, chat.StatusFailed)
+
+	if len(recorder.prompts) != 2 {
+		t.Errorf("asked %d times, want twice: %v", len(recorder.prompts), recorder.prompts)
+	}
+}
+
 // TestWhatIsSaidInPassingIsNotSentBack : Thanks or a hello has nothing to
 // look up, so its answer goes out as it is, in one round.
 func TestWhatIsSaidInPassingIsNotSentBack(t *testing.T) {
