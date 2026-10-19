@@ -21542,3 +21542,42 @@ running binary when it happened. A rule the model has to weigh loses,
 again. So `memory.precedence` now names the conversation as the first
 rung, which is correct and is not what is relied on: the count and the
 floor are.
+
+**Four hours against a true fifty minutes** (19 October 2026).
+
+Asked *"my phone is in charging how long it will take to charge full"*,
+it answered *"it charged from nine percent to fourteen percent at
+fourteen forty-five... At that rate it will take roughly four hours."*
+The phone had been plugged in **23 seconds earlier** and was climbing at
+35 seconds a percent -- 13% at 16:43:46, 17% at 16:46:07 -- so the
+answer was about fifty minutes.
+
+The rate was never handed to it. The model called:
+
+    event_recent {"kind": "power.charging", "limit": 1}
+
+which is a fair way to ask, and `asksBattery` matched only
+`battery.level`, `battery` and `battery.`. So `Moving` never ran. The
+one event that came back has the value `unknown`, because the phone
+cannot report charging state at all -- see
+[[charging-state-comes-from-home-assistant]] -- and with no rate in
+front of it the model did the arithmetic itself, across an unplug an
+hour earlier, mixing two charging sessions.
+
+That is word for word what `Moving`'s own comment says will happen:
+*handed two figures and a subtraction, a model does the subtraction in
+its head and gets it wrong.* The guard was right and was never reached.
+
+`asksBattery` now matches both families, `battery.` and `power.`, with
+or without the dot.
+
+**The half that matters is the empty answer.** The rate was computed
+only after the early return for a window that held nothing, and
+`power.charging` is exactly the kind that finds nothing -- it is stale,
+and its value never varies. So the case that caused this was the one
+case the rate could not reach. It is now attached to `Nothing` as well
+as to `describe`.
+
+The lesson, and it is the second time today: when a guard exists and the
+fault happens anyway, check whether the guard ran before changing what
+it says. Both faults today were a correct guard that nothing reached.

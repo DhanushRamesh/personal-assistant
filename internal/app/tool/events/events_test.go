@@ -683,3 +683,39 @@ func TestTheLedgerSaysWhatIsWrongWithTheBooks(t *testing.T) {
 		}
 	}
 }
+
+// TestAskingAboutThePlugCarriesTheRate : "How long until it is full"
+// is as naturally asked of the plug as of the level, and the rate has
+// to come back either way.
+//
+// The fault, 19 October 2026: asked exactly that, the model called
+// event_recent for power.charging. Only battery.level carried a rate,
+// so none was attached, and the one event it got back has the value
+// "unknown" -- the phone cannot report charging state. It worked the
+// answer out itself across an unplug an hour earlier, mixed two
+// charging sessions, and said four hours against a true fifty minutes.
+func TestAskingAboutThePlugCarriesTheRate(t *testing.T) {
+	s := store(t,
+		at(t, 11, 40, "power.plugged", "unknown"),
+		at(t, 11, 42, "battery.level", "12"),
+		at(t, 11, 48, "battery.level", "15"),
+		at(t, 11, 54, "battery.level", "18"),
+	)
+
+	for _, kind := range []string{"power.charging", "power.plugged", "power.", "battery.level", "battery."} {
+		got := ask(t, s, `{"kind":"`+kind+`","limit":1}`)
+		if got.Outcome == conversation.OutcomeFailed {
+			t.Fatalf("%s failed: %s", kind, got.Content)
+		}
+		if !strings.Contains(got.Content, "charging at about") {
+			t.Errorf("asking for %q came back with no rate:\n%s", kind, got.Content)
+		}
+	}
+
+	// A question about something else does not carry one. The rate is
+	// an answer to "how long", not a thing to say at every opportunity.
+	got := ask(t, s, `{"kind":"screen.unlocked","limit":1}`)
+	if strings.Contains(got.Content, "charging at about") {
+		t.Errorf("a question about the screen carried a charging rate:\n%s", got.Content)
+	}
+}

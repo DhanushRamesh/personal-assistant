@@ -440,16 +440,23 @@ func recent(reader Reader, clock Clock) tool.Tool {
 				return tool.Broke("What their devices reported could not be read.", err)
 			}
 
-			if len(found) == 0 {
-				return tool.OK(Nothing(ctx, reader, in.Caller.UserID, q, over) +
-					Besides(ctx, reader, in.Caller.UserID, q, over))
-			}
-			// And, where the battery was asked about, how it is
-			// moving -- worked out here rather than left to be
+			// Where the battery or the plug was asked about, how it
+			// is moving -- worked out here rather than left to be
 			// divided in somebody's head. See Moving.
 			rate := ""
 			if asksBattery(kind) {
 				rate = Moving(ctx, reader, in.Caller.UserID, clock.now())
+			}
+
+			// Attached to an empty answer as well, and that is the
+			// half that matters. "How long until it is full" asked
+			// of power.charging finds nothing -- the phone cannot
+			// report charging state, so that kind is stale and its
+			// value is always "unknown" -- and an empty answer with
+			// no rate is what left the model to work it out itself.
+			if len(found) == 0 {
+				return tool.OK(Nothing(ctx, reader, in.Caller.UserID, q, over) + rate +
+					Besides(ctx, reader, in.Caller.UserID, q, over))
 			}
 			return tool.OK(describe(found, q, over, where) + rate +
 				Besides(ctx, reader, in.Caller.UserID, q, over))
@@ -781,12 +788,24 @@ func sameDay(a, b time.Time) bool {
 	return ay == by && am == bm && ad == bd
 }
 
-// asksBattery : Whether this question was about the battery level.
+// asksBattery : Whether this question was one a charging rate answers.
 //
-// The family as well as the kind, since "battery" and "battery." both
-// reach it, and a question about the level is the only one where a
-// rate is the answer.
+// Both families, because "how long until it is full" is as naturally
+// asked of the plug as of the level. Asked that on 19 October 2026 the
+// model called event_recent for power.charging, which this did not
+// match, so no rate was attached. It got back one event whose value is
+// "unknown" -- that field has never carried anything else, since the
+// phone cannot report charging state -- and worked the answer out
+// itself across an unplug an hour earlier, mixing two charging
+// sessions: four hours, against a true fifty minutes.
+//
+// Which is exactly what the comment above [Moving] says happens to a
+// model handed two figures and a subtraction. The guard was right and
+// was never reached.
 func asksBattery(kind string) bool {
 	kind = strings.TrimSpace(kind)
-	return kind == Battery || kind == "battery" || kind == "battery."
+	if kind == "battery" || kind == "battery." || kind == "power" || kind == "power." {
+		return true
+	}
+	return strings.HasPrefix(kind, "battery.") || strings.HasPrefix(kind, "power.")
 }
