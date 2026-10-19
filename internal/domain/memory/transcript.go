@@ -11,7 +11,34 @@ import (
 //
 // Fewer than the curated memories. The transcript is larger and looser, so
 // its near misses are nearer and more numerous.
-const MaxQuoted = 3
+//
+// One, from 19 October 2026. Owner: *"the first priority is the current
+// conversation!!"* and *"the bge retrieval of past conversation should
+// have last preference"*. Last preference is not a sentence that can be
+// written into a prompt and relied on -- the block already carries one --
+// so it is spent here, on how many get in at all.
+//
+// It was three, and the third did the damage. Asked "Why did you say
+// that?" of the sentence directly above it, the model was handed three
+// exchanges scoring 0.818, 0.713 and 0.712. The first two were harmless,
+// both of them it saying it could not tell what "that" meant. The third
+// was a note about sleeping after 2 AM, four days old, and the answer
+// was copied from it almost word for word. At one, it never arrives.
+const MaxQuoted = 1
+
+// Least : How alike a past exchange must be before it is offered at all.
+//
+// A search always returns its nearest, however far away that is: over
+// 1146 turns the best match scored 0.655 on average and as little as
+// 0.378, and every one of them went into the prompt. What comes back
+// below this is not evidence, it is the nearest thing in a pile --
+// "Yes, do it." matched "yes" at 0.603, and "You can use step search"
+// matched a year-old "I have no tool for that" at 0.600.
+//
+// Deliberately low. The noise reaches 0.70 and no line separates it
+// cleanly, so this cuts only what is indefensible and MaxQuoted does
+// the rest. Raising it is a measurement, not an argument.
+const Least = 0.55
 
 // IndexBatch : How many exchanges are embedded in one call.
 const IndexBatch = 32
@@ -155,7 +182,21 @@ func (r *Recall) Said(ctx context.Context, userID, question, skipConversation st
 	if limit <= 0 {
 		limit = MaxQuoted
 	}
-	return r.Transcript.NearestTo(ctx, userID, q, r.Embedder.Model(), skipConversation, limit)
+	heard, err := r.Transcript.NearestTo(ctx, userID, q, r.Embedder.Model(), skipConversation, limit)
+	if err != nil {
+		return nil, err
+	}
+
+	// Nearest is not the same as near. Dropped here rather than left to
+	// the model, which is told in the block itself that ignoring all of
+	// them is often right and does not.
+	kept := heard[:0]
+	for _, h := range heard {
+		if h.Score >= Least {
+			kept = append(kept, h)
+		}
+	}
+	return kept, nil
 }
 
 // IndexTranscript : Gives a vector to exchanges that have none.

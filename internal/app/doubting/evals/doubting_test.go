@@ -145,3 +145,68 @@ func TestWhatTheNeedlessOnesLookLike(t *testing.T) {
 	show("the look was owed", true, 25)
 	fmt.Println()
 }
+
+// TestWhatKeepingTheFirstAnswerWouldChange : The 154 send-backs where
+// the second look called no tool, and what each one gave up.
+//
+// The rule being measured is "if the send-back called no tool, keep the
+// first answer". The send-back exists to make it look; where it looked
+// and found nothing to call, the second answer is the same model
+// answering the same question again, with an instruction pushing it to
+// go and look. That push is what produced "I said that because you have
+// a note asking me to advise you to sleep" in place of the true answer
+// it had already written, "You asked what O Yen Yen X was, sir, and I
+// looked it up."
+//
+// Only the cases that carry the draft can say whether the first answer
+// was better. Drafts have been kept since 18 October 2026.
+func TestWhatKeepingTheFirstAnswerWouldChange(t *testing.T) {
+	cases := read(t)
+
+	cfg, err := config.Load("../../../../config.ini", os.LookupEnv)
+	if err != nil {
+		t.Fatalf("config: %v", err)
+	}
+	db, err := storage.Open(context.Background(), cfg.Database,
+		slog.New(slog.NewTextHandler(io.Discard, nil)), storage.Options{})
+	if err != nil {
+		t.Skipf("no database to read: %v", err)
+	}
+	t.Cleanup(func() { _ = db.Close() })
+
+	var idle, idleWithDraft, owed int
+	for _, c := range cases {
+		if c.Looked {
+			owed++
+			continue
+		}
+		idle++
+		if c.Draft == "" {
+			continue
+		}
+		idleWithDraft++
+
+		var final string
+		if err := db.WithContext(context.Background()).Raw(
+			`SELECT COALESCE(response, "") FROM chats WHERE id = ?`, c.ChatID).Scan(&final).Error; err != nil {
+			t.Fatalf("reading the answer: %v", err)
+		}
+
+		t.Logf("\n  asked   %s\n  first   %s\n  sent    %s",
+			short(c.Prompt), short(c.Draft), short(strings.TrimSpace(final)))
+	}
+
+	t.Logf("\n%d send-backs: %d were owed a look, %d were not", len(cases), owed, idle)
+	t.Logf("%d of the %d carry the answer that was thrown away", idleWithDraft, idle)
+	t.Logf("so the rule would have kept the first answer in %d of %d turns (%d%%)",
+		idle, len(cases), 100*idle/len(cases))
+}
+
+// short : One line of a thing said, for reading a table.
+func short(s string) string {
+	s = strings.Join(strings.Fields(s), " ")
+	if len(s) > 150 {
+		return s[:149] + "…"
+	}
+	return s
+}

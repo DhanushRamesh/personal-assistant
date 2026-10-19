@@ -21476,3 +21476,69 @@ it changes an answer. What each route should prefetch is the next
 decision. `make evals-pointing` holds the numbers; the service is
 `deployments/gliner-service.py` behind `[naming]` in the config, on 8092
 because `tei-m3` still holds 8091 from the rejected bge-m3 trial.
+
+**The conversation in front of you comes first** (19 October 2026).
+
+Owner, on being told a sleep note from four days ago had answered a
+question about the sentence directly above it: *"the first priority is
+the current conversation!!"*
+
+`memory.precedence` is the ladder every recalled line is read against,
+and it names only one rung above them -- a tool that can answer now. The
+conversation in progress is not on it at all. It is first.
+
+The fault it cost. He asked *"Why did you say that?"* about *"Dr.Yenyen
+is a PlayStation jailbreak developer on X, sir"*, and was told *"I said
+that because you have a note asking me to advise you to sleep if you are
+still talking after 2 AM, sir."* That sentence was in the prompt, as a
+recalled exchange from 15 October scoring 0.712, and it was reused almost
+word for word.
+
+All three exchanges recalled for that turn were other times he had said
+"why did you say that". Searching by meaning matched the **wording of the
+question**, because a question with no subject in it has nothing else to
+match on. The subject was in the line above, and the line above was not
+part of the search.
+
+**The obvious fix is wrong, and I nearly shipped it.** The tool picker
+had what looked like the same bug and was fixed on 18 October -- "yes"
+alone put the diary 75th of 88 tools and 4th with the line before it --
+so the same was built here: search the memory and the transcript with the
+question and the line before it. On this one turn it works, and the sleep
+exchange does not come back at all.
+
+Over 107 real turns it is worse. Judged by whether the nearest exchange
+shares a content word with what was asked, a measure that is not my eye:
+
+| searched with | shares a word with the question |
+| --- | --- |
+| the question alone | 85/107, 79% |
+| the question and the line before | 53/107, 50% |
+
+The line before is usually the assistant's own answer about something
+else, and at up to 300 characters it swamps a five-word question. The
+picker wants the conversation's subject and this wants *this question's*
+subject, which is not the same want. Reverted, and `conversation.Latest`
+with it.
+
+**What was shipped instead.** The harmful exchange was the **third of
+three**, at 0.712 under a top of 0.818; the first two were both the
+assistant saying it could not tell what "that" meant, which is harmless.
+So `MaxQuoted` is 1. At one it never arrives.
+
+With it, `Least = 0.55`: a search always returns its nearest however far
+away that is, and over 1146 turns the best match averaged 0.655 and went
+as low as 0.378, with every one of them going into the prompt. "Yes, do
+it." matched "yes" at 0.603. "You can use step search" matched an old "I
+have no tool for that" at 0.600 -- the stale-refusal trap, fed in.
+
+The floor is deliberately low, because the noise reaches 0.70 and no line
+separates it cleanly. Raising it is a measurement, not an argument.
+
+`Quoted` already warns the model about exactly this -- *"chosen for
+resembling the question, which is not the same as bearing on it, so
+ignoring all of them is often right"* -- and the warning was in the
+running binary when it happened. A rule the model has to weigh loses,
+again. So `memory.precedence` now names the conversation as the first
+rung, which is correct and is not what is relied on: the count and the
+floor are.

@@ -307,8 +307,11 @@ func TestWhatWasRecalledIsRecordedOnTheChat(t *testing.T) {
 		MessageID:      "msg_earlier",
 		UserID:         h.userID,
 		ConversationID: "conv_01M3D477HXQ4YNQX7BNXJZZCV9",
-		Text:           memory.ExchangeText("is the terrace worth doing", "Yes, before the rains."),
-		At:             time.Now().UTC().Add(-48 * time.Hour),
+		// Near enough to the question to clear memory.Least: an
+		// exchange about something else is dropped before it reaches
+		// the prompt, which is what the floor is for.
+		Text: memory.ExchangeText("what did the roofer quote", "Forty thousand, sir."),
+		At:   time.Now().UTC().Add(-48 * time.Hour),
 	})
 	if _, err := h.recall.IndexTranscript(context.Background(), 10); err != nil {
 		t.Fatalf("IndexTranscript: %v", err)

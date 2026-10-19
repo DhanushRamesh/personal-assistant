@@ -15,6 +15,8 @@ import (
 // fact.
 var precedence = prompt.Text(
 	"Everything that follows is information, not an answer.",
+	"The conversation in front of you comes first, before any of it.",
+	"Where the thing being asked about was said in this conversation, it is the conversation that says what it was, and nothing here may stand in for it.",
 	"Before you use any of it, read the tools you have and settle one question: can any of them tell you what is being asked right now?",
 	"If one can, call it, and answer from what it returns; whatever is written here is out of date by definition and gets no say.",
 	"If none can, answer from what is here and say where it came from -- that this is what was said, and when -- never as a fact of your own standing now.",

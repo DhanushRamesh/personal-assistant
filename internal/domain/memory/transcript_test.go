@@ -240,3 +240,87 @@ func TestItIsToldItMaySayWhen(t *testing.T) {
 		t.Errorf("nothing says the time may be used:\n%s", got)
 	}
 }
+
+// scoring : A transcript that hands back exactly the scores a test names,
+// so what the floor does can be read without an embedder in the way.
+type scoring []memory.Heard
+
+func (s scoring) Unindexed(context.Context, string, int) ([]memory.Exchange, error) { return nil, nil }
+func (s scoring) Index(context.Context, memory.Exchange, string, []float32) error   { return nil }
+func (s scoring) NearestTo(_ context.Context, _ string, _ []float32, _ string,
+	_ string, limit int) ([]memory.Heard, error) {
+	if limit < len(s) {
+		return s[:limit], nil
+	}
+	return s, nil
+}
+
+// A search always returns its nearest, however far away that is. What
+// comes back below the floor is the nearest thing in a pile rather than
+// anything bearing on the question, so it is dropped here rather than
+// left to the model to ignore.
+func TestWhatIsNotNearIsNotOffered(t *testing.T) {
+	held := scoring{
+		{Exchange: memory.Exchange{MessageID: "m1", Text: "They said: the roof quote"}, Score: 0.81},
+		{Exchange: memory.Exchange{MessageID: "m2", Text: "They said: yes"}, Score: memory.Least - 0.01},
+		{Exchange: memory.Exchange{MessageID: "m3", Text: "They said: what is it?"}, Score: 0.2},
+	}
+
+	r := &memory.Recall{Transcript: held, Embedder: embed.Fake{}, Quoted: 10}
+	got, err := r.Said(context.Background(), "usr_1", "what did the roofer quote", "")
+	if err != nil {
+		t.Fatalf("Said: %v", err)
+	}
+	if len(got) != 1 || got[0].Exchange.MessageID != "m1" {
+		t.Errorf("offered %d exchanges, want only the one above the floor: %+v", len(got), got)
+	}
+}
+
+// Nothing near enough is nothing offered, rather than the least bad of
+// what there was.
+func TestNothingNearEnoughIsNothingOffered(t *testing.T) {
+	held := scoring{
+		{Exchange: memory.Exchange{MessageID: "m1", Text: "They said: yes"}, Score: 0.41},
+	}
+	r := &memory.Recall{Transcript: held, Embedder: embed.Fake{}}
+	if got, err := r.Said(context.Background(), "usr_1", "anything", ""); err != nil || len(got) != 0 {
+		t.Errorf("Said = %v, %v, want nothing", got, err)
+	}
+}
+
+// One exchange, not three. The third is what did the damage: asked why
+// it had said something, the model was handed its own two harmless
+// refusals and, third, a note about sleeping after 2 AM that it copied
+// into an answer about something else entirely.
+func TestOnlyTheNearestExchangeIsOffered(t *testing.T) {
+	if memory.MaxQuoted != 1 {
+		t.Errorf("MaxQuoted is %d; past exchanges rank last, which is spent on how many get in",
+			memory.MaxQuoted)
+	}
+
+	held := scoring{
+		{Exchange: memory.Exchange{MessageID: "m1", Text: "They said: why did you say that"}, Score: 0.818},
+		{Exchange: memory.Exchange{MessageID: "m2", Text: "They said: why do you say so"}, Score: 0.713},
+		{Exchange: memory.Exchange{MessageID: "m3", Text: "They said: that's what I'm saying"}, Score: 0.712},
+	}
+	r := &memory.Recall{Transcript: held, Embedder: embed.Fake{}}
+	got, err := r.Said(context.Background(), "usr_1", "why did you say that", "")
+	if err != nil {
+		t.Fatalf("Said: %v", err)
+	}
+	if len(got) != 1 {
+		t.Errorf("offered %d exchanges, want one: %+v", len(got), got)
+	}
+}
+
+// The conversation in front of the model outranks anything recalled, and
+// the block that carries recalled lines says so.
+func TestTheConversationComesFirst(t *testing.T) {
+	block := memory.Quoted([]memory.Heard{
+		{Exchange: memory.Exchange{Text: "They said: the roof quote", At: time.Now()}},
+	}, time.UTC)
+
+	if !strings.Contains(block, "conversation in front of you comes first") {
+		t.Error("the recalled block does not say the conversation comes first")
+	}
+}
