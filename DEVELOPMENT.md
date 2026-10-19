@@ -22095,3 +22095,56 @@ of the price, and only the question and the history would be fresh.
 
 Until then the honest position is that caching is blocked on the
 gateway, not on us, and the evidence for the request is in this table.
+
+## What a call cost, kept and shown
+
+The usage dashboard said *"Tokens only: the server keeps no prices."*
+It was true and it need not have been: the gateway returns
+`zoho_total_credits` and `zoho_available_credits` beside `ai_stats` on
+every call, streamed and not, and the client parsed three fields of
+`ai_stats` and dropped the rest.
+
+Owner, 20 October 2026, shown that a turn is 65,755 tokens in: *"in the
+client it shows the token usage per call, I think we can update
+there"*. Of two ways -- work the cost out here from measured rates, or
+keep what the gateway already says -- the second, because it survives
+the breakpoint being fixed and it carries the balance, which is the
+figure that matters this week.
+
+### What is kept
+
+`model_calls` gains four columns: `cache_read_tokens`,
+`cache_write_tokens`, `credits`, `credits_left`.
+
+Credits and not money. The gateway prices a call in its own unit, the
+rate differs by model and by whether a token was served from the cache,
+and nothing here knows what a credit is worth. Taken as given rather
+than worked out.
+
+`credits_left` is the balance *after* that call, so the newest row is
+what is left. `Totals.Left` reads it rather than summing it, and reads
+it across every call rather than the window, since a quiet window still
+has a balance.
+
+The cache counts are kept although caching is off and both are zero.
+They cannot be worked out from `input_tokens`: a read is a tenth of the
+price and a write is twice, so a bill read from input alone would be
+wrong the day it is turned on.
+
+### What is shown
+
+Two tiles beside the six -- **Spent**, with the window before it and
+what a call costs, and **Left**, with how long that lasts at the rate
+it is going. The tiles went from six across to four, so eight sit as
+two rows of four rather than six and a stranded pair.
+
+Every call and every turn now carries what it cost, and a call served
+from the cache says how much of it was.
+
+### What is not proved yet
+
+No model call has run since the server restarted, so no row has a real
+credit figure in it. The parse is pinned against a real streamed final
+chunk from the gateway, and the round trip through MySQL is pinned in
+the shared store suite, balance included. The first background pass
+will show it for real.

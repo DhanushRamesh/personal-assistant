@@ -111,6 +111,16 @@ type Totals struct {
 	Calls  int
 	Input  int
 	Output int
+	// CacheRead, CacheWrite : Tokens served from the prompt cache and
+	// written into it. Both zero while caching is off.
+	CacheRead  int
+	CacheWrite int
+	// Credits : What the gateway charged for these calls, in its own
+	// unit. Nothing here knows what a credit is worth.
+	Credits float64
+	// Left : The balance after the newest call, which is a reading
+	// rather than a sum and is not confined to this window.
+	Left float64
 	// Chat, Background : How many of Calls were each.
 	Chat       int
 	Background int
@@ -123,6 +133,12 @@ func (t *Totals) Add(c Call) {
 	t.Calls++
 	t.Input += c.Input
 	t.Output += c.Output
+	t.CacheRead += c.CacheRead
+	t.CacheWrite += c.CacheWrite
+	t.Credits += c.Spent
+	if c.Available > 0 {
+		t.Left = c.Available
+	}
 	if IsChat(c.Feature) {
 		t.Chat++
 	} else {

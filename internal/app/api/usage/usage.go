@@ -102,12 +102,21 @@ func Label(f environment.Feature) string {
 }
 
 // Totals : One window's figures.
+//
+// Credits is what the gateway charged, in its own unit, and Left is the
+// balance after the newest call. Both are the gateway's own numbers: no
+// price is worked out here, because the rate differs by model and by
+// whether a token was served from the cache.
 type Totals struct {
-	Calls           int `json:"calls"`
-	Input           int `json:"input"`
-	Output          int `json:"output"`
-	ChatCalls       int `json:"chat_calls"`
-	BackgroundCalls int `json:"background_calls"`
+	Calls           int     `json:"calls"`
+	Input           int     `json:"input"`
+	Output          int     `json:"output"`
+	CacheRead       int     `json:"cache_read"`
+	CacheWrite      int     `json:"cache_write"`
+	Credits         float64 `json:"credits"`
+	Left            float64 `json:"credits_left"`
+	ChatCalls       int     `json:"chat_calls"`
+	BackgroundCalls int     `json:"background_calls"`
 }
 
 // Windows : The three windows a page shows side by side.
@@ -146,6 +155,9 @@ type Call struct {
 	Model      string    `json:"model"`
 	Input      int       `json:"input"`
 	Output     int       `json:"output"`
+	CacheRead  int       `json:"cache_read"`
+	CacheWrite int       `json:"cache_write"`
+	Credits    float64   `json:"credits"`
 	DurationMS int64     `json:"duration_ms"`
 	Ended      string    `json:"ended"`
 	ChatID     string    `json:"chat_id,omitempty"`
@@ -241,6 +253,8 @@ func (h *Handler) Usage(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 		*win.into = Totals{Calls: t.Calls, Input: t.Input, Output: t.Output,
+			CacheRead: t.CacheRead, CacheWrite: t.CacheWrite,
+			Credits: t.Credits, Left: t.Left,
 			ChatCalls: t.Chat, BackgroundCalls: t.Background}
 		if win.days == days {
 			window = t
@@ -262,6 +276,8 @@ func (h *Handler) Usage(w http.ResponseWriter, r *http.Request) {
 	}
 	if t, err := h.o.Store.Totals(ctx, userID, before); err == nil {
 		out.Insights.Before = Totals{Calls: t.Calls - window.Calls, Input: t.Input - window.Input, Output: t.Output - window.Output,
+			CacheRead: t.CacheRead - window.CacheRead, CacheWrite: t.CacheWrite - window.CacheWrite,
+			Credits:   t.Credits - window.Credits,
 			ChatCalls: t.Chat - window.Chat, BackgroundCalls: t.Background - window.Background}
 	}
 
@@ -296,8 +312,10 @@ func (h *Handler) Usage(w http.ResponseWriter, r *http.Request) {
 		out.Calls = append(out.Calls, Call{
 			ID: c.ID, At: c.At, Feature: string(c.Feature), Label: Label(c.Feature),
 			Detail: c.Detail, Vendor: c.Vendor, Model: c.Model,
-			Input: c.Input, Output: c.Output, DurationMS: c.Took.Milliseconds(),
-			Ended: string(c.Ended), ChatID: c.ChatID, Prompt: prompts[c.ChatID], ConversationID: c.ConversationID,
+			Input: c.Input, Output: c.Output,
+			CacheRead: c.CacheRead, CacheWrite: c.CacheWrite, Credits: c.Spent,
+			DurationMS: c.Took.Milliseconds(),
+			Ended:      string(c.Ended), ChatID: c.ChatID, Prompt: prompts[c.ChatID], ConversationID: c.ConversationID,
 			ConversationTitle: titles[c.ConversationID],
 		})
 	}

@@ -8,6 +8,7 @@ package storetest
 
 import (
 	"context"
+	"math"
 	"testing"
 	"time"
 
@@ -34,6 +35,7 @@ func Run(t *testing.T, open New) {
 		{"a listing is limited", listingIsLimited},
 		{"every call is read, oldest first, past any limit", everyCallIsRead},
 		{"old calls are forgotten and newer ones kept", oldOnesAreForgotten},
+		{"what a call cost is kept and added up", creditsAreKept},
 	} {
 		t.Run(c.name, func(t *testing.T) { c.run(t, open) })
 	}
@@ -271,3 +273,62 @@ func everyCallIsRead(t *testing.T, open New) {
 		t.Errorf("read %d calls, from %v; want %d, oldest first from a minute in", len(got), got[0].At, n-1)
 	}
 }
+
+// creditsAreKept : The gateway's own figures survive the round trip and
+// add up, and the balance is the newest reading rather than a sum.
+//
+// Added 20 October 2026, when the usage dashboard stopped saying
+// "tokens only: the server keeps no prices". The gateway had been
+// sending zoho_total_credits and zoho_available_credits all along and
+// the client dropped them, so nothing had ever stored one.
+func creditsAreKept(t *testing.T, open New) {
+	s, user, _ := open(t)
+
+	first := call(user, environment.FeatureChat, 1, 4523, 5, environment.EndedAnswered)
+	first.Spent, first.Available = 13.644, 152916.55
+
+	// A cached call: almost nothing read, almost everything served from
+	// the cache, and a tenth of the price.
+	second := call(user, environment.FeatureChat, 2, 3, 5, environment.EndedAnswered)
+	second.Input, second.CacheRead = 3, 4520
+	second.Spent, second.Available = 1.44, 152915.11
+
+	// A write, which costs twice and is counted apart from a read.
+	third := call(user, environment.FeatureChat, 3, 3, 5, environment.EndedAnswered)
+	third.CacheWrite = 4520
+	third.Spent, third.Available = 27.204, 152887.9
+
+	add(t, s, first, second, third)
+
+	got, err := s.Totals(context.Background(), user, at)
+	if err != nil {
+		t.Fatalf("Totals: %v", err)
+	}
+	if round(got.Credits) != round(13.644+1.44+27.204) {
+		t.Errorf("credits = %v, want them added up", got.Credits)
+	}
+	if got.CacheRead != 4520 || got.CacheWrite != 4520 {
+		t.Errorf("cache = %d read, %d written, want 4520 of each", got.CacheRead, got.CacheWrite)
+	}
+	// The newest call's balance, not the three of them added together.
+	if round(got.Left) != round(152887.9) {
+		t.Errorf("left = %v, want the balance after the newest call", got.Left)
+	}
+
+	listed, err := s.List(context.Background(), usage.Query{UserID: user, Since: at, Kind: usage.KindAll, Limit: 10})
+	if err != nil {
+		t.Fatalf("List: %v", err)
+	}
+	if len(listed) == 0 {
+		t.Fatal("nothing was listed")
+	}
+	// Newest first, which is the write.
+	if round(listed[0].Spent) != round(27.204) || listed[0].CacheWrite != 4520 {
+		t.Errorf("the newest call came back as %v credits, %d written",
+			listed[0].Spent, listed[0].CacheWrite)
+	}
+}
+
+// round : To the hundredth, since a credit is stored to four places and
+// a float compared exactly is a test that fails on arithmetic.
+func round(f float64) float64 { return math.Round(f*100) / 100 }

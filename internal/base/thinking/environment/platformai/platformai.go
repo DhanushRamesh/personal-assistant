@@ -415,14 +415,18 @@ func (p *Environment) keep(ctx context.Context, why environment.Purpose, got rep
 	// worth its row, and the context that stopped it would refuse to
 	// write one.
 	p.cfg.Recorder.Record(context.WithoutCancel(ctx), environment.Call{
-		Label:  label,
-		Vendor: got.Vendor,
-		Model:  got.Model,
-		Input:  got.Usage.Input,
-		Output: got.Usage.Output,
-		At:     got.At,
-		Took:   got.Took,
-		Ended:  ended,
+		Label:      label,
+		Vendor:     got.Vendor,
+		Model:      got.Model,
+		Input:      got.Usage.Input,
+		Output:     got.Usage.Output,
+		CacheRead:  got.Usage.CacheRead,
+		CacheWrite: got.Usage.CacheWrite(),
+		Spent:      got.Spent,
+		Available:  got.Available,
+		At:         got.At,
+		Took:       got.Took,
+		Ended:      ended,
 	})
 }
 

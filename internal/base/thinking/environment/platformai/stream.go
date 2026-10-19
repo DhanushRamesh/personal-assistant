@@ -50,10 +50,8 @@ type chunk struct {
 		FinishReason string          `json:"finish_reason"`
 	} `json:"messages"`
 	Data *struct {
-		Final bool `json:"is_final_chunk"`
-		Usage struct {
-			Stats wireUsage `json:"ai_stats"`
-		} `json:"usage"`
+		Final bool     `json:"is_final_chunk"`
+		Usage wireCost `json:"usage"`
 	} `json:"data"`
 }
 
@@ -62,6 +60,10 @@ type gathered struct {
 	text  strings.Builder
 	calls []environment.ToolCall
 	usage wireUsage
+	// spent, available : The gateway's own credit figures for this
+	// call and the balance after it.
+	spent     float64
+	available float64
 	// seen : Whether anything at all arrived, so an empty stream is
 	// told apart from a stream of empty text.
 	seen bool
@@ -115,6 +117,7 @@ func readStream(body io.Reader, onText func(string)) (gathered, error) {
 
 		if c.Data != nil {
 			out.usage = c.Data.Usage.Stats
+			out.spent, out.available = c.Data.Usage.Spent, c.Data.Usage.Available
 			if c.Data.Final {
 				break
 			}
@@ -186,7 +189,7 @@ func (p *Environment) fromStream(_ context.Context, body io.Reader, status int,
 	if err != nil {
 		// What it had said the call cost by then, if anything: a
 		// stream cut off near its end has usually been charged.
-		return reply{Usage: got.usage}, status, err
+		return reply{Usage: got.usage, Spent: got.spent, Available: got.available}, status, err
 	}
 	if !got.seen {
 		return reply{}, status, fmt.Errorf("platformai: the streamed reply was empty")
@@ -205,23 +208,23 @@ func (p *Environment) fromStream(_ context.Context, body io.Reader, status int,
 	// as a call that was never made.
 	text := strings.TrimSpace(got.text.String())
 	if Cut(got.finish) {
-		return reply{Text: text, ToolCalls: got.calls, Usage: got.usage}, status, fmt.Errorf(
+		return reply{Text: text, ToolCalls: got.calls, Usage: got.usage, Spent: got.spent, Available: got.available}, status, fmt.Errorf(
 			"%w (%d events, %d words written)", ErrCut, got.events, got.usage.Output)
 	}
 
 	if len(got.calls) > 0 {
-		return reply{Text: text, ToolCalls: got.calls, Usage: got.usage}, status, nil
+		return reply{Text: text, ToolCalls: got.calls, Usage: got.usage, Spent: got.spent, Available: got.available}, status, nil
 	}
 	if text == "" {
 		// What the stream did carry, because the failure is
 		// otherwise unexplainable: sixty seconds of events that
 		// add up to no answer look exactly like one second of
 		// them.
-		return reply{Usage: got.usage}, status, fmt.Errorf(
+		return reply{Usage: got.usage, Spent: got.spent, Available: got.available}, status, fmt.Errorf(
 			"platformai: the reply was empty (%d events, finished %q, %d words written)",
 			got.events, got.finish, got.usage.Output)
 	}
-	return reply{Text: text, Usage: got.usage}, status, nil
+	return reply{Text: text, Usage: got.usage, Spent: got.spent, Available: got.available}, status, nil
 }
 
 // ErrCut : The reply stopped at the budget rather than at its end.

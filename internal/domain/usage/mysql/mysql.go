@@ -23,6 +23,10 @@ type row struct {
 	Model          string    `gorm:"column:model"`
 	InputTokens    int       `gorm:"column:input_tokens"`
 	OutputTokens   int       `gorm:"column:output_tokens"`
+	CacheRead      int       `gorm:"column:cache_read_tokens"`
+	CacheWrite     int       `gorm:"column:cache_write_tokens"`
+	Credits        float64   `gorm:"column:credits"`
+	CreditsLeft    float64   `gorm:"column:credits_left"`
 	DurationMS     int       `gorm:"column:duration_ms"`
 	Ended          string    `gorm:"column:ended"`
 	ChatID         *string   `gorm:"column:chat_id"`
@@ -70,6 +74,10 @@ func (s *Store) Add(ctx context.Context, c usage.Call) error {
 		Model:          cut(c.Model, modelWidth),
 		InputTokens:    c.Input,
 		OutputTokens:   c.Output,
+		CacheRead:      c.CacheRead,
+		CacheWrite:     c.CacheWrite,
+		Credits:        c.Spent,
+		CreditsLeft:    c.Available,
 		DurationMS:     int(c.Took.Milliseconds()),
 		Ended:          string(c.Ended),
 		ChatID:         nullable(c.ChatID, 0),
@@ -95,11 +103,16 @@ func (s *Store) theirs(ctx context.Context, userID string, since time.Time) *gor
 func (s *Store) Totals(ctx context.Context, userID string, since time.Time) (usage.Totals, error) {
 	var got struct {
 		Calls, Input, Output, Chat, Failed int
+		CacheRead, CacheWrite              int
+		Credits                            float64
 	}
 	err := s.theirs(ctx, userID, since).Select(
 		"COUNT(*) AS calls, "+
 			"COALESCE(SUM(input_tokens), 0) AS input, "+
 			"COALESCE(SUM(output_tokens), 0) AS output, "+
+			"COALESCE(SUM(cache_read_tokens), 0) AS cache_read, "+
+			"COALESCE(SUM(cache_write_tokens), 0) AS cache_write, "+
+			"COALESCE(SUM(credits), 0) AS credits, "+
 			"COALESCE(SUM(feature IN ?), 0) AS chat, "+
 			"COALESCE(SUM(ended = ?), 0) AS failed",
 		usage.ChatFeatures(), string(environment.EndedFailed)).
@@ -107,8 +120,22 @@ func (s *Store) Totals(ctx context.Context, userID string, since time.Time) (usa
 	if err != nil {
 		return usage.Totals{}, fmt.Errorf("adding up model calls: %w", err)
 	}
+
+	// The balance is the newest one seen, not a sum: every row carries
+	// what was left after it, so the latest row is what is left now.
+	// Read across every call, not just this window, since a window
+	// with nothing in it still has a balance.
+	var left float64
+	if err := s.db.WithContext(ctx).Model(&row{}).
+		Where("user_id = ? AND credits_left > 0", userID).
+		Order("at DESC").Limit(1).Pluck("credits_left", &left).Error; err != nil {
+		return usage.Totals{}, fmt.Errorf("reading what is left: %w", err)
+	}
+
 	return usage.Totals{
 		Calls: got.Calls, Input: got.Input, Output: got.Output,
+		CacheRead: got.CacheRead, CacheWrite: got.CacheWrite,
+		Credits: got.Credits, Left: left,
 		Chat: got.Chat, Background: got.Calls - got.Chat, Failed: got.Failed,
 	}, nil
 }
@@ -208,13 +235,17 @@ func (r row) toCall() usage.Call {
 			ChatID:         value(r.ChatID),
 			ConversationID: value(r.ConversationID),
 		},
-		Vendor: r.Vendor,
-		Model:  r.Model,
-		Input:  r.InputTokens,
-		Output: r.OutputTokens,
-		At:     r.At.UTC(),
-		Took:   time.Duration(r.DurationMS) * time.Millisecond,
-		Ended:  environment.Ended(r.Ended),
+		Vendor:     r.Vendor,
+		Model:      r.Model,
+		Input:      r.InputTokens,
+		Output:     r.OutputTokens,
+		CacheRead:  r.CacheRead,
+		CacheWrite: r.CacheWrite,
+		Spent:      r.Credits,
+		Available:  r.CreditsLeft,
+		At:         r.At.UTC(),
+		Took:       time.Duration(r.DurationMS) * time.Millisecond,
+		Ended:      environment.Ended(r.Ended),
 	}}
 }
 

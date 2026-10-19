@@ -123,25 +123,50 @@ type chatResponse struct {
 			Content   json.RawMessage `json:"content"`
 			ToolCalls []wireToolCall  `json:"tool_calls"`
 		} `json:"messages"`
-		Usage struct {
-			Stats wireUsage `json:"ai_stats"`
-		} `json:"usage"`
+		Usage wireCost `json:"usage"`
 	} `json:"data"`
 }
 
-// wireUsage : What the endpoint says the call cost.
+// wireCost : What the endpoint says the call cost, in tokens and in
+// the gateway's own credits.
+//
+// The credits sit beside ai_stats rather than inside it. They are the
+// only priced figure anywhere in this system -- nothing here knows
+// what a token is worth -- so they are taken as given rather than
+// worked out, and Available is the balance after this call.
+type wireCost struct {
+	Spent     float64   `json:"zoho_total_credits"`
+	Available float64   `json:"zoho_available_credits"`
+	Stats     wireUsage `json:"ai_stats"`
+}
+
+// wireUsage : What the endpoint says the call cost in tokens.
 //
 // Read because the size of a request is otherwise a guess. The fixed
 // part of every request -- the manner, and the description of every
-// tool -- is sent again on each call and cannot be cached, so it is
-// the thing to watch when latency moves. Estimating it from the
-// source put it near fifteen thousand tokens; this says what it
-// actually was.
+// tool -- is sent again on each call, so it is the thing to watch when
+// latency moves. Estimating it from the source put it near fifteen
+// thousand tokens; this says what it actually was.
+//
+// Cached and CacheRead are reported whether or not caching was asked
+// for, and were zero on every call until 20 October 2026, when the
+// gateway was found to take prompt_caching. Kept because a cache read
+// is a tenth of the price of an input token and a write is twice, so a
+// bill cannot be read from Input alone.
 type wireUsage struct {
 	Input  int `json:"input_tokens"`
 	Output int `json:"output_tokens"`
 	Total  int `json:"total_tokens"`
+	// CacheRead : Tokens served from the cache instead of being read.
+	CacheRead int `json:"cache_read_tokens"`
+	// CachedShort, CachedLong : Tokens written into the cache, by the
+	// life they were written for. The gateway takes only those two.
+	CachedShort int `json:"cached_5min_input_tokens"`
+	CachedLong  int `json:"cached_1hour_input_tokens"`
 }
+
+// CacheWrite : Tokens written into the cache, whichever life they have.
+func (u wireUsage) CacheWrite() int { return u.CachedShort + u.CachedLong }
 
 // toolBytes : How much of a request the tool list takes up.
 //
@@ -169,6 +194,11 @@ type reply struct {
 	// Kept on a failure too, where the endpoint said: a reply that
 	// streamed for a minute and came to nothing was still charged for.
 	Usage wireUsage
+	// Spent, Available : The gateway's own credits for this call, and
+	// the balance left after it. The only priced numbers in this
+	// server; nothing here knows what a token is worth.
+	Spent     float64
+	Available float64
 
 	// Vendor, Model : What this attempt was sent to, after defaults.
 	Vendor string
@@ -550,7 +580,7 @@ func (p *Environment) attemptOnce(ctx context.Context, ask environment.Request, 
 	var parsed chatResponse
 	if err := json.Unmarshal(raw, &parsed); err != nil || len(parsed.Data.Messages) == 0 {
 		// Whatever it said the call cost, which a failure may still carry.
-		spent := reply{Usage: parsed.Data.Usage.Stats}
+		spent := reply{Usage: parsed.Data.Usage.Stats, Spent: parsed.Data.Usage.Spent, Available: parsed.Data.Usage.Available}
 		if msg := errorMessage(raw); msg != "" {
 			return spent, resp.StatusCode, &APIError{Message: msg, Status: resp.StatusCode}
 		}
@@ -589,14 +619,14 @@ func (p *Environment) attemptOnce(ctx context.Context, ask environment.Request, 
 	// carried back with the calls as progress, never as the answer: on its
 	// own it would tell the person about work that has not run yet.
 	if len(calls) > 0 {
-		return reply{Text: text, ToolCalls: calls, Usage: parsed.Data.Usage.Stats},
+		return reply{Text: text, ToolCalls: calls, Usage: parsed.Data.Usage.Stats, Spent: parsed.Data.Usage.Spent, Available: parsed.Data.Usage.Available},
 			resp.StatusCode, nil
 	}
 
 	if text == "" {
-		return reply{Usage: parsed.Data.Usage.Stats}, resp.StatusCode, fmt.Errorf("platformai: the reply was empty")
+		return reply{Usage: parsed.Data.Usage.Stats, Spent: parsed.Data.Usage.Spent, Available: parsed.Data.Usage.Available}, resp.StatusCode, fmt.Errorf("platformai: the reply was empty")
 	}
-	return reply{Text: text, Usage: parsed.Data.Usage.Stats}, resp.StatusCode, nil
+	return reply{Text: text, Usage: parsed.Data.Usage.Stats, Spent: parsed.Data.Usage.Spent, Available: parsed.Data.Usage.Available}, resp.StatusCode, nil
 }
 
 // statusOf : The HTTP status a failure carries, or zero if it carries

@@ -166,6 +166,25 @@ type Call struct {
 	// it said nothing.
 	Input  int
 	Output int
+	// CacheRead, CacheWrite : Tokens served from the prompt cache, and
+	// tokens written into it.
+	//
+	// Both zero while caching is off, which it is: the gateway takes
+	// prompt_caching but puts its breakpoint after the question, so
+	// every turn would write and none would read. Kept because they
+	// cannot be worked out from Input -- a read is a tenth of the
+	// price of an input token and a write is twice -- so a bill read
+	// from Input alone would be wrong the day it is turned on.
+	CacheRead  int
+	CacheWrite int
+	// Spent, Available : What the gateway charged for this call in its
+	// own credits, and the balance after it.
+	//
+	// Taken as given rather than worked out. Nothing in this server
+	// knows what a token is worth, and the rates differ by model, by
+	// vendor and by whether a token was cached.
+	Spent     float64
+	Available float64
 	// At : When it was sent.
 	At time.Time
 	// Took : From sending to the end of the reply.
