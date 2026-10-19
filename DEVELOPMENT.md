@@ -22259,3 +22259,63 @@ is answering, whichever kind of message carried it.
 
 A conversation's naming is a turn of its own now, which is the one
 visible change to the window and is what the test counts.
+
+## Asking what tools exist is not looking anything up
+
+He asked how long a call had lasted and was told:
+
+> Your devices do not record call duration, sir. They record that the
+> call was made at 11:09 pm yesterday, but not how long it lasted.
+
+Untrue. The event is in the database:
+
+    call.made  {"via":"meet","value":"Alekhya Chintada","seconds":465}
+
+Four hundred and sixty-five seconds, which `span` renders as **8
+minutes**. And it had read those same events twice already, in the two
+turns immediately before, answering when the call was and who it was
+to.
+
+### What it did instead
+
+```
+01:20:25  event_recent   "checking your last outgoing call, sir"
+01:20:42  event_recent   "checking who you called last, sir"
+01:21:04  tool_describe  "checking available tools, sir"
+```
+
+On the third turn it asked what tools exist, found nothing named for
+durations, and answered from that. An absence asserted out of not
+having found a tool -- and nothing proves an absence.
+
+The guard for this is `lookFirst`, which sends an answer back when no
+tool was used. It did not fire, because a tool was used.
+`tool_describe` is a tool.
+
+### The hole, which is the one from earlier tonight
+
+`reached` was set by any tool call at all. But `tool_describe` reads
+the toolbox; every other tool reads the world or his life. Asking what
+exists is not evidence about anything except what exists.
+
+So `reached` is now set only by a call to something that is not
+`tool_describe`. A turn that only asked what tools there are is a turn
+that looked at nothing, and is sent back to look.
+
+**This is the third guard tonight keyed on a proxy.** `Writes` stood in
+for "takes an identifier". "A tool ran" stood in for "it did the thing"
+when a yes was answered by reading. And here "a tool ran" stands in for
+"it looked something up". Each was written correctly and each asked a
+question one step away from the thing it was protecting.
+
+### What is not fixed
+
+The results of those two `event_recent` calls were gone by the third
+turn: `conversation.withdrawn` takes the contents of an earlier turn's
+tool results out of the window, deliberately, because a result is true
+when it runs and not afterwards. The placeholder says to call it again
+if the answer is needed. It did not; it asked what tools existed
+instead.
+
+Sending it back makes it look. Why it reached for the toolbox rather
+than the tool it had just used twice is not answered here.

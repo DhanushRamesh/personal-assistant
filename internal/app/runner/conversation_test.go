@@ -875,3 +875,35 @@ func TestTheSubjectIsWhateverItSaidLast(t *testing.T) {
 		t.Errorf("the subject was a reply he had stopped talking about: %q", sent)
 	}
 }
+
+// TestAskingWhatToolsExistIsNotLookingAnythingUp : The call duration
+// turn.
+//
+// He asked how long a call had lasted and was told "your devices do
+// not record call duration, sir". They do: the event carried
+// seconds 465, and the two turns before it had read those same events.
+//
+// What happened in between is that the model called tool_describe,
+// found nothing named for durations, and answered from that. Asking
+// what tools exist counted as having looked, so the guard that insists
+// on looking had nothing to say.
+func TestAskingWhatToolsExistIsNotLookingAnythingUp(t *testing.T) {
+	recorder := &recordingProvider{
+		calls:  []string{tool.DescribeName},
+		answer: "Your devices do not record call duration, sir.",
+	}
+	h := newHarness(t, recorder, runner.Options{Tools: offering()})
+
+	tk := h.submit(t, "how long did I talk to her")
+	h.await(t, tk.ID, chat.StatusCompleted, chat.StatusFailed)
+
+	var sent bool
+	for _, p := range recorder.prompts {
+		if strings.Contains(p, "you did not use any tool this turn") {
+			sent = true
+		}
+	}
+	if !sent {
+		t.Errorf("a turn that only asked what tools exist counted as having looked: %v", recorder.prompts)
+	}
+}

@@ -839,7 +839,25 @@ func (r *Runner) consume(runCtx, ctx context.Context, t *chat.Chat, systemPrompt
 			r.complete(ctx, t, aloud, answer)
 			return
 		}
-		reached = true
+		// Asking what tools exist is not looking anything up.
+		//
+		// tool_describe reads the toolbox; every other tool reads the
+		// world or his life. Counting it as a look disarmed the guard
+		// that insists on one: on 20 October 2026 he asked how long a
+		// call had lasted, the model called tool_describe, found
+		// nothing named for durations, and told him "your devices do
+		// not record call duration". The call was in the events with
+		// seconds 465, and it had read those same events twice in the
+		// two turns before.
+		//
+		// Which is an absence asserted from not having found a tool,
+		// and nothing proves an absence.
+		for _, c := range final.ToolCalls {
+			if c.Name != tool.DescribeName {
+				reached = true
+				break
+			}
+		}
 
 		// Tools were asked for. Run them, remember both halves, and go round
 		// again with what they returned. The question is not repeated: it is
