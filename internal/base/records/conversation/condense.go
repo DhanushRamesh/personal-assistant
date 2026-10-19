@@ -17,11 +17,29 @@ const CondenseWords = 300
 // It is written to be read by the model that also answers as the assistant,
 // which will otherwise reply in character, so it says plainly that the result
 // is notes and not an answer.
+//
+// A forecast is not kept, from 19 October 2026. That afternoon the assistant
+// said his phone would take "roughly four hours to full charge" when it was
+// about fifty minutes, and the fault was fixed the same day -- but the
+// conversation's notes still read "At that rate will take roughly four hours
+// to full charge", and notes go into every later prompt for that
+// conversation. A wrong answer corrected in the tool is not corrected in the
+// summary, because he corrected the server and not the assistant.
+//
+// Measured over the summaries as they stood: 3 of 16 carried a worked-out
+// number. The reading it was worked out from -- 9% at 14:45, 14% by 16:07 --
+// is worth keeping and is still there.
 const condenseInstruction = `Update the running notes for a conversation you are keeping memory for.
 
 Fold the new exchange into the existing notes and return the combined notes.
 Keep every decision, fact, name, number, preference and open question that a
 later turn would need. Drop pleasantries and anything already superseded.
+
+Keep what was said and what was looked up. Drop what was worked out from it:
+a rate, a projection, how long something will take, when something will be
+ready, what something will come to. Those were true for a minute and these
+notes are read for weeks, and a number worked out once reads afterwards as
+something that was measured. The reading keeps; the forecast does not.
 
 Write plain statements in the third person, under %d words. Do not answer
 anything, do not greet, do not explain what you are doing, and do not mention

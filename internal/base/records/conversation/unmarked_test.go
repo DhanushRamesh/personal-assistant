@@ -1,6 +1,9 @@
 package conversation
 
-import "testing"
+import (
+	"strings"
+	"testing"
+)
 
 // TestTheServersOwnNotesAreTakenOut : They are written for the model
 // to read in the history and never to be said.
@@ -47,5 +50,33 @@ func TestTheServersOwnNotesAreTakenOut(t *testing.T) {
 		if got := Unmarked(one); got != one {
 			t.Errorf("a bracket that was not ours was taken out: %q became %q", one, got)
 		}
+	}
+}
+
+// TestNotesKeepTheReadingAndNotTheForecast : A projection is true for a
+// minute and the notes are read for weeks.
+//
+// On 19 October 2026 the assistant said his phone would take "roughly
+// four hours to full charge" when it was about fifty minutes. The tool
+// was fixed the same day; the conversation's notes still said four
+// hours, and notes go into every later prompt for that conversation.
+func TestNotesKeepTheReadingAndNotTheForecast(t *testing.T) {
+	got := CondensePrompt("", []Message{
+		{Role: User, Kind: Chat, Content: "how long to full charge"},
+		{Role: Assistant, Kind: Chat, Content: "Nine percent at 2:45, fourteen by 4:07 -- about four hours, sir."},
+	})
+
+	for _, must := range []string{
+		"Keep what was said and what was looked up",
+		"Drop what was worked out from it",
+		"The reading keeps; the forecast does not",
+	} {
+		if !strings.Contains(got, must) {
+			t.Errorf("the notes contract lost %q", must)
+		}
+	}
+	// And it still asks for what it always did.
+	if !strings.Contains(got, "name, number, preference and open question") {
+		t.Error("the contract lost what it keeps")
 	}
 }
