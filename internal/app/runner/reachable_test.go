@@ -2,6 +2,7 @@ package runner_test
 
 import (
 	"context"
+	"errors"
 	"strings"
 	"testing"
 	"time"
@@ -46,6 +47,15 @@ func guarding() *tool.Registry {
 			Params:   tool.Schema{Properties: map[string]tool.Property{}},
 			Run: func(context.Context, tool.Invocation) tool.Result {
 				return tool.OK("Milk, bread.")
+			},
+		},
+		tool.Tool{
+			Name: "task_lists", Domain: "task", Lists: true,
+			Purpose: "The lists there are.", UseWhen: "They ask which lists exist.",
+			Channels: []chat.Channel{chat.ChannelVoice, chat.ChannelDirect},
+			Params:   tool.Schema{Properties: map[string]tool.Property{}},
+			Run: func(context.Context, tool.Invocation) tool.Result {
+				return tool.OK("Shopping, Jarvis Improvements.")
 			},
 		},
 		tool.Tool{
@@ -319,5 +329,102 @@ func TestAPrefetchThatFailedIsNotARead(t *testing.T) {
 		if strings.Contains(got, "Removed it.") {
 			t.Errorf("the write went through on a prefetch that failed: %q", got)
 		}
+	}
+}
+
+// counting : A registry whose tools count their own calls, so a retry
+// can be seen.
+type ranTimes struct {
+	reads, writes, refusals int
+}
+
+func (c *ranTimes) registry(t *testing.T) *tool.Registry {
+	t.Helper()
+	r, err := tool.NewRegistry(
+		tool.Tool{
+			Name: "task_list", Domain: "task", Lists: true,
+			Purpose: "What is on a list.", UseWhen: "They ask what is on it.",
+			Channels: []chat.Channel{chat.ChannelVoice, chat.ChannelDirect},
+			Params:   tool.Schema{Properties: map[string]tool.Property{}},
+			Run: func(context.Context, tool.Invocation) tool.Result {
+				c.reads++
+				return tool.Broke("I could not read your lists, sir.", errors.New("dial tcp: i/o timeout"))
+			},
+		},
+		tool.Tool{
+			Name: "task_find", Domain: "task", Lists: true,
+			Purpose: "Find a task.", UseWhen: "They name one.",
+			Channels: []chat.Channel{chat.ChannelVoice, chat.ChannelDirect},
+			Params:   tool.Schema{Properties: map[string]tool.Property{}},
+			Run: func(context.Context, tool.Invocation) tool.Result {
+				c.refusals++
+				return tool.Failed("There is no task called that, sir.")
+			},
+		},
+		tool.Tool{
+			Name: "task_add", Domain: "task", Writes: true,
+			Purpose: "Add to a list.", UseWhen: "They ask for something added.",
+			Channels: []chat.Channel{chat.ChannelVoice, chat.ChannelDirect},
+			Params:   tool.Schema{Properties: map[string]tool.Property{}},
+			Run: func(context.Context, tool.Invocation) tool.Result {
+				c.writes++
+				return tool.Broke("I could not add that, sir.", errors.New("dial tcp: i/o timeout"))
+			},
+		},
+	)
+	if err != nil {
+		t.Fatalf("registry: %v", err)
+	}
+	return r
+}
+
+// TestWhatBrokeIsRunOnceMore : A read that broke underneath did not
+// happen, so running it again is not running it twice.
+//
+// Three rules, and each is the reason for the next. Only a failure
+// with a fault behind it: a tool saying no on purpose says the same no
+// the second time and costs a second call. Only a read: a write that
+// failed halfway may have applied half of itself. And once only, or a
+// service that is down is asked twice for every tool in every round.
+func TestWhatBrokeIsRunOnceMore(t *testing.T) {
+	// A write is held by retryable itself rather than through a turn:
+	// reaching one takes a read of its domain first, which is a
+	// different guard, and a test that trips that one proves nothing
+	// about this one.
+	broke := tool.Broke("I could not add that, sir.", errors.New("dial tcp: i/o timeout"))
+	if runner.Retryable(broke, tool.Tool{Name: "task_add", Writes: true}, true) {
+		t.Error("a write that broke would be run again; half of it may already have applied")
+	}
+	if !runner.Retryable(broke, tool.Tool{Name: "task_list"}, true) {
+		t.Error("a read that broke would not be run again")
+	}
+	if runner.Retryable(tool.Failed("There is no task called that, sir."), tool.Tool{Name: "task_find"}, true) {
+		t.Error("a tool saying no on purpose would be asked again for the same no")
+	}
+
+	for _, c := range []struct {
+		what string
+		// call : What the model asks for, in order. A write needs a
+		// read of its own domain first or it is refused before it
+		// runs at all, which is a different guard and not this one.
+		call  []string
+		count func(*ranTimes) int
+		want  int
+	}{
+		{"a read that broke", []string{"task_list"}, func(c *ranTimes) int { return c.reads }, 2},
+		{"a read that said no", []string{"task_find"}, func(c *ranTimes) int { return c.refusals }, 1},
+	} {
+		t.Run(c.what, func(t *testing.T) {
+			ran := &ranTimes{}
+			recorder := &recordingProvider{calls: c.call}
+			h := newHarness(t, recorder, runner.Options{Tools: ran.registry(t)})
+
+			tk := h.submit(t, "what is on the shopping list")
+			h.await(t, tk.ID, chat.StatusCompleted, chat.StatusFailed)
+
+			if got := c.count(ran); got != c.want {
+				t.Errorf("%s ran %d times, want %d", c.what, got, c.want)
+			}
+		})
 	}
 }

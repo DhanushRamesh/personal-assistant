@@ -212,6 +212,17 @@ type writing struct {
 // claimable : Whether the answer may report that something changed.
 func (w writing) claimable() bool { return w.tried == 0 || w.took > 0 }
 
+// Retryable : Whether a tool that failed is worth running once more.
+//
+// Broke and not Failed, and a read and not a write. See where it is
+// called for why each of those matters.
+func Retryable(result tool.Result, x tool.Tool, known bool) bool {
+	if result.Outcome != conversation.OutcomeFailed || result.Detail == "" {
+		return false
+	}
+	return known && !x.Writes
+}
+
 // runTools : Runs what the model asked for and records both halves.
 //
 // The call and the answer are both written to the conversation before the
@@ -282,11 +293,35 @@ func (r *Runner) runTools(
 			continue
 		}
 
-		result := tools.Call(running, c.Name, tool.Invocation{
+		invocation := tool.Invocation{
 			Caller: caller,
 			Args:   []byte(c.Arguments),
 			Ran:    *seen,
-		})
+		}
+		result := tools.Call(running, c.Name, invocation)
+
+		// Broke once, so once more.
+		//
+		// A read that failed because something underneath it went
+		// wrong -- a query that timed out, a service that was
+		// briefly away -- did not happen, so doing it is not doing
+		// it twice. The same reasoning that makes a dropped
+		// connection safe to ask again, one level up.
+		//
+		// Only Broke, never Failed. Failed is the tool saying no on
+		// purpose -- "there is no list called that" -- and asking a
+		// second time gets the same no and costs a second call.
+		// Only a read: a write that failed halfway may have applied
+		// half of itself, and running it again is the one way to do
+		// a thing twice.
+		//
+		// Once. A service that is down would otherwise be asked
+		// twice for every tool in every round.
+		if Retryable(result, x, known) && running.Err() == nil {
+			r.logger.WarnContext(ctx, "a tool broke, running it once more",
+				slog.String("tool", c.Name), slog.String("detail", result.Detail))
+			result = tools.Call(running, c.Name, invocation)
+		}
 
 		// Recorded whatever it returned. A listing that failed did not
 		// show the model anything, but one that ran did, and a write may
