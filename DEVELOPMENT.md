@@ -22435,3 +22435,67 @@ What stands: the system prompt holds still, and every job with a
 prompt that repeats now reads its cache -- `rule_remark` at 5.547
 credits uncached, 11.01 to write once, and 0.630 a call after that.
 Chat still pays full price.
+
+## Gemini answers better and sometimes does not answer at all
+
+Owner, 20 October 2026, shown that the search in place fails nothing:
+*"my web search isn't broken but gemini is exceptional results"*. The
+measurements said 32 calls of 32 succeeded, which is a different claim
+from the one he was making: he was judging the answers, and nothing
+here had measured those.
+
+### What it is
+
+Not a search service. Google's grounding answers the question and
+names what it read. `internal/base/thinking/search/gemini` puts the
+answer first as a result with no URL -- nothing should offer the
+model's own sentence as a page to go and read -- and the pages it used
+after it.
+
+It is reached directly. The gateway takes `ai_vendor` anthropic and
+openai and refuses google, so this carries its own key, from
+`~/.config/jarvis/gemini-key` where the Home Assistant token lives,
+and appears in no credit figure the gateway reports.
+
+### What the race says
+
+`make evals-searching`, on the accuracy cases:
+
+| | answered |
+| --- | --- |
+| tinyfish | 6 of 6 |
+| tavily | 6 of 6 |
+| firecrawl | 6 of 6 |
+| gemini | 6 of 6 on content, 5 of 6 counted |
+
+The one it did not answer was a thirty-second timeout, not a wrong
+answer. Where it replies, it replies well:
+
+> *Jailer 2 female lead actress cast* -- "Vidya Balan is the officially
+> announced female lead... she portrays the character Kantha. Ramya
+> Krishnan reprises her role from the first film."
+
+A list of links does not say that.
+
+### The checker was scoring the wrong answer right
+
+Petrol in Chennai was 107.77 that day. The wanted list was 100., 101.,
+102. and 99., so Gemini said the true figure and was marked wrong,
+while the services that matched "100." matched a price from months
+earlier and scored a point for it.
+
+**A checker that names the answer it expects goes stale with the
+answer.** Widened to any plausible rupee figure. This is the second
+time tonight a measurement was wrong before the thing it measured was.
+
+### Where this leaves it
+
+Better answers, worse tail. A turn has thirty seconds in all, and a
+search that can take thirty of them is a turn lost, so it cannot
+simply replace what is there. The shape that fits is the one the
+search package already has: ask Gemini first with a short patience and
+fall back to the pair, which costs nothing when it is quick and loses
+nothing when it is not.
+
+Not built. The patience to set is a measurement nobody has taken: how
+often it runs long, and at what cut the good answers survive.

@@ -187,7 +187,7 @@ evals-mustcall: ## Whether the gateway will let a round be told it must call a t
 		-run TestWhetherTheGatewayCanBeToldToUseATool $(ARGS)
 
 .PHONY: evals-searching
-evals-searching: ## Ask all three searches the same real questions, side by side (costs real searches)
+evals-searching: ## Ask every search the same real questions, side by side, and count who answers (costs real searches)
 	@go test ./internal/base/thinking/search/evals/ -tags evals -count=1 -v -timeout 10m $(ARGS)
 
 .PHONY: evals-toolcost
