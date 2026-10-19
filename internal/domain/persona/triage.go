@@ -186,3 +186,45 @@ func Agrees(said, name string) bool {
 func Asks(said string) bool {
 	return asking.MatchString(strings.TrimRight(said, ` "'”’)]`))
 }
+
+// Wall : How many sentences in a row make a paragraph a wall.
+//
+// The written manner says it already -- *"Never a wall of prose. More
+// than about three sentences in a row is a wall"* -- and on 19 October
+// 2026 it answered him in three paragraphs of five, six and four. He
+// had asked in the desktop app, which is the written form, and said:
+// *"im a person who doesnt like reading long paragraphs, i prefer short
+// pointers and compact ones"*.
+//
+// Four, so the manner's own "about three" is what it counts. A count
+// rather than the sentence, for the reason [Aloud] is a count: the
+// sentence was in the running binary and lost, which makes seven.
+const Wall = 4
+
+// marked : A block that is already a list, a heading, a table, a quote
+// or code, and so is not prose to count.
+var marked = regexp.MustCompile(`(?m)^\s*(?:[-*+]\s|\d+[.)]\s|#{1,6}\s|>\s|\||` + "```" + `)`)
+
+// AWall : Whether a written answer has a paragraph of prose in it that
+// should have been a list.
+//
+// Per paragraph, not over the whole answer: a reply that opens with a
+// list and then runs six sentences together is the thing being
+// stopped, and an answer-wide check would pass it.
+//
+// Spoken answers are not read, they are heard, and [TooLong] is their
+// rule. This never applies to them.
+func AWall(answer string, how Reading) bool {
+	if how != Written {
+		return false
+	}
+	for _, block := range strings.Split(strings.TrimSpace(answer), "\n\n") {
+		if strings.TrimSpace(block) == "" || marked.MatchString(block) {
+			continue
+		}
+		if Sentences(block) >= Wall {
+			return true
+		}
+	}
+	return false
+}

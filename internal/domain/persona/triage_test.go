@@ -140,3 +140,55 @@ func TestAsks(t *testing.T) {
 		t.Error("a statement is taken for a question")
 	}
 }
+
+// TestAWallOfProseIsCaught : He reads on a screen and does not read
+// paragraphs. The manner says so already and lost.
+func TestAWallOfProseIsCaught(t *testing.T) {
+	// What it actually sent him, shortened: three paragraphs, the
+	// first of five sentences.
+	wall := "Claude Code rejected the proposed changes because most of them were rewording only. " +
+		"Moving things from a check to a sentence does not sharpen them. " +
+		"The three pieces it kept are worth lifting. " +
+		"They add something new. " +
+		"The four-way distinction is one of them."
+
+	if !AWall(wall, Written) {
+		t.Error("a paragraph of five sentences was not taken as a wall")
+	}
+	// Heard, not read. The sentence count is its rule instead.
+	if AWall(wall, Spoken) {
+		t.Error("a spoken answer was judged as though it were read")
+	}
+
+	// Shaped is fine, however long.
+	shaped := "**It rejected most of it** — the changes were rewording only.\n\n" +
+		"Three pieces are worth lifting:\n\n" +
+		"- the four-way distinction\n- the recovery rules\n- the section structure\n\n" +
+		"A better-written prompt is still an unmeasured one."
+	if AWall(shaped, Written) {
+		t.Error("a shaped answer was taken as a wall")
+	}
+
+	// A list first and a wall after it is the thing an answer-wide
+	// check would pass.
+	if !AWall(shaped+"\n\n"+wall, Written) {
+		t.Error("a wall after a list went unnoticed")
+	}
+
+	// Three sentences is the manner's own line and is left alone.
+	three := "It rejected most of it. The changes were rewording. Three pieces are worth lifting."
+	if AWall(three, Written) {
+		t.Errorf("three sentences were taken as a wall: %q", three)
+	}
+
+	// A table, a code block and a quote are not prose to count.
+	for _, shape := range []string{
+		"| a | b |\n| --- | --- |\n| 1 | 2 |\n| 3 | 4 |",
+		"```\none. two. three. four. five.\n```",
+		"> one. two. three. four. five.",
+	} {
+		if AWall(shape, Written) {
+			t.Errorf("a marked block was counted as prose: %q", shape)
+		}
+	}
+}

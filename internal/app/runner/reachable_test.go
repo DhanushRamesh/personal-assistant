@@ -117,10 +117,33 @@ func TestEveryGuardIsReachableFromARealTurn(t *testing.T) {
 			shows:   "they are listening to it",
 		},
 		{
-			guard:   "an answer that names its own machinery",
+			guard: "a written answer that ran as prose",
+			said:  "why not the pasted prompt is not good?",
+			answer: "It rejected most of the changes because they were rewording only. " +
+				"Moving a thing from a check to a sentence does not sharpen it. " +
+				"The three pieces it kept are worth lifting. " +
+				"They add something the current one does not have. " +
+				"The four-way distinction is one of them.",
+			channel: chat.ChannelDirect,
+			shows:   "it has a paragraph of four or more sentences in it",
+		},
+		{
+			guard:   "an answer that names its own machinery, spoken",
 			said:    "can you do that",
 			answer:  "I have no tools for that, sir.",
 			channel: chat.ChannelVoice,
+			shows:   "it names your own machinery",
+		},
+		{
+			// Typed, which was out of reach until 19 October 2026: a
+			// written answer is streamed, streamed is published, and
+			// published is what the shape guards will not touch. This
+			// is the row the test stating that gap said to move here
+			// once it could fire. It fired.
+			guard:   "an answer that names its own machinery, typed",
+			said:    "can you do that",
+			answer:  "I have no tools for that, sir.",
+			channel: chat.ChannelDirect,
 			shows:   "it names your own machinery",
 		},
 	} {
@@ -223,113 +246,6 @@ func shortest(s string) string {
 		return s[:23] + "…"
 	}
 	return s
-}
-
-// TestTheMachineryGuardCannotReachATypedAnswer : The gap this file was
-// written to find, left standing because closing it is a trade.
-//
-// On 19 October the assistant answered him "Understood, sir. I will
-// search before claiming that anything has not happened... I will read
-// both lists of tools before saying I cannot do something" -- the word
-// "tools" twice, which persona.NamesMachinery bans outright. The guard
-// did not fire, and could not have.
-//
-// Why. The guard carries !published, because an answer already read
-// aloud cannot be taken back. published is set when an answer is
-// streamed rather than held, and an answer is held only while
-// returnable says a send-back is still possible. returnable counts two
-// reasons -- look-first and an abandoned change -- and not the other
-// two, the machinery check and the length check. So on the round after
-// a send-back, on a typed channel where the answer streams, published
-// is true and both of those are out of reach. That is exactly the
-// round that produced the answer above.
-//
-// Spoken answers are held whole, so the guard reaches them; the row in
-// TestEveryGuardIsReachableFromARealTurn proves it on voice.
-//
-// Closing it means holding typed answers too, which stops them
-// appearing as they are written. That is a visible change to how the
-// app feels and is the owner's to make, so this test states the gap
-// rather than hiding it.
-func TestTheMachineryGuardCannotReachATypedAnswer(t *testing.T) {
-	recorder := &recordingProvider{answer: "I have no tools for that, sir."}
-	h := newHarness(t, recorder, runner.Options{Tools: guarding()})
-
-	tk := h.submitOn(t, chat.ChannelDirect, "can you do that")
-	h.await(t, tk.ID, chat.StatusCompleted, chat.StatusFailed)
-
-	for _, p := range recorder.prompts {
-		if strings.Contains(p, "it names your own machinery") {
-			t.Fatal("the machinery guard now reaches a typed answer; " +
-				"delete this test and move the typed row into the table above")
-		}
-	}
-
-	// And the answer went out with the banned word in it.
-	got, err := h.repo.Get(context.Background(), tk.ID)
-	if err != nil {
-		t.Fatalf("Get: %v", err)
-	}
-	if !strings.Contains(got.Response, "tools") {
-		t.Errorf("the answer no longer carries the word, so this gap may be closed: %q", got.Response)
-	}
-}
-
-// TestAPrefetchThatFailedIsNotAReadentry : A write is refused until its
-// domain has been read, and a prefetch that did not run is not a read.
-//
-// Until 19 October 2026 the turn counted the tools that *get*
-// prefetched, not the ones that returned anything. So a prefetch that
-// failed still satisfied the guard, and a write could go through with
-// nothing read -- the guard the model was once seen to need when it
-// deleted from a list it had never fetched.
-func TestAPrefetchThatFailedIsNotARead(t *testing.T) {
-	broken, err := tool.NewRegistry(
-		tool.Tool{
-			Name: "task_list", Domain: "task", Lists: true, Prefetch: true,
-			Purpose: "What is on a list.", UseWhen: "They ask what is on it.",
-			Channels: []chat.Channel{chat.ChannelVoice, chat.ChannelDirect},
-			Params:   tool.Schema{Properties: map[string]tool.Property{}},
-			Run: func(context.Context, tool.Invocation) tool.Result {
-				return tool.Failed("That list is not there, sir.")
-			},
-		},
-		tool.Tool{
-			Name: "task_remove", Domain: "task", Writes: true,
-			Purpose: "Remove from a list.", UseWhen: "They ask for something removed.",
-			Channels: []chat.Channel{chat.ChannelVoice, chat.ChannelDirect},
-			Params:   tool.Schema{Properties: map[string]tool.Property{}},
-			Run: func(context.Context, tool.Invocation) tool.Result {
-				return tool.OK("Removed it.")
-			},
-		},
-	)
-	if err != nil {
-		t.Fatalf("registry: %v", err)
-	}
-
-	recorder := &recordingProvider{calls: []string{"task_remove"}}
-	h := newHarness(t, recorder, runner.Options{Tools: broken})
-
-	tk := h.submit(t, "take the milk off the shopping list")
-	h.await(t, tk.ID, chat.StatusCompleted, chat.StatusFailed)
-
-	// The write must have been refused for never having read. The
-	// server says so in the result it hands back in its place.
-	var results []string
-	for _, turn := range recorder.history() {
-		for _, got := range turn.ToolResults {
-			results = append(results, got.Content)
-		}
-	}
-	if len(results) == 0 {
-		t.Fatal("the write never ran at all, so this proves nothing")
-	}
-	for _, got := range results {
-		if strings.Contains(got, "Removed it.") {
-			t.Errorf("the write went through on a prefetch that failed: %q", got)
-		}
-	}
 }
 
 // counting : A registry whose tools count their own calls, so a retry

@@ -147,6 +147,9 @@ func (r *Runner) consume(runCtx, ctx context.Context, t *chat.Chat, systemPrompt
 	// Whether the model has already been sent back once for giving up
 	// on a change it was asked to make.
 	var nudged bool
+	// Whether a written answer has already been sent back for running
+	// as paragraphs rather than points. Once a turn.
+	var pointed bool
 	// Whether the answer has already been sent back for naming its
 	// machinery, so it is asked once and not in a circle.
 	var plainly bool
@@ -431,7 +434,7 @@ func (r *Runner) consume(runCtx, ctx context.Context, t *chat.Chat, systemPrompt
 		// Whether any of this turn's answer has already reached
 		// them. A round read aloud cannot be taken back, so nothing
 		// after this point may send it away to be rewritten.
-		if !sendable && !heard {
+		if !sendable && !heard && !shapeable(pointed, plainly, shortened, reading(t)) {
 			published = true
 		}
 		// A recallable round waits for ever; a held spoken one gives
@@ -636,6 +639,28 @@ func (r *Runner) consume(runCtx, ctx context.Context, t *chat.Chat, systemPrompt
 				continue
 			}
 
+			// A written answer that runs as paragraphs of prose.
+			//
+			// The manner says it -- "Never a wall of prose. More than
+			// about three sentences in a row is a wall" -- and on 19
+			// October 2026 it answered him in three paragraphs of
+			// five, six and four, in the desktop app. Owner: *"im a
+			// person who doesnt like reading long paragraphs, i prefer
+			// short pointers and compact ones"*. That makes seven
+			// rules the model has been asked to weigh and has broken.
+			//
+			// Only written. A spoken answer is heard and its rule is
+			// the sentence count above.
+			if !pointed && !published && persona.AWall(final.Text, reading(t)) {
+				r.logger.InfoContext(ctx, "a written answer ran as prose",
+					slog.String("said", first(final.Text, 90)))
+				pointed = true
+				turns = append(turns, asUserTurn(prompt)...)
+				turns = append(turns, asAnswer(final.Text)...)
+				prompt = sayItInPoints
+				continue
+			}
+
 			if !plainly && !published && persona.NamesMachinery(final.Text) && len(tools) > 0 {
 				r.logger.InfoContext(ctx, "the answer named its own machinery",
 					slog.String("said", first(final.Text, 90)))
@@ -830,6 +855,21 @@ func lookFirstFor(request string) string {
 //
 // Not a reminder of the rule. It has the rule and broke it. This
 // says what to write instead, which is the thing it was missing.
+// sayItInPoints : Sent back when a written answer ran as prose.
+//
+// Names the paragraph rather than the principle. "Be more concise"
+// is advice; "this paragraph is five sentences, make it a list" is a
+// thing to do, and the difference is the whole reason this exists in
+// code at all.
+const sayItInPoints = "Before that answer goes out: it is being read on a screen, not heard, " +
+	"and it has a paragraph of four or more sentences in it. " +
+	"That is a wall, and he does not read walls -- he reads points. " +
+	"Say the same thing again with the same facts in it, shaped: " +
+	"a short bolded lead where there is a conclusion, a bulleted or numbered list " +
+	"wherever you are naming more than two things, a table where the same few facts " +
+	"are given about several things, and no paragraph longer than three sentences. " +
+	"Lose nothing. This is the shape changing, not the answer."
+
 const sayItPlainly = "Before that answer goes out: it names your own machinery, which they " +
 	"never hear about. Say it again without that, and change nothing else. " +
 	"Everything you were telling them stays -- every fact, every figure, the whole of the " +
@@ -1461,6 +1501,35 @@ func (r *Runner) save(ctx context.Context, t *chat.Chat) error {
 		return err
 	}
 	return nil
+}
+
+// shapeable : Whether the answer may still be sent back to be shaped.
+//
+// Apart from [returnable], which decides whether to begin the next
+// round early. Two different questions that shared one answer, and the
+// sharing is what made two guards unreachable.
+//
+// A written answer is streamed as it is written, streamed is
+// published, and published is the one thing the shape guards will not
+// touch -- an answer already read aloud cannot be taken back. So on
+// every round after the first a typed answer was past both of them.
+// That is why NamesMachinery never fired on the answer that said
+// "tools" twice, and why the wall guard, written on 19 October 2026 at
+// the owner's asking, did not fire at all on its first test.
+//
+// What it costs: a written answer that might still be shaped is held
+// rather than streamed, so it arrives whole instead of building. Taken
+// on purpose -- he reads on a screen, and an answer that appears
+// already shaped is worth more to him than one that appears sooner as
+// prose.
+//
+// Spoken answers are not held by this. Their rule is the sentence
+// count, which runs before anything is said.
+func shapeable(pointed, plainly, shortened bool, how persona.Reading) bool {
+	if how != persona.Written {
+		return false
+	}
+	return !pointed || !plainly || !shortened
 }
 
 // returnable : Whether an answer given on this round could still be sent
