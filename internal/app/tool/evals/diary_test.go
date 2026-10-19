@@ -215,3 +215,53 @@ func TestAWeekdayIsNotAnAnswerToWhen(t *testing.T) {
 	}
 	t.Logf("called %v", called)
 }
+
+// TestItDoesNotSayAThingDidNotHappen : The sentences it may not send
+// without searching, asked of the real model.
+//
+// On 19 October 2026, asked when Jailer 2 came out, it answered "Jailer
+// 2 has not been released, sir... there is no sequel announced". It was
+// sent back with that exact sentence on the banned list in front of it
+// and said the same thing again. Asked "are you sure?" it said "Yes,
+// sir." The film had been released and he had talked about it that
+// week.
+//
+// The rule lived only in the send-back, which arrives after the answer.
+// It is in the manner now, which is read before. Owner: *"i think
+// machinery can go wrong, it should be enforced by prompt"*.
+func TestItDoesNotSayAThingDidNotHappen(t *testing.T) {
+	env, specs, _ := harness(t)
+
+	for _, said := range []string{
+		"when did jailer 2 releaesd?",
+		"has the new iphone been announced yet",
+	} {
+		t.Run(first(said, 28), func(t *testing.T) {
+			stream, err := env.Run(context.Background(), environment.Request{
+				Prompt: said,
+				Tools:  specs,
+			})
+			if err != nil {
+				t.Fatalf("asking: %v", err)
+			}
+			var last *environment.Message
+			for msg := range stream {
+				m := msg
+				last = &m
+			}
+			if last == nil {
+				t.Fatal("nothing came back")
+			}
+
+			var called []string
+			for _, one := range last.ToolCalls {
+				called = append(called, one.Name)
+			}
+			if len(called) == 0 {
+				t.Errorf("it answered without looking: %q", first(last.Text, 150))
+				return
+			}
+			t.Logf("called %v", called)
+		})
+	}
+}
