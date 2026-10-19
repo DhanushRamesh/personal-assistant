@@ -192,3 +192,50 @@ func TestAWallOfProseIsCaught(t *testing.T) {
 		}
 	}
 }
+
+// TestAnAnswerWithNoShapeIsCaught : He reads on a screen and will not
+// read a paragraph, however short it is.
+//
+// Asked when a film was out, it gave three countries and three dates in
+// one paragraph -- a table written as a sentence. Three sentences, so
+// the wall check passed it. Measured over his typed answers, 127 of 136
+// carried no shape at all.
+func TestAnAnswerWithNoShapeIsCaught(t *testing.T) {
+	// What it actually sent him: 37 words, three sentences, no shape.
+	flat := "Avengers: Doomsday releases December 18, 2026 in the United States — that is nearly " +
+		"two months away. In India it releases December 17, a day earlier, and in the UK " +
+		"December 16. Tickets are on sale now."
+	if !AWall(flat, Written) {
+		t.Error("an answer with three dates and no shape was not caught")
+	}
+	if AWall(flat, Spoken) {
+		t.Error("a spoken answer was judged on how it looks")
+	}
+
+	// One bold phrase clears it. The bar is low on purpose.
+	if AWall("**18 December 2026** in the US, a day later than India and two days after the UK. "+
+		"Tickets are on sale now and it is nearly two months away from today.", Written) {
+		t.Error("a bolded lead did not count as shape")
+	}
+	// So does a table or a list.
+	for _, one := range []string{
+		"| Country | Date |\n| --- | --- |\n| US | 18 Dec |\n| India | 17 Dec |\n| UK | 16 Dec |",
+		"Released:\n\n- US, 18 December\n- India, 17 December\n- UK, 16 December",
+		"## 18 December 2026\n\nThe United States gets it last of the three, sir.",
+	} {
+		if AWall(one, Written) {
+			t.Errorf("a shaped answer was caught: %q", one)
+		}
+	}
+
+	// Short answers are left alone, which is most of them.
+	for _, one := range []string{
+		"It is twenty past four, sir.",
+		"Nothing in your diary tomorrow, sir.",
+		"Thirteen, sir.",
+	} {
+		if AWall(one, Written) {
+			t.Errorf("a short answer was caught: %q", one)
+		}
+	}
+}

@@ -218,6 +218,9 @@ func AWall(answer string, how Reading) bool {
 	if how != Written {
 		return false
 	}
+	if Unshaped(answer) {
+		return true
+	}
 	for _, block := range strings.Split(strings.TrimSpace(answer), "\n\n") {
 		if strings.TrimSpace(block) == "" || marked.MatchString(block) {
 			continue
@@ -227,4 +230,36 @@ func AWall(answer string, how Reading) bool {
 		}
 	}
 	return false
+}
+
+// Shapeless : How many words a written answer may run to with no shape
+// at all.
+//
+// Thirty, because the answer that prompted this is thirty-seven: asked
+// when a film was out, it gave three countries and three dates in one
+// paragraph -- *"December 18, 2026 in the United States... In India it
+// releases December 17... and in the UK December 16"* -- which is a
+// table written as a sentence. Owner: *"it can say the date in header
+// like in big font, and tables are easy to read"*.
+//
+// Measured over his typed answers: 127 of 136 carried no shape at all,
+// so the written manner was not being followed on text in any
+// meaningful sense. 44 of them are this long or longer.
+const Shapeless = 30
+
+// shaped : Anything that gives an answer a shape -- a heading, a list,
+// a table, a quote, code, or bold on the words that carry it.
+var shaped = regexp.MustCompile("(?m)^\\s*(?:[-*+]\\s|\\d+[.)]\\s|#{1,6}\\s|>\\s|\\||```)|\\*\\*\\S")
+
+// Unshaped : Whether a written answer of any length ran as plain prose.
+//
+// A low bar on purpose: one bolded phrase clears it. What it stops is
+// an answer with several facts in it arriving as a paragraph, which is
+// the thing he says he will not read.
+func Unshaped(answer string) bool {
+	answer = strings.TrimSpace(answer)
+	if answer == "" || shaped.MatchString(answer) {
+		return false
+	}
+	return len(strings.Fields(answer)) >= Shapeless
 }
