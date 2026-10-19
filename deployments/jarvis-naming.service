@@ -1,0 +1,50 @@
+# The service that points at the names in a sentence, as a user service
+# like everything else on this machine.
+#
+#   cp deployments/jarvis-naming.service ~/.config/systemd/user/
+#   systemctl --user daemon-reload
+#   systemctl --user enable --now jarvis-naming
+#
+# Why it exists. It was started by hand from a scratch directory on 19
+# October 2026 and would have died at the next reboot -- and when it is
+# gone the server logs "could not find the names in the question" on
+# every turn and carries on, which is harmless and silently useless.
+# The assistant is configured to reach it, so it has to be there.
+#
+# The weights live in %h/.local/share/jarvis-naming/model: 583MB,
+# fetched once. The environment beside them is its own, because a venv
+# is not relocatable -- the one in the scratch directory could not be
+# copied here and had to be built again.
+
+[Unit]
+Description=The assistant's name finder
+# Nothing waits for this and it waits for nothing. The server reaches
+# it over HTTP on every turn and carries on without it.
+StartLimitIntervalSec=120
+StartLimitBurst=5
+
+[Service]
+Type=simple
+WorkingDirectory=%h/workspace/personal-assistant
+ExecStart=%h/.local/share/jarvis-naming/venv/bin/python \
+  %h/workspace/personal-assistant/deployments/gliner-service.py \
+  --model %h/.local/share/jarvis-naming/model \
+  --host 127.0.0.1 --port 8092
+
+# Loopback only, and said twice: once in the command above and once
+# here. It has no authentication of any kind.
+#
+# 8092 rather than 8091, which tei-m3 still holds from the bge-m3 trial
+# that was tried and rejected.
+
+ExecStartPre=/bin/sh -c 'printf "\n=== started %%s ===\n" "$(date -Is)" >> %h/.local/share/jarvis-naming/service.log'
+StandardOutput=append:%h/.local/share/jarvis-naming/service.log
+StandardError=append:%h/.local/share/jarvis-naming/service.log
+
+# It loads 583MB of weights at startup and then answers in about fifty
+# milliseconds, so a restart is cheap to the server and not to itself.
+Restart=on-failure
+RestartSec=10s
+
+[Install]
+WantedBy=default.target
