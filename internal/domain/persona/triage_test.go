@@ -272,3 +272,43 @@ func TestALongAnswerNeedsMoreThanBold(t *testing.T) {
 		t.Error("a short bolded answer was caught")
 	}
 }
+
+// TestADateLeadsOrItIsSentBack : The date is what was asked for, so it
+// goes where he looks first.
+//
+// Asked when a song came out, it answered "**Something About Us** was
+// released November 14, 2003, as a single from Discovery" -- the date
+// behind the name he had just typed.
+func TestADateLeadsOrItIsSentBack(t *testing.T) {
+	buried := "**Something About Us** was released November 14, 2003, as a single from " +
+		"*Discovery*. It was the sixth and final single off that album."
+	if !AWall(buried, Written) {
+		t.Error("a buried date was not caught")
+	}
+	if AWall(buried, Spoken) {
+		t.Error("a spoken answer was judged on where its date sits")
+	}
+
+	// Leading with it, in any of the shapes that lead.
+	for _, one := range []string{
+		"## 14 November 2003\n\nThe sixth and final single from *Discovery*, sir.",
+		"**14 November 2003** — the sixth and final single from *Discovery*, sir.",
+		"- 14 November 2003, the sixth single\n- Used to promote *Interstella 5555*",
+		"| Single | Date |\n| --- | --- |\n| Something About Us | 14 November 2003 |",
+	} {
+		if AWall(one, Written) {
+			t.Errorf("an answer that leads with its date was caught: %q", one)
+		}
+	}
+
+	// Not every number is a date. A year alone, a weekday, a time.
+	for _, one := range []string{
+		"It came out in 2003, sir.",
+		"New episodes air on Wednesdays, sir.",
+		"It is twenty past four, sir.",
+	} {
+		if AWall(one, Written) {
+			t.Errorf("something that is not a date was caught: %q", one)
+		}
+	}
+}

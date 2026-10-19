@@ -918,7 +918,10 @@ const sayItInPoints = "Before that answer goes out: it is being read on a screen
 	"thirty words with nothing to look at, or past eighty with nothing but a bold phrase. " +
 	"He does not read paragraphs; he reads points. " +
 	"Say the same thing again with every fact still in it, shaped: " +
-	"the answer itself as a short bold lead, or a heading where it is a date or a name he came for; " +
+	"the answer itself as a short bold lead, or a heading where it is a date or a name he came for. " +
+	"Where there is a date in it at all, that is almost always what he asked for, so it leads: " +
+	"a heading of its own -- ## 14 November 2003 -- and the rest beneath it, never in the middle " +
+	"of a sentence behind a name he has just typed. " +
 	"a bulleted or numbered list wherever you are naming more than two things; " +
 	"a table wherever the same few facts are given about several things -- three release dates " +
 	"in three countries is a table, not a sentence; and no paragraph longer than three sentences. " +

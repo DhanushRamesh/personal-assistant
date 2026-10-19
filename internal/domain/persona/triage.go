@@ -218,7 +218,7 @@ func AWall(answer string, how Reading) bool {
 	if how != Written {
 		return false
 	}
-	if Unshaped(answer) {
+	if Unshaped(answer) || Buried(answer) {
 		return true
 	}
 	for _, block := range strings.Split(strings.TrimSpace(answer), "\n\n") {
@@ -292,4 +292,51 @@ func Unshaped(answer string) bool {
 		return !shaped.MatchString(answer)
 	}
 	return false
+}
+
+// dated : A real date in an answer -- a day beside a month, either way
+// round. Not a year on its own and not a weekday: "Wednesdays" is what
+// he was given in place of a date, and "2003" is not one either.
+var dated = regexp.MustCompile(`(?i)\b(\d{1,2}(st|nd|rd|th)? (January|February|March|April|May|June|July|` +
+	`August|September|October|November|December)|(January|February|March|April|May|June|July|` +
+	`August|September|October|November|December) \d{1,2})\b`)
+
+// bolded : A run of bold text, for asking what the bold is actually on.
+var bolded = regexp.MustCompile(`\*\*([^*]+)\*\*`)
+
+// stands : A line that is itself something to look at -- a heading, a
+// list item or a table row.
+var stands = regexp.MustCompile("^\\s*(?:#{1,6}\\s|[-*+]\\s|\\d+[.)]\\s|\\|)")
+
+// Buried : Whether a written answer carries a date and leaves it in
+// the middle of a sentence.
+//
+// Asked when a song came out, it answered "**Something About Us** was
+// released November 14, 2003, as a single from Discovery" -- the date
+// he came for sitting in prose, behind the name he had just typed.
+// Owner: *"i want the header"*.
+//
+// The test is where the date is, not whether the answer has a shape.
+// The first version asked only whether the answer opened with
+// something to look at, and this passed it: it opens with the song in
+// bold. A date in a heading, in a bold run, in a list item or in a
+// table row is where he looks; anywhere else it is buried.
+//
+// 17 of his 141 typed answers carry a date and all but one bury it.
+func Buried(answer string) bool {
+	answer = strings.TrimSpace(answer)
+	if answer == "" || !dated.MatchString(answer) {
+		return false
+	}
+	for _, line := range strings.Split(answer, "\n") {
+		if stands.MatchString(line) && dated.MatchString(line) {
+			return false
+		}
+	}
+	for _, run := range bolded.FindAllStringSubmatch(answer, -1) {
+		if dated.MatchString(run[1]) {
+			return false
+		}
+	}
+	return true
 }
