@@ -710,6 +710,15 @@ func (r *Runner) consume(runCtx, ctx context.Context, t *chat.Chat, systemPrompt
 					slog.String("removed", first(answer[:len(answer)-len(shorter)], 90)))
 				answer = shorter
 			}
+			// The server's own notes on the history, taken out.
+			// They are written for the model to read and never to be
+			// said, and it said two of them in a row: see
+			// conversation.Unmarked.
+			if clean := conversation.Unmarked(answer); clean != answer {
+				r.logger.InfoContext(ctx, "the answer carried the server's own note",
+					slog.String("removed", first(answer, 90)))
+				answer = clean
+			}
 			answer = tool.Ensure(answer, address, tool.Merged(owed))
 			// A turn that reached for a write and never landed one
 			// may not end as though it had. The model has been seen

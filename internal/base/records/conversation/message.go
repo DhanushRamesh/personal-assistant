@@ -7,6 +7,7 @@ package conversation
 
 import (
 	"errors"
+	"regexp"
 	"sort"
 	"strings"
 	"time"
@@ -744,3 +745,36 @@ func Volunteered() []Kind {
 // conversation, and reading it as agreement to a warning would put
 // words in their mouth.
 const Within = 5 * time.Minute
+
+// ours : A bracketed note the server put in front of a message in the
+// history, as [announcedAs] and the kinds beside it write them.
+//
+// Matched on how they begin, which is what they have in common and
+// what survives the model paraphrasing the rest of one.
+// Spaces and tabs around it, never newlines: a written answer's
+// paragraph breaks are the shape he reads by, and taking a note off
+// the front of one must not join it to the line above.
+var ours = regexp.MustCompile(`(?m)^[ \t]*\[(?:Said unasked|Announced aloud|Reminder announced|You named this conversation|This was cut short)[^\]]*\][ \t]*`)
+
+// Unmarked : An answer with the server's own notes taken out of it.
+//
+// They are written for the model to read in the history and never to
+// be said. It says them anyway: on 19 October 2026 two answers in a
+// row began "[Said unasked at 8:09 pm, news from their devices -- a
+// record of what you said then, never a way to begin an answer]", with
+// the words "never a way to begin an answer" inside the thing it had
+// begun its answer with.
+//
+// That wording was itself the fix, made earlier the same day, for the
+// model copying the marker that preceded it. Rewording moved which
+// words were copied and not whether they were, which makes nine. So
+// the note is taken out rather than argued about -- the same remedy as
+// [persona.Triaged], and for the same reason: the answer underneath is
+// sound and a round trip to remove a line is a round trip nobody is
+// waiting through.
+func Unmarked(answer string) string {
+	if !strings.Contains(answer, "[") {
+		return answer
+	}
+	return strings.TrimSpace(ours.ReplaceAllString(answer, ""))
+}
