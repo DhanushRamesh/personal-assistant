@@ -836,3 +836,34 @@ func TestAReplyIsKeptAndListed(t *testing.T) {
 		t.Errorf("listed %+v", listed)
 	}
 }
+
+// The usage page adds up a turn's rounds and names it by what was asked,
+// read in one query, cut short, and only the person's own.
+func TestChatPromptsAreReadTogether(t *testing.T) {
+	r := newRepository(t)
+	ctx := context.Background()
+	mine, err := chat.New(storedConversation(t, r), chat.ChannelDirect, "list me the folders in the workspace")
+	if err != nil {
+		t.Fatalf("chat.New: %v", err)
+	}
+	theirs, err := chat.New(storedConversation(t, r), chat.ChannelDirect, "not yours")
+	if err != nil {
+		t.Fatalf("chat.New: %v", err)
+	}
+	for _, tk := range []*chat.Chat{mine, theirs} {
+		if err := r.Create(ctx, tk); err != nil {
+			t.Fatalf("Create: %v", err)
+		}
+	}
+	c, err := r.GetConversation(ctx, mine.ConversationID)
+	if err != nil {
+		t.Fatalf("GetConversation: %v", err)
+	}
+	got, err := r.ChatPrompts(ctx, c.UserID, []string{mine.ID, theirs.ID, "chat_missing"}, 11)
+	if err != nil {
+		t.Fatalf("ChatPrompts: %v", err)
+	}
+	if want := "list me the"; len(got) != 1 || got[mine.ID] != want {
+		t.Errorf("prompts = %v, want %q for mine", got, want)
+	}
+}

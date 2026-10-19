@@ -215,6 +215,27 @@ func (m *Repository) ConversationTitles(_ context.Context, userID string, ids []
 	return out, nil
 }
 
+// ChatPrompts : See the MySQL repository's.
+func (m *Repository) ChatPrompts(_ context.Context, userID string, ids []string, most int) (map[string]string, error) {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	out := make(map[string]string, len(ids))
+	for _, id := range ids {
+		t, ok := m.chats[id]
+		if !ok {
+			continue
+		}
+		if c, ok := m.conversations[t.ConversationID]; ok && c.UserID == userID {
+			p := []rune(t.Prompt)
+			if most > 0 && len(p) > most {
+				p = p[:most]
+			}
+			out[id] = string(p)
+		}
+	}
+	return out, nil
+}
+
 // ListConversations : Returns stored conversations.
 func (m *Repository) ListConversations(ctx context.Context, userID string, limit int) ([]chat.Conversation, error) {
 	return m.listConversations(ctx, userID, limit, false)

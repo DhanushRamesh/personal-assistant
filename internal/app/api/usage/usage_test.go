@@ -300,3 +300,41 @@ func TestAWeekIsBucketedByTheDay(t *testing.T) {
 		t.Errorf("today's bucket has %d calls, want 3", last.Calls)
 	}
 }
+
+// A call that was a round of a chat carries what was asked in it, so the
+// rounds of one turn can be added up and told apart from another's.
+func TestACallCarriesWhatWasAskedInItsTurn(t *testing.T) {
+	e, talk := setUp(t)
+	asked, err := chat.New(talk, chat.ChannelDirect, "list me the folders in ~/workspace/personal-assistant")
+	if err != nil {
+		t.Fatal(err)
+	}
+	asked.ID = "chat_x"
+	if err := e.Repo.Create(context.Background(), asked); err != nil {
+		t.Fatal(err)
+	}
+	rec := e.Get(t, "/v1/usage")
+	var got struct {
+		Calls []struct {
+			ChatID string `json:"chat_id"`
+			Prompt string `json:"prompt"`
+		} `json:"calls"`
+	}
+	if err := json.Unmarshal(rec.Body.Bytes(), &got); err != nil {
+		t.Fatal(err)
+	}
+	rounds := 0
+	for _, c := range got.Calls {
+		if c.ChatID == "chat_x" {
+			rounds++
+			if c.Prompt != asked.Prompt {
+				t.Errorf("a round of chat_x carries %q, want %q", c.Prompt, asked.Prompt)
+			}
+		} else if c.Prompt != "" {
+			t.Errorf("a call of no chat carries %q", c.Prompt)
+		}
+	}
+	if rounds != 2 {
+		t.Errorf("%d rounds of chat_x, want 2", rounds)
+	}
+}

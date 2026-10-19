@@ -26,6 +26,16 @@ type Titles interface {
 	ConversationTitles(ctx context.Context, userID string, ids []string) (map[string]string, error)
 }
 
+// Prompts : Where what was asked in each chat is read, all at once.
+// Optional, beside Titles: where Titles is one too, a call of a chat
+// carries what was asked in it.
+type Prompts interface {
+	ChatPrompts(ctx context.Context, userID string, ids []string, most int) (map[string]string, error)
+}
+
+// MaxPrompt : The most of what was asked a call carries, in runes.
+const MaxPrompt = 160
+
 // Options : What the handler reads from. Only Store is needed for an
 // answer; without it every figure is zero.
 type Options struct {
@@ -127,20 +137,24 @@ type Model struct {
 
 // Call : One call, as the list shows it.
 type Call struct {
-	ID                string    `json:"id"`
-	At                time.Time `json:"at"`
-	Feature           string    `json:"feature"`
-	Label             string    `json:"label"`
-	Detail            string    `json:"detail,omitempty"`
-	Vendor            string    `json:"vendor"`
-	Model             string    `json:"model"`
-	Input             int       `json:"input"`
-	Output            int       `json:"output"`
-	DurationMS        int64     `json:"duration_ms"`
-	Ended             string    `json:"ended"`
-	ChatID            string    `json:"chat_id,omitempty"`
-	ConversationID    string    `json:"conversation_id,omitempty"`
-	ConversationTitle string    `json:"conversation_title,omitempty"`
+	ID         string    `json:"id"`
+	At         time.Time `json:"at"`
+	Feature    string    `json:"feature"`
+	Label      string    `json:"label"`
+	Detail     string    `json:"detail,omitempty"`
+	Vendor     string    `json:"vendor"`
+	Model      string    `json:"model"`
+	Input      int       `json:"input"`
+	Output     int       `json:"output"`
+	DurationMS int64     `json:"duration_ms"`
+	Ended      string    `json:"ended"`
+	ChatID     string    `json:"chat_id,omitempty"`
+	// Prompt : What was asked in the chat the call was a round of, so the
+	// rounds of one turn can be told apart from another's (owner, 20
+	// October 2026: *"each turn's input and output tokens, to measure"*).
+	Prompt            string `json:"prompt,omitempty"`
+	ConversationID    string `json:"conversation_id,omitempty"`
+	ConversationTitle string `json:"conversation_title,omitempty"`
 }
 
 // Kinds : How many calls of each kind are in the window, for the
@@ -277,16 +291,43 @@ func (h *Handler) Usage(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	titles := h.titles(ctx, userID, calls)
+	prompts := h.prompts(ctx, userID, calls)
 	for _, c := range calls {
 		out.Calls = append(out.Calls, Call{
 			ID: c.ID, At: c.At, Feature: string(c.Feature), Label: Label(c.Feature),
 			Detail: c.Detail, Vendor: c.Vendor, Model: c.Model,
 			Input: c.Input, Output: c.Output, DurationMS: c.Took.Milliseconds(),
-			Ended: string(c.Ended), ChatID: c.ChatID, ConversationID: c.ConversationID,
+			Ended: string(c.Ended), ChatID: c.ChatID, Prompt: prompts[c.ChatID], ConversationID: c.ConversationID,
 			ConversationTitle: titles[c.ConversationID],
 		})
 	}
 	httpx.WriteJSON(ctx, w, http.StatusOK, out)
+}
+
+// prompts : What was asked in the chats the calls were rounds of, read in
+// one go; nothing, as with titles, when it cannot be.
+func (h *Handler) prompts(ctx context.Context, userID string, calls []usage.Call) map[string]string {
+	p, ok := h.o.Titles.(Prompts)
+	if !ok {
+		return nil
+	}
+	seen := map[string]bool{}
+	var ids []string
+	for _, c := range calls {
+		if c.ChatID != "" && !seen[c.ChatID] {
+			seen[c.ChatID] = true
+			ids = append(ids, c.ChatID)
+		}
+	}
+	if len(ids) == 0 {
+		return nil
+	}
+	got, err := p.ChatPrompts(ctx, userID, ids, MaxPrompt)
+	if err != nil {
+		h.Logger.WarnContext(ctx, "cannot read what was asked", slog.Any("error", err))
+		return nil
+	}
+	return got
 }
 
 // titles : The titles of the conversations the calls belong to, read

@@ -228,6 +228,13 @@ message, and the server is also told that it is for that message"*).
 - The migration is numbered 59 because 57 and 58 were run on 17 October by
   work since taken back, and goose counts them as applied.
 
+**A call of a turn carries what was asked in it** (owner, 20 October
+2026: *"each turn's input and output tokens, to measure"*). `/v1/usage`
+gives each call that was a round of a chat that chat's prompt (`prompt`,
+cut to `usage.MaxPrompt`, 160 runes), read for all of them in one query
+(`ChatPrompts`, only the person's own). The app adds the rounds up by
+turn.
+
 **What it is doing is said in the persona's voice** (owner, 19 October
 2026: *"add the word sir, like 'Looking into it, sir'"*). The line a round
 says while its tools run (the `saying` argument) gets the persona's
@@ -22029,3 +22036,62 @@ the thing done. Caught at the yes, it costs the round that understands
 the yes, the round that looks, and the round that finally does it --
 and three pieces of machinery had to exist to carry the subject that
 far.
+
+## Prompt caching exists on the gateway, and would double the bill
+
+Asked to try it on 20 October 2026. It is there, it works, and it must
+not be turned on as it stands.
+
+### The switch
+
+`prompt_caching` in the request body. The only sub-key it accepts is
+`ttl`, and the only values are `"5m"` and `"1h"`. Anything else is
+refused with `"Unexpected key found in request body"` -- which names
+the key it refused, so the whitelist can be enumerated a key at a time,
+and a rejection costs no model tokens.
+
+The response has reported it all along, zeroed: `cache_read_tokens`,
+`cached_5min_input_tokens`, `cached_1hour_input_tokens`,
+`zoho_cache_read_credits`, `zoho_cached_1hour_input_credits`.
+
+### What it does
+
+On a 4,523-token request, vendor `anthropic`, model `claude-sonnet-4-6`:
+
+| | input | write | read | credits |
+| --- | --- | --- | --- | --- |
+| off | 4,523 | 0 | 0 | 13.64 |
+| on, first | 3 | 4,520 | 0 | 27.20 |
+| on, again | 3 | 0 | 4,520 | **1.44** |
+
+A write costs twice; a read costs a tenth. Tool schemas cache the same
+way -- 8,310 of 8,313 tokens, 25.01 credits down to 2.58.
+
+### Why it must not be turned on
+
+The breakpoint is after the whole payload, the question included.
+Changing only the question writes a second entry instead of reading the
+shared prefix:
+
+```
+Q1 first    write 4517   27.19
+Q1 again    read  4517    1.44
+Q2 new      write 4517   27.19     <- not a read
+Q1 again    read  4517    1.44
+Q2 again    read  4517    1.44
+```
+
+Every turn carries a question nobody has asked before, so every turn
+would pay the write and none would read. Switching it on blindly is not
+a saving; it is close to double.
+
+### The ask, which is now a specific one
+
+Put the breakpoint after `tools` and `context` -- the stable prefix --
+rather than after `messages`. Anthropic allows four. With one there,
+the persona and the tool schemas, which were 45,362 and 120,397 bytes
+of a 46,633-token turn measured the same night, would read at a tenth
+of the price, and only the question and the history would be fresh.
+
+Until then the honest position is that caching is blocked on the
+gateway, not on us, and the evidence for the request is in this table.

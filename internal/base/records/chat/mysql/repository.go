@@ -650,6 +650,36 @@ func (r *Repository) ConversationTitles(ctx context.Context, userID string, ids 
 	return out, nil
 }
 
+// ChatPrompts : What was asked in each of ids that is the user's, by chat
+// id, cut to most runes. One query however many.
+func (r *Repository) ChatPrompts(ctx context.Context, userID string, ids []string, most int) (map[string]string, error) {
+	out := make(map[string]string, len(ids))
+	if len(ids) == 0 {
+		return out, nil
+	}
+	var rows []struct {
+		ID     string
+		Prompt string
+	}
+	if err := r.db.WithContext(ctx).Table("chats").Select("chats.id", "chats.prompt").
+		Joins("JOIN conversations ON conversations.id = chats.conversation_id").
+		Where("conversations.user_id = ? AND chats.id IN ?", userID, ids).Find(&rows).Error; err != nil {
+		return nil, fmt.Errorf("chat: reading what was asked: %w", err)
+	}
+	for _, row := range rows {
+		out[row.ID] = cutRunes(row.Prompt, most)
+	}
+	return out, nil
+}
+
+// cutRunes : s, at most n runes of it.
+func cutRunes(s string, n int) string {
+	if r := []rune(s); n > 0 && len(r) > n {
+		return string(r[:n])
+	}
+	return s
+}
+
 // ListConversations : Returns a user's conversations, most recently used
 // first.
 func (r *Repository) ListConversations(ctx context.Context, userID string, limit int) ([]chat.Conversation, error) {
