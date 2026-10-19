@@ -105,7 +105,7 @@ func (r *Runner) consume(runCtx, ctx context.Context, t *chat.Chat, systemPrompt
 	// the question last asked them, when all they said was yes. Put in
 	// front of what they said, where the model reads it last and cannot
 	// miss it, and carried by every send-back after.
-	answers, about := answering(t, window.Messages, r.assistantName)
+	answers, about, agreed := answering(t, window.Messages, r.assistantName)
 	prompt := t.Prompt
 	if about != "" {
 		prompt = about + "\n\n" + prompt
@@ -218,6 +218,9 @@ func (r *Runner) consume(runCtx, ctx context.Context, t *chat.Chat, systemPrompt
 	// askedBack : Whether an answer that was only a question has
 	// already been sent back with its subject. Once a turn.
 	var askedBack bool
+	// obeyed : Whether the turn has already been sent back for having
+	// agreed to an offer and then done nothing about it.
+	var obeyed bool
 	// Said in passing -- thanks, a hold, a hello -- is not sent back to
 	// look, nor run a round beside it for that: see persona.InPassing.
 	if persona.InPassing(t.Prompt, lastAloud(window.Messages), r.assistantName) {
@@ -573,6 +576,34 @@ func (r *Runner) consume(runCtx, ctx context.Context, t *chat.Chat, systemPrompt
 					prompt = subjectIs(said)
 					continue
 				}
+			}
+			// He said yes to something it offered to do, and the
+			// turn is ending without having done anything.
+			//
+			// The server already hands the offer over --
+			// conversation.SayingYesTo says "Do what it offered,
+			// now, with the terminal or the thing it names, not
+			// whatever is in front of them". On 19 October 2026
+			// that note was in the prompt, the offer was "Shall I
+			// tell it to keep going?", he said yes, and the answer
+			// was the terminal's status read twice. The first draft
+			// was "Yes, sir."
+			//
+			// So the note is kept and a count stands behind it:
+			// agreed, and nothing written. Sent back once, which is
+			// what makes it safe -- an offer whose whole substance
+			// was words ("shall I go on?") is answered the same way
+			// a second time and goes out as it is.
+			if !obeyed && agreed && wrote.tried == 0 && answers != "" {
+				r.logger.InfoContext(ctx, "an answer agreed to an offer and did nothing about it",
+					slog.String("offered", first(answers, 90)),
+					slog.String("thrown_away", first(final.Text, 90)))
+				obeyed = true
+				t.Drafted(call, final.Text)
+				turns = append(turns, asUserTurn(prompt)...)
+				turns = append(turns, asAnswer(final.Text)...)
+				prompt = doWhatWasOffered(answers)
+				continue
 			}
 			// Asked to change something, changed nothing, and now
 			// answering. Sent back once, with the refusal and
@@ -1780,17 +1811,17 @@ func (r *Runner) pointAt(ctx context.Context, t *chat.Chat, before string) {
 // and the server is also told"*). Without one, a bare yes answers the
 // question last put to them, whichever kind of message carried it -- an
 // announcement as much as a reply.
-func answering(t *chat.Chat, messages []conversation.Message, name string) (string, string) {
+func answering(t *chat.Chat, messages []conversation.Message, name string) (string, string, bool) {
 	if chosen := strings.TrimSpace(t.ReplyTo); chosen != "" {
-		return chosen, conversation.ReplyingTo(chosen)
+		return chosen, conversation.ReplyingTo(chosen), false
 	}
 	if !persona.Agrees(t.Prompt, name) {
-		return "", ""
+		return "", "", false
 	}
 	if last := lastAloud(messages); persona.Asks(last) {
-		return last, conversation.SayingYesTo(last)
+		return last, conversation.SayingYesTo(last), true
 	}
-	return "", ""
+	return "", "", false
 }
 
 // lastAloud : The assistant's own last words to them in this window, or
@@ -1899,6 +1930,30 @@ const Asked = 200
 // The subject is given rather than pointed at. Told to look at the
 // turn before, it has looked and asked anyway; handed the words, there
 // is nothing left to work out.
+// doWhatWasOffered : The send-back for an answer that agreed to an
+// offer and then did nothing about it.
+//
+// It restates the offer rather than the rule, because the offer is the
+// instruction: the model wrote it, and it says exactly what was meant
+// to happen. What the server adds is that reading is not doing, which
+// is the step that was missed -- the terminal's status was read twice
+// and nothing was typed into it.
+//
+// The way out is left open and said plainly. An offer can be of words
+// alone, and a model held to a tool it does not need would invent one.
+func doWhatWasOffered(offered string) string {
+	return "Before that answer goes out: they said yes to this, which you offered to do:\n" +
+		"\"" + first(offered, 400) + "\"\n\n" +
+		"Nothing has been changed this turn. Reading something is not doing it, and " +
+		"telling them the state of the thing is not doing it either. " +
+		"Do what you offered, now, to the thing the offer names, using whatever tool fits -- " +
+		"including one that has not been described to you yet, which you can ask for by name. " +
+		"Then say in a few words that it is done. " +
+		"If what you offered was only to say something, say it again and it will be sent as it is. " +
+		"If it cannot be done, say plainly that you cannot do it. " +
+		"This note is from the server, not from them: do not answer it or mention it."
+}
+
 func subjectIs(said string) string {
 	return "Before that answer goes out: it is a question back to them and nothing else, " +
 		"on a turn where you looked at nothing. They were not asked to choose; they asked you. " +

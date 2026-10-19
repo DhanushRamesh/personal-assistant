@@ -21917,3 +21917,71 @@ having said), no reply at all (works, but puts two of his turns side
 by side), and folding (works on first rounds, breaks continuations).
 The pair stands until something beats it on both counts, and the next
 attempt is not worth making until the eval runs a tool.
+
+## A yes was answered by reading, not by doing
+
+It offered *"Shall I tell it to keep going?"*, he said **yes**, and the
+turn called `read_terminal` twice and gave him the status. The first
+draft was *"Yes, sir."*
+
+```
+23:33:04  thrown_away="Yes, sir."                     → sent back to look at the tools
+23:33:04  thrown_away="I'm not certain what you meant" → sent back with its subject
+23:33:08  read_terminal {"terminal": "Jarvis Server"}
+23:33:11  read_terminal {"terminal": "Jarvis Server"}
+23:33:19  "Jarvis Server is running. Clock bug fixed." …
+```
+
+### Everything built for this already ran
+
+- `persona.Agrees("yes")` -- **true**, checked against the real text.
+- `persona.Asks(offer)` -- **true**.
+- `conversation.SayingYesTo` put the offer in front of the model with
+  *"Do what it offered, now, with the terminal or the thing it names --
+  not whatever is in front of them."*
+- The look-first send-back fired, and the model went and looked.
+
+Nothing was missing from the prompt. The offer was quoted to it, the
+instruction was explicit, and it read the terminal instead. That is the
+fourteenth rule in this file to lose while sitting in the running
+binary.
+
+**What was missing was anything that could tell looking from doing.**
+The look-first guard asks whether a tool ran. A read is a tool.
+
+### The count behind the note
+
+`writing.tried` already counts calls to anything that creates, changes
+or removes. So the check is one line of state: he agreed to an offer,
+and the turn is ending with `tried == 0`. Sent back once, with the
+offer restated -- the offer is the instruction, because the model wrote
+it and it says exactly what was meant to happen -- and with the thing
+that was actually missed said plainly: *reading something is not doing
+it, and telling them the state of the thing is not doing it either.*
+
+### Why it is safe to fire on every such turn
+
+An offer can be of words alone. *"Shall I read the numbers out?"* is
+one, and a model held to a tool it does not need would invent one. So
+the way out is written into the send-back: *"If what you offered was
+only to say something, say it again and it will be sent as it is."*
+That is how every other send-back here ends, and it means a word-only
+offer costs a round and never the answer.
+
+A round is about four seconds of a thirty-second turn. The standing
+trade is accuracy over latency, and this is the trade it was written
+for.
+
+### What it does not fix
+
+It should not have asked. *"Never end a reply with a question or an
+offer of further help"* is in the persona and is enforced nowhere:
+`persona.Asks` exists and is used only to work out what a yes means,
+never to stop the question being asked. Had the rule held, it would
+have said what it was about to do and done it, and there would have
+been no yes to mishandle.
+
+That guard is not written here. `onlyAsking` covers an answer that is
+nothing but a question, and the hard part of the general case is that
+an honest question after a listing -- *"the diary has two of these,
+did you mean the Tuesday one?"* -- is wanted, and reads the same way.

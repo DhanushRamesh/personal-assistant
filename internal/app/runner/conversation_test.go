@@ -408,11 +408,17 @@ func TestNothingIsSentBackWhenThereAreNoTools(t *testing.T) {
 
 // TestAYesToAnOfferIsSentBack : An offer the assistant made itself is
 // answered by doing the thing offered, so "okay" to it goes back to look
-// at the tools.
+// at the tools, and then back again for having changed nothing.
 //
 // The offer arrives as conversation.Immediate, which is how a terminal
 // asking for the owner is published, so the question is not in the reply
 // history at all.
+//
+// Three rounds, not two. The second is doWhatWasOffered, which fires
+// because this recorder writes nothing. An offer of words alone -- and
+// reading the numbers out is one -- is answered the same way a second
+// time and goes out as it is, so what it costs is a round and never
+// the answer. Correctness over latency, which is the standing trade.
 func TestAYesToAnOfferIsSentBack(t *testing.T) {
 	recorder := &recordingProvider{}
 	h := newHarness(t, recorder, runner.Options{Tools: offering()})
@@ -431,8 +437,8 @@ func TestAYesToAnOfferIsSentBack(t *testing.T) {
 	tk := h.submit(t, "okay")
 	h.await(t, tk.ID, chat.StatusCompleted, chat.StatusFailed)
 
-	if len(recorder.prompts) != 2 {
-		t.Errorf("asked %d times, want twice: %v", len(recorder.prompts), recorder.prompts)
+	if len(recorder.prompts) != 3 {
+		t.Errorf("asked %d times, want three times: %v", len(recorder.prompts), recorder.prompts)
 	}
 }
 
@@ -461,8 +467,15 @@ func TestAYesIsToldWhatItAnswers(t *testing.T) {
 	tk := h.submit(t, "yes")
 	h.await(t, tk.ID, chat.StatusCompleted, chat.StatusFailed)
 
-	if len(recorder.prompts) != 2 {
-		t.Fatalf("asked %d times, want twice: %v", len(recorder.prompts), recorder.prompts)
+	// Three: the question in front of the yes, the send-back to look at
+	// the tools, and doWhatWasOffered for having changed nothing. This
+	// offer is to tell a terminal to move on, so the third is the one
+	// that matters -- it is the round where the typing happens.
+	if len(recorder.prompts) != 3 {
+		t.Fatalf("asked %d times, want three times: %v", len(recorder.prompts), recorder.prompts)
+	}
+	if got := recorder.prompts[2]; !strings.Contains(got, "they said yes to this") || !strings.Contains(got, offer) {
+		t.Errorf("the send-back did not restate the offer: %q", got)
 	}
 	if got := recorder.prompts[0]; !strings.Contains(got, "saying yes to this") || !strings.Contains(got, offer) || !strings.HasSuffix(got, "yes") {
 		t.Errorf("the yes went without its question: %q", got)
@@ -646,5 +659,54 @@ func TestWhereItCameFromIsSaidOnceATurn(t *testing.T) {
 	}
 	if said != 1 {
 		t.Errorf("where it came from was said %d times in one turn, want once", said)
+	}
+}
+
+// TestAYesThatOnlyReadsIsSentBack : Reading is not doing.
+//
+// On 19 October 2026 the assistant offered "Shall I tell it to keep
+// going?", he said yes, and the turn called read_terminal twice and
+// reported the status. The first draft was "Yes, sir."
+//
+// Everything that should have caught it was already there and did not:
+// conversation.SayingYesTo put the offer in front of the model with
+// "Do what it offered, now, with the terminal or the thing it names",
+// the look-first send-back fired, and the model went and looked. What
+// was missing was anything that could tell looking from doing.
+func TestAYesThatOnlyReadsIsSentBack(t *testing.T) {
+	recorder := &recordingProvider{calls: []string{"thing_list"}}
+	h := newHarness(t, recorder, runner.Options{Tools: offering()})
+	const offer = "The Server terminal is done, sir. Shall I tell it to keep going?"
+	if _, err := h.repo.Append(context.Background(), conversation.Message{
+		ID:             conversation.NewMessageID(),
+		ConversationID: h.conversation(t),
+		Kind:           conversation.Immediate,
+		Role:           conversation.Assistant,
+		Content:        offer,
+		At:             time.Now().UTC(),
+	}); err != nil {
+		t.Fatalf("Append: %v", err)
+	}
+
+	tk := h.submit(t, "yes")
+	h.await(t, tk.ID, chat.StatusCompleted, chat.StatusFailed)
+
+	// A tool ran, so the look-first guard is satisfied and would let
+	// this out. It read, and nothing was changed.
+	var sent string
+	for _, p := range recorder.prompts {
+		if strings.Contains(p, "Reading something is not doing it") {
+			sent = p
+		}
+	}
+	if sent == "" {
+		t.Fatalf("a yes answered by reading went out unchallenged: %v", recorder.prompts)
+	}
+	if !strings.Contains(sent, offer) {
+		t.Errorf("the send-back did not say what had been offered: %q", sent)
+	}
+	// The way out is said, so an offer of words alone is not trapped.
+	if !strings.Contains(sent, "it will be sent as it is") {
+		t.Errorf("the send-back left no way out: %q", sent)
 	}
 }
