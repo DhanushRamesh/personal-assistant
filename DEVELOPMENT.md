@@ -22404,3 +22404,34 @@ Whether the model uses a recalled memory as readily from a turn as
 from the system prompt. The tool evals cannot see it: they build their
 own prompt and never call promptFor. Only real traffic can, and none
 has run since the restart.
+
+### The last step was attempted twice and not taken
+
+For a cache to keep a prefix, what was sent last turn must be the
+beginning of what is sent this turn. The clock turn is not: it goes
+between the history and the question, and the history grows past it, so
+every turn's message list differs from the last one's early on. Folding
+it into the question is the arrangement that would work.
+
+It was tried on 20 October and taken back, for the second time.
+
+Two tests fail on it and neither failure is understood.
+`TestAVoiceTurnIsWrittenIntoHomeAssistant` and
+`TestAPhoneTurnMovesTheSatelliteState` wait for the satellite to go
+idle and it does not come within twenty seconds. Idle is written after
+`speech.Saying(said.text)`, which is how long the answer takes to say,
+and `said.text` is every chunk of every round added together. So the
+turn is running rounds it did not run before -- nine of them would be
+about the twenty seconds -- and which guard is sending it back is not
+known.
+
+**The same two tests failed the same way on the first attempt**, where
+the reason looked like the continuation branch and was patched around.
+It was not that. Something about the question carrying the note makes a
+guard fire that did not, and until that is named this is not a change
+to make at half past two in the morning.
+
+What stands: the system prompt holds still, and every job with a
+prompt that repeats now reads its cache -- `rule_remark` at 5.547
+credits uncached, 11.01 to write once, and 0.630 a call after that.
+Chat still pays full price.
