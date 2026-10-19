@@ -63,7 +63,15 @@ var unsearched = regexp.MustCompile(`(?i)\b(` +
 	`you'll have to (check|look|find|visit|log)|` +
 	`that is something you would need|` +
 	`i have no information|i do not have information|i don't have information|` +
-	`i am not sure how to|i do not know how to|i don't know how to` +
+	`i am not sure how to|i do not know how to|i don't know how to|` +
+	// The same thing said as an instruction rather than as a limit.
+	// "so check JioHotstar directly for the latest schedule" is a
+	// hand-back with no "I cannot" in front of it, and the first
+	// version of this missed it entirely.
+	`check [^.]{0,40}? directly|` +
+	`for the (latest|current|up-to-date|exact) |` +
+	`on (their|its|the) (website|app|site|page)|` +
+	`visit (their|its|the)` +
 	`)\b`)
 
 // Unsearched : Whether an answer handed the question back rather than

@@ -178,3 +178,40 @@ func TestItLooksThingsUpRatherThanSendingHimAway(t *testing.T) {
 		})
 	}
 }
+
+// TestAWeekdayIsNotAnAnswerToWhen : Asked when the next episode was,
+// it said "New episodes air Wednesdays" and told him to check the
+// service himself.
+//
+// It is told today's date, so the date is something it can work out.
+// Owner: *"i expected a date, it knows its next wednesday right, it
+// could have said the date"*.
+func TestAWeekdayIsNotAnAnswerToWhen(t *testing.T) {
+	env, specs, _ := harness(t)
+
+	stream, err := env.Run(context.Background(), environment.Request{
+		Prompt: "when is the new episode of brothers and sisters series?",
+		Tools:  specs,
+	})
+	if err != nil {
+		t.Fatalf("asking: %v", err)
+	}
+	var last *environment.Message
+	for msg := range stream {
+		m := msg
+		last = &m
+	}
+	if last == nil {
+		t.Fatal("nothing came back")
+	}
+
+	var called []string
+	for _, one := range last.ToolCalls {
+		called = append(called, one.Name)
+	}
+	if len(called) == 0 {
+		t.Errorf("it answered without looking: %q", first(last.Text, 140))
+		return
+	}
+	t.Logf("called %v", called)
+}

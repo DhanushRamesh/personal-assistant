@@ -102,3 +102,31 @@ func TestSendingSomebodyToAPersonIsNotAHandBack(t *testing.T) {
 		}
 	}
 }
+
+// The same hand-back said as an instruction rather than as a limit.
+// "so check JioHotstar directly for the latest schedule" has no "I
+// cannot" in front of it and the first version of this missed it.
+func TestAHandBackSaidAsAnInstructionIsCaught(t *testing.T) {
+	for _, said := range []string{
+		"The search does not show which Wednesday is next, so check JioHotstar directly for the latest schedule.",
+		"Check their website for the current price, sir.",
+		"The details are on their app, sir.",
+		"Visit their site for the schedule, sir.",
+	} {
+		if !persona.Unsearched(said) {
+			t.Errorf("not caught: %q", said)
+		}
+	}
+
+	// Still not a hand-back.
+	for _, said := range []string{
+		"I cannot put a call on speaker from here, sir.",
+		"Your diary has nothing on Thursday, sir.",
+		"New episodes air on Wednesdays, sir — the next is 21 October.",
+		"You would need to check with your doctor, sir.",
+	} {
+		if persona.Unsearched(said) {
+			t.Errorf("wrongly caught: %q", said)
+		}
+	}
+}
