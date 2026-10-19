@@ -55,9 +55,9 @@ func (r *Runner) execute(ctx, lifeCtx context.Context, t *chat.Chat) {
 
 	// Composed once. It reads the database and searches memory, and every
 	// hop of the tool loop must be given the same one.
-	systemPrompt, missed, note := r.promptFor(ctx, t)
+	systemPrompt, moving, missed, note := r.promptFor(ctx, t)
 
-	r.consume(runCtx, ctx, t, systemPrompt, note)
+	r.consume(runCtx, ctx, t, systemPrompt, moving, note)
 	r.changed(ctx, t.ConversationID)
 
 	// Once there is an answer, not before. Marking them while composing
@@ -81,7 +81,7 @@ func (r *Runner) execute(ctx, lifeCtx context.Context, t *chat.Chat) {
 // runCtx bounds the provider's work and is cancelled to stop it. ctx outlives
 // it and is used for the final write, because a cancelled context cannot be
 // used to record that the chat was cancelled.
-func (r *Runner) consume(runCtx, ctx context.Context, t *chat.Chat, systemPrompt string, note chat.Recalled) {
+func (r *Runner) consume(runCtx, ctx context.Context, t *chat.Chat, systemPrompt, moving string, note chat.Recalled) {
 	window := r.history(ctx, t, systemPrompt)
 	turns := toProviderTurns(window.Messages)
 
@@ -99,7 +99,11 @@ func (r *Runner) consume(runCtx, ctx context.Context, t *chat.Chat, systemPrompt
 	//
 	// Forty invented turns over one hour did not reproduce any of it.
 	// Both positions passed. Only his real conversation failed.
-	turns = append(turns, r.clock()...)
+	// What changes from turn to turn goes here rather than in the
+	// system prompt, so that what is left holds still and a cache can
+	// keep it. Beside the clock, which is already here and already a
+	// note of the server's, so this adds no turn of its own.
+	turns = append(turns, r.clock(moving)...)
 
 	// The message this turn answers: the one they chose to reply to, or
 	// the question last asked them, when all they said was yes. Put in

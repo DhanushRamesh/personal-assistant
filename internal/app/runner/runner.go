@@ -100,6 +100,13 @@ type Options struct {
 	MaxConcurrent int
 	// Messages : Where the conversation is read and written. Required.
 	Messages conversation.Repository
+	// StablePrompt : Whether to keep the system prompt to the parts that
+	// do not change from turn to turn, and give the rest as a turn.
+	//
+	// A cached prompt is kept only while it is byte for byte what it
+	// was, so one recalled memory changing costs the whole of it. See
+	// where it is read, in promptFor.
+	StablePrompt bool
 	// HistoryLimits : The ceilings the conversation sent to the provider is
 	// held under. A zero size selects conversation.DefaultBudget, and a zero
 	// count means the provider accepts any number of messages.
@@ -172,16 +179,20 @@ type Aside interface {
 //
 // It is safe for concurrent use.
 type Runner struct {
-	repo            store.Repository
-	messages        conversation.Repository
-	announcements   Announcements
-	publishing      Publishing
-	environment     environment.Environment
-	publisher       Publisher
-	changes         Changes
-	logger          *slog.Logger
-	chatTimeout     time.Duration
-	historyLimits   conversation.Limits
+	repo          store.Repository
+	messages      conversation.Repository
+	announcements Announcements
+	publishing    Publishing
+	environment   environment.Environment
+	publisher     Publisher
+	changes       Changes
+	logger        *slog.Logger
+	chatTimeout   time.Duration
+	historyLimits conversation.Limits
+	// stablePrompt : Whether the parts that change every turn are given
+	// as a turn rather than in the system prompt, so that what is left
+	// holds still and a cache can keep it.
+	stablePrompt    bool
 	condenseTimeout time.Duration
 	assistantName   string
 	// picker : Chooses which tools to describe for a question. Nil
@@ -275,6 +286,7 @@ func New(opts Options) (*Runner, error) {
 		logger:          opts.Logger,
 		chatTimeout:     opts.ChatTimeout,
 		historyLimits:   opts.HistoryLimits,
+		stablePrompt:    opts.StablePrompt,
 		condenseTimeout: opts.CondenseTimeout,
 		assistantName:   opts.AssistantName,
 		picker:          opts.Picker,
@@ -436,7 +448,7 @@ func (r *Runner) personaID() string {
 // an assistant that has not been told answers from whatever it remembers
 // doing, and remembering having switched somewhere is not the same as being
 // there.
-func (r *Runner) promptFor(ctx context.Context, t *chat.Chat) (string, []remind.Reminder, chat.Recalled) {
+func (r *Runner) promptFor(ctx context.Context, t *chat.Chat) (string, string, []remind.Reminder, chat.Recalled) {
 	standing := r.prompt(reading(t)) + r.heard(t)
 
 	// The conversation is read once: it carries both where the assistant is
@@ -486,6 +498,34 @@ func (r *Runner) promptFor(ctx context.Context, t *chat.Chat) (string, []remind.
 	timed("quoted", func() { quoted = r.quoted(ctx, userID, t.Prompt, t.ConversationID, &note) })
 	timed("just_said", func() { justSaid = r.justSaid(ctx, userID) })
 	timed("prefetched", func() { prefetched = r.prefetch(ctx, t, &note) })
+	// What holds still and what does not, kept apart.
+	//
+	// The gateway keeps a cached prompt only while it is byte for
+	// byte what it was, and the whole of it: one word changed in the
+	// manner, the profile or a recalled memory and the next call pays
+	// full price for all thirty thousand characters of it. Measured 20
+	// October 2026 over six real turns: standing was 7,592 characters
+	// every single time, known and prefetched changed once each, and
+	// where, recalled and quoted changed every turn.
+	//
+	// So the ones that change are given as a turn instead, after the
+	// history and before the question, which is where the clock
+	// already goes and for the same reason. What is left is about
+	// twenty-six thousand characters that hold still across a
+	// conversation, which is what a cache can keep.
+	//
+	// Behind a flag until it is measured. See Options.StablePrompt.
+	if r.stablePrompt {
+		prompt := join(standing, known, prefetched)
+		moving := join(where, recalled, quoted, justSaid, unsaid)
+		r.logger.InfoContext(ctx, "system prompt composed",
+			slog.Int("standing", len(standing)), slog.Int("known", len(known)),
+			slog.Int("prefetched", len(prefetched)), slog.Int("whole", len(prompt)),
+			slog.Int("as_a_turn", len(moving)),
+			slog.Duration("took", time.Since(started)))
+		return prompt, moving, covered, note
+	}
+
 	prompt := join(standing, where, known, recalled, quoted, justSaid, prefetched, unsaid)
 
 	// What the system prompt is made of, in bytes: the parts that are not
@@ -505,7 +545,7 @@ func (r *Runner) promptFor(ctx context.Context, t *chat.Chat) (string, []remind.
 	note.TookMS = time.Since(started).Milliseconds()
 	r.recordRecalled(ctx, t, note)
 
-	return prompt, covered, note
+	return prompt, "", covered, note
 }
 
 // whereTheyAre : What the person has in front of them in the client that
@@ -806,9 +846,13 @@ func (r *Runner) cancelReason(id string) (string, bool) {
 //
 // Given as a pair of turns rather than a line in the system prompt.
 // See the measurement where it is appended, in execute.go.
-func (r *Runner) clock() []environment.Turn {
+func (r *Runner) clock(moving string) []environment.Turn {
+	said := conversation.Now(r.now())
+	if strings.TrimSpace(moving) != "" {
+		said += "\n\n" + moving
+	}
 	return []environment.Turn{
-		{Role: environment.RoleUser, Text: conversation.Now(r.now())},
+		{Role: environment.RoleUser, Text: said},
 		{Role: environment.RoleAssistant, Text: conversation.Acknowledged},
 	}
 }

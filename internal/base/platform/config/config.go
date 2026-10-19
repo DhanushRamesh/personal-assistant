@@ -116,6 +116,15 @@ const (
 // server states a name.
 type Assistant struct {
 
+	// StablePrompt : Whether the system prompt is kept to the parts that
+	// do not change from turn to turn, the rest given as a turn.
+	//
+	// A cached prompt is kept only while it is byte for byte what it
+	// was. Measured over six real turns: the manner was identical every
+	// time, the profile and the prefetched memories changed once each,
+	// and where he is, what was recalled and what was quoted changed
+	// every turn -- about seven thousand characters of thirty-three.
+	StablePrompt bool
 	// Name : What the assistant calls itself when it answers. Empty leaves
 	// it nameless, which is a working assistant that simply never says what
 	// it is called.
@@ -678,9 +687,10 @@ func Load(path string, lookup Lookup) (Config, error) {
 			AutoMigrate:     l.boolean("database", "auto_migrate", true),
 		},
 		Assistant: Assistant{
-			Name:     l.str("assistant", "name", ""),
-			Greeting: l.str("assistant", "greeting", "plain"),
-			Alarms:   l.boolean("assistant", "alarms", true),
+			Name:         l.str("assistant", "name", ""),
+			StablePrompt: l.boolean("assistant", "stable_prompt", false),
+			Greeting:     l.str("assistant", "greeting", "plain"),
+			Alarms:       l.boolean("assistant", "alarms", true),
 
 			ToolsNearest: l.integer("assistant", "tools_nearest", 0),
 			Persona:      l.str("assistant", "persona", ""),

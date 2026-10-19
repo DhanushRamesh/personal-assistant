@@ -22335,3 +22335,72 @@ not.
 The ask itself is written up in `docs/prompt-caching-request.md`, with
 the two tables that make the case -- what caching does, and why it
 cannot be used as the mark is placed now.
+
+## The system prompt holds still, so a cache can keep it
+
+Caching was switched on and measured, and the first two conclusions
+were both wrong. The third is in the code.
+
+### What was wrong the first time
+
+The test asked two different questions of the same prompt and saw a
+second cache entry written rather than the first read, and concluded
+that the breakpoint was useless. But a conversation does not replace
+its question; it adds to it. Asked properly:
+
+| | write | read | credits |
+| --- | --- | --- | --- |
+| turn 1 | 4,517 | 0 | 27.19 |
+| turn 2, grown | 12 | 4,517 | **1.51** |
+| turn 3, grown | 12 | 4,529 | **1.51** |
+
+A growing conversation reads the whole of what came before at a tenth
+of the price. The breakpoint is where it should be.
+
+### What was wrong the second time
+
+The system prompt changes every turn, and a cached prompt is kept only
+while it is byte for byte what it was:
+
+| | write | read |
+| --- | --- | --- |
+| same prompt, grown | 12 | 4,526 |
+| **one sentence changed** | 4,544 | **0** |
+
+So caching helped only inside a single turn, where the prompt is
+composed once and the rounds share it. Write at twice, read at a
+tenth, over 1.93 rounds: about five per cent *more* than not caching,
+bought back in latency on the second round.
+
+### What is actually true
+
+Most of the prompt does not change. Measured over six real turns:
+
+| | bytes | |
+| --- | --- | --- |
+| `standing` | 7,592 | identical every turn |
+| `known` | 6,582 | changed once |
+| `prefetched` | 11,727 | changed once |
+| `where` | 2,425-3,424 | every turn |
+| `recalled` | 2,107-2,286 | every turn |
+| `quoted` | 0-2,789 | every turn |
+
+Twenty-six thousand characters of thirty-three hold still. Only seven
+thousand move, and they move because they are about this turn: where
+he is, what was recalled for this question, what was quoted.
+
+**So they are given as a turn.** They go in with the clock, after the
+history and before the question, which is where a note about this
+moment belongs and where the clock already is -- so no turn is added,
+only lengthened. What is left in the system prompt is the manner, the
+profile and the prefetched memories, and it is the same from one turn
+to the next until the profile is rewritten.
+
+`[assistant] stable_prompt`, on. One line turns it off.
+
+### What is not known yet
+
+Whether the model uses a recalled memory as readily from a turn as
+from the system prompt. The tool evals cannot see it: they build their
+own prompt and never call promptFor. Only real traffic can, and none
+has run since the restart.

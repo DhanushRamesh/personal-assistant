@@ -596,6 +596,7 @@ func run() error {
 		Publisher:     bus,
 		Changes:       liveHub,
 		HistoryLimits: historyLimits(cfg, logger.Logger),
+		StablePrompt:  cfg.Assistant.StablePrompt,
 		AssistantName: cfg.Assistant.Name,
 		Picker:        picking,
 		Pointer:       pointed,
