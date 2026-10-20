@@ -235,6 +235,16 @@ cut to `usage.MaxPrompt`, 160 runes), read for all of them in one query
 (`ChatPrompts`, only the person's own). The app adds the rounds up by
 turn.
 
+**What a spoken turn is doing reaches the desktop app** (owner, 20
+October 2026: *"it called the web search, but why didn't I get the
+transient message?"*). The runner kept the `saying` line off a voice
+turn, for Home Assistant, which speaks its whole stream. That also kept
+it from the desktop app, the one that says it for a turn asked aloud
+there, so nothing was said while web_search ran for 4.6 s. It is
+published for every turn now; Home Assistant's stream still keeps
+progress off a spoken turn by itself (`assist.go`, held by
+`progress_test.go`).
+
 **What it is doing is said in the persona's voice** (owner, 19 October
 2026: *"add the word sir, like 'Looking into it, sir'"*). The line a round
 says while its tools run (the `saying` argument) gets the persona's

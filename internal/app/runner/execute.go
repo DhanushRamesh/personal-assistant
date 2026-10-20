@@ -892,16 +892,16 @@ func (r *Runner) consume(runCtx, ctx context.Context, t *chat.Chat, systemPrompt
 		// sayAside are what keep several of them from running
 		// together.
 		//
-		// Never onto a voice stream. Home Assistant speaks
-		// everything written to it, so a narration put there is
-		// recited whether or not anybody asked for one -- which is
-		// how "starting a new conversation" came to be said in front
-		// of "a new conversation has been created, sir". Aloud, the
-		// narration belongs to the aside player, which is off by
-		// default and which settleAside sequences against the
-		// answer. On a screen it is a status line and is never
-		// spoken, so it goes through as before.
-		if said != "" && t.Channel != chat.ChannelVoice {
+		// Published for a spoken turn too. It was kept off one
+		// here, for Home Assistant, which speaks everything written to
+		// its stream -- "starting a new conversation" was said in front
+		// of "a new conversation has been created, sir". That stream
+		// keeps progress off a spoken turn by itself (assist.go), and
+		// the desktop app is the one that says it, for a turn asked
+		// aloud there; kept off here, the app never had it (owner, 20
+		// October 2026: *"it called the web search, but why didn't I
+		// get the transient message?"*).
+		if said != "" {
 			r.announce(t.ID, environment.Update(said))
 		}
 		if r.sayAside(ctx, t, aloud, said) {

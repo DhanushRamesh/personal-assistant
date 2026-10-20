@@ -193,22 +193,31 @@ func (p *narrating) Run(_ context.Context, req environment.Request) (<-chan envi
 	return ch, nil
 }
 
-// TestAVoiceTurnIsNotToldWhatIsBeingDone : The owner, hearing
-// "starting a new conversation" in front of "a new conversation has
-// been created, sir": "no need for aside now, turn it off."
+// TestAVoiceTurnIsToldWhatIsBeingDone : The desktop app says what a
+// turn asked aloud there is doing while it waits, so the line is
+// published for a voice turn too (owner, 20 October 2026: "it called the
+// web search, but why didn't I get the transient message?").
 //
-// Home Assistant speaks everything written to the stream, so a
-// narration put there is recited whether or not anybody asked for
-// one. Aloud it belongs to the aside player, which is off.
-func TestAVoiceTurnIsNotToldWhatIsBeingDone(t *testing.T) {
+// It was kept off a voice turn here once, because Home Assistant speaks
+// everything written to its stream: "starting a new conversation" was
+// heard in front of "a new conversation has been created, sir". That
+// stream keeps progress off a spoken turn itself, and
+// assist/progress_test.go holds it to that.
+func TestAVoiceTurnIsToldWhatIsBeingDone(t *testing.T) {
 	h := newHarness(t, &narrating{}, runner.Options{Tools: writer(true)})
 
 	tk := h.submitOn(t, chat.ChannelVoice, "switch to a new conversation")
 	heard := h.listen(t, tk.ID)
 	h.await(t, tk.ID, chat.StatusCompleted, chat.StatusFailed)
 
-	if got := heard(); len(got) > 0 {
-		t.Errorf("a voice turn was narrated, and Home Assistant speaks it: %q", got)
+	var found bool
+	for _, got := range heard() {
+		if strings.Contains(got, "starting a new conversation") {
+			found = true
+		}
+	}
+	if !found {
+		t.Errorf("a voice turn was not told what was being done: %q", heard())
 	}
 	if answer := answered(t, h); !strings.Contains(answer, "created") {
 		t.Errorf("the answer did not survive: %q", answer)
