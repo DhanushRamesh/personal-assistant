@@ -2,6 +2,7 @@ package conversation
 
 import (
 	"personal-assistant/internal/base/thinking/prompt"
+	"strconv"
 	"strings"
 	"unicode"
 )
@@ -207,4 +208,20 @@ func SayingYesTo(question string) string {
 		"\"" + question + "\"\n\n" +
 		"Do what it offered, now, with the terminal or the thing it names -- " +
 		"not whatever is in front of them. Then say in a few words that it is done."
+}
+
+// ChoosingFrom : What the assistant is told when the person answers its
+// question with an option's number alone (owner, 20 October 2026: "3"
+// under "Shall I tell it to choose option one?" was typed into Claude Code
+// as "1"). Empty when there is no question.
+func ChoosingFrom(question string, option int) string {
+	question = strings.TrimSpace(question)
+	if question == "" || option <= 0 {
+		return ""
+	}
+	n := strconv.Itoa(option)
+	return "They are choosing option " + n + ", in answer to this, the last thing you asked them:\n" +
+		"\"" + question + "\"\n\n" +
+		"Do option " + n + " -- exactly that one, not the one you suggested -- with the terminal or the thing it names: " +
+		"where it is a choice on Claude Code's screen, type " + n + ". Then say in a few words that it is done."
 }

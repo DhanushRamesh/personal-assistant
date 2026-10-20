@@ -235,6 +235,16 @@ cut to `usage.MaxPrompt`, 160 runes), read for all of them in one query
 (`ChatPrompts`, only the person's own). The app adds the rounds up by
 turn.
 
+**A bare number picks that option** (owner, 20 October 2026: he typed
+"3" under "I'd go with option one ... Shall I tell it to choose option
+one?", and "1" was typed into Claude Code). A prompt that is only an
+option -- "3", "option three", "the third one", "number 2, please"
+(`persona.Chooses`) -- answering the message chosen, or the last
+question asked, gets `conversation.ChoosingFrom` in front of it: do
+option N, exactly that one and not the one suggested; where it is a
+choice on Claude Code's screen, type N. It counts as agreeing, so an
+answer that then does nothing is sent back.
+
 **What a spoken turn is doing reaches the desktop app** (owner, 20
 October 2026: *"it called the web search, but why didn't I get the
 transient message?"*). The runner kept the `saying` line off a voice

@@ -495,6 +495,33 @@ func TestAYesIsToldWhatItAnswers(t *testing.T) {
 	}
 }
 
+// TestANumberIsToldWhichOptionItPicks : "3" under "Shall I tell it to
+// choose option one?" was typed into Claude Code as "1" (owner, 20
+// October 2026). The number is made plain, and the question with it.
+func TestANumberIsToldWhichOptionItPicks(t *testing.T) {
+	recorder := &recordingProvider{}
+	h := newHarness(t, recorder, runner.Options{Tools: offering()})
+	const offer = "Claude Code in Server is waiting, sir. I'd go with option one. Shall I tell it to choose option one?"
+	if _, err := h.repo.Append(context.Background(), conversation.Message{
+		ID:             conversation.NewMessageID(),
+		ConversationID: h.conversation(t),
+		Kind:           conversation.Immediate,
+		Role:           conversation.Assistant,
+		Content:        offer,
+		At:             time.Now().UTC(),
+	}); err != nil {
+		t.Fatalf("Append: %v", err)
+	}
+	tk := h.submit(t, "3")
+	h.await(t, tk.ID, chat.StatusCompleted, chat.StatusFailed)
+	got := recorder.prompts[0]
+	for _, want := range []string{"choosing option 3", offer, "not the one you suggested", "type 3"} {
+		if !strings.Contains(got, want) {
+			t.Errorf("no %q in %q", want, got)
+		}
+	}
+}
+
 // TestAReplyChosenIsToldWhatItAnswers : A message chosen in the app is
 // what the prompt answers, whatever came last, and whatever was said.
 func TestAReplyChosenIsToldWhatItAnswers(t *testing.T) {

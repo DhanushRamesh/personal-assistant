@@ -1903,13 +1903,23 @@ func (r *Runner) pointAt(ctx context.Context, t *chat.Chat, before string) {
 // question last put to them, whichever kind of message carried it -- an
 // announcement as much as a reply.
 func answering(t *chat.Chat, messages []conversation.Message, name string) (string, string, bool) {
+	// An option's number alone picks that option, of the message chosen
+	// or of the question last asked, and is an answer to be acted on.
+	option := persona.Chooses(t.Prompt, name)
 	if chosen := strings.TrimSpace(t.ReplyTo); chosen != "" {
+		if option > 0 {
+			return chosen, conversation.ChoosingFrom(chosen, option), true
+		}
 		return chosen, conversation.ReplyingTo(chosen), false
+	}
+	last := lastAloud(messages)
+	if option > 0 && persona.Asks(last) {
+		return last, conversation.ChoosingFrom(last, option), true
 	}
 	if !persona.Agrees(t.Prompt, name) {
 		return "", "", false
 	}
-	if last := lastAloud(messages); persona.Asks(last) {
+	if persona.Asks(last) {
 		return last, conversation.SayingYesTo(last), true
 	}
 	return "", "", false
