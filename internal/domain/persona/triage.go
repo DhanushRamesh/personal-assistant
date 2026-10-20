@@ -3,6 +3,7 @@ package persona
 import (
 	"regexp"
 	"strings"
+	"unicode"
 )
 
 // triage : An opening that says what sort of question was asked.
@@ -109,7 +110,17 @@ func TooLong(answer string, how Reading) bool {
 // "hey" around it aside -- thanks, an acknowledgement, a hold, a hello or
 // a goodbye. Never a yes: a yes to something offered is answered by doing
 // it.
-var inPassing = regexp.MustCompile(`^(?:thanks|thank you|thanks a lot|thank you so much|cheers|okay|ok|okay then|alright|all right|got it|understood|cool|great|nice|good|fine|perfect|wait|hold on|one moment|one second|not now|never mind|nevermind|nothing|forget it|leave it|no|no thanks|hello|hi|hey|good morning|good afternoon|good evening|good night|bye|goodbye|see you|i was just checking|just checking|i was just checking in)$`)
+//
+// Tamil and Hindi beside the English, added 20 October 2026. The list
+// is his languages and not every language, which is the honest shape
+// of a word list: it works where it was written and nowhere else, and
+// what it cannot do belongs to the prompt instead.
+var inPassing = regexp.MustCompile(`^(?:` +
+	// Tamil: thanks, fine, understood, enough, leave it, hello, bye.
+	`நன்றி|சரி|சரிங்க|புரிஞ்சுது|புரிந்தது|போதும்|விடு|வணக்கம்|பை|` +
+	// Hindi: thanks, fine, understood, enough, leave it, hello, bye.
+	`धन्यवाद|शुक्रिया|ठीक|ठीक है|समझ गया|समझ गयी|बस|रहने दो|छोड़ो|नमस्ते|अलविदा|` +
+	`thanks|thank you|thanks a lot|thank you so much|cheers|okay|ok|okay then|alright|all right|got it|understood|cool|great|nice|good|fine|perfect|wait|hold on|one moment|one second|not now|never mind|nevermind|nothing|forget it|leave it|no|no thanks|hello|hi|hey|good morning|good afternoon|good evening|good night|bye|goodbye|see you|i was just checking|just checking|i was just checking in)$`)
 
 // agreeing : The in-passing words that mean yes when they answer a
 // question.
@@ -118,10 +129,38 @@ var inPassing = regexp.MustCompile(`^(?:thanks|thank you|thanks a lot|thank you 
 // consent, and the word is the same either way. Only the plain yesses
 // belong here: an acknowledgement -- got it, understood, cool -- is not
 // an instruction even after a question.
-var agreeing = regexp.MustCompile(`^(?:okay|ok|okay then|alright|all right|fine)$`)
+var agreeing = regexp.MustCompile(`^(?:` +
+	// The same shrug in Tamil and Hindi: fine, alright.
+	`சரி|சரிங்க|ஓகே|ठीक|ठीक है|ओके|` +
+	`okay|ok|okay then|alright|all right|fine)$`)
 
 // asking : Whether the assistant's last words put a question to them.
 var asking = regexp.MustCompile(`\?\s*$`)
+
+// bare : What was said, with the punctuation off and the spacing
+// evened out, ready to compare against a word list.
+//
+// Every letter is kept, in whatever alphabet it is written. It used to
+// be `[^a-z' ]+` replaced with a space, which does not merely fail to
+// match Tamil or Hindi -- it deletes them, so "ஆம்" arrives at the
+// comparison as the empty string and a yes is read as nothing at all.
+// Owner, 20 October 2026: *"what if I speak in another language"*.
+//
+// Marks are dropped rather than kept because they are what varies:
+// the same word arrives with and without them depending on the
+// transcriber.
+func bare(said string) string {
+	var b strings.Builder
+	for _, r := range strings.ToLower(said) {
+		switch {
+		case unicode.IsLetter(r), unicode.IsMark(r), r == '\'':
+			b.WriteRune(r)
+		default:
+			b.WriteRune(' ')
+		}
+	}
+	return strings.Join(strings.Fields(b.String()), " ")
+}
 
 // InPassing : Whether what was said is said in passing, with nothing to
 // look up or do, so its answer is not sent back to look at the tools,
@@ -141,9 +180,7 @@ var asking = regexp.MustCompile(`\?\s*$`)
 // in passing, however short: "open Spotify" was answered "I cannot" until
 // it was sent back, which is what the send-back is for.
 func InPassing(said, before, name string) bool {
-	s := strings.ToLower(said)
-	s = regexp.MustCompile(`[^a-z' ]+`).ReplaceAllString(s, " ")
-	s = strings.Join(strings.Fields(s), " ")
+	s := bare(said)
 	s = strings.TrimPrefix(s, "hey ")
 	if n := strings.ToLower(strings.TrimSpace(name)); n != "" {
 		s = strings.TrimSpace(strings.TrimSuffix(strings.TrimPrefix(s, n+" "), " "+n))
@@ -159,7 +196,12 @@ func InPassing(said, before, name string) bool {
 
 // consenting : A bare yes, and nothing else -- the words a person
 // answers an offer with when the offer says what is to be done.
-var consenting = regexp.MustCompile(`^(?:(?:yes|yeah|yep|yup|ya|sure|ok|okay|alright|all right|fine|absolutely|of course|please)` +
+var consenting = regexp.MustCompile(`^(?:` +
+	// Tamil: yes, fine, do it, go on, carry on.
+	`ஆம்|ஆமா|ஆமாம்|சரி|சரிங்க|ஓகே|செய்|செய்யுங்க|தொடரு|தொடருங்க|` +
+	// Hindi: yes, fine, do it, go ahead, carry on.
+	`हाँ|हां|जी|जी हाँ|ठीक|ठीक है|ओके|करो|कर दो|आगे बढ़ो|जारी रखो|` +
+	`(?:yes|yeah|yep|yup|ya|sure|ok|okay|alright|all right|fine|absolutely|of course|please)` +
 	`(?: (?:yes|sir|please|do it|do that|go ahead|go on|proceed|carry on|tell it|do so))*` +
 	`|go ahead|do it|do that|go on|proceed|carry on|go for it|please do|sounds good|tell it)(?: sir| please)*$`)
 
@@ -172,9 +214,7 @@ var consenting = regexp.MustCompile(`^(?:(?:yes|yeah|yep|yup|ya|sure|ok|okay|alr
 // conversation and did nothing. A yes on its own carries no subject; the
 // question it answers is the subject, and the runner hands it over.
 func Agrees(said, name string) bool {
-	s := strings.ToLower(said)
-	s = regexp.MustCompile(`[^a-z' ]+`).ReplaceAllString(s, " ")
-	s = strings.Join(strings.Fields(s), " ")
+	s := bare(said)
 	s = strings.TrimPrefix(s, "hey ")
 	if n := strings.ToLower(strings.TrimSpace(name)); n != "" {
 		s = strings.TrimSpace(strings.TrimSuffix(strings.TrimPrefix(s, n+" "), " "+n))
@@ -199,7 +239,17 @@ func Asks(said string) bool {
 // an offer -- "can I confirm which one you meant" -- and a guard that
 // fires on an honest question is worse than one that misses an offer,
 // since the offer is caught again the moment they say yes to it.
-var offering = regexp.MustCompile(`(?i)\b(?:shall i|should i|would you like me to|` +
+//
+// Tamil and Hindi beside the English. This one reads the assistant's
+// own words rather than his, so it is English far more often than not
+// -- but it answers in the language it was spoken to, and an offer
+// made in Tamil was invisible until this.
+var offering = regexp.MustCompile(`(?i)(?:` +
+	// Tamil: shall I, do you want me to, anything else.
+	`சொல்லவா|செய்யவா|படிக்கவா|வேணுமா|வேண்டுமா|வேறு ஏதாவது|` +
+	// Hindi: shall I, do you want, anything else.
+	`क्या मैं|बताऊँ|करूँ|कर दूँ|चाहिए क्या|और कुछ` +
+	`)|\b(?:shall i|should i|would you like me to|` +
 	`do you want me to|did you want me to|want me to|would you like that|` +
 	`anything else|let me know if)\b`)
 

@@ -22750,3 +22750,38 @@ for the task titles in the answer and every case failed it -- because
 the right answer says "those five items" and does not recite them,
 which is what the listing itself asks for. What is counted now is the
 fault: an answer that says the subject is missing.
+
+### The strip was the bug; the lists were only incomplete
+
+Two different faults were under *"what if I speak in another
+language"*, and only one of them was the word lists.
+
+**The strip deleted alphabets.** Both `Agrees` and `InPassing` began
+by replacing `[^a-z' ]+` with a space. That does not fail to match
+Tamil or Hindi -- it removes them, so "ஆம்" reached the comparison as
+the empty string and was read as nothing said at all. Even "ஆம் sir"
+came through as "sir".
+
+Replaced by `bare`, which keeps every letter and every mark in
+whatever alphabet it is written and drops only the punctuation. One
+function, used by both, since they were the same five lines twice.
+
+**The lists are his languages now.** Tamil and Hindi beside the
+English in `consenting`, `agreeing`, `inPassing` and `offering`. Not
+every language: a word list works where it was written and nowhere
+else, and that is the honest shape of one. What it cannot do belongs
+to the prompt, which reads meaning rather than spelling -- which is
+why the pointing rule went there and these did not.
+
+`offering` matters more than it looks. It reads the assistant's own
+words, which are usually English -- but it answers in the language it
+was spoken to, so an offer made in Tamil was invisible.
+
+**A test holds all three**, and would have caught the original: every
+yes, every acknowledgement and every offer in English, Tamil and
+Hindi, with the things that are none of them beside each one.
+
+Writing it caught a mistake of the same kind: an alternation ending in
+`|)` has an empty branch and matches everything, so `Offers` became
+true of every answer there was. Four tests failed at once, which is
+what tests are for.
