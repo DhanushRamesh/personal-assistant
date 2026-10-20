@@ -22685,3 +22685,68 @@ answer.
 writes into its result -- *"say so"*, *"tell them both numbers"* --
 are about reporting what happened accurately, which is a different
 thing from deciding the next move on the strength of a guess.
+
+## A word that points, and why a regex cannot see it
+
+Read five tasks and told *"add these tl secuyre access spoace notes"*,
+it answered: *"I need to see what you want to add, sir. You said 'add
+these' but there is nothing following it."* It looked for the list
+after the word in his message instead of before it in the
+conversation, where it had just written it out.
+
+The first attempt was a pattern -- the sentences that ask for a
+subject without a question mark, since `onlyAsking` wanted a question
+mark and this ends in a full stop. Owner, cutting it off: *"we can't
+handle these by regex!! what if I speak in another language"*.
+
+He is right, and it is worse than the one pattern I was adding:
+
+| | |
+| --- | --- |
+| `Agrees("yes")` | true |
+| `Agrees("ஆம்")`, `("சரி")`, `("sí")`, `("हाँ")` | **false** |
+| `Offers("Shall I tell it to keep going?")` | true |
+| `Offers("அதைத் தொடரச் சொல்லவா?")` | **false** |
+
+Say **ஆம்** to an offer and the whole machinery behind a yes goes
+quiet: the subject is never handed over, and the guard that insists
+the offer be carried out never fires. One line is the worst of it --
+`[^a-z' ]+` replaced before matching deletes every non-Latin alphabet,
+so nothing survives to compare.
+
+**Language-dependent:** `consenting`, `agreeing`, `inPassing`,
+`offering`, `triage`, and both strips.
+**Language-independent, and fine:** sentence ends, the question mark,
+markdown shape, word counts, whether a tool ran, whether anything was
+written.
+
+### So this one is the prompt's, and for a reason
+
+Every other fault this week was better fixed in code, because a count
+cannot be reasoned away. This one is the opposite: whether a word
+points backwards is a question about meaning, and the words that do it
+are different in every language. A model understands *these* in Tamil
+as readily as in English; a pattern cannot be written for a language
+nobody listed.
+
+Both personas say it now: a word that points -- these, those, it,
+them, that one -- points backwards into what has been said, and never
+further along their message.
+
+### Measured in three languages
+
+`make evals-pointing-words`, with the five tasks behind it:
+
+| | |
+| --- | --- |
+| as he typed it | held |
+| plainly | held |
+| only the pointing word | held |
+| in Tamil | held |
+| in Hindi | held |
+
+**The first checker was wrong, which is the third tonight.** It looked
+for the task titles in the answer and every case failed it -- because
+the right answer says "those five items" and does not recite them,
+which is what the listing itself asks for. What is counted now is the
+fault: an answer that says the subject is missing.

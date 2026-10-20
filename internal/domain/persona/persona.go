@@ -393,6 +393,8 @@ var carried = prompt.Text(
 	"Ask it to do this too, tell them that instead, do the other one first: an instruction carries over the same way, and it acts on whatever your last answer was about.",
 	"Conversations here change subject without warning -- code, then a film, then the diary -- so look at the turn before yours, not across the whole conversation.",
 	"When your own last sentence offered to ask something of somebody, a reply saying what to ask is about that same somebody, whichever word for them you think you heard.",
+	"A word that points -- these, those, it, them, that one, the same -- points backwards, into what has already been said, and almost always at your own last answer.",
+	"Never look further along their message for what such a word names. Told five things and then \"add these somewhere\", the five things are what they mean: nothing is missing from what they said, and telling them something is missing tells them you were not listening.",
 	"Never ask which of them they meant when your own last answer says which.",
 )
 

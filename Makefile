@@ -137,6 +137,11 @@ evals-models: ## Ask which models this gateway will accept (costs API calls)
 	@go test ./internal/app/noticing/evals/ -tags evals -count=1 -v -timeout 10m \
 		-run TestWhichModelsThisGatewayTakes $(ARGS)
 
+.PHONY: evals-pointing-words
+evals-pointing-words: ## Whether "add these" reaches what was just said, in English, Tamil and Hindi (costs API calls)
+	@go test ./internal/domain/persona/evals/ -tags evals -count=1 -v -timeout 10m \
+		-run TestAWordThatPointsPointsBackwards $(ARGS)
+
 .PHONY: evals-shape
 evals-shape: ## Ask a real model the same question for the ear and the eye. ASK="..." for one of your own (costs API calls)
 	@go test ./internal/domain/persona/evals/ -tags evals -count=1 -v -timeout 10m \
