@@ -22610,3 +22610,50 @@ because each asked a question one step away from what it was
 protecting -- "does it write" for "does it take an identifier", "did a
 tool run" for both "did it do the thing" and "did it look something
 up", and a message kind that a merge had already erased.
+
+## A name may be a list's as readily as a task's
+
+He asked *"whara re the tasks for secure accesss"* and was told the
+Secure access list has one task, and told the wrong one. It has
+several.
+
+The model is blameless. `task_find` returned this:
+
+> Nothing is called exactly "Secure Access". The nearest is "Do a
+> health call when provisional access is set" on Secure access. Ask
+> whether that is the one they meant, as a yes or no.
+
+It searched **task titles** and nothing else. "Secure access" is a
+list, so nothing matched, and it offered the nearest task -- which
+came from the list of that name and sat among its siblings. Then it
+instructed the model to ask the confirming question, and the model did
+exactly as it was told.
+
+Five hours later he said *"yes"*, and the answer repeated the one task
+the question had named. That looked like the fault and was its echo.
+
+### What changed
+
+`task_find` looks at list names before task names, by the same crude
+likeness, since a list name arrives through speech as mangled as
+anything else. A name that is a list's comes back as the list and
+everything on it:
+
+> "secure accesss" is a list, not a task. It holds 3 tasks:
+> - "Show enrolment options in Ulaa About page"
+> - ...
+
+A list is checked first because a list that matches is an answer,
+where the nearest task is a guess. A name that is a task's is still
+looked for among tasks, which has a test of its own.
+
+### The shape of it
+
+The tool knew less than the question needed and said so with
+confidence: *"nothing is called exactly that"* is true of tasks and
+false of the person's lists, and nothing in the sentence says which it
+searched.
+
+It also wrote the model's next move for it -- *"ask whether that is
+the one they meant"* -- and the model obeyed. A tool that instructs is
+a tool whose mistakes are carried out rather than weighed.

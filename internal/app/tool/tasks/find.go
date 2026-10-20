@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"strconv"
 	"strings"
 
 	"personal-assistant/internal/app/tool"
@@ -92,6 +93,30 @@ func findATask(lists Lists, clock Clock) tool.Tool {
 				return whenTrouble(err)
 			}
 
+			// A name may be a list's as readily as a task's, and he
+			// says one without saying which. Asked for "the tasks for
+			// secure access" on 20 October 2026, this searched task
+			// titles alone, found none called that, and offered the
+			// nearest single task -- from the list of that name, which
+			// held several. He was told the list had one task and was
+			// told the wrong one.
+			//
+			// Checked first, because a list that matches is an answer
+			// and the nearest task is a guess.
+			if on := onTheList(all, want); len(on) > 0 {
+				var b strings.Builder
+				fmt.Fprintf(&b, "%q is a list, not a task. It holds %d %s:",
+					want, len(on), plural("task", len(on)))
+				for _, t := range on {
+					b.WriteString("\n- " + describeOnIts(t))
+				}
+				if len(missed) > 0 {
+					fmt.Fprintf(&b, "\n\nThese lists could not be read: %s.",
+						strings.Join(missed, ", "))
+				}
+				return tool.Reference(b.String())
+			}
+
 			var exact, near []string
 			for _, t := range all {
 				switch {
@@ -123,6 +148,34 @@ func findATask(lists Lists, clock Clock) tool.Tool {
 			return tool.OK(b.String())
 		},
 	}
+}
+
+// onTheList : The tasks on the list of this name, when the name is a
+// list's.
+//
+// Exactly or near enough, by the same crude likeness a task name gets,
+// because a list name arrives through speech as mangled as anything
+// else. Nothing is returned when no list matches, which is what sends
+// the caller on to look at task names instead.
+func onTheList(all []tasks.Task, want string) []tasks.Task {
+	var on []tasks.Task
+	for _, t := range all {
+		if strings.EqualFold(strings.TrimSpace(t.List), want) ||
+			alike(t.List, want) >= closeEnough {
+			on = append(on, t)
+		}
+	}
+	return on
+}
+
+// describeOnIts : One task, without naming the list it is on, since
+// every one of them is on the list just named.
+func describeOnIts(t tasks.Task) string {
+	out := strconv.Quote(strings.TrimSpace(t.Title))
+	if t.Done {
+		out += " (done)"
+	}
+	return out
 }
 
 // describeFound : One task and where it lives.

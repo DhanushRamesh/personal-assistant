@@ -94,3 +94,65 @@ func TestAListThatCouldNotBeReadIsAdmitted(t *testing.T) {
 		t.Errorf("did not admit a list it could not read: %q", got.Content)
 	}
 }
+
+// secureAccess : a list holding several tasks, named as he named it.
+func secureAccess() *lists {
+	return &lists{
+		held: []tasks.List{{ID: "l1", Title: "Secure access"}, {ID: "l2", Title: "My Tasks"}},
+		on: map[string][]tasks.Task{
+			"l1": {
+				{ID: "t1", Title: "Show enrolment options in Ulaa About page", List: "Secure access"},
+				{ID: "t2", Title: "Provisional access close button when gateway is not running", List: "Secure access"},
+				{ID: "t3", Title: "Do a health call when provisional access is set", List: "Secure access"},
+			},
+			"l2": {{ID: "t4", Title: "Buy a cutting board", List: "My Tasks"}},
+		},
+	}
+}
+
+// TestANameMayBeAListsRatherThanATasks : what he asked for on 20
+// October 2026, and what he was told.
+//
+// *"whara re the tasks for secure accesss"*. This searched task titles
+// alone, found none called that, and offered the nearest single task --
+// which happened to be on the list of that name. He was told the list
+// had one task, and was told the wrong one. It has three here and
+// several in his account.
+func TestANameMayBeAListsRatherThanATasks(t *testing.T) {
+	got := found(t, secureAccess(), "secure accesss")
+
+	if strings.Contains(got.Content, "Nothing is called exactly") {
+		t.Fatalf("a list name was searched as a task name: %q", got.Content)
+	}
+	if !strings.Contains(got.Content, "is a list") {
+		t.Errorf("did not say it is a list: %q", got.Content)
+	}
+	if !strings.Contains(got.Content, "3 tasks") {
+		t.Errorf("did not say how many are on it: %q", got.Content)
+	}
+	for _, want := range []string{
+		"Show enrolment options in Ulaa About page",
+		"Provisional access close button when gateway is not running",
+		"Do a health call when provisional access is set",
+	} {
+		if !strings.Contains(got.Content, want) {
+			t.Errorf("left out %q: %s", want, got.Content)
+		}
+	}
+	// Nothing from the other list.
+	if strings.Contains(got.Content, "cutting board") {
+		t.Errorf("a task from another list came back: %q", got.Content)
+	}
+}
+
+// TestATaskStillWinsOverAListItIsNotOn : a name that is a task's is
+// still looked for among tasks.
+func TestATaskStillWinsOverAListItIsNotOn(t *testing.T) {
+	got := found(t, secureAccess(), "Buy a cutting board")
+	if strings.Contains(got.Content, "is a list") {
+		t.Errorf("a task name was taken for a list: %q", got.Content)
+	}
+	if !strings.Contains(got.Content, "My Tasks") {
+		t.Errorf("did not say which list it is on: %q", got.Content)
+	}
+}
