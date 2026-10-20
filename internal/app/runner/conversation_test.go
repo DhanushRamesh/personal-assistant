@@ -522,6 +522,30 @@ func TestANumberIsToldWhichOptionItPicks(t *testing.T) {
 	}
 }
 
+// TestAHoldIsNeverSentBackToDoWhatWasOffered : "wait" under "Shall I
+// tell it to commit?" was answered holding, with an offer about another
+// terminal after it; sent back to do what it offered, it typed "yes"
+// into the first (owner, 20 October 2026: "I said wait, it said yes!!").
+func TestAHoldIsNeverSentBackToDoWhatWasOffered(t *testing.T) {
+	recorder := &recordingProvider{answer: "Understood, sir, I will hold. Secure Access is done too. Shall I tell it to push?"}
+	h := newHarness(t, recorder, runner.Options{Tools: offering()})
+	if _, err := h.repo.Append(context.Background(), conversation.Message{
+		ID:             conversation.NewMessageID(),
+		ConversationID: h.conversation(t),
+		Kind:           conversation.Immediate,
+		Role:           conversation.Assistant,
+		Content:        "PW Claude is done, sir. Shall I tell it to commit?",
+		At:             time.Now().UTC(),
+	}); err != nil {
+		t.Fatalf("Append: %v", err)
+	}
+	tk := h.submit(t, "wait")
+	h.await(t, tk.ID, chat.StatusCompleted, chat.StatusFailed)
+	if len(recorder.prompts) != 1 {
+		t.Errorf("a hold was sent back %d times: %v", len(recorder.prompts)-1, recorder.prompts)
+	}
+}
+
 // TestAReplyChosenIsToldWhatItAnswers : A message chosen in the app is
 // what the prompt answers, whatever came last, and whatever was said.
 func TestAReplyChosenIsToldWhatItAnswers(t *testing.T) {

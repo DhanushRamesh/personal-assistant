@@ -235,6 +235,22 @@ cut to `usage.MaxPrompt`, 160 runes), read for all of them in one query
 (`ChatPrompts`, only the person's own). The app adds the rounds up by
 turn.
 
+**An announcement has no "Sir." in front of it** (owner, 20 October 2026:
+*"don't need to add sir at the start"*). The opening given to cold
+announcements since 7 October (*"saying the important stuff fast before
+I even start to listen"*) is gone: `announcement.Opening` gives nothing,
+and the sentence is said as written, its own "sir" where the model put it.
+
+**A hold or a no is never sent back to act** (owner, 20 October 2026:
+*"I said wait, it said yes!!"*). He said "wait" to "Shall I tell it to
+commit?". The answer held, rightly, but went on to the Secure Access
+terminal in front of him and ended "Shall I tell it to push?"; the
+send-back for an answer that offers instead of doing sent it back to do
+what it offered, and "yes" was typed into PW Claude. Neither that
+send-back nor the one for an answer that is only a question fires now
+when what was said is said in passing (`persona.InPassing`: wait, hold on,
+not now, no, leave it ...).
+
 **A bare number picks that option** (owner, 20 October 2026: he typed
 "3" under "I'd go with option one ... Shall I tell it to choose option
 one?", and "1" was typed into Claude Code). A prompt that is only an

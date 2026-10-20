@@ -230,7 +230,8 @@ func (r *Runner) consume(runCtx, ctx context.Context, t *chat.Chat, systemPrompt
 	var offered bool
 	// Said in passing -- thanks, a hold, a hello -- is not sent back to
 	// look, nor run a round beside it for that: see persona.InPassing.
-	if persona.InPassing(t.Prompt, lastAloud(window.Messages), r.assistantName) {
+	passing := persona.InPassing(t.Prompt, lastAloud(window.Messages), r.assistantName)
+	if passing {
 		pressed = true
 		r.logger.InfoContext(ctx, "said in passing: not sent back to look")
 	}
@@ -605,7 +606,7 @@ func (r *Runner) consume(runCtx, ctx context.Context, t *chat.Chat, systemPrompt
 			// the two announcements -- how long he had slept. It
 			// went and read his sleep, which is the right thing to
 			// do with the wrong subject.
-			if !reached && !askedBack && onlyAsking(final.Text) {
+			if !reached && !askedBack && !passing && onlyAsking(final.Text) {
 				if said := lastAloud(window.Messages); said != "" {
 					r.logger.InfoContext(ctx, "an answer that was only a question was sent back with its subject",
 						slog.String("thrown_away", first(final.Text, 90)))
@@ -640,7 +641,13 @@ func (r *Runner) consume(runCtx, ctx context.Context, t *chat.Chat, systemPrompt
 			// meant. The send-back leaves the irreversible case
 			// open in words as well, because the line is drawn on
 			// a sentence and the judgement belongs to the model.
-			if !offered && wrote.tried == 0 && persona.Offers(final.Text) {
+			// Never after a hold or a no. He said "wait" to "Shall I tell
+			// it to commit?"; the answer, rightly holding, ended on an
+			// offer about another terminal, was sent back here to do
+			// what it offered, and "yes" was typed into the first --
+			// committed after he said wait (owner, 20 October 2026:
+			// "I said wait, it said yes!!").
+			if !offered && !passing && wrote.tried == 0 && persona.Offers(final.Text) {
 				r.logger.InfoContext(ctx, "an answer offered to do something instead of doing it",
 					slog.String("thrown_away", first(final.Text, 90)))
 				offered = true

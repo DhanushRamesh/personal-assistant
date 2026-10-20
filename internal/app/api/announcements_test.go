@@ -53,7 +53,7 @@ func TestAClientCollectsAndSaysItsOwn(t *testing.T) {
 	if err := json.Unmarshal(rec.Body.Bytes(), &list); err != nil {
 		t.Fatal(err)
 	}
-	if len(list.Announcements) != 2 || list.Announcements[0].Say != "Sir. The battery is low." {
+	if len(list.Announcements) != 2 || list.Announcements[0].Say != "The battery is low." {
 		t.Fatalf("collected %+v", list.Announcements)
 	}
 

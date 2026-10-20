@@ -245,8 +245,9 @@ func TestSomethingDisposableIsSaidFirst(t *testing.T) {
 	// Capitalised, because the sentence now begins after a full stop
 	// -- and because taking the address off the front of one that
 	// opened with it leaves a sentence that has to start somewhere.
-	if len(to.said) != 1 || to.said[0] != "Sir. Your battery is low." {
-		t.Errorf("nothing was said in front of it: %v", to.said)
+	// Nothing in front of it now: said as written.
+	if len(to.said) != 1 || to.said[0] != "your battery is low." {
+		t.Errorf("something was said in front of it: %v", to.said)
 	}
 }
 
@@ -298,33 +299,16 @@ func TestItIsSaidOnce(t *testing.T) {
 	announcement.Addressing("sir")
 	t.Cleanup(func() { announcement.Addressing("sir") })
 
-	for _, c := range []struct {
-		why  string
-		text string
-		want string
-	}{
-		{"at the end, which is where the model puts it",
-			"Your battery has dropped below fifty percent, sir.",
-			"Sir. Your battery has dropped below fifty percent."},
-		{"in the middle, which is just as much a second one",
-			"The silence from your phone, sir, has now stretched to three hours.",
-			"Sir. The silence from your phone has now stretched to three hours."},
-		{"at the front, where it would read as a stammer",
-			"Sir, the battery is at twenty-five percent.",
-			"Sir. The battery is at twenty-five percent."},
-		{"twice over, because a model has bad minutes too",
-			"Sir, the battery is low, sir.",
-			"Sir. The battery is low."},
-		{"not there at all, which is left alone",
-			"The cable may not be in properly.",
-			"Sir. The cable may not be in properly."},
-		{"a word that merely contains it",
-			"Your sirloin is still in the oven.",
-			"Sir. Your sirloin is still in the oven."},
+	// No opening any more (owner, 20 October 2026: "don't need to add
+	// sir at the start"), so the sentence is said as written, its own
+	// address where the model put it, said once.
+	for _, text := range []string{
+		"Your battery has dropped below fifty percent, sir.",
+		"The silence from your phone, sir, has now stretched to three hours.",
+		"The cable may not be in properly.",
 	} {
-		got := announcement.Spoken(conversation.Immediate, c.text)
-		if got != c.want {
-			t.Errorf("%s:\n  got  %q\n  want %q", c.why, got, c.want)
+		if got := announcement.Spoken(conversation.Immediate, text); got != text {
+			t.Errorf("got %q, want it as written: %q", got, text)
 		}
 	}
 }

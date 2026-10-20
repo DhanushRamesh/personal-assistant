@@ -63,11 +63,13 @@ func Addressing(a string) { address = strings.TrimSpace(a) }
 // The greeting has had this since it was written -- "Good evening,
 // sir." in front of whatever the model wrote -- and it is the
 // reason a greeting is easy to follow and an announcement is not.
+//
+// None now (owner, 20 October 2026: *"don't need to add sir at the
+// start"*). An announcement is said as written, its own "sir" where
+// the model put it, and nothing in front of it; the opening is kept
+// as the place to put one back.
 func Opening(kind conversation.Kind) string {
-	if !kind.Cold() || address == "" {
-		return ""
-	}
-	return strings.ToUpper(address[:1]) + address[1:] + "."
+	return ""
 }
 
 // Spoken : The announcement as it will be heard.
