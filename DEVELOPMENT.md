@@ -22560,3 +22560,43 @@ a paragraph may read as the answer and be repeated, or may crowd out
 the model's own words. Nothing here tested that. It is worth watching
 the first few searches after one in the morning, when the allowance
 comes back.
+
+## The asked half first
+
+Owner, 20 October 2026: *"when you ask something to do, that's the AI
+agent part; when it does something automatically, that's agentic AI...
+my first goal is to make it a perfect AI agent"*.
+
+The labels are used loosely in the field and the distinction is not.
+There are two halves here: what it does when asked, and what it says
+unasked -- the greeting, the announcements, the rules, the background
+passes.
+
+**The asked half first, and it is the right order**, because the
+unasked half runs on the same loop. A greeting, a rule and an
+announcement all go through the same tools, the same send-backs and
+the same guards. Fixing the core fixes both; breaking it breaks both.
+Every fault reported on 19 and 20 October was in the asked half.
+
+### What perfect means here
+
+Four failure classes appeared in one night, and nothing else did:
+
+| | what it looked like |
+| --- | --- |
+| the wrong subject | *"you didn't even look at"* answered about his sleep |
+| an absence claimed without looking | *"your devices do not record call duration"*, which they do |
+| reading taken for doing | a yes to an offer, answered by reading the terminal twice |
+| the server's own note answered | *"hi"*, answered with six bullets about shaping answers |
+
+Perfect on this half is those four being unable to happen, and being
+provable. Not better wording: fifteen rules lost in one night while
+sitting in the running binary.
+
+**One guard per class, each keyed on the property itself, each with a
+test driven from a real turn.** The last part matters most. Four of
+those failures were guards written correctly that could never fire,
+because each asked a question one step away from what it was
+protecting -- "does it write" for "does it take an identifier", "did a
+tool run" for both "did it do the thing" and "did it look something
+up", and a message kind that a merge had already erased.
