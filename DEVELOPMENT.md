@@ -22657,3 +22657,31 @@ searched.
 It also wrote the model's next move for it -- *"ask whether that is
 the one they meant"* -- and the model obeyed. A tool that instructs is
 a tool whose mistakes are carried out rather than weighed.
+
+### And it never looked anywhere else
+
+Auditing the other tools for the same shape turned up a second gap in
+the same one.
+
+`tool.WhichOne` is what a tool returns when a name is not found, and
+it is well made: it names the kind it searched -- *"No **conversation**
+is called that"* -- it lists every candidate there is rather than one
+guess, and it marks the result with `Looked(kind, said)`. That mark
+has the registry search the other domains and append whatever it
+finds, which is the whole mechanism behind "a name does not say its
+domain".
+
+`task_find` hand-rolled its own sentence and got none of the three. It
+did not say it had searched tasks, it offered one guess instead of the
+set, and it never marked the lookup -- so a name that failed in tasks
+was never looked for among reminders, conversations, rules or
+memories. Every other tool does this. This one never has.
+
+Failed lookups are marked now, and only failed ones: a task that was
+found is not looked for elsewhere, and neither is a list, which is an
+answer.
+
+**The rest of the audit was clean.** The other instructions a tool
+writes into its result -- *"say so"*, *"tell them both numbers"* --
+are about reporting what happened accurately, which is a different
+thing from deciding the next move on the strength of a guess.

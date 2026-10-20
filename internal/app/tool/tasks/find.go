@@ -145,6 +145,15 @@ func findATask(lists Lists, clock Clock) tool.Tool {
 				fmt.Fprintf(&b, " These lists could not be read, so this is not the whole picture: %s.",
 					strings.Join(missed, ", "))
 			}
+			// A name that is nowhere in the tasks is marked as looked
+			// for, which has the registry search the other domains and
+			// append whatever it finds. Every other tool that fails to
+			// find a name does this; this one never did, so a word that
+			// turned out to be a reminder or a conversation was simply
+			// reported missing.
+			if len(exact) == 0 && len(near) == 0 {
+				return tool.OK(b.String()).Looked("task", want)
+			}
 			return tool.OK(b.String())
 		},
 	}

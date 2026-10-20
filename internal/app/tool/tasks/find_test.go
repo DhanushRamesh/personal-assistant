@@ -156,3 +156,29 @@ func TestATaskStillWinsOverAListItIsNotOn(t *testing.T) {
 		t.Errorf("did not say which list it is on: %q", got.Content)
 	}
 }
+
+// TestANameFoundNowhereIsLookedForElsewhere : a word that is not a
+// task may be a reminder, a conversation or a rule.
+//
+// Every other tool that fails to find a name marks what it looked for,
+// which has the registry search the other domains and append what it
+// finds. task_find never did, so a name that lived in another domain
+// came back as simply missing.
+func TestANameFoundNowhereIsLookedForElsewhere(t *testing.T) {
+	got := found(t, twoLists(), "ring the dentist")
+	if got.Looking == nil {
+		t.Fatalf("a name found nowhere was not marked as looked for: %q", got.Content)
+	}
+	if got.Looking.Kind != "task" || got.Looking.For != "ring the dentist" {
+		t.Errorf("marked as %+v", got.Looking)
+	}
+
+	// A name that was found is not looked for anywhere else.
+	if other := found(t, twoLists(), "Buy a cutting board"); other.Looking != nil {
+		t.Errorf("a name that was found was still looked for elsewhere: %+v", other.Looking)
+	}
+	// Nor is a list's name, which is an answer.
+	if list := found(t, secureAccess(), "secure accesss"); list.Looking != nil {
+		t.Errorf("a list that was found was still looked for elsewhere: %+v", list.Looking)
+	}
+}
