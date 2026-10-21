@@ -22811,3 +22811,56 @@ Writing it caught a mistake of the same kind: an alternation ending in
 `|)` has an empty branch and matches everything, so `Offers` became
 true of every answer there was. Four tests failed at once, which is
 what tests are for.
+
+## A rule that waits can now be over
+
+Owner, 21 October 2026, on what he wants this for: *"I will use Jarvis
+to do complex tasks, to manage all my spaces and terminals inside it.
+Here accuracy is what matters, not the latency -- the job has to be
+done and I should be able to rely on it."*
+
+Work that waits on a terminal does not fit in a turn. A turn has
+thirty seconds and Claude Code takes minutes, so the asking and the
+answering are different turns, and nothing carried the rest of the
+intention across the gap.
+
+**The engine for it was already here.** A job is a schedule and a
+sequence; a step can call a tool, read a condition and stop the rest,
+or hand the model an instruction along with what the earlier steps
+found. So the waiting is written as a rule that comes round every
+minute and stops at a check until the answer is there -- which costs
+nothing while it waits, since nothing is held open.
+
+What it could not do was end. A repeating rule repeats, so a rule that
+had done its work went on coming round for ever.
+
+### A finish
+
+```
+every 1m
+  check   terminal.finished within 2m     <- stops here while waiting
+  write   compare it with the notes
+  finish
+```
+
+Reached means over. No branch is added: a check already stops the
+steps after it, so a finish put last is reached only on the pass where
+the work actually happened. A step may stop the ones after it, and
+this one is simply the last -- which is the whole of the conditional
+in this engine and still is.
+
+Refused at writing: a step after a finish, which could never run, and
+a finish on its own, which is a rule that exists to delete itself.
+Read back as *"and is over"*, because a rule that ends itself looks
+like one somebody forgot to cancel otherwise.
+
+### What this does not do yet
+
+**Nobody can ask for it in words.** The model writes rules; whether it
+can write this one -- a tool step, a check on a terminal, and a finish
+-- is untested, and that is the whole way in.
+
+**And the evidence is thin.** He has to be able to rely on it, which
+means every step's result kept where he can see what was asked, what
+came back and what was concluded. The runs table records that a rule
+ran. It does not yet make a case.

@@ -164,6 +164,23 @@ const (
 	// within a tick. Nothing a rule says is worth a goroutine
 	// held open.
 	DoWait = "wait"
+	// DoFinish : End the job here. Reached means over.
+	//
+	// Owner, 21 October 2026, on using this to manage his spaces and
+	// terminals: *"here accuracy is what matters, not the latency ..
+	// the job has to be done and I should be reliable [on it]"*. Work
+	// that waits on a terminal is written as a rule that comes round
+	// every minute and stops at a check until the answer is there --
+	// which costs nothing while it waits, and never ends.
+	//
+	// Nothing new is needed to say when it is over, because a check
+	// already stops the steps after it. A finish put past the check
+	// is reached only on the pass where the work actually happened,
+	// and reaching it is the whole of the instruction.
+	//
+	// So there is still no branch here. A step may stop the ones
+	// after it; this one is simply the last.
+	DoFinish = "finish"
 )
 
 // The operators as a structured rule writes them. The word forms
@@ -343,6 +360,8 @@ func actOf(s Step) (Act, error) {
 		return Act{Do: DoSay, Text: s.Say}, nil
 	case Relay:
 		return Act{Do: DoRelay}, nil
+	case Finish:
+		return Act{Do: DoFinish}, nil
 	}
 	return Act{}, fmt.Errorf("job: nothing carries out %q", s.Do)
 }
@@ -964,6 +983,18 @@ func Make(id, userID, name, kind string, when Occasion, acts []Act, from time.Ti
 	for i, a := range acts {
 		switch a.Do {
 		case DoTool, DoPattern, DoWrite, DoSay, DoRelay:
+		case DoFinish:
+			// Anything after it would never run, which is a sequence
+			// written by somebody who thought it would.
+			if i != len(acts)-1 {
+				return Job{}, fmt.Errorf("%w: a finish ends the rule, so nothing can come after it",
+					ErrUnreadable)
+			}
+			// On its own it is a rule that exists to delete itself.
+			if len(acts) == 1 {
+				return Job{}, fmt.Errorf("%w: a finish with nothing before it does nothing",
+					ErrUnreadable)
+			}
 		case DoWait:
 			if _, err := Span(a.For); err != nil {
 				return Job{}, fmt.Errorf("%w: a wait is a length of time, and %q is not one",

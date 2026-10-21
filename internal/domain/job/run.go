@@ -782,7 +782,7 @@ func (r *Runner) one(ctx context.Context, j Job, now time.Time, pass *Pass) {
 	// carry, never a thing that was spoken. A step that does not
 	// stop and hands back a sentence has just said it.
 	var why, spoke, remember string
-	var stopped, failed bool
+	var stopped, failed, over bool
 	var already []Ran
 	// What each step did, collected as it goes. A run is written
 	// down once at the end, so this is the only record of the
@@ -852,6 +852,14 @@ func (r *Runner) one(ctx context.Context, j Job, now time.Time, pass *Pass) {
 		// finished. What it said so far is kept the same way a
 		// finished run keeps it, so the half that already spoke is
 		// not said again when the other half arrives.
+		// Reached, so the sequence did its work and the rule is
+		// over. Nothing is called: reaching it is the instruction.
+		// See DoFinish.
+		if act.Do == DoFinish {
+			tried = append(tried, Tried{Do: Task(DoFinish), Came: Went})
+			over = true
+			break
+		}
 		if act.Do == DoWait {
 			d, err := Span(act.For)
 			if err != nil {
@@ -982,6 +990,13 @@ func (r *Runner) one(ctx context.Context, j Job, now time.Time, pass *Pass) {
 		}
 	}
 
+	if over {
+		// Done rather than due again, whatever its schedule says.
+		if err := r.Store.Ran(ctx, j.ID, time.Time{}, Done, why, remember, now); err != nil {
+			r.log("cannot record that a rule finished", err)
+		}
+		return
+	}
 	r.settle(ctx, j, now, why, remember)
 }
 

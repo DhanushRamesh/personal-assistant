@@ -449,3 +449,32 @@ func TestEveryConditionIsAnswered(t *testing.T) {
 		t.Errorf("a rule with no conditions judged %+v", none)
 	}
 }
+
+// A finish is the last thing a rule does, and never the only one.
+func TestAFinishIsLastAndNotAlone(t *testing.T) {
+	// Anything after it would never run.
+	if _, err := job.New("job_1", "usr_1", "a job", "rule", "every 1m",
+		[]job.Step{
+			job.Step{Do: job.Check, When: "hour >= 22"},
+			job.Step{Do: job.Finish},
+			job.Step{Do: job.Announce, Say: "and this never happens"},
+		}, noon); err == nil {
+		t.Error("a step after a finish was allowed, and it could never run")
+	}
+
+	// On its own it is a rule that exists to delete itself.
+	if _, err := job.New("job_2", "usr_1", "a job", "rule", "every 1m",
+		[]job.Step{{Do: job.Finish}}, noon); err == nil {
+		t.Error("a finish with nothing before it was allowed")
+	}
+
+	// Last, after work, is the shape it is for.
+	if _, err := job.New("job_3", "usr_1", "a job", "rule", "every 1m",
+		[]job.Step{
+			job.Step{Do: job.Check, When: "terminal.finished within 2m"},
+			job.Step{Do: job.Write, Ask: "compare it with the notes"},
+			job.Step{Do: job.Finish},
+		}, noon); err != nil {
+		t.Errorf("the shape this exists for was refused: %v", err)
+	}
+}

@@ -97,6 +97,18 @@ const (
 	// check in the middle is a condition on what follows. One kind
 	// of step covers both.
 	Check Task = "check"
+	// Finish : End the job here, whatever its schedule says.
+	//
+	// For work that waits: a rule that comes round every minute and
+	// stops at a check until what it is waiting for arrives. Before
+	// this there was no way for such a rule to be over, so it went on
+	// coming round for ever after it had done its work.
+	//
+	// Reached means over, and a check already stops the steps after
+	// it, so a finish put last is reached only on the pass where the
+	// work happened. No branch is added: a step may stop the ones
+	// after it, and this one is simply the last. See DoFinish.
+	Finish Task = "finish"
 )
 
 // Step : One thing to do.
@@ -342,9 +354,24 @@ func New(id, userID, name, kind, schedule string, steps []Step, from time.Time) 
 	if len(steps) == 0 {
 		return Job{}, ErrNoSteps
 	}
-	for _, step := range steps {
+	for i, step := range steps {
 		if err := step.Valid(); err != nil {
 			return Job{}, err
+		}
+		if step.Do != Finish {
+			continue
+		}
+		// Reaching a finish ends the rule, so anything after it
+		// would never run -- which is a sequence written by somebody
+		// who thought it would.
+		if i != len(steps)-1 {
+			return Job{}, fmt.Errorf("%w: a finish ends the rule, so nothing can come after it",
+				ErrUnreadable)
+		}
+		// And on its own it is a rule that exists to delete itself.
+		if len(steps) == 1 {
+			return Job{}, fmt.Errorf("%w: a finish with nothing before it does nothing",
+				ErrUnreadable)
 		}
 	}
 	// A watching rule has no first run to work out. Its next_at
@@ -697,6 +724,8 @@ func (s Step) Valid() error {
 		if _, err := ParseConditions(s.When); err != nil {
 			return err
 		}
+	case Finish:
+		// Nothing to carry. Reaching it is the instruction.
 	default:
 		return fmt.Errorf("job: %q is not something a step can do", s.Do)
 	}

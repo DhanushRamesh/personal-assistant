@@ -718,3 +718,67 @@ func TestATrialMarksEachCondition(t *testing.T) {
 		t.Errorf("why %q, %d acts: want it stopped on the battery before any step", tried.Why, len(tried.Acts))
 	}
 }
+
+// A rule that waits for something and then ends.
+//
+// Owner, 21 October 2026, on using this to manage his spaces and
+// terminals: *"here accuracy is what matters, not the latency .. the
+// job has to be done and I should be reliable [on it]"*. Work that
+// waits on a terminal is a rule that comes round every minute and
+// stops at a check until the answer is there. That costs nothing
+// while it waits, and before this it never ended.
+//
+// A finish past the check is reached only on the pass where the work
+// happened. No branch: a step may stop the ones after it, and this
+// one is simply the last.
+func TestAFinishEndsARepeatingRule(t *testing.T) {
+	// Waiting: the answer is not there, so the check stops the rest
+	// and the finish is never reached.
+	waiting, h := inmemory.New(), &hands{withhold: "no answer yet"}
+	put(t, waiting, "every 1m",
+		job.Step{Do: job.Check, When: "terminal.finished within 2m"},
+		job.Step{Do: job.Write, Ask: "compare it with the notes"},
+		job.Step{Do: job.Finish},
+	)
+	if got := runner(waiting, h, noon).Once(context.Background()); got.Stopped != 1 {
+		t.Fatalf("pass = %+v, want it stopped at the check", got)
+	}
+	held, ok := waiting.Get("job_1")
+	if !ok {
+		t.Fatal("the rule is gone")
+	}
+	if held.State != job.Active {
+		t.Errorf("state = %q, want it still waiting", held.State)
+	}
+	if held.Next.IsZero() {
+		t.Error("a waiting rule has no next time, so it would never come round again")
+	}
+
+	// Answered: the check holds, the work runs, and the finish ends
+	// it although its schedule says every minute.
+	done, g := inmemory.New(), &hands{}
+	put(t, done, "every 1m",
+		job.Step{Do: job.Check, When: "terminal.finished within 2m"},
+		job.Step{Do: job.Write, Ask: "compare it with the notes"},
+		job.Step{Do: job.Finish},
+	)
+	if got := runner(done, g, noon).Once(context.Background()); got.Ran != 1 {
+		t.Fatalf("pass = %+v, want it run", got)
+	}
+	over, ok := done.Get("job_1")
+	if !ok {
+		t.Fatal("the rule is gone")
+	}
+	if over.State != job.Done {
+		t.Errorf("state = %q, want it over", over.State)
+	}
+	if !over.Next.IsZero() {
+		t.Errorf("a finished rule is due again at %v", over.Next)
+	}
+	// The work happened before it ended. The harness records a step
+	// by its kind, and the finish is not one it is asked to carry
+	// out -- reaching it is the whole instruction.
+	if len(g.did) != 1 || !strings.HasPrefix(g.did[0], "write") {
+		t.Errorf("it ended without doing the work, or asked somebody to do the finish: %v", g.did)
+	}
+}
