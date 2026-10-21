@@ -23204,3 +23204,20 @@ afraid I cannot do that"* keeps the machinery out of sight and makes a
 flatly untrue sentence out of it. For a fact he wanted kept, the
 honest answer was to keep it; failing that, something other than a
 refusal.
+
+### And it keeps them now
+
+`make evals-keeping`, against the real registry and a real model:
+
+```
+kept  "54.197.7.79 is my gateway ip in ULaa US DC"
+kept  "remember that 54.197.7.79 is my gateway ip"
+kept  "my wife's birthday is on the 3rd of March"
+kept  "I prefer the window seat on flights"
+kept  "the office wifi password changes every quarter"
+kept 5 of 5
+```
+
+The sentence that was refused is kept. Nothing about the model changed
+and nothing about the tool's words changed: it is on the table, which
+it had never been. The failure was never in the reasoning.

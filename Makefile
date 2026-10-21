@@ -200,6 +200,11 @@ evals-toolcost: ## What the tool block costs in time, at three sizes (costs API 
 	@go test ./internal/app/tool/evals/ -tags evals -count=1 -v -timeout 20m \
 		-run TestWhatTheToolBlockCostsInTime $(ARGS)
 
+.PHONY: evals-keeping
+evals-keeping: ## Whether a plain fact worth keeping is kept rather than refused (costs API calls)
+	@go test ./internal/app/tool/evals/ -tags evals -count=1 -v -timeout 10m \
+		-run TestAFactWorthKeepingIsKept $(ARGS)
+
 .PHONY: evals-nearest
 evals-nearest: ## Whether the right tool is near the question by meaning, against the hand-written 25 (no API calls)
 	@go test ./internal/app/tool/evals/ -tags evals -count=1 -v -timeout 10m \
