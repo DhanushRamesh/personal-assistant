@@ -80,6 +80,19 @@ const holding = `His rules already, as examples of the shape:
 	`"perform":[{"do":"tool","use":"calendar_events","with":{"days":1}},` +
 	`{"do":"write","ask":"say what is on today, briefly"}]}`
 
+// examples : His rules, unless EVAL_BARE is set.
+//
+// Set it to measure what the refusals alone can do: if a writer shown
+// no example recovers from the sentences it is handed back, those
+// sentences are carrying the shape, which is the thing worth knowing
+// about them.
+func examples() string {
+	if os.Getenv("EVAL_BARE") != "" {
+		return ""
+	}
+	return holding
+}
+
 func TestTheWriterPlansLaptopWork(t *testing.T) {
 	cfg, err := config.Load("../../../../../config.ini", os.LookupEnv)
 	if err != nil {
@@ -147,7 +160,7 @@ func TestTheWriterPlansLaptopWork(t *testing.T) {
 		// both missing the wake array -- and a harness that withholds
 		// what the real caller gives is measuring itself.
 		when, acts, why := writer.Written(ctx,
-			rules.Request{UserID: "usr_1", Asked: c.say, Holding: holding}, look)
+			rules.Request{UserID: "usr_1", Asked: c.say, Holding: examples()}, look)
 		cancel()
 
 		if why != "" {

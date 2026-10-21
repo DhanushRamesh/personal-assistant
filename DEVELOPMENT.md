@@ -23300,3 +23300,45 @@ The others are worth auditing for the same shape.
 | every morning, check the Jarvis Server | `at 08:00` |
 | when Claude Code finishes | `terminal.finished arrives` |
 | every evening at six | `at 18:00` |
+
+### Measured: the refusals carry the shape
+
+Four more refusals were finished -- they named the fault and kept the
+remedy:
+
+```
+nothing would ever wake this rule
+  -> A rule wakes on a clock or on something arriving, inside "wake":
+     {"when": {"wake": [{"at": "08:00"}]}} ... "all" and "any" beside
+     it are conditions, and a condition never wakes anything
+"X" has nothing to compare with
+  -> Give it a value, or use "arrives" for a thing that happens
+there is nothing a condition does called "X"
+  -> The ones there are: is, is not, <, >, <=, >=, within, older than
+a wait is a length of time, and "X" is not one
+  -> Write it as "30s", "5m" or "2h"
+```
+
+Then the writer was shown **no examples at all** -- `EVAL_BARE=1 make
+evals-planning` -- which is the state that refused every rule an hour
+ago, the battery one included.
+
+| | with his rules shown | with none |
+| --- | --- | --- |
+| before | 3 of 4 | **0 of 4** |
+| after | 4 of 4 | **4 of 4** |
+
+So the sentences are carrying the shape. A writer that has never seen
+one of his rules now writes four correct ones, including the terminal
+event with the right operator, from nothing but what it is told when
+it gets something wrong.
+
+**Which is why this is the better lever.** The specification is paid
+for by every rule ever written, in full, whether or not any of it is
+needed. A refusal is read only by the writer that got it wrong, only
+when it got it wrong, and it arrives attached to the mistake.
+
+It reaches past rules. `task_find` told the model *"nothing is called
+exactly 'Secure Access'"* this morning and then dictated the next move
+-- the same family, a message that could have taught and misled
+instead.

@@ -454,7 +454,9 @@ func (w Where) Gate() (Gate, error) {
 					"For a value, say what about it -- is, is not, <, >, <=, >=, within, older than.",
 				ErrUnreadableGate, w.Source, w.Source)
 		}
-		return Gate{}, fmt.Errorf("%w: there is nothing a condition does called %q",
+		return Gate{}, fmt.Errorf("%w: there is nothing a condition does called %q. The ones "+
+			`there are: is, is not, <, >, <=, >=, within, older than, and "arrives" for a thing `+
+			"that happens rather than a level that moves",
 			ErrUnreadableGate, w.Op)
 	}
 
@@ -479,7 +481,9 @@ func (w Where) Gate() (Gate, error) {
 	case w.Value != nil:
 		gate.Value = value(w.Value)
 	default:
-		return Gate{}, fmt.Errorf("%w: %q has nothing to compare with",
+		return Gate{}, fmt.Errorf("%w: %q has nothing to compare with. Give it a value, or, "+
+			`for a thing that happens rather than a level that moves, use "arrives", which asks `+
+			"about no value at all",
 			ErrUnreadableGate, gate.Source)
 	}
 	if err := gate.sound(); err != nil {
@@ -860,7 +864,17 @@ func (o Occasion) Sound() error {
 		return err
 	}
 	if len(o.Ticking()) == 0 && len(hooks) == 0 {
-		return fmt.Errorf("%w: nothing would ever wake this rule", ErrUnreadable)
+		// The shape, not only the fault. This is the refusal a
+		// writer meets when it has put the hook in the wrong place
+		// -- {"when": {"on": ...}} or {"when": [...]}, both of them
+		// the right thought without the wrapper -- and being told
+		// that nothing would wake it leaves it to guess which of the
+		// two it got wrong.
+		return fmt.Errorf("%w: nothing would ever wake this rule. A rule wakes on a clock or "+
+			`on something arriving, inside "wake": {"when": {"wake": [{"at": "08:00"}]}} or `+
+			`{"when": {"wake": [{"on": {"source": "terminal.finished", "op": "arrives"}}]}}. `+
+			`"all" and "any" beside it are conditions, and a condition never wakes anything`,
+			ErrUnreadable)
 	}
 	for _, h := range o.Wake {
 		if _, err := h.Waits(); err != nil {
@@ -1030,7 +1044,8 @@ func Make(id, userID, name, kind string, when Occasion, acts []Act, from time.Ti
 			}
 		case DoWait:
 			if _, err := Span(a.For); err != nil {
-				return Job{}, fmt.Errorf("%w: a wait is a length of time, and %q is not one",
+				return Job{}, fmt.Errorf("%w: a wait is a length of time, and %q is not one. "+
+					`Write it as "30s", "5m" or "2h"`,
 					ErrUnreadable, a.For)
 			}
 			// A wait with nothing after it waits for nothing. It
