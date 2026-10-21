@@ -167,11 +167,34 @@ const Before = 300
 // is only a name, it reaches for something else and is wrong. With a
 // search in the list it can at least go and look.
 //
-// web_search only. It is the one that answers a question about anything
-// rather than about one thing, so it is the only one whose absence
-// leaves nothing to fall back on. Adding the others would be adding
-// them to every question, which is the fixed list this replaced.
-var Always = []string{"web_search"}
+// web_search was the only one, and memory_remember joined it on 21
+// October 2026.
+//
+// web_search is here because it answers a question about anything
+// rather than about one thing, so its absence leaves nothing to fall
+// back on.
+//
+// memory_remember is here for the opposite reason: it is never what a
+// sentence is about. He said *"54.197.7.79 is my gateway ip in ULaa US
+// DC"* and was told "I am afraid I cannot do that, sir." The ranking
+// put event_recent first and memory_remember nowhere in the top eight
+// of eighty-eight -- an address reads as a place, and the tool's own
+// words are about when to decide to keep something rather than about
+// the kind of sentence that needs keeping. Asked to remember his
+// wife's birthday it loses to place_find as well.
+//
+// Nothing about that is a wrong answer by the model: it looked at what
+// it had, found nothing for keeping a fact, and said so. The tool was
+// never on the table.
+//
+// It is also the one tool that is used without being asked for --
+// *"whether or not you were asked to keep it ... do not wait to be
+// told"* -- which is an instruction it cannot follow on a turn where
+// nobody handed it the tool.
+//
+// Two and no more. Every name here is a description on every turn of
+// every conversation, which is the fixed list this replaced.
+var Always = []string{"web_search", "memory_remember"}
 
 // kept : Whether a tool is offered whatever the ranking says.
 func kept(name string) bool {

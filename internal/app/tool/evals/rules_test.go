@@ -148,7 +148,7 @@ func TestTheModelWritesARuleProperly(t *testing.T) {
 	registry, err := tool.NewRegistry(slices.Concat(
 		rules.All(jobmemory.New(), rules.Clock{Location: time.UTC},
 			func() string { return "job_01M48E09RJW0G247RBST6712D1" },
-			func(string) (tool.Tool, bool) { return tool.Tool{}, false },
+			func(string, string) (tool.Tool, bool) { return tool.Tool{}, false },
 			// usually, then the trier and the writer. A writer with
 			// no model in it refuses rather than writes, which is
 			// what this suite wants: it measures whether the model

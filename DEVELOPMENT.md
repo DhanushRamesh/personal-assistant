@@ -23130,3 +23130,77 @@ That the planner writes a good plan for laptop work. It has never been
 asked: until now it could not have written one that passed. The next
 thing is to ask it, in his words, and read what comes back -- which is
 `make evals-rules` territory and costs a few calls.
+
+## Remembering was never on the table
+
+He said *"54.197.7.79 is my gateway ip in ULaa US DC"* and was told
+**"I am afraid I cannot do that, sir."**
+
+The turn, in order:
+
+```
+1st answer  "Remembered, sir. 54.197.7.79 is your gateway IP..."
+            -> sent back to look: it had called nothing
+2nd answer  "I do not have a tool t..."
+            -> the answer named its own machinery, and was rewritten
+final       "I am afraid I cannot do that, sir."
+```
+
+Every guard did its job. The first answer claimed a thing it had not
+done and was caught. The second named its own machinery and was
+caught. What came out was a refusal to keep one line of fact.
+
+**And the model was not wrong.** It looked at the tools it had, found
+nothing for keeping something, and said so. `memory_remember` was
+never described to it.
+
+### Measured against all eighty-eight
+
+```
+"54.197.7.79 is my gateway ip in ULaa US DC"
+  1  0.414  event_recent
+  2  0.367  go_to
+  3  0.359  web_read
+  4  0.359  web_search
+  5  0.358  mail_search
+  6  0.357  place_find
+```
+
+Not in the top eight. An address reads as a place. And it is not this
+sentence alone: *"my wife's birthday is on the 3rd of March"* loses to
+`place_find` too, and *"remember that..."* -- a sentence beginning with
+the word -- does not reach it either.
+
+The reason is in the tool's own words. Its purpose and its use-when
+are about **when to decide** to keep something: *"whether or not you
+were asked"*, *"would it still matter in a month"*. That is judgement,
+written for a model already holding the tool. It looks nothing like
+the sentences that need it, which are plain statements of fact.
+
+### Always offered
+
+`nearest.Always` had one name in it, for a reason that applies here
+twice over. Owner, 18 October: *"make search tool always inside so
+even if it misses, the job is still done."*
+
+`memory_remember` is the opposite case and the same conclusion. It is
+never what a sentence is *about* -- the sentence is about an IP, a
+birthday, a preference -- so a ranking by meaning will keep missing
+it. And it is the one tool meant to be used without being asked,
+which is an instruction it cannot follow on a turn where nobody
+handed it over.
+
+Two names, and no more. Every one is a description paid for on every
+turn of every conversation, which is the fixed list this replaced.
+
+`make evals-nearest` is unchanged at 97% of 93 for the nearest ten,
+which is what matters: the list is added beside the ranking rather
+than taken out of it.
+
+### What is not fixed
+
+**The rewrite.** Turning *"I do not have a tool for that"* into *"I am
+afraid I cannot do that"* keeps the machinery out of sight and makes a
+flatly untrue sentence out of it. For a fact he wanted kept, the
+honest answer was to keep it; failing that, something other than a
+refusal.
