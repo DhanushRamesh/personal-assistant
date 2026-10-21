@@ -157,11 +157,15 @@ var howToPerform = prompt.Lines(
 	`  {"do": "say", "text": "Time to stand up."} -- the same words every time`,
 	`  {"do": "relay"} -- say what the tool before it already worked out, word for word`,
 	`  {"do": "wait", "for": "5m"} -- stop here and carry on with the rest later`,
+	`  {"do": "ask", "text": "Shall I tell the Laptop client to carry on, sir?"} -- say what is about to be done and stop until he allows it`,
+	`  {"do": "finish"} -- the rule is over; put it last, where a check before it means it is only reached once the work is done`,
 	"It has to end in something being said: a write, a say, or a relay.",
 	"A wait must have something after it, and does not re-check the conditions when it comes back -- they held when the rule started and that is what started it.",
 	"Use say for words they dictated and write for anything that depends on the day -- a reading, the diary, who rang.",
 	"Give a tool its arguments. A rule runs with nobody watching, and a tool's defaults are usually everything rather than the one thing the rule is about: a rule asking for the battery every minute, given no arguments, read out a reading from the day before.",
-	"Reading tools only, at most three. A rule runs unattended and may run every few minutes; reading is safe to repeat and writing is not.",
+	"Reading tools, at most three. A rule runs unattended and may run every few minutes, and reading is safe to repeat.",
+	"A tool that changes something is allowed only after an ask step, which says what is about to be done and stops the rule until he allows it. Writing is not safe to repeat and nobody is watching, so he is: put the ask before it, saying plainly what it would do.",
+	"An ask must have something after it -- it is a question about what follows -- and nothing happens until he answers. There is no timeout: a rule that goes ahead when nobody replied is one that did not ask.",
 	`A write may be given "tools" it can call for itself when the rule runs, where what is needed depends on what it finds.`,
 )
 
@@ -806,6 +810,9 @@ func allowed(acts []job.Act, look Lookup) string {
 		return "A rule has to do something. Give it at least one thing to perform."
 	}
 	tools := 0
+	// Whether an approval has been passed. A writing tool is allowed
+	// only behind one, and only the steps after it are behind it.
+	asked := false
 	for _, a := range acts {
 		switch a.Do {
 		case job.DoSay:
@@ -837,16 +844,38 @@ func allowed(acts []job.Act, look Lookup) string {
 				}
 				return fmt.Sprintf("There is no tool called %q.", name)
 			}
-			if found.Writes {
+			// A writing tool, only behind an approval.
+			//
+			// Until 21 October a rule could not change anything at
+			// all: it ran unattended every few minutes, nobody was
+			// there the first time it went wrong, and reading is
+			// safe to repeat where writing is not. None of that has
+			// stopped being true. What changed is that a rule can
+			// now stop and say what it is about to do, and go no
+			// further until he answers -- so the thing that was
+			// missing is no longer missing, and a write behind an
+			// ask is watched after all.
+			//
+			// Behind, strictly: the ask must come earlier in the
+			// sequence. One that comes after is a rule that acts and
+			// then enquires.
+			if found.Writes && !asked {
 				return fmt.Sprintf(
-					"%s changes things, and a rule may only look things up.", name)
+					"%s changes things. A rule may only do that after an ask step "+
+						"that says what it is about to do and waits to be allowed, "+
+						"so put one before it.", name)
 			}
 			if len(a.With) == 0 {
 				return fmt.Sprintf(
 					"%s needs its arguments. A rule runs with nobody watching, "+
 						"and without them it answers from the wrong row.", name)
 			}
-		case job.DoRelay:
+		case job.DoAsk:
+			if strings.TrimSpace(a.Text) == "" {
+				return "An approval needs to say what it would do, in the words he will hear."
+			}
+			asked = true
+		case job.DoFinish, job.DoWait, job.DoRelay:
 		default:
 			return fmt.Sprintf("There is nothing a rule does called %q.", a.Do)
 		}

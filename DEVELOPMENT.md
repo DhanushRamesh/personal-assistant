@@ -23011,3 +23011,53 @@ the ones it had.
 A rule still cannot hold a writing tool -- *"reading tools only, at
 most three"* -- so there is nothing yet for an approval to guard. That
 is the last piece, and it is the one this was built to make safe.
+
+### And now a rule may change something
+
+The last piece, and the one the rest was built for.
+
+> Reading tools only, at most three. A rule runs unattended and may
+> run every few minutes; reading is safe to repeat and writing is not.
+
+All of that is still true. What changed is that a rule can now stop and
+say what it is about to do, and go no further until he answers. The
+thing that was missing is no longer missing.
+
+**A writing tool is allowed only behind an ask.** Strictly behind: the
+approval must come earlier in the sequence, since one that comes after
+is a rule that acts and then enquires. The refusal says what to do
+about it rather than only that it is refused.
+
+```
+tool    read_terminal        {"terminal": "Jarvis Server"}
+ask     "Shall I tell the Laptop client to carry on, sir?"
+tool    type_into_terminal   {"terminal": "Laptop client", ...}
+say     "Told it, sir."
+```
+
+**Two guards, not one.** The runner calls a rule's tools as the person
+on the typed channel, and hands them what the sequence has already
+run. So the rule that a write is preceded by a read of its own domain
+applies inside a sequence exactly as it does inside a turn -- a rule
+that types into a terminal it has not read is refused by machinery
+that was already there and needed nothing.
+
+**And the model is told, including the part that constrains it.** The
+ask and the finish are in what it may write, and so is why: writing is
+not safe to repeat and nobody is watching, so he is; put the ask
+before it, saying plainly what it would do; there is no timeout,
+because a rule that goes ahead when nobody replied is one that did not
+ask.
+
+### The shape, end to end
+
+A rule reads what it needs, says what it would do, and stops. He is
+told. The clock passes over it, for an hour or a day, until he
+answers. He says yes in whatever language he says it in; the model
+understands and calls rule_allow; the rule carries on from the step it
+stopped at, does what it was allowed to do, and says so. If he says
+no, it is cancelled.
+
+Nothing in that is a planner. It is a sequence with a question in the
+middle of it, which is what he asked for when he said the job has to
+be done and he has to be able to rely on it.
