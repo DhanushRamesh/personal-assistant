@@ -433,6 +433,27 @@ func (w Where) Gate() (Gate, error) {
 	// over as a string, and "op": "nonsense" was accepted and made
 	// into a rule that could never hold.
 	if !known[gate.Op] {
+		// An operator left out altogether is almost never a typo.
+		// It is somebody meaning "when this happens", about a kind
+		// where the value is beside the point: a terminal finished,
+		// a call came, a plug went in. There is a word for that and
+		// the refusal used to keep it to itself.
+		//
+		// Said here because this sentence is handed back to the
+		// thing that wrote the rule, and it writes again from it.
+		// Asked on 21 October 2026 to do something when Claude Code
+		// finished, it wrote {"source": "terminal.finished"} with no
+		// operator three times over -- which is the right thought --
+		// and was told three times that there is nothing a condition
+		// does called "". Neither of them was wrong about anything
+		// except how to say it.
+		if strings.TrimSpace(w.Op) == "" {
+			return Gate{}, fmt.Errorf(
+				"%w: %s has no operator. For a thing that happens rather than a level "+
+					`that moves, the operator is "arrives": {"source": %q, "op": "arrives"}. `+
+					"For a value, say what about it -- is, is not, <, >, <=, >=, within, older than.",
+				ErrUnreadableGate, w.Source, w.Source)
+		}
 		return Gate{}, fmt.Errorf("%w: there is nothing a condition does called %q",
 			ErrUnreadableGate, w.Op)
 	}

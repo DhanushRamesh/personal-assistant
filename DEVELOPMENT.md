@@ -23221,3 +23221,82 @@ kept 5 of 5
 The sentence that was refused is kept. Nothing about the model changed
 and nothing about the tool's words changed: it is on the table, which
 it had never been. The failure was never in the reasoning.
+
+## A refusal is a prompt
+
+The planner can see the laptop now, and had never been asked to plan
+for it. `make evals-planning` asks it, in his words, and reads the
+rule that comes back.
+
+### Three things the measurement settled
+
+**It can.** Asked to check the Jarvis Server every morning and ask
+before telling Claude Code to carry on, it wrote:
+
+```
+at 08:00
+  list_terminals()
+  read_terminal(name=Jarvis Server)
+  write: say whether Claude Code is waiting
+  ask:   Claude Code is waiting on you on the Jarvis Server...
+  read_terminal(name=Jarvis Server)
+  write: confirm that the instruction to carry on...
+```
+
+Nobody told it that an approval belongs before acting on his
+terminal. It worked that out from the grammar.
+
+**It needed examples, not better wording.** With no rules of his shown
+to it, it wrote `{"when": {"on": ...}}` and `{"when": [...]}`, both
+missing the wake array, and every rule was refused -- including a
+battery rule of a shape the server writes today. The real caller
+passes his existing rules and the harness did not. **The measurement
+was wrong before the thing it measured was**, which is the fourth time
+in two days.
+
+**And one real gap, now closed.**
+
+### The gap: a refusal that kept the answer to itself
+
+Asked to do something when Claude Code finishes, it wrote
+`{"source": "terminal.finished"}` with no operator, three times over.
+That is the right thought: the arrival is the trigger and there is no
+value to compare.
+
+The grammar has a word for it -- `arrives` -- and the specification
+says so. It still wrote no operator, and was told three times:
+
+> there is nothing a condition does called ""
+
+Which names the fault and withholds the answer. Now:
+
+> terminal.finished has no operator. For a thing that happens rather
+> than a level that moves, the operator is "arrives":
+> {"source": "terminal.finished", "op": "arrives"}
+
+It writes again from that sentence and gets it right. **No change to
+the prompt, the specification or the model.**
+
+### The lever this uncovers
+
+Every refusal in this subsystem is handed back to the thing that wrote
+the rule -- the design says so in as many words: *"a mistake is
+described in the same words whether it is being explained to a person
+or corrected by a model."*
+
+So a refusal **is** a prompt, and a better one than the specification:
+it is read only by the writer that needs it, only when it is needed,
+and it costs nothing on every other turn. A refusal that says what is
+wrong makes the writer guess. One that says what to write instead
+fixes itself on the next attempt.
+
+The others are worth auditing for the same shape.
+
+### Where the four stand
+
+| asked | wakes |
+| --- | --- |
+| battery below twenty | `battery.level < 20` |
+| every morning, check the Jarvis Server | `at 08:00` |
+| when Claude Code finishes | `terminal.finished arrives` |
+| every evening at six | `at 18:00` |

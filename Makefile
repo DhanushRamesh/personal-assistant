@@ -200,6 +200,11 @@ evals-toolcost: ## What the tool block costs in time, at three sizes (costs API 
 	@go test ./internal/app/tool/evals/ -tags evals -count=1 -v -timeout 20m \
 		-run TestWhatTheToolBlockCostsInTime $(ARGS)
 
+.PHONY: evals-planning
+evals-planning: ## Whether the thing that writes rules can plan laptop work from his words (costs API calls)
+	@go test ./internal/app/tool/rules/evals/ -tags evals -count=1 -v -timeout 10m \
+		-run TestTheWriterPlansLaptopWork $(ARGS)
+
 .PHONY: evals-keeping
 evals-keeping: ## Whether a plain fact worth keeping is kept rather than refused (costs API calls)
 	@go test ./internal/app/tool/evals/ -tags evals -count=1 -v -timeout 10m \
