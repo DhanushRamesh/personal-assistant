@@ -516,6 +516,31 @@ func (s *Store) Waits(ctx context.Context, id string, at time.Time, step int) er
 	return err
 }
 
+// Asks : Leaves a rule waiting to be allowed to go on, at this step.
+//
+// No next time: next_at is cleared, so the clock passes over it until
+// somebody answers. See job.Asking.
+func (s *Store) Asks(ctx context.Context, id string, step int) error {
+	if s == nil || s.db == nil {
+		return fmt.Errorf("job: there is nowhere to read jobs")
+	}
+	out := s.db.WithContext(ctx).Model(&row{}).
+		Where("id = ?", id).
+		Updates(map[string]any{
+			"state":          string(job.Asking),
+			"next_at":        nil,
+			"resume_at_step": step,
+			"updated_at":     time.Now().UTC(),
+		})
+	if out.Error != nil {
+		err := fmt.Errorf("job: leaving %s waiting to be allowed: %w", id, out.Error)
+		s.tell(err, "")
+		return err
+	}
+	s.tell(nil, "")
+	return nil
+}
+
 // Forgets : See forgets; the change hook is told when it succeeds.
 func (s *Store) Forgets(ctx context.Context, id string) error {
 	err := s.forgets(ctx, id)

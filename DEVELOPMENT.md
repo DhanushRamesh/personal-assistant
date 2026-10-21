@@ -22920,3 +22920,54 @@ goes out as it is.
 **Nowhere names are left out.** A name belonging to no record of his
 and to nothing in the world is a word the reader took for a name, and
 holding the turn to it would hold it to "sir".
+
+## A rule can stop and ask
+
+Owner, 21 October 2026, shown five agent principles and asked which of
+the two gaps to close first: *"approval first"*.
+
+The reasoning was that a rule managing his terminals could do real
+work unwatched. Building it turned up something better: **it cannot.**
+
+> Reading tools only, at most three. A rule runs unattended and may
+> run every few minutes; reading is safe to repeat and writing is not.
+
+Rules read and speak. Nothing in the engine has ever changed anything
+on its own. So approval is not a guard over a capability that exists
+-- it is the gate that would let one in.
+
+### The step
+
+```
+tool    read_terminal
+ask     "Shall I tell the Laptop client to carry on, sir?"
+type_into_terminal ...
+```
+
+The steps before it have run. He is told, in the rule's own words,
+what is about to happen. The rule then stops, and the ones after it
+wait.
+
+**It has no next time at all.** A clock would make the answer
+optional: the rule would go ahead when nobody replied, and an approval
+nobody gave is not an approval. Its own state, `asking`, rather than a
+flag -- the clock takes `active` and nothing else, so every pass
+afterwards goes over it until he answers.
+
+Refused at writing: an approval with nothing after it, which asks
+about nothing, and one that does not say what it would do.
+
+### Deliberately out of reach
+
+`howToPerform` -- what the model is told it may write -- does not
+mention it. **Nothing can make one of these yet, and that is on
+purpose**: the answering half does not exist, so a rule that stopped
+would stop for ever.
+
+What is missing is the way back: he says yes, and the rule carries on
+at the step it stopped at. Everything for it is there -- the resume
+index is written, `Waits` makes a rule due again -- and nothing joins
+them to what he says.
+
+That, and letting a rule hold a writing tool at all, are the next two.
+Neither is worth having without this one.

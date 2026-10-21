@@ -181,6 +181,9 @@ const (
 	// So there is still no branch here. A step may stop the ones
 	// after it; this one is simply the last.
 	DoFinish = "finish"
+	// DoAsk : Say what is about to be done and wait to be allowed.
+	// See the Ask task.
+	DoAsk = "ask"
 )
 
 // The operators as a structured rule writes them. The word forms
@@ -360,6 +363,8 @@ func actOf(s Step) (Act, error) {
 		return Act{Do: DoSay, Text: s.Say}, nil
 	case Relay:
 		return Act{Do: DoRelay}, nil
+	case Ask:
+		return Act{Do: DoAsk, Text: s.Say}, nil
 	case Finish:
 		return Act{Do: DoFinish}, nil
 	}
@@ -983,6 +988,13 @@ func Make(id, userID, name, kind string, when Occasion, acts []Act, from time.Ti
 	for i, a := range acts {
 		switch a.Do {
 		case DoTool, DoPattern, DoWrite, DoSay, DoRelay:
+		case DoAsk:
+			// Nothing after it would ever run, since nothing would
+			// let it: an approval is a question about what follows.
+			if i == len(acts)-1 {
+				return Job{}, fmt.Errorf("%w: an approval with nothing after it asks about nothing",
+					ErrUnreadable)
+			}
 		case DoFinish:
 			// Anything after it would never run, which is a sequence
 			// written by somebody who thought it would.

@@ -49,6 +49,19 @@ const (
 	Done State = "done"
 	// Cancelled : Called off before it ran again.
 	Cancelled State = "cancelled"
+	// Asking : Stopped part-way, waiting to be allowed to go on.
+	//
+	// Owner, 21 October 2026, asked which of the agent principles to
+	// build first and answering *"approval first"*: a rule that types
+	// into his terminals can do real work unwatched, and nothing in
+	// the engine could stop and ask him before it did.
+	//
+	// Its own state rather than a flag, because what reads jobs reads
+	// state: the clock takes Active and nothing else, so a rule
+	// waiting on him is passed over by every pass until he answers.
+	// It has no next time at all -- a clock would make the answer
+	// optional, and an approval nobody gave is not an approval.
+	Asking State = "asking"
 )
 
 // Errors a caller can act on.
@@ -97,6 +110,16 @@ const (
 	// check in the middle is a condition on what follows. One kind
 	// of step covers both.
 	Check Task = "check"
+	// Ask : Say what is about to be done and stop until he allows it.
+	//
+	// The steps before it have run; the ones after it wait. He is told
+	// in the words the rule carries, and the rule goes nowhere until
+	// he answers -- there is no timeout, because a rule that goes
+	// ahead when nobody replied is one that did not ask.
+	//
+	// Every other step is the assistant acting. This is the one place
+	// the engine hands the decision back.
+	Ask Task = "ask"
 	// Finish : End the job here, whatever its schedule says.
 	//
 	// For work that waits: a rule that comes round every minute and
@@ -357,6 +380,12 @@ func New(id, userID, name, kind, schedule string, steps []Step, from time.Time) 
 	for i, step := range steps {
 		if err := step.Valid(); err != nil {
 			return Job{}, err
+		}
+		if step.Do == Ask && i == len(steps)-1 {
+			// Nothing after it would ever run, since nothing would
+			// let it: an approval is a question about what follows.
+			return Job{}, fmt.Errorf("%w: an approval with nothing after it asks about nothing",
+				ErrUnreadable)
 		}
 		if step.Do != Finish {
 			continue
@@ -723,6 +752,10 @@ func (s Step) Valid() error {
 		}
 		if _, err := ParseConditions(s.When); err != nil {
 			return err
+		}
+	case Ask:
+		if strings.TrimSpace(s.Say) == "" {
+			return errors.New("job: an approval that does not say what it would do")
 		}
 	case Finish:
 		// Nothing to carry. Reaching it is the instruction.

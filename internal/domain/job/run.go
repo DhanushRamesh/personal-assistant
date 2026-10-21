@@ -70,6 +70,13 @@ type Store interface {
 	// Forgets : Clears what a rule last said, so the next time it
 	// has something to say it is heard.
 	Forgets(ctx context.Context, id string) error
+	// Asks : Stops a rule part-way and leaves it waiting to be
+	// allowed to go on, with no next time of its own.
+	//
+	// No time, deliberately. A clock would make the answer optional
+	// -- the rule would go ahead on its own when nobody replied --
+	// and an approval nobody gave is not an approval.
+	Asks(ctx context.Context, id string, step int) error
 }
 
 // Ran : What a step earlier in the same sequence did.
@@ -859,6 +866,31 @@ func (r *Runner) one(ctx context.Context, j Job, now time.Time, pass *Pass) {
 			tried = append(tried, Tried{Do: Task(DoFinish), Came: Went})
 			over = true
 			break
+		}
+		// Stop and ask him. What was said goes out as the words of
+		// the rule; the steps after it wait for his answer, which
+		// arrives as a resume and not as a clock.
+		if act.Do == DoAsk {
+			if _, err := r.Doer.Do(ctx,
+				Turn{UserID: j.UserID, Name: j.Name, Already: already, Before: j.Said,
+					Worth: j.Worth(), Anywhere: j.Anywhere},
+				Act{Do: DoSay, Text: act.Text}); err != nil {
+				pass.Failed++
+				failed, why = true, err.Error()
+				r.note("a rule could not ask to go on", j, why)
+				break
+			}
+			spoke = act.Text
+			tried = append(tried, Tried{Do: Task(DoAsk), When: act.Text, Came: Went})
+			if err := r.Store.Asks(ctx, j.ID, i+1); err != nil {
+				r.log("cannot leave a rule waiting to be allowed", err)
+			}
+			r.wrote(ctx, Record{
+				UserID: j.UserID, JobID: j.ID, Name: j.Name,
+				Schedule: j.Schedule, At: now, Took: r.clock().Sub(began),
+				Steps: tried, Said: spoke, Why: "waiting to be allowed",
+			})
+			return
 		}
 		if act.Do == DoWait {
 			d, err := Span(act.For)

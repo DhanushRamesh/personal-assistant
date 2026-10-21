@@ -941,6 +941,8 @@ func doing(steps []job.Step) string {
 			out = append(out, "only if "+s.When)
 		case job.Call:
 			out = append(out, "looks up "+s.Tool)
+		case job.Ask:
+			out = append(out, "asks whether to go on, saying "+strconv.Quote(s.Say))
 		case job.Finish:
 			// Said plainly, because a rule that ends itself reads as
 			// a rule somebody forgot to cancel otherwise.

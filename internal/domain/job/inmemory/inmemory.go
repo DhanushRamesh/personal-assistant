@@ -100,6 +100,19 @@ func (s *Store) Arm(_ context.Context, id string, at time.Time) error {
 }
 
 // Waits : Stops a rule part-way through, to carry on at a moment.
+// Asks : Leaves a rule waiting to be allowed, with no next time.
+func (s *Store) Asks(_ context.Context, id string, step int) error {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	j, ok := s.jobs[id]
+	if !ok {
+		return nil
+	}
+	j.State, j.Next, j.Resume = job.Asking, time.Time{}, step
+	s.jobs[id] = j
+	return nil
+}
+
 func (s *Store) Waits(_ context.Context, id string, at time.Time, step int) error {
 	s.mu.Lock()
 	defer s.mu.Unlock()

@@ -782,3 +782,74 @@ func TestAFinishEndsARepeatingRule(t *testing.T) {
 		t.Errorf("it ended without doing the work, or asked somebody to do the finish: %v", g.did)
 	}
 }
+
+// A rule that stops and asks before it acts.
+//
+// Owner, 21 October 2026, asked which of the agent principles to build
+// first: *"approval first"*. A rule that types into his terminals can
+// do real work unwatched, and nothing in the engine could stop and ask
+// him before it did.
+//
+// No timeout. A rule that goes ahead when nobody replied is one that
+// did not ask, so it has no next time at all and the clock passes over
+// it until he answers.
+func TestARuleStopsToBeAllowed(t *testing.T) {
+	s, h := inmemory.New(), &hands{}
+	put(t, s, "every 5m",
+		job.Step{Do: job.Call, Tool: "read_terminal"},
+		job.Step{Do: job.Ask, Say: "Shall I tell the Laptop client to carry on, sir?"},
+		job.Step{Do: job.Call, Tool: "type_into_terminal"},
+	)
+
+	runner(s, h, noon).Once(context.Background())
+
+	// It read, it asked, and it did not type. The asking is said --
+	// he has to hear what he is allowing -- and the step after it is
+	// the one that waits.
+	if len(h.did) != 2 || h.did[0] != "tool:read_terminal" ||
+		!strings.HasPrefix(h.did[1], "say:Shall I") {
+		t.Fatalf("the sequence ran as %v, want it read, asked, and stopped", h.did)
+	}
+
+	held, ok := s.Get("job_1")
+	if !ok {
+		t.Fatal("the rule is gone")
+	}
+	if held.State != job.Asking {
+		t.Errorf("state = %q, want it waiting to be allowed", held.State)
+	}
+	if !held.Next.IsZero() {
+		t.Errorf("a rule waiting on him comes round on its own at %v", held.Next)
+	}
+	// Where to carry on from, once he says yes.
+	if held.Resume != 2 {
+		t.Errorf("resume = %d, want the step after the asking", held.Resume)
+	}
+
+	// And the clock passes over it, however long it waits.
+	later := runner(s, h, noon.Add(time.Hour)).Once(context.Background())
+	if later.Ran != 0 {
+		t.Errorf("a rule waiting to be allowed ran anyway: %+v", later)
+	}
+	if len(h.did) != 2 {
+		t.Errorf("it went on without being allowed: %v", h.did)
+	}
+}
+
+// An approval with nothing after it asks about nothing.
+func TestAnApprovalAsksAboutWhatFollows(t *testing.T) {
+	if _, err := job.New("job_1", "usr_1", "a job", "rule", "every 5m",
+		[]job.Step{
+			job.Step{Do: job.Call, Tool: "read_terminal"},
+			job.Step{Do: job.Ask, Say: "Shall I?"},
+		}, noon); err == nil {
+		t.Error("an approval with nothing after it was allowed")
+	}
+	if _, err := job.New("job_2", "usr_1", "a job", "rule", "every 5m",
+		[]job.Step{
+			job.Step{Do: job.Ask, Say: ""},
+			job.Step{Do: job.Call, Tool: "type_into_terminal"},
+		}, noon); err == nil {
+		t.Error("an approval that does not say what it would do was allowed")
+	}
+}
