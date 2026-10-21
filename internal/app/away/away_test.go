@@ -5,6 +5,8 @@ import (
 	"encoding/json"
 	"io"
 	"log/slog"
+	"sort"
+	"strings"
 	"testing"
 	"time"
 
@@ -20,10 +22,17 @@ import (
 // connection would join it: what each side writes, the other is handed.
 func device(t *testing.T, s *Set, userID string) (leave func()) {
 	t.Helper()
+	leave, _ = deviceServer(t, s, userID)
+	return leave
+}
+
+// deviceServer : A device as device joins it, and its MCP server, whose tools a test changes.
+func deviceServer(t *testing.T, s *Set, userID string) (leave func(), server *mcp.Server) {
+	t.Helper()
 	ctx, cancel := context.WithCancel(context.Background())
 	t.Cleanup(cancel)
 
-	server := mcp.NewServer(&mcp.Implementation{Name: "desktop-client", Version: "0"}, nil)
+	server = mcp.NewServer(&mcp.Implementation{Name: "desktop-client", Version: "0"}, nil)
 	type space struct {
 		Space string `json:"space" jsonschema:"The space's name"`
 	}
@@ -59,7 +68,7 @@ func device(t *testing.T, s *Set, userID string) (leave func()) {
 	if _, err := server.Connect(ctx, transport{app}, nil); err != nil {
 		t.Fatalf("the device's server did not start: %v", err)
 	}
-	return leave
+	return leave, server
 }
 
 // offered : Waits for the device's tools to arrive, as the handshake and the listing take a moment.
@@ -155,3 +164,83 @@ func TestAnArgumentOfAnotherKindLeavesTheToolOut(t *testing.T) {
 
 // decode : One MCP message from its JSON.
 func decode(m json.RawMessage) (jsonrpc.Message, error) { return jsonrpc.DecodeMessage(m) }
+
+// purposeOf : A tool offered now, by name; its Purpose, or "" when it is not offered.
+func purposeOf(s *Set, userID, name string) string {
+	for _, x := range s.For(userID) {
+		if x.Name == name {
+			return x.Purpose
+		}
+	}
+	return ""
+}
+
+// waitFor : Waits for what is offered to come to be so.
+func waitFor(t *testing.T, what string, ok func() bool) {
+	t.Helper()
+	deadline := time.Now().Add(3 * time.Second)
+	for time.Now().Before(deadline) {
+		if ok() {
+			return
+		}
+		time.Sleep(10 * time.Millisecond)
+	}
+	t.Fatalf("%s did not come to be", what)
+}
+
+// A tool the device adds, describes anew or takes out while connected is
+// offered as it now is, without the line closing: the device says its
+// tools changed, and they are listed again.
+func TestADevicesToolsChangedWhileConnectedAreOfferedAsTheyAreNow(t *testing.T) {
+	s := NewSet(quiet())
+	_, server := deviceServer(t, s, "u1")
+	offered(t, s, "u1", 2)
+
+	mcp.AddTool(server, &mcp.Tool{Name: "zoom_page", Title: "Zoom a page", Description: "Zooms a page."},
+		func(context.Context, *mcp.CallToolRequest, struct{}) (*mcp.CallToolResult, any, error) {
+			return &mcp.CallToolResult{Content: []mcp.Content{&mcp.TextContent{Text: "Zoomed."}}}, nil, nil
+		})
+	offered(t, s, "u1", 3)
+
+	mcp.AddTool(server, &mcp.Tool{Name: "list_spaces", Title: "List spaces", Description: "Every space, hibernating ones too.", Annotations: &mcp.ToolAnnotations{ReadOnlyHint: true}},
+		func(context.Context, *mcp.CallToolRequest, struct{}) (*mcp.CallToolResult, any, error) {
+			return &mcp.CallToolResult{Content: []mcp.Content{&mcp.TextContent{Text: "- Primeum"}}}, nil, nil
+		})
+	waitFor(t, "list_spaces described anew", func() bool {
+		return strings.HasPrefix(purposeOf(s, "u1", "list_spaces"), "Every space, hibernating ones too.")
+	})
+
+	server.RemoveTools("open_space")
+	offered(t, s, "u1", 2)
+	if purposeOf(s, "u1", "open_space") != "" {
+		t.Error("open_space still offered after the device took it out")
+	}
+}
+
+// Listed again every RefreshEvery too, a device that never says its tools
+// changed is offered them as they are; a listing that changes nothing keeps them.
+func TestADevicesToolsAreListedAgainEveryRefresh(t *testing.T) {
+	was := RefreshEvery
+	RefreshEvery = 30 * time.Millisecond
+	t.Cleanup(func() { RefreshEvery = was })
+	s := NewSet(quiet())
+	device(t, s, "u1")
+	before := offered(t, s, "u1", 2)
+	time.Sleep(100 * time.Millisecond)
+	after := s.For("u1")
+	names := func(ts []tool.Tool) string {
+		var out []string
+		for _, x := range ts {
+			out = append(out, x.Name+"="+x.Purpose)
+		}
+		sort.Strings(out)
+		return strings.Join(out, "|")
+	}
+	if names(after) != names(before) {
+		t.Fatalf("listings that changed nothing changed what is offered: %s, was %s", names(after), names(before))
+	}
+	added, removed, changed := difference(map[string]string{"a": "1", "b": "2"}, map[string]string{"b": "3", "c": "4"})
+	if strings.Join(added, ",") != "c" || strings.Join(removed, ",") != "a" || strings.Join(changed, ",") != "b" {
+		t.Errorf("difference = %v %v %v, want c added, a removed, b changed", added, removed, changed)
+	}
+}

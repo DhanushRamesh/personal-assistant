@@ -19900,6 +19900,18 @@ opened to the network and a server elsewhere still reaches the laptop.
   client marks read-only `Lists`; any other `Writes`, so the registry's
   read-before-write reads the laptop first. Its `Run` is `tools/call`,
   given 20 seconds.
+- **Kept as the app now describes them** (owner, 21 October 2026:
+  *"whenever descriptions are being added, deleted, or updated, refresh
+  the tool definitions to match"*). Listed once, a device's tools stayed
+  as they were when its line opened. Now `away.Set` lists them again every
+  `RefreshEvery` (5 minutes), and at once when the device sends
+  `notifications/tools/list_changed` (the TypeScript SDK sends it when a
+  tool is added, changed or taken out while connected). Each tool is kept
+  as the device described it -- name, title, description, schema,
+  annotations -- and a listing that changes none of them changes nothing;
+  one that does replaces them, logged as `away: tools refreshed` with what
+  was added, taken out and changed. The deferred hot list names six of
+  them; their words are always the device's.
 - **Per chat.** The registry is fixed at start and a device comes and
   goes, so each chat, as it begins, takes `Tools.With(the person's
   device tools)` -- a copy, the server's own never displaced by a name

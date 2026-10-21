@@ -18,6 +18,7 @@ import (
 	"fmt"
 	"io"
 	"log/slog"
+	"sort"
 	"strings"
 	"sync"
 	"time"
@@ -37,6 +38,13 @@ var CallTimeout = 20 * time.Second
 // HelloTimeout : How long a device has to answer the opening handshake and
 // list its tools.
 var HelloTimeout = 10 * time.Second
+
+// RefreshEvery : How often a connected device's tools are listed again, so
+// one added, taken out or described anew is offered as it now is, without
+// the line closing first (owner, 21 October 2026: "whenever descriptions
+// are being added, deleted, or updated, refresh the tool definitions to
+// match"). A device that says its tools changed is listed at once.
+var RefreshEvery = 5 * time.Minute
 
 // Send : Writes one MCP message to the device, wrapped as the live
 // connection carries it.
@@ -60,6 +68,13 @@ type line struct {
 	conn    *conn
 	session *mcp.ClientSession
 	tools   []tool.Tool
+	// kept : Each tool as the device last described it, by name, to tell
+	// whether a listing changed anything.
+	kept map[string]string
+	// changed : The device said its tools changed; done : the line closed.
+	changed chan struct{}
+	done    chan struct{}
+	ending  sync.Once
 }
 
 // Join : Becomes the MCP client of a device that has said it holds a
@@ -68,7 +83,7 @@ type line struct {
 // listing run on their own, since their answers arrive through deliver.
 func (s *Set) Join(ctx context.Context, userID, clientID string, send func(context.Context, json.RawMessage) error) (deliver func(json.RawMessage), leave func()) {
 	c := newConn(send)
-	l := &line{conn: c}
+	l := &line{conn: c, changed: make(chan struct{}, 1), done: make(chan struct{})}
 	log := s.logger.With(slog.String("client_id", clientID))
 	go s.open(ctx, userID, clientID, l, log)
 	deliver = func(raw json.RawMessage) {
@@ -80,6 +95,7 @@ func (s *Set) Join(ctx context.Context, userID, clientID string, send func(conte
 		c.deliver(msg)
 	}
 	leave = func() {
+		l.ending.Do(func() { close(l.done) })
 		s.mu.Lock()
 		if s.lines[userID][clientID] == l {
 			delete(s.lines[userID], clientID)
@@ -93,30 +109,32 @@ func (s *Set) Join(ctx context.Context, userID, clientID string, send func(conte
 	return deliver, leave
 }
 
-// open : The handshake, then the listing, kept once both are done.
+// open : The handshake, then the listing, kept once both are done; then
+// the tools are listed again every RefreshEvery, and at once when the
+// device says they changed.
 func (s *Set) open(ctx context.Context, userID, clientID string, l *line, log *slog.Logger) {
 	hello, cancel := context.WithTimeout(ctx, HelloTimeout)
 	defer cancel()
-	client := mcp.NewClient(&mcp.Implementation{Name: "assistant", Version: "1"}, nil)
+	client := mcp.NewClient(&mcp.Implementation{Name: "assistant", Version: "1"}, &mcp.ClientOptions{
+		ToolListChangedHandler: func(context.Context, *mcp.ToolListChangedRequest) {
+			select {
+			case l.changed <- struct{}{}:
+			default:
+			}
+		},
+	})
 	session, err := client.Connect(hello, transport{l.conn}, nil)
 	if err != nil {
 		log.WarnContext(ctx, "away: the device did not answer its handshake", slog.Any("error", err))
 		return
 	}
 	l.session = session
-	listed, err := session.ListTools(hello, &mcp.ListToolsParams{})
+	tools, kept, err := listed(hello, session, log)
 	if err != nil {
 		log.WarnContext(ctx, "away: the device did not list its tools", slog.Any("error", err))
 		return
 	}
-	for _, t := range listed.Tools {
-		x, err := assistantTool(t, session)
-		if err != nil {
-			log.WarnContext(ctx, "away: a tool left out", slog.String("tool", t.Name), slog.Any("error", err))
-			continue
-		}
-		l.tools = append(l.tools, x)
-	}
+	l.tools, l.kept = tools, kept
 	s.mu.Lock()
 	if s.lines[userID] == nil {
 		s.lines[userID] = map[string]*line{}
@@ -124,6 +142,92 @@ func (s *Set) open(ctx context.Context, userID, clientID string, l *line, log *s
 	s.lines[userID][clientID] = l
 	s.mu.Unlock()
 	log.InfoContext(ctx, "away: tools offered", slog.Int("tools", len(l.tools)))
+	go s.watch(ctx, l, session, log)
+}
+
+// watch : Lists a device's tools again every RefreshEvery, and when it
+// says they changed, until its line closes; what changed replaces them.
+func (s *Set) watch(ctx context.Context, l *line, session *mcp.ClientSession, log *slog.Logger) {
+	every := time.NewTicker(RefreshEvery)
+	defer every.Stop()
+	for {
+		select {
+		case <-ctx.Done():
+			return
+		case <-l.done:
+			return
+		case <-every.C:
+		case <-l.changed:
+		}
+		s.refresh(ctx, l, session, log)
+	}
+}
+
+// refresh : The device's tools listed again; kept only when one was added,
+// taken out or described anew, and said so.
+func (s *Set) refresh(ctx context.Context, l *line, session *mcp.ClientSession, log *slog.Logger) {
+	list, cancel := context.WithTimeout(ctx, HelloTimeout)
+	defer cancel()
+	tools, kept, err := listed(list, session, log)
+	if err != nil {
+		select {
+		case <-l.done:
+		default:
+			log.WarnContext(ctx, "away: the device did not list its tools again", slog.Any("error", err))
+		}
+		return
+	}
+	s.mu.Lock()
+	added, removed, changed := difference(l.kept, kept)
+	if len(added)+len(removed)+len(changed) > 0 {
+		l.tools, l.kept = tools, kept
+	}
+	s.mu.Unlock()
+	if len(added)+len(removed)+len(changed) > 0 {
+		log.InfoContext(ctx, "away: tools refreshed", slog.Int("tools", len(tools)), slog.Any("added", added), slog.Any("removed", removed), slog.Any("changed", changed))
+	}
+}
+
+// listed : A device's tools as the assistant's own, and each as the device
+// describes it, by name; one the assistant cannot take is left out.
+func listed(ctx context.Context, session *mcp.ClientSession, log *slog.Logger) ([]tool.Tool, map[string]string, error) {
+	got, err := session.ListTools(ctx, &mcp.ListToolsParams{})
+	if err != nil {
+		return nil, nil, err
+	}
+	var tools []tool.Tool
+	kept := map[string]string{}
+	for _, t := range got.Tools {
+		x, err := assistantTool(t, session)
+		if err != nil {
+			log.WarnContext(ctx, "away: a tool left out", slog.String("tool", t.Name), slog.Any("error", err))
+			continue
+		}
+		tools = append(tools, x)
+		described, _ := json.Marshal(t)
+		kept[t.Name] = string(described)
+	}
+	return tools, kept, nil
+}
+
+// difference : The tools added, taken out and described anew, by name, from was to now.
+func difference(was, now map[string]string) (added, removed, changed []string) {
+	for name, d := range now {
+		if w, ok := was[name]; !ok {
+			added = append(added, name)
+		} else if w != d {
+			changed = append(changed, name)
+		}
+	}
+	for name := range was {
+		if _, ok := now[name]; !ok {
+			removed = append(removed, name)
+		}
+	}
+	sort.Strings(added)
+	sort.Strings(removed)
+	sort.Strings(changed)
+	return added, removed, changed
 }
 
 // For : The tools a person's connected devices offer now, the first
