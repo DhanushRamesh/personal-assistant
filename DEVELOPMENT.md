@@ -23061,3 +23061,60 @@ no, it is cancelled.
 Nothing in that is a planner. It is a sequence with a question in the
 middle of it, which is what he asked for when he said the job has to
 be done and he has to be able to rely on it.
+
+## The planner could not see the laptop
+
+Owner, 21 October 2026: *"now my focus is I want to do proper planning
+and execution, at least in the laptop first"*, and then *"Jarvis is a
+planner and orchestrator -- when given a task it should plan and then
+do the jobs"*.
+
+Most of that was already built, and the pieces had not been introduced
+to each other.
+
+**The planner exists.** `rules.Writer` is a separate agent whose whole
+prompt is the specification -- his own asking, 9 October: *"for
+writing a rule we should have a separate agent with all the
+specification clearly written so that no mistake is made"*. It is
+given the grammar, what his devices actually report, what he usually
+does and the rules he has; it answers JSON and nothing else; what it
+answers is read, validated and handed back with the reason when it is
+wrong.
+
+**The execution exists.** A sequence of steps, a condition that can
+wait on a named terminal -- `terminal.finished is Jarvis Server by
+value within 2m` parses today -- an approval that stops until he
+answers, a resume that carries on where it stopped, and a finish.
+
+**What was missing was that the planner did not know the laptop is
+there.**
+
+```go
+Reading: func() []string { return readable(registry) }
+```
+
+The tools a rule may use came from the registry built at startup. His
+laptop's tools are not in it: they arrive per person while the desktop
+app is connected. So the planner was told, in as many words, that the
+terminals, the spaces and its own Claude Code do not exist -- and the
+check that validates a written rule said "there is no tool called
+type_into_terminal" about a tool running on the machine in front of
+him.
+
+### What changed
+
+A lookup takes the person now, and consults what their machines
+brought as well as the registry. The list the planner is given does
+the same. Both are one place each; the awkward part was only that the
+device set is made later in startup than the lookup, which the
+registry already solves by being named before it exists.
+
+So a plan may now name a terminal, a space, its own Claude Code or the
+notes, and be validated against tools that are actually there.
+
+### What has not been proved
+
+That the planner writes a good plan for laptop work. It has never been
+asked: until now it could not have written one that passed. The next
+thing is to ask it, in his words, and read what comes back -- which is
+`make evals-rules` territory and costs a few calls.

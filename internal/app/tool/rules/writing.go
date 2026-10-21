@@ -56,7 +56,7 @@ type Writer struct {
 	// that exists rather than one that sounds right.
 	Kinds Kinds
 	// Reading : The tools a rule may look things up with.
-	Reading func() []string
+	Reading func(userID string) []string
 	// Tries : How many goes it gets. Zero selects [Tries].
 	Tries int
 }
@@ -112,7 +112,7 @@ func (w Writer) Written(ctx context.Context, r Request, look Lookup) (job.Occasi
 	brief := prompt.Block(
 		specification,
 		w.reported(ctx, r.UserID),
-		w.available(),
+		w.available(r.UserID),
 		r.Holding,
 		changing(r.Was),
 		prompt.Text("What they asked for:", strings.TrimSpace(r.Asked)),
@@ -135,7 +135,7 @@ func (w Writer) Written(ctx context.Context, r Request, look Lookup) (job.Occasi
 		if err != nil {
 			return job.Occasion{}, nil, "That rule could not be worked out."
 		}
-		when, acts, why, settled := read(answer, look)
+		when, acts, why, settled := read(r.UserID, answer, look)
 		switch {
 		case why == "":
 			return when, acts, ""
@@ -195,7 +195,7 @@ type cannot struct {
 // object is a mistake and the writer is told what was wrong; a
 // writer that has read the request and says it is not a rule has
 // already done the thinking, and asking again only costs.
-func read(answer string, look Lookup) (when job.Occasion, acts []job.Act, why string, settled bool) {
+func read(userID, answer string, look Lookup) (when job.Occasion, acts []job.Act, why string, settled bool) {
 	body := fenced(answer)
 	var refused cannot
 	if err := json.Unmarshal([]byte(body), &refused); err == nil && refused.Cannot != "" {
@@ -209,7 +209,7 @@ func read(answer string, look Lookup) (when job.Occasion, acts []job.Act, why st
 	if err := json.Unmarshal([]byte(body), &written); err != nil {
 		return job.Occasion{}, nil, "That was not a JSON object: " + err.Error(), false
 	}
-	if bad := allowed(written.Perform, look); bad != "" {
+	if bad := allowed(userID, written.Perform, look); bad != "" {
 		return job.Occasion{}, nil, bad, false
 	}
 	if err := written.When.Sound(); err != nil {
@@ -262,11 +262,11 @@ func (w Writer) reported(ctx context.Context, userID string) string {
 }
 
 // available : The tools a rule may look things up with.
-func (w Writer) available() string {
+func (w Writer) available(userID string) string {
 	if w.Reading == nil {
 		return ""
 	}
-	names := w.Reading()
+	names := w.Reading(userID)
 	if len(names) == 0 {
 		return ""
 	}

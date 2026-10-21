@@ -27,7 +27,7 @@ var kept = map[string]tool.Tool{
 	"calendar_cancel": {Name: "calendar_cancel", Writes: true},
 }
 
-func look(name string) (tool.Tool, bool) {
+func look(_, name string) (tool.Tool, bool) {
 	t, ok := kept[name]
 	return t, ok
 }

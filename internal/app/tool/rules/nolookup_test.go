@@ -33,7 +33,7 @@ func TestANilLookupRefusesRatherThanPanics(t *testing.T) {
 					t.Fatalf("panicked on a nil lookup: %v", r)
 				}
 			}()
-			if bad := allowed(c.acts, nil); bad == "" {
+			if bad := allowed("usr_1", c.acts, nil); bad == "" {
 				t.Error("a rule naming a tool was allowed with nothing to check it against")
 			} else if !strings.Contains(bad, "to check th") {
 				t.Errorf("refused for the wrong reason: %q", bad)
@@ -51,7 +51,7 @@ func TestNamingNoToolNeedsNoLookup(t *testing.T) {
 		}
 	}()
 	acts := []job.Act{{Do: job.DoSay, Text: "Time to stand up."}}
-	if bad := allowed(acts, nil); bad != "" {
+	if bad := allowed("usr_1", acts, nil); bad != "" {
 		t.Errorf("a rule that looks nothing up was refused: %q", bad)
 	}
 }

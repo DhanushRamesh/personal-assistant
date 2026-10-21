@@ -9,7 +9,7 @@ import (
 )
 
 // looking : a lookup with one read and one write in it.
-func looking(name string) (tool.Tool, bool) {
+func looking(_, name string) (tool.Tool, bool) {
 	switch name {
 	case "read_terminal":
 		return tool.Tool{Name: name}, true
@@ -28,7 +28,7 @@ func looking(name string) (tool.Tool, bool) {
 // and go no further until he answers.
 func TestAWritingToolIsAllowedOnlyBehindAnApproval(t *testing.T) {
 	// Without an ask, refused, and the refusal says what to do.
-	why := allowed([]job.Act{
+	why := allowed("usr_1", []job.Act{
 		{Do: job.DoTool, Use: "read_terminal", With: []byte(`{"terminal":"Jarvis Server"}`)},
 		{Do: job.DoTool, Use: "type_into_terminal", With: []byte(`{"terminal":"Laptop client","text":"carry on"}`)},
 		{Do: job.DoSay, Text: "Told it, sir."},
@@ -41,7 +41,7 @@ func TestAWritingToolIsAllowedOnlyBehindAnApproval(t *testing.T) {
 	}
 
 	// Behind one, allowed.
-	if why := allowed([]job.Act{
+	if why := allowed("usr_1", []job.Act{
 		{Do: job.DoTool, Use: "read_terminal", With: []byte(`{"terminal":"Jarvis Server"}`)},
 		{Do: job.DoAsk, Text: "Shall I tell the Laptop client to carry on, sir?"},
 		{Do: job.DoTool, Use: "type_into_terminal", With: []byte(`{"terminal":"Laptop client","text":"carry on"}`)},
@@ -51,7 +51,7 @@ func TestAWritingToolIsAllowedOnlyBehindAnApproval(t *testing.T) {
 	}
 
 	// An ask after the write is a rule that acts and then enquires.
-	if why := allowed([]job.Act{
+	if why := allowed("usr_1", []job.Act{
 		{Do: job.DoTool, Use: "type_into_terminal", With: []byte(`{"terminal":"Laptop client","text":"carry on"}`)},
 		{Do: job.DoAsk, Text: "Shall I?"},
 		{Do: job.DoSay, Text: "Told it, sir."},
@@ -60,7 +60,7 @@ func TestAWritingToolIsAllowedOnlyBehindAnApproval(t *testing.T) {
 	}
 
 	// And an approval that says nothing is no approval.
-	if why := allowed([]job.Act{
+	if why := allowed("usr_1", []job.Act{
 		{Do: job.DoAsk, Text: "  "},
 		{Do: job.DoTool, Use: "type_into_terminal", With: []byte(`{"terminal":"x","text":"y"}`)},
 		{Do: job.DoSay, Text: "Done."},

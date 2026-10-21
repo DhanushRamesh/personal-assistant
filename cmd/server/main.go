@@ -390,11 +390,24 @@ func run() error {
 	// registry cannot be an argument to its own contents, and
 	// nothing calls a tool before it exists.
 	var registry *tool.Registry
-	known := func(name string) (tool.Tool, bool) {
-		if registry == nil {
-			return tool.Tool{}, false
+	// And the tools his own machines bring, which are not in the
+	// registry: they arrive per person while a desktop app is
+	// connected, long after everything registered at startup. A rule
+	// about his laptop names one of those, and a lookup that knew
+	// only the registry answered that no such tool exists.
+	var devices *away.Set
+	known := func(userID, name string) (tool.Tool, bool) {
+		if registry != nil {
+			if found, ok := registry.Get(name); ok {
+				return found, true
+			}
 		}
-		return registry.Get(name)
+		for _, t := range devices.For(userID) {
+			if t.Name == name {
+				return t, true
+			}
+		}
+		return tool.Tool{}, false
 	}
 
 	// The engine, named before it exists.
@@ -445,7 +458,7 @@ func run() error {
 				// Only what a rule may actually use, so it cannot
 				// reach for a tool that writes and be refused for
 				// it afterwards.
-				Reading: func() []string { return readable(registry) },
+				Reading: func(userID string) []string { return readable(registry, devices.For(userID)) },
 			}),
 		memories.All(remembering),
 		reminders.All(reminderStore, clock, alarms),
@@ -570,7 +583,7 @@ func run() error {
 
 	// The tools a person's desktop app offers over MCP on /v1/live, added
 	// to that person's chats while it stays connected.
-	devices := away.NewSet(logger.Logger)
+	devices = away.NewSet(logger.Logger)
 
 	// Which tools a question is shown in full, chosen by what it means
 	// rather than by a list written in advance. Nil where there is no
@@ -869,7 +882,7 @@ func run() error {
 		// with nothing to check against the check panicked rather
 		// than refusing -- which no rule the assistant wrote had
 		// ever reached, because none had ever been written.
-		func(name string) (tool.Tool, bool) { return known(name) },
+		func(userID, name string) (tool.Tool, bool) { return known(userID, name) },
 		scheduled, ranLog, remembered, &profile.Reader{Memories: remembering.Store},
 		rules.Writer{
 			Ask: func(ctx context.Context, system, ask string) (string, error) {
@@ -889,7 +902,7 @@ func run() error {
 			// for naming a tool that does not exist. Neither pass
 			// has ever written a rule, and this half of it could
 			// not have.
-			Reading: func() []string { return readable(registry) },
+			Reading: func(userID string) []string { return readable(registry, devices.For(userID)) },
 		},
 		// The pass that decides whether anything is worth a rule can
 		// now go and look for itself, rather than deciding from a
@@ -1833,12 +1846,27 @@ func announcer(cfg config.Config, logger *slog.Logger) announce.Announcer {
 // and may run every few minutes; reading is safe to repeat and
 // writing is not, and the thing that writes rules should be told
 // what it may have rather than corrected afterwards.
-func readable(registry *tool.Registry) []string {
-	if registry == nil {
-		return nil
-	}
+// readable : The tools a rule may look things up with, the person's
+// own machines included.
+//
+// His laptop's tools are not in the registry -- they arrive while the
+// desktop app is connected -- so a planner given the registry alone
+// was told the terminals, the spaces and its own Claude Code do not
+// exist, and could not write a rule about the machine in front of him.
+//
+// Writing tools are left out here as they always were. What a rule may
+// change is settled where a sequence is checked, which now allows one
+// behind an approval; this is the list of what it may look at.
+func readable(registry *tool.Registry, brought []tool.Tool) []string {
 	var out []string
-	for _, t := range registry.All() {
+	if registry != nil {
+		for _, t := range registry.All() {
+			if !t.Writes {
+				out = append(out, t.Name)
+			}
+		}
+	}
+	for _, t := range brought {
 		if !t.Writes {
 			out = append(out, t.Name)
 		}

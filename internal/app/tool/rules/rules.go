@@ -99,7 +99,15 @@ func proving(ctx context.Context, try Trier, j job.Job) string {
 }
 
 // Lookup : Finds a tool by name, for checking what a rule may run.
-type Lookup func(name string) (tool.Tool, bool)
+//
+// The person is given, because not every tool is the server's. His
+// laptop brings its own -- the terminals, the spaces, its own Claude
+// Code -- and they arrive per person while the desktop app is
+// connected, after everything registered at startup. A lookup that
+// knew only the startup registry said "there is no tool called
+// type_into_terminal" about a tool running on the machine in front of
+// him, so a rule could never be written about his own laptop.
+type Lookup func(userID, name string) (tool.Tool, bool)
 
 // Clock : What these tools need to know about time.
 type Clock struct {
@@ -789,7 +797,7 @@ func letItGoOn(store Store, clock Clock) tool.Tool {
 // A rule runs unattended and may run every few minutes. Reading is
 // safe to repeat; writing is not, and nobody is there to notice the
 // first time it goes wrong.
-func allowed(acts []job.Act, look Lookup) string {
+func allowed(userID string, acts []job.Act, look Lookup) string {
 	missing := false
 	// A rule that names a tool is checked against the lookup, and a
 	// missing one is a mistake in the caller rather than in the
@@ -803,7 +811,7 @@ func allowed(acts []job.Act, look Lookup) string {
 	// morning cleared the way, a rule was written, and the pass
 	// panicked on a nil func.
 	if look == nil {
-		look = func(string) (tool.Tool, bool) { return tool.Tool{}, false }
+		look = func(string, string) (tool.Tool, bool) { return tool.Tool{}, false }
 		missing = true
 	}
 	if len(acts) == 0 {
@@ -826,7 +834,7 @@ func allowed(acts []job.Act, look Lookup) string {
 			if missing && len(a.Tools) > 0 {
 				return "There is nothing on this server to check those tools against."
 			}
-			if names, bad := reading(a.Tools, look); bad != "" {
+			if names, bad := reading(userID, a.Tools, look); bad != "" {
 				return bad
 			} else if len(names) != len(a.Tools) {
 				return "Some of those tools could not be read."
@@ -837,7 +845,7 @@ func allowed(acts []job.Act, look Lookup) string {
 				return fmt.Sprintf("A rule may look up at most %d things.", Most)
 			}
 			name := strings.TrimSpace(a.Use)
-			found, ok := look(name)
+			found, ok := look(userID, name)
 			if !ok {
 				if missing {
 					return "There is nothing on this server to check that tool against."
@@ -911,7 +919,7 @@ func others(held []job.Job, id string) []job.Job {
 // A rule runs unattended and may run every few minutes. Reading
 // is safe to repeat; writing is not, and nobody is there to
 // notice the first time it goes wrong.
-func reading(names []string, look Lookup) ([]string, string) {
+func reading(userID string, names []string, look Lookup) ([]string, string) {
 	if len(names) == 0 {
 		return nil, ""
 	}
@@ -924,7 +932,7 @@ func reading(names []string, look Lookup) ([]string, string) {
 		if name == "" {
 			continue
 		}
-		found, ok := look(name)
+		found, ok := look(userID, name)
 		if !ok {
 			return nil, fmt.Sprintf("There is no tool called %q.", name)
 		}

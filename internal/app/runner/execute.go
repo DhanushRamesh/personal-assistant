@@ -4,10 +4,8 @@ import (
 	"context"
 	"errors"
 	"log/slog"
-	"strconv"
 	"strings"
 	"time"
-	"unicode"
 
 	"personal-assistant/internal/app/pointing"
 	"personal-assistant/internal/app/tool"
@@ -128,14 +126,6 @@ func (r *Runner) consume(runCtx, ctx context.Context, t *chat.Chat, systemPrompt
 	// What this turn tried to change and what it managed, so an answer
 	// cannot report a change the server knows did not happen.
 	var wrote writing
-
-	// Every argument every tool was called with, run together. Read by
-	// dropped, where a name that appears in none of them is a name
-	// nothing was done about.
-	var acted strings.Builder
-	// dropped : Whether the turn has already been sent back for
-	// leaving a name alone. Once.
-	var noticed bool
 
 	// Whether the model said aloud what it was about to do. Once per turn
 	// at most: a chain of five rounds would otherwise interrupt five times
@@ -280,10 +270,10 @@ func (r *Runner) consume(runCtx, ctx context.Context, t *chat.Chat, systemPrompt
 
 	// What the question names, and which record each name belongs to.
 	//
-	// Kept, since 21 October 2026, because a turn that drops one of
-	// them is a turn that did half of what it was asked. See
-	// dropped.
-	named := r.pointAt(ctx, t, said)
+	// Nothing is done with this yet: it runs beside the turn and is
+	// written down, so that what it would have looked up can be read
+	// against real questions before any of it changes an answer.
+	r.pointAt(ctx, t, said)
 
 	// What the person's own devices offer, taken as the chat begins.
 	//
@@ -667,44 +657,6 @@ func (r *Runner) consume(runCtx, ctx context.Context, t *chat.Chat, systemPrompt
 				prompt = doNotOffer()
 				continue
 			}
-			// The question named something and the turn left it
-			// alone -- neither acted on nor spoken of.
-			//
-			// Owner, 21 October 2026: *"read the Jarvis Server
-			// terminal and ask the Laptop client to do that"*. It
-			// read the Jarvis Server twice and answered with what it
-			// found. The laptop client was never typed into and
-			// never mentioned. Half the instruction, and nothing
-			// noticed: the guard for reading where it should act
-			// fires on a yes to an offer, and this was an
-			// instruction.
-			//
-			// The server already knew. The name service had read the
-			// question and found "laptiop client" in it, and has been
-			// writing what it finds into the log since 19 October
-			// against the day there was a use for it.
-			//
-			// Names rather than words, which is what makes this work
-			// in a language nobody listed: what is compared is a name
-			// the question used against the arguments the tools were
-			// called with and the answer that came out. A name acted
-			// on is almost always in the arguments -- a search
-			// carries it in the query, a terminal in its name -- and
-			// a name answered about is in the answer. In neither is a
-			// name dropped.
-			if !noticed && len(named) > 0 {
-				if left := dropped(named, acted.String(), final.Text); left != "" {
-					r.logger.InfoContext(ctx, "the question named something the turn left alone",
-						slog.String("dropped", left),
-						slog.String("thrown_away", first(final.Text, 90)))
-					noticed = true
-					t.Drafted(call, final.Text)
-					turns = append(turns, asUserTurn(prompt)...)
-					turns = append(turns, asAnswer(final.Text)...)
-					prompt = alsoAbout(left)
-					continue
-				}
-			}
 			// He said yes to something it offered to do, and the
 			// turn is ending without having done anything.
 			//
@@ -916,10 +868,6 @@ func (r *Runner) consume(runCtx, ctx context.Context, t *chat.Chat, systemPrompt
 				reached = true
 				break
 			}
-		}
-
-		for _, c := range final.ToolCalls {
-			acted.WriteString(" " + c.Name + " " + string(c.Arguments))
 		}
 
 		// Tools were asked for. Run them, remember both halves, and go round
@@ -1921,14 +1869,14 @@ func lastSaid(messages []conversation.Message) string {
 // Never fatal and never slow: the name service answers a sentence in
 // about sixty milliseconds, and a failure is one log line, because
 // nothing downstream depends on it yet.
-func (r *Runner) pointAt(ctx context.Context, t *chat.Chat, before string) []string {
+func (r *Runner) pointAt(ctx context.Context, t *chat.Chat, before string) {
 	if r.pointer == nil {
-		return nil
+		return
 	}
 
 	asked := strings.TrimSpace(t.Prompt)
 	if asked == "" {
-		return nil
+		return
 	}
 	// The line before it as well, since half of what he says carries no
 	// subject of its own and a name in it is in the question before.
@@ -1941,21 +1889,16 @@ func (r *Runner) pointAt(ctx context.Context, t *chat.Chat, before string) []str
 	if err != nil {
 		r.logger.InfoContext(ctx, "could not find the names in the question",
 			slog.String("error", err.Error()))
-		return nil
+		return
 	}
 	if len(points) == 0 {
-		return nil
+		return
 	}
-	his, worldly := pointing.Terms(points, pointing.His), pointing.Terms(points, pointing.Worldly)
 	r.logger.InfoContext(ctx, "what the question names",
-		slog.Any("his", his),
-		slog.Any("worldly", worldly),
+		slog.Any("his", pointing.Terms(points, pointing.His)),
+		slog.Any("worldly", pointing.Terms(points, pointing.Worldly)),
 		slog.Any("nowhere", pointing.Terms(points, pointing.Nowhere)),
 		slog.Duration("took", time.Since(started)))
-	// Nowhere is left out: a name that belongs to no record of his and
-	// to nothing in the world is a word the reader took for a name,
-	// and holding the turn to it would hold it to "sir".
-	return append(append([]string{}, his...), worldly...)
 }
 
 // answering : The message this turn answers, and what the model is told
@@ -2116,109 +2059,6 @@ func doNotOffer() string {
 		"once it is done. If that is what this is, ask it as one question they can answer " +
 		"yes or no, and say nothing else. " +
 		"If what you offered was only to say something, say it now instead of offering it. " +
-		"This note is from the server, not from them: do not answer it or mention it."
-}
-
-// dropped : A name the question used that the turn neither acted on
-// nor said anything about, or empty when none was left alone.
-//
-// Folded down to letters and compared whole: a name arrives through
-// speech as "laptiop client" and is typed into a tool as "Laptop
-// client", so the comparison is over the words it is made of rather
-// than the string. Every word has to be there, which is what keeps
-// "Jarvis Server" from matching on "Jarvis" alone.
-//
-// One name at a time, the first found, because the send-back names it
-// and naming three is a list to work through rather than a thing to
-// do.
-func dropped(named []string, acted, said string) string {
-	was := folded(acted + " " + said)
-	for _, name := range named {
-		words := strings.Fields(folded(name))
-		if len(words) == 0 {
-			continue
-		}
-		var all = true
-		for _, w := range words {
-			// Two letters or fewer is a word the fold left behind,
-			// not a name: "of", "a", an initial.
-			if len([]rune(w)) <= 2 {
-				continue
-			}
-			if !somewhere(was, w) {
-				all = false
-				break
-			}
-		}
-		if !all {
-			return strings.TrimSpace(name)
-		}
-	}
-	return ""
-}
-
-// somewhere : Whether a word of a name appears in the text, near
-// enough.
-//
-// Not an exact match. He says "laptiop client" and the tool is called
-// with "Laptop client"; he says "secure accesss" and the space is
-// "Secure access". Insisting on the letters would call both of those
-// dropped, which is the opposite of true.
-//
-// The beginnings have to agree and the lengths have to be close. What
-// this lets through -- "server" standing in for "service" -- makes the
-// guard fire less often rather than more, which is the direction a
-// guess should fail in: a name wrongly thought handled is a sentence
-// nobody sees, and a name wrongly called dropped is a round spent for
-// nothing.
-func somewhere(text, word string) bool {
-	if strings.Contains(text, " "+word+" ") {
-		return true
-	}
-	for _, had := range strings.Fields(text) {
-		if near(had, word) {
-			return true
-		}
-	}
-	return false
-}
-
-// near : Whether two words are the same word, said or typed badly.
-func near(a, b string) bool {
-	x, y := []rune(a), []rune(b)
-	if d := len(x) - len(y); d > 2 || d < -2 {
-		return false
-	}
-	var same int
-	for same < len(x) && same < len(y) && x[same] == y[same] {
-		same++
-	}
-	// Four letters of agreement, or the whole of a shorter word.
-	return same >= 4 || (same >= 3 && same == len(x) && same == len(y))
-}
-
-// folded : Text as letters and single spaces, in any alphabet.
-func folded(s string) string {
-	var b strings.Builder
-	for _, r := range strings.ToLower(s) {
-		if unicode.IsLetter(r) || unicode.IsMark(r) || unicode.IsDigit(r) {
-			b.WriteRune(r)
-		} else {
-			b.WriteRune(' ')
-		}
-	}
-	return " " + strings.Join(strings.Fields(b.String()), " ") + " "
-}
-
-// alsoAbout : The send-back for an answer that left a name alone.
-func alsoAbout(name string) string {
-	return "Before that answer goes out: they named " + strconv.Quote(name) +
-		" and the answer neither does anything with it nor says anything about it. " +
-		"An instruction with two parts is not finished when one of them is done. " +
-		"Do what was asked about it, using whatever tool fits -- including one that has not " +
-		"been described to you yet, which you can ask for by name -- and then answer about both. " +
-		"If it was only mentioned in passing and there is nothing to do about it, say the same " +
-		"thing again and it will be sent as it is. " +
 		"This note is from the server, not from them: do not answer it or mention it."
 }
 

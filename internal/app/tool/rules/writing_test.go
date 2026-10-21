@@ -29,7 +29,7 @@ func answering(said ...string) (*[]string, rules.Writer) {
 		Kinds: func(context.Context, string) ([]event.Kind, error) {
 			return []event.Kind{{Kind: "battery.level"}, {Kind: "call.missed"}}, nil
 		},
-		Reading: func() []string { return []string{"event_recent", "calendar_events"} },
+		Reading: func(string) []string { return []string{"event_recent", "calendar_events"} },
 	}
 }
 
