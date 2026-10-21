@@ -22864,3 +22864,59 @@ can write this one -- a tool step, a check on a terminal, and a finish
 means every step's result kept where he can see what was asked, what
 came back and what was concluded. The runs table records that a rule
 ran. It does not yet make a case.
+
+## A name the turn left alone
+
+Owner, 21 October 2026: *"read the Jarvis Server terminal and ask the
+laptop client to do that"*. It read the Jarvis Server twice and
+answered with what it found. The laptop client was never typed into
+and never mentioned. Half the instruction, and nothing noticed.
+
+The guard for reading where it should act fires on a yes to an offer
+-- `agreed && wrote.tried == 0` -- and this was an instruction, so it
+never ran, though the count it reads was zero and would have caught it.
+
+### The server already knew
+
+The name service had read the question and found `worldly=[laptiop
+client]` in it. It has been writing what it finds into the log since
+19 October, against the day there was a use for it:
+
+> Nothing is done with this yet: it runs beside the turn and is
+> written down, so that what it would have looked up can be read
+> against real questions before any of it changes an answer.
+
+That day is this one.
+
+### What is checked
+
+A name the question used that appears neither in the arguments any
+tool was called with nor in the answer. Both halves matter: a name
+acted on is almost always in the arguments -- a search carries it in
+the query, a terminal in its name -- and a name merely answered about
+is in the answer. In neither is a name dropped.
+
+**Names, not words, which is the point.** Everything else of this kind
+in the server matches English and goes deaf in Tamil. This compares a
+name the question used against the names the tools were given, so it
+works in any alphabet: a Tamil name left alone is noticed, and the
+same name answered about is not.
+
+Matched the way speech delivers them. He says *"laptiop client"* and
+the tool is called with *"Laptop client"*; he says *"secure accesss"*
+and the space is *"Secure access"*. The beginnings have to agree and
+the lengths be close, and every word of a name has to be there -- so
+"Jarvis" alone does not answer for "Jarvis Server".
+
+What that lets through -- "server" standing in for "service" -- makes
+the guard fire less often rather than more, which is the direction to
+fail in: a name wrongly thought handled is a sentence nobody sees, and
+a name wrongly called dropped is a round spent for nothing.
+
+Sent back once, with the way out said plainly: a name mentioned in
+passing with nothing to do about it is answered the same way again and
+goes out as it is.
+
+**Nowhere names are left out.** A name belonging to no record of his
+and to nothing in the world is a word the reader took for a name, and
+holding the turn to it would hold it to "sir".
