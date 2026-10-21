@@ -100,6 +100,20 @@ func (s *Store) Arm(_ context.Context, id string, at time.Time) error {
 }
 
 // Waits : Stops a rule part-way through, to carry on at a moment.
+// Allow : Lets a rule that stopped to ask carry on, from where it
+// stopped.
+func (s *Store) Allow(_ context.Context, userID, id string, at time.Time) (bool, error) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	j, ok := s.jobs[id]
+	if !ok || j.UserID != userID || j.State != job.Asking {
+		return false, nil
+	}
+	j.State, j.Next = job.Active, at
+	s.jobs[id] = j
+	return true, nil
+}
+
 // Asks : Leaves a rule waiting to be allowed, with no next time.
 func (s *Store) Asks(_ context.Context, id string, step int) error {
 	s.mu.Lock()
@@ -197,8 +211,10 @@ func (s *Store) Stop(_ context.Context, userID, id string) (bool, error) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 
+	// A rule waiting to be allowed is called off the same way as one
+	// that runs: saying no to an approval is cancelling the rule.
 	j, ok := s.jobs[id]
-	if !ok || j.UserID != userID || j.State != job.Active {
+	if !ok || j.UserID != userID || (j.State != job.Active && j.State != job.Asking) {
 		return false, nil
 	}
 	j.State, j.Next = job.Cancelled, time.Time{}

@@ -211,8 +211,12 @@ func (s *Store) stop(ctx context.Context, userID, id string) (bool, error) {
 	if s == nil || s.db == nil {
 		return false, fmt.Errorf("job: there is nowhere to read jobs")
 	}
+	// A rule waiting to be allowed is called off the same way as one
+	// that runs. Saying no to an approval is cancelling the rule, and
+	// before this only an active one could be.
 	out := s.db.WithContext(ctx).Model(&row{}).
-		Where("id = ? AND user_id = ? AND state = ?", id, userID, string(job.Active)).
+		Where("id = ? AND user_id = ? AND state IN ?", id, userID,
+			[]string{string(job.Active), string(job.Asking)}).
 		Updates(map[string]any{
 			"state":      string(job.Cancelled),
 			"next_at":    nil,
@@ -492,6 +496,32 @@ func (s *Store) Stop(ctx context.Context, userID, id string) (bool, error) {
 	stopped, err := s.stop(ctx, userID, id)
 	s.tell(err, userID)
 	return stopped, err
+}
+
+// Allow : Lets a rule that stopped to ask carry on, from the step it
+// stopped at.
+//
+// Only one that is waiting: allowing anything else would set a rule
+// running from the middle of its sequence, which is not something
+// anybody asked for. resume_at_step is left where the asking put it.
+func (s *Store) Allow(ctx context.Context, userID, id string, at time.Time) (bool, error) {
+	if s == nil || s.db == nil {
+		return false, fmt.Errorf("job: there is nowhere to read jobs")
+	}
+	out := s.db.WithContext(ctx).Model(&row{}).
+		Where("id = ? AND user_id = ? AND state = ?", id, userID, string(job.Asking)).
+		Updates(map[string]any{
+			"state":      string(job.Active),
+			"next_at":    at.UTC(),
+			"updated_at": time.Now().UTC(),
+		})
+	if out.Error != nil {
+		err := fmt.Errorf("job: allowing %s to carry on: %w", id, out.Error)
+		s.tell(err, userID)
+		return false, err
+	}
+	s.tell(nil, userID)
+	return out.RowsAffected > 0, nil
 }
 
 // Ran : See ran; the change hook is told when it succeeds.

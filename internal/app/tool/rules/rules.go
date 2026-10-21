@@ -49,6 +49,9 @@ type Store interface {
 	// said.
 	Change(ctx context.Context, j job.Job) error
 	Stop(ctx context.Context, userID, id string) (bool, error)
+	// Allow : Lets a rule that stopped to ask carry on, from the step
+	// it stopped at.
+	Allow(ctx context.Context, userID, id string, at time.Time) (bool, error)
 }
 
 // Trier : Runs a rule now and says what it would have said,
@@ -242,6 +245,7 @@ func All(store Store, clock Clock, id func() string, look Lookup,
 		update(store, clock, look, try, writer),
 		quieten(store, clock),
 		cancel(store),
+		letItGoOn(store, clock),
 	}
 }
 
@@ -696,6 +700,83 @@ func cancel(store Store) tool.Tool {
 	}
 }
 
+// letItGoOn : The tool that answers a rule which stopped to ask.
+//
+// A rule that is about to change something says what it would do and
+// stops. He is told, and nothing happens until he answers -- there is
+// no timeout, because a rule that goes ahead when nobody replied is
+// one that did not ask.
+//
+// A tool rather than a yes read off his words. Whether somebody has
+// agreed is a question about meaning, and every word-matching check in
+// this server is deaf in another language: Agrees("ஆம்") is false. The
+// model understands a yes in whatever he said it in, and this is the
+// mechanism it reaches for once it has.
+//
+// Saying no is rule_cancel, which now reaches a waiting rule as well
+// as a running one. Nothing new is needed for a refusal: a rule he
+// will not allow is a rule he does not want.
+func letItGoOn(store Store, clock Clock) tool.Tool {
+	return tool.Tool{
+		Name:    "rule_allow",
+		Domain:  Kind,
+		Writes:  true,
+		Purpose: "Let a rule that stopped to ask carry on with what it was about to do.",
+		UseWhen: prompt.Text(
+			"A rule said what it was about to do and stopped for an answer, and they have given one.",
+			"Anything that means yes, in any language, and however they said it: go ahead, do it, fine, carry on.",
+		),
+		Avoid: prompt.Text(
+			"Not when they said no or said nothing: a rule nobody allowed stays where it is, and one they will not allow is rule_cancel.",
+			"Not for a rule that is simply running. This is only for one waiting to be allowed, which a listing shows as asking.",
+			"The identifier must come from a listing in this turn, never from one you remember.",
+		),
+		Channels: []chat.Channel{chat.ChannelVoice, chat.ChannelDirect},
+		Params: tool.Schema{
+			Required: []string{"id"},
+			Properties: map[string]tool.Property{
+				"id": {
+					Type:        "string",
+					Description: "The rule's identifier, exactly as the listing gave it.",
+					Pattern:     idPattern,
+				},
+			},
+		},
+		Examples: []tool.Example{
+			{Ask: "yes", Args: `{"saying":"telling it to go ahead","id":"job_01M48E09RJW0G247RBST6712D3"}`},
+		},
+		Run: func(ctx context.Context, in tool.Invocation) tool.Result {
+			var args struct {
+				ID string `json:"id"`
+			}
+			if err := json.Unmarshal(in.Args, &args); err != nil {
+				return tool.Failed("Those arguments could not be read.")
+			}
+			if store == nil {
+				return tool.Failed("There is nowhere to keep rules on this server.")
+			}
+			if in.Caller.UserID == "" {
+				return tool.Failed("This request did not come from a known person.")
+			}
+
+			// Now, so the next pass picks it up: the waiting is over
+			// the moment he says so, and a rule he has allowed should
+			// not sit for another five minutes.
+			allowed, err := store.Allow(ctx, in.Caller.UserID, strings.TrimSpace(args.ID), clock.Now())
+			if err != nil {
+				return tool.Broke("That rule could not be allowed to carry on.", err)
+			}
+			if !allowed {
+				return tool.Failed(prompt.Text(
+					"No rule of theirs is waiting to be allowed under that identifier.",
+					"List them again: one that is waiting shows as asking, and nothing else can be allowed.",
+				))
+			}
+			return tool.OK("Allowed. It carries on from where it stopped, within the minute.")
+		},
+	}
+}
+
 // allowed : Whether a sequence may run, and why not.
 //
 // Everything assemble used to refuse, asked of a sequence the model
@@ -912,7 +993,15 @@ func one(j job.Job, clock Clock) string {
 		parts = append(parts, "quiet until "+j.Quiet.In(clock.where()).Format("Mon 2 Jan 3:04 pm"))
 	}
 	if j.State != job.Active {
-		parts = append(parts, string(j.State))
+		// Said rather than named. "asking" is the column; what it
+		// means is that the rule has stopped and is waiting on him,
+		// and a listing nobody can read is a listing that gets
+		// guessed at.
+		if j.State == job.Asking {
+			parts = append(parts, "waiting to be allowed to carry on")
+		} else {
+			parts = append(parts, string(j.State))
+		}
 	}
 	parts = append(parts, doing(j.Steps))
 	if !j.Next.IsZero() {

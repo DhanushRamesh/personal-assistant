@@ -22971,3 +22971,43 @@ them to what he says.
 
 That, and letting a rule hold a writing tool at all, are the next two.
 Neither is worth having without this one.
+
+### And the way back
+
+He says yes and the rule carries on from the step it stopped at.
+
+**A tool, not a yes read off his words.** Whether somebody has agreed
+is a question about meaning, and every word-matching check in this
+server is deaf in another language -- `Agrees("ஆம்")` is false. The
+model understands a yes in whatever he said it in; `rule_allow` is the
+mechanism it reaches for once it has.
+
+It takes an identifier from a listing, like every other rule tool,
+which means the guard that insists on a listing first covers it with
+nothing added. Only a rule that is waiting can be allowed: anything
+else would set a rule running from the middle of its sequence.
+
+Made due now rather than at its next time. The waiting is over the
+moment he says so, and a rule he has allowed should not sit for
+another five minutes.
+
+**Saying no needed nothing new, and uncovered a gap.** A refusal is
+`rule_cancel` -- a rule he will not allow is a rule he does not want --
+and that only ever reached a rule in the active state. A waiting rule
+could not be called off at all. Both stores now take either.
+
+**And a listing says it in words.** The state is `asking`; what it
+means is that the rule has stopped and is waiting on him, so that is
+what a listing says. A listing nobody can read is a listing that gets
+guessed at.
+
+The sequence, end to end, is held by a test: it reads, it asks, it
+stops; the clock passes over it however long it waits; he allows it;
+the next pass runs the steps it had not reached and does not repeat
+the ones it had.
+
+### What is still missing
+
+A rule still cannot hold a writing tool -- *"reading tools only, at
+most three"* -- so there is nothing yet for an approval to guard. That
+is the last piece, and it is the one this was built to make safe.

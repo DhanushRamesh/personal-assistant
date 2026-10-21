@@ -303,8 +303,8 @@ func TestWritingRulesInsistsOnReadingThemFirst(t *testing.T) {
 	if lists != 1 {
 		t.Errorf("%d tools list rules, want exactly one for a write to read first", lists)
 	}
-	if writes != 4 {
-		t.Errorf("%d tools write rules, want add, update, quiet and cancel", writes)
+	if writes != 5 {
+		t.Errorf("%d tools write rules, want add, update, quiet, cancel and allow", writes)
 	}
 }
 

@@ -853,3 +853,65 @@ func TestAnApprovalAsksAboutWhatFollows(t *testing.T) {
 		t.Error("an approval that does not say what it would do was allowed")
 	}
 }
+
+// And carries on where it stopped, once he allows it.
+//
+// The whole point of asking: a rule that stops and can never be
+// answered is worse than one that never stopped. The answer arrives
+// as a resume rather than a clock -- he says yes, the rule is made due
+// again, and the pass after that runs the steps it had not reached.
+func TestAnAllowedRuleCarriesOnWhereItStopped(t *testing.T) {
+	s, h := inmemory.New(), &hands{}
+	put(t, s, "every 5m",
+		job.Step{Do: job.Call, Tool: "read_terminal"},
+		job.Step{Do: job.Ask, Say: "Shall I tell the Laptop client to carry on, sir?"},
+		job.Step{Do: job.Call, Tool: "type_into_terminal"},
+		job.Step{Do: job.Announce, Say: "Told it, sir."},
+	)
+	runner(s, h, noon).Once(context.Background())
+
+	allowed, err := s.Allow(context.Background(), "usr_1", "job_1", noon.Add(time.Minute))
+	if err != nil || !allowed {
+		t.Fatalf("Allow = %v, %v", allowed, err)
+	}
+
+	// The pass after he allowed it runs what it had not reached, and
+	// does not do again what it had.
+	if got := runner(s, h, noon.Add(time.Minute)).Once(context.Background()); got.Ran != 1 {
+		t.Fatalf("pass = %+v, want it run", got)
+	}
+	want := []string{
+		"tool:read_terminal",
+		"say:Shall I tell the Laptop client to carry on, sir?",
+		"tool:type_into_terminal",
+		"say:Told it, sir.",
+	}
+	if len(h.did) != len(want) {
+		t.Fatalf("it did %v, want %v", h.did, want)
+	}
+	for i := range want {
+		if h.did[i] != want[i] {
+			t.Fatalf("it did %v, want %v", h.did, want)
+		}
+	}
+}
+
+// A rule nobody allowed can still be called off, which is how saying
+// no is answered. Before this only a running rule could be cancelled.
+func TestAWaitingRuleCanBeCalledOff(t *testing.T) {
+	s, h := inmemory.New(), &hands{}
+	put(t, s, "every 5m",
+		job.Step{Do: job.Ask, Say: "Shall I?"},
+		job.Step{Do: job.Call, Tool: "type_into_terminal"},
+	)
+	runner(s, h, noon).Once(context.Background())
+
+	stopped, err := s.Stop(context.Background(), "usr_1", "job_1")
+	if err != nil || !stopped {
+		t.Fatalf("Stop = %v, %v", stopped, err)
+	}
+	held, _ := s.Get("job_1")
+	if held.State != job.Cancelled {
+		t.Errorf("state = %q, want it called off", held.State)
+	}
+}
